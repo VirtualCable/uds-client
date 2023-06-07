@@ -1,0 +1,4 @@
+/bin
+/udsclient*
+/udsclient-*.tar.gz
+/*.rpm
