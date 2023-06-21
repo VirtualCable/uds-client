@@ -180,6 +180,10 @@ class ForwardServer(socketserver.ThreadingTCPServer):
                     raise Exception({'Invalid  tunnelresponse: {resp}'})
                 logger.debug('Tunnel is available!')
                 return True
+        except ssl.SSLError as e:
+            logger.error(f'Certificate error connecting to {self.server_address}: {e!s}')
+            # will surpas the "check" method on script caller, arriving to the UDSClient error handler
+            raise Exception(f'Certificate error connecting to {self.server_address}') from e
         except Exception as e:
             logger.error('Error connecting to tunnel server %s: %s', self.server_address, e)
         return False
@@ -235,6 +239,10 @@ class Handler(socketserver.BaseRequestHandler):
                 # All is fine, now we can tunnel data
 
                 self.process(remote=ssl_socket)
+        except ssl.SSLError as e:
+            logger.error(f'Certificate error connecting to {self.server.remote!s}: {e!s}')
+            self.server.status = ForwardState.TUNNEL_ERROR
+            self.server.stop()
         except Exception as e:
             logger.error(f'Error connecting to {self.server.remote!s}: {e!s}')
             self.server.status = ForwardState.TUNNEL_ERROR
