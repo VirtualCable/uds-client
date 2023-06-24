@@ -38,7 +38,7 @@ import tempfile
 
 # First, try to use PyQt6, available on arm64, x86_64, i386, ...
 try:
-    from PyQt6 import QtCore   # Just to test if it's available
+    from PyQt6 import QtCore  # type: ignore  # Just to test if it's available
     QT='PyQt6'
 except ImportError:  # If not found, it is using PyQt5
     QT='PyQt5'
