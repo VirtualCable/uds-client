@@ -36,36 +36,14 @@ import threading
 import select
 import typing
 import logging
-import enum
 
-from . import tools
-
-DEBUG = True
-
-BUFFER_SIZE: typing.Final[int] = 1024 * 16  # Max buffer length
-LISTEN_ADDRESS: typing.Final[str] = '0.0.0.0' if DEBUG else '127.0.0.1'
-LISTEN_ADDRESS_V6: typing.Final[str] = '::' if DEBUG else '::1'
-
-
-# ForwarServer states
-class ForwardState(enum.IntEnum):
-    TUNNEL_LISTENING = 0
-    TUNNEL_OPENING = 1
-    TUNNEL_PROCESSING = 2
-    TUNNEL_ERROR = 3
-
-
-# Some constants strings for protocol
-HANDSHAKE_V1: typing.Final[bytes] = b'\x5AMGB\xA5\x01\x00'
-CMD_TEST: typing.Final[bytes] = b'TEST'
-CMD_OPEN: typing.Final[bytes] = b'OPEN'
-
-RESPONSE_OK: typing.Final[bytes] = b'OK'
+from . import tools, consts, types
 
 
 logger = logging.getLogger(__name__)
 
 PayLoadType = typing.Optional[typing.Tuple[typing.Optional[bytes], typing.Optional[bytes]]]
+
 
 class ForwardServer(socketserver.ThreadingTCPServer):
     daemon_threads = True
@@ -80,7 +58,7 @@ class ForwardServer(socketserver.ThreadingTCPServer):
     check_certificate: bool
     keep_listening: bool
     current_connections: int
-    status: ForwardState
+    status: types.ForwardState
 
     address_family = socket.AF_INET
 
@@ -94,7 +72,7 @@ class ForwardServer(socketserver.ThreadingTCPServer):
         keep_listening: bool = False,
         ipv6_listen: bool = False,
         ipv6_remote: bool = False,
-    ) -> None:       
+    ) -> None:
         # Negative values for timeout, means "accept always connections"
         # "but if no connection is stablished on timeout (positive)"
         # "stop the listener"
@@ -108,10 +86,10 @@ class ForwardServer(socketserver.ThreadingTCPServer):
 
         # Binds and activate the server, so if local_port is 0, it will be assigned
         super().__init__(
-            server_address=(LISTEN_ADDRESS_V6 if ipv6_listen else LISTEN_ADDRESS, local_port),
+            server_address=(consts.LISTEN_ADDRESS_V6 if ipv6_listen else consts.LISTEN_ADDRESS, local_port),
             RequestHandlerClass=Handler,
         )
-        
+
         self.remote = remote
         self.remote_ipv6 = ipv6_remote or ':' in remote[0]  # if ':' in remote address, it's ipv6 (port is [1])
         self.ticket = ticket
@@ -120,7 +98,7 @@ class ForwardServer(socketserver.ThreadingTCPServer):
         self.stop_flag = threading.Event()  # False initial
         self.current_connections = 0
 
-        self.status = ForwardState.TUNNEL_LISTENING
+        self.status = types.ForwardState.TUNNEL_LISTENING
         self.can_stop = False
 
         timeout = timeout or 60
@@ -144,7 +122,7 @@ class ForwardServer(socketserver.ThreadingTCPServer):
 
             rsocket.connect(self.remote)
 
-            rsocket.sendall(HANDSHAKE_V1)  # No response expected, just the handshake
+            rsocket.sendall(consts.HANDSHAKE_V1)  # No response expected, just the handshake
 
             context = ssl.create_default_context()
 
@@ -167,16 +145,16 @@ class ForwardServer(socketserver.ThreadingTCPServer):
             return context.wrap_socket(rsocket, server_hostname=self.remote[0])
 
     def check(self) -> bool:
-        if self.status == ForwardState.TUNNEL_ERROR:
+        if self.status == types.ForwardState.TUNNEL_ERROR:
             return False
 
         logger.debug('Checking tunnel availability')
 
         try:
             with self.connect() as ssl_socket:
-                ssl_socket.sendall(CMD_TEST)
+                ssl_socket.sendall(consts.CMD_TEST)
                 resp = ssl_socket.recv(2)
-                if resp != RESPONSE_OK:
+                if resp != consts.RESPONSE_OK:
                     raise Exception({'Invalid  tunnelresponse: {resp}'})
                 logger.debug('Tunnel is available!')
                 return True
@@ -212,12 +190,12 @@ class Handler(socketserver.BaseRequestHandler):
 
     # server: ForwardServer
     def handle(self) -> None:
-        if self.server.status == ForwardState.TUNNEL_LISTENING:
-            self.server.status = ForwardState.TUNNEL_OPENING  # Only update state on first connection
+        if self.server.status == types.ForwardState.TUNNEL_LISTENING:
+            self.server.status = types.ForwardState.TUNNEL_OPENING  # Only update state on first connection
 
         # If server new connections processing are over time...
         if self.server.stoppable and not self.server.keep_listening:
-            self.server.status = ForwardState.TUNNEL_ERROR
+            self.server.status = types.ForwardState.TUNNEL_ERROR
             logger.info('Rejected timedout connection')
             self.request.close()  # End connection without processing it
             return
@@ -229,10 +207,10 @@ class Handler(socketserver.BaseRequestHandler):
             logger.debug('Ticket %s', self.server.ticket)
             with self.server.connect() as ssl_socket:
                 # Send handhshake + command + ticket
-                ssl_socket.sendall(CMD_OPEN + self.server.ticket.encode())
+                ssl_socket.sendall(consts.CMD_OPEN + self.server.ticket.encode())
                 # Check response is OK
                 data = ssl_socket.recv(2)
-                if data != RESPONSE_OK:
+                if data != consts.RESPONSE_OK:
                     data += ssl_socket.recv(128)
                     raise Exception(f'Error received: {data.decode(errors="ignore")}')  # Notify error
 
@@ -241,11 +219,11 @@ class Handler(socketserver.BaseRequestHandler):
                 self.process(remote=ssl_socket)
         except ssl.SSLError as e:
             logger.error(f'Certificate error connecting to {self.server.remote!s}: {e!s}')
-            self.server.status = ForwardState.TUNNEL_ERROR
+            self.server.status = types.ForwardState.TUNNEL_ERROR
             self.server.stop()
         except Exception as e:
             logger.error(f'Error connecting to {self.server.remote!s}: {e!s}')
-            self.server.status = ForwardState.TUNNEL_ERROR
+            self.server.status = types.ForwardState.TUNNEL_ERROR
             self.server.stop()
         finally:
             self.server.current_connections -= 1
@@ -255,19 +233,19 @@ class Handler(socketserver.BaseRequestHandler):
 
     # Processes data forwarding
     def process(self, remote: ssl.SSLSocket):
-        self.server.status = ForwardState.TUNNEL_PROCESSING
+        self.server.status = types.ForwardState.TUNNEL_PROCESSING
         logger.debug('Processing tunnel with ticket %s', self.server.ticket)
         # Process data until stop requested or connection closed
         try:
             while not self.server.stop_flag.is_set():
                 r, _w, _x = select.select([self.request, remote], [], [], 1.0)
                 if self.request in r:
-                    data = self.request.recv(BUFFER_SIZE)
+                    data = self.request.recv(consts.BUFFER_SIZE)
                     if not data:
                         break
                     remote.sendall(data)
                 if remote in r:
-                    data = remote.recv(BUFFER_SIZE)
+                    data = remote.recv(consts.BUFFER_SIZE)
                     if not data:
                         break
                     self.request.sendall(data)
@@ -306,35 +284,3 @@ def forward(
     threading.Thread(target=_run, args=(fs,)).start()
 
     return fs
-
-
-if __name__ == "__main__":
-    import sys
-
-    log = logging.getLogger()
-    log.setLevel(logging.DEBUG)
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(levelname)s - %(message)s')  # Basic log format, nice for syslog
-    handler.setFormatter(formatter)
-    log.addHandler(handler)
-
-    ticket = 'mffqg7q4s61fvx0ck2pe0zke6k0c5ipb34clhbkbs4dasb4g'
-
-    fs = forward(
-        ('demoaslan.udsenterprise.com', 11443),
-        ticket,
-        local_port=0,
-        timeout=-20,
-        check_certificate=False,
-    )
-    print('Listening on port', fs.server_address)
-    import socket
-    # Open a socket to local fs.server_address and send some random data
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect(fs.server_address)
-        s.sendall(b'Hello world!')
-        data = s.recv(1024)
-        print('Received', repr(data))
-    fs.stop()
-    

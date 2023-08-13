@@ -29,32 +29,30 @@
 '''
 @author: Adolfo Gómez, dkmaster at dkmon dot com
 '''
-import tempfile
-import string
-import random
+import base64
 import os
 import os.path
-import sys
+import random
 import socket
 import stat
+import string
 import sys
+import tempfile
 import time
-import base64
 import typing
 
 import certifi
-
 # For signature checking
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization, hashes
-from cryptography.hazmat.primitives.asymmetric import utils, padding
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding, utils
 
 try:
     import psutil
 except ImportError:
     psutil = None
 
-
+from . import consts
 from .log import logger
 
 _unlinkFiles: typing.List[typing.Tuple[str, bool]] = []
@@ -62,22 +60,6 @@ _tasksToWait: typing.List[typing.Tuple[typing.Any, bool]] = []
 _execBeforeExit: typing.List[typing.Callable[[], None]] = []
 
 sys_fs_enc = sys.getfilesystemencoding() or 'mbcs'
-
-# Public key for scripts
-PUBLIC_KEY = b'''-----BEGIN PUBLIC KEY-----
-MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAuNURlGjBpqbglkTTg2lh
-dU5qPbg9Q+RofoDDucGfrbY0pjB9ULgWXUetUWDZhFG241tNeKw+aYFTEorK5P+g
-ud7h9KfyJ6huhzln9eyDu3k+kjKUIB1PLtA3lZLZnBx7nmrHRody1u5lRaLVplsb
-FmcnptwYD+3jtJ2eK9ih935DYAkYS4vJFi2FO+npUQdYBZHPG/KwXLjP4oGOuZp0
-pCTLiCXWGjqh2GWsTECby2upGS/ZNZ1r4Ymp4V2A6DZnN0C0xenHIY34FWYahbXF
-ZGdr4DFBPdYde5Rb5aVKJQc/pWK0CV7LK6Krx0/PFc7OGg7ItdEuC7GSfPNV/ANt
-5BEQNF5w2nUUsyN8ziOrNih+z6fWQujAAUZfpCCeV9ekbwXGhbRtdNkbAryE5vH6
-eCE0iZ+cFsk72VScwLRiOhGNelMQ7mIMotNck3a0P15eaGJVE2JV0M/ag/Cnk0Lp
-wI1uJQRAVqz9ZAwvF2SxM45vnrBn6TqqxbKnHCeiwstLDYG4fIhBwFxP3iMH9EqV
-2+QXqdJW/wLenFjmXfxrjTRr+z9aYMIdtIkSpADIlbaJyTtuQpEdWnrlDS2b1IGd
-Okbm65EebVzOxfje+8dRq9Uqwip8f/qmzFsIIsx3wPSvkKawFwb0G5h2HX5oJrk0
-nVgtClKcDDlSaBsO875WDR0CAwEAAQ==
------END PUBLIC KEY-----'''
 
 
 def saveTempFile(content: str, filename: typing.Optional[str] = None) -> str:
@@ -222,7 +204,7 @@ def verifySignature(script: bytes, signature: bytes) -> bool:
     param: signature String signature to be verified
     return: Boolean. True if the signature is valid; False otherwise.
     '''
-    public_key = serialization.load_pem_public_key(data=PUBLIC_KEY, backend=default_backend())
+    public_key = serialization.load_pem_public_key(data=consts.PUBLIC_KEY, backend=default_backend())
 
     try:
         public_key.verify(  # type: ignore

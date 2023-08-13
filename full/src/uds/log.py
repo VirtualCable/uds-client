@@ -35,15 +35,20 @@ import os.path
 import platform
 import sys
 import tempfile
+import typing
+
+from . import consts
 
 # First, try to use PyQt6, available on arm64, x86_64, i386, ...
 try:
     from PyQt6 import QtCore  # type: ignore  # Just to test if it's available
-    QT='PyQt6'
+
+    QT: typing.Final[str] = 'PyQt6'
 except ImportError:  # If not found, it is using PyQt5
-    QT='PyQt5'
+    QT = 'PyQt5'  # type: ignore # (in fact, QT is only assined once)
 
 
+# Local variables
 LOGLEVEL = logging.INFO
 DEBUG = False
 
@@ -105,4 +110,3 @@ if DEBUG:
     logger.debug('Python modules path: %s', sys.path)
     logger.debug('Python modules path (site): %s', sys.path_importer_cache)
     logger.debug('Python modules path (site): %s', sys.path_hooks)
-    

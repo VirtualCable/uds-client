@@ -34,7 +34,7 @@ import sys
 
 LINUX = 'Linux'
 WINDOWS = 'Windows'
-MAC_OS_X = 'Mac os x'
+MAC_OS_X = 'Mac OS X'
 
 
 def getOs():

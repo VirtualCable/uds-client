@@ -42,7 +42,6 @@ from uds.ui import QtCore, QtWidgets, QtGui, QSettings, Ui_MainWindow  # type: i
 from uds.rest import RestApi, RetryException, InvalidVersion
 
 # Just to ensure there are available on runtime
-from uds.forward import forward as ssh_forward  # type: ignore  # pylint: disable=unused-import
 from uds.tunnel import forward as tunnel_forwards  # type: ignore  # pylint: disable=unused-import
 
 from uds.log import logger

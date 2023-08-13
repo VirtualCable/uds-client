@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2014-2023 Virtual Cable S.L.U.
+# Copyright (c) 2014-2021 Virtual Cable S.L.U.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without modification,
@@ -11,7 +11,7 @@
 #    * Redistributions in binary form must reproduce the above copyright notice,
 #      this list of conditions and the following disclaimer in the documentation
 #      and/or other materials provided with the distribution.
-#    * Neither the name of Virtual Cable S.L.U. nor the names of its contributors
+#    * Neither the name of Virtual Cable S.L. nor the names of its contributors
 #      may be used to endorse or promote products derived from this software
 #      without specific prior written permission.
 #
@@ -27,13 +27,32 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 '''
-@author: Adolfo Gómez, dkmaster at dkmon dot com
+Author: Adolfo Gómez, dkmaster at dkmon dot com
 '''
-from .consts import VERSION
+import enum
+import sys
 
-__title__ = 'udclient'
-__version__ = VERSION
-__build__ = 0x010712
-__author__ = 'Adolfo Gómez <dkmaster@dkmon.com>'
-__license__ = "BSD 3-clause"
-__copyright__ = "Copyright 2014-2023 VirtualCable S.L.U."
+
+class OsType(enum.StrEnum):
+    LINUX = 'Linux'
+    WINDOWS = 'Windows'
+    MAC = 'Mac OS'
+    UNKNOWN = 'Unknown'
+
+    DETECTED_SO = (
+        LINUX
+        if sys.platform.startswith('linux')
+        else WINDOWS
+        if sys.platform.startswith('win')
+        else MAC
+        if sys.platform.startswith('darwin')
+        else UNKNOWN
+    )
+
+
+# ForwarServer states
+class ForwardState(enum.IntEnum):
+    TUNNEL_LISTENING = 0
+    TUNNEL_OPENING = 1
+    TUNNEL_PROCESSING = 2
+    TUNNEL_ERROR = 3

@@ -29,40 +29,22 @@
 '''
 Author: Adolfo Gómez, dkmaster at dkmon dot com
 '''
-import json
-import bz2
 import base64
+import bz2
+import json
+import socket
+import ssl
+import typing
 import urllib
+import urllib.error
 import urllib.parse
 import urllib.request
-import urllib.error
-import ssl
-import socket
-import typing
 
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 
-from . import os_detector
-from . import tools
-from . import VERSION
+from . import consts, tools
 from .log import logger
-
-# Server before this version uses "unsigned" scripts
-OLD_METHOD_VERSION = '2.4.0'
-
-SECURE_CIPHERS = (
-    'TLS_AES_256_GCM_SHA384'
-    ':TLS_CHACHA20_POLY1305_SHA256'
-    ':TLS_AES_128_GCM_SHA256'
-    ':ECDHE-RSA-AES256-GCM-SHA384'
-    ':ECDHE-RSA-AES128-GCM-SHA256'
-    ':ECDHE-RSA-CHACHA20-POLY1305'
-    ':ECDHE-ECDSA-AES128-GCM-SHA256'
-    ':ECDHE-ECDSA-AES256-GCM-SHA384'
-    ':ECDHE-ECDSA-AES128-SHA256'
-    ':ECDHE-ECDSA-CHACHA20-POLY1305'
-)
 
 # Callback for error on cert
 # parameters are hostname, serial
@@ -135,7 +117,7 @@ class RestApi:
             downloadUrl = data['result']['downloadUrl']
 
         try:
-            if self._serverVersion > VERSION:
+            if self._serverVersion > consts.VERSION:
                 raise InvalidVersion(downloadUrl)
 
             return self._serverVersion
@@ -152,7 +134,7 @@ class RestApi:
         try:
             data = self.get(
                 '/{}/{}'.format(ticket, scrambler),
-                params={'hostname': tools.getHostName(), 'version': VERSION},
+                params={'hostname': tools.getHostName(), 'version': consts.VERSION},
             )
         except Exception as e:
             logger.exception('Got exception on getTransportData')
@@ -163,27 +145,24 @@ class RestApi:
 
         params = None
 
-        if self._serverVersion <= OLD_METHOD_VERSION:
-            raise Exception('Server version is too old. Please, update it')
-        else:
-            res = data['result']
-            # We have three elements on result:
-            # * Script
-            # * Signature
-            # * Script data
-            # We test that the Script has correct signature, and them execute it with the parameters
-            # script, signature, params = res['script'].decode('base64').decode('bz2'), res['signature'], json.loads(res['params'].decode('base64').decode('bz2'))
-            script, signature, params = (
-                bz2.decompress(base64.b64decode(res['script'])),
-                res['signature'],
-                json.loads(bz2.decompress(base64.b64decode(res['params']))),
-            )
-            if tools.verifySignature(script, signature) is False:
-                logger.error('Signature is invalid')
+        res = data['result']
+        # We have three elements on result:
+        # * Script
+        # * Signature
+        # * Script data
+        # We test that the Script has correct signature, and them execute it with the parameters
+        # script, signature, params = res['script'].decode('base64').decode('bz2'), res['signature'], json.loads(res['params'].decode('base64').decode('bz2'))
+        script, signature, params = (
+            bz2.decompress(base64.b64decode(res['script'])),
+            res['signature'],
+            json.loads(bz2.decompress(base64.b64decode(res['params']))),
+        )
+        if tools.verifySignature(script, signature) is False:
+            logger.error('Signature is invalid')
 
-                raise Exception(
-                    'Invalid UDS code signature. Please, report to administrator'
-                )
+            raise Exception(
+                'Invalid UDS code signature. Please, report to administrator'
+            )
 
         return script.decode(), params
 
@@ -198,7 +177,7 @@ class RestApi:
         ctx.verify_mode = ssl.CERT_NONE
         # Disable SSLv2, SSLv3, TLSv1, TLSv1.1
         ctx.minimum_version = ssl.TLSVersion.TLSv1_2
-        ctx.set_ciphers(SECURE_CIPHERS)
+        ctx.set_ciphers(consts.SECURE_CIPHERS)
 
         # If we have the certificates file, we use it
         if tools.getCaCertsFile() is not None:
@@ -235,7 +214,7 @@ class RestApi:
             req = urllib.request.Request(
                 url,
                 headers={
-                    'User-Agent': os_detector.getOs() + " - UDS Connector " + VERSION
+                    'User-Agent': consts.USER_AGENT,
                 },
             )
             return urllib.request.urlopen(req, context=ctx)

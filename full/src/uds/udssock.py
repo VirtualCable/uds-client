@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2014-2021 Virtual Cable S.L.U.
+# Copyright (c) 2023 Virtual Cable S.L.U.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without modification,
@@ -11,7 +11,7 @@
 #    * Redistributions in binary form must reproduce the above copyright notice,
 #      this list of conditions and the following disclaimer in the documentation
 #      and/or other materials provided with the distribution.
-#    * Neither the name of Virtual Cable S.L. nor the names of its contributors
+#    * Neither the name of Virtual Cable S.L.U. nor the names of its contributors
 #      may be used to endorse or promote products derived from this software
 #      without specific prior written permission.
 #
@@ -27,7 +27,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 '''
-@author: Adolfo Gómez, dkmaster at dkmon dot com
+Author: Adolfo Gómez, dkmaster at dkmon dot com
 '''
 import logging
 import socket
@@ -37,6 +37,7 @@ import urllib.request
 
 # This module allows to use proxyes to make socket connections
 # It's simply initializes the connection and, after proxy (if required) is connected, returns the socket
+# Currently experimenting with this, but not used at all
 
 
 def connect(host: str, port: int) -> socket.socket:
@@ -45,24 +46,24 @@ def connect(host: str, port: int) -> socket.socket:
     if proxy:
         # If proxy is set, connect to it and try to connect to host:port
         # First, extract proxy scheme to connect
-        proxyScheme = proxy[:proxy.index('://')]
+        proxyScheme = proxy[: proxy.index('://')]
         # Remove scheme from proxy
-        proxy = proxy[proxy.index('://') + 3:]
-        
+        proxy = proxy[proxy.index('://') + 3 :]
+
         # If user:password is present in proxy, it will be used
         if '@' in proxy:
             # Extract user:password
-            proxyUserPass = proxy[:proxy.index('@')]
+            proxyUserPass = proxy[: proxy.index('@')]
             # Remove user:password from proxy
-            proxy = proxy[proxy.index('@') + 1:]
+            proxy = proxy[proxy.index('@') + 1 :]
             # Encode user and password for basic auth on proxy
             proxyUserPass = base64.b64encode(proxyUserPass.encode('utf8')).decode('utf8')
         else:
             proxyUserPass = None
 
         # ProxyHost may be ipv4 or ipv6, so we need to split it
-        proxyHost, proxyPort = proxy.rsplit(':', 1)
-        proxyPort = int(proxyPort)
+        proxyHost, proxyPortStr = proxy.rsplit(':', 1)
+        proxyPort = int(proxyPortStr)
         if proxyHost.startswith('['):
             # ipv6
             proxyHost = proxyHost[1:-1]
@@ -77,7 +78,7 @@ def connect(host: str, port: int) -> socket.socket:
         # Read response
         data = s.recv(4096)
         if not data.startswith(b'HTTP/1.1 200'):
-            raise Exception('Proxy returned error: {}'.format(data))
+            raise Exception(f'Proxy returned error: {data!r}')
         # Return socket
         return s
     else:
@@ -87,8 +88,10 @@ def connect(host: str, port: int) -> socket.socket:
         s.connect((host, port))
         return s
 
+
 if __name__ == "__main__":
     import os
+
     os.environ['http_proxy'] = 'http://proxy:3128'
     logging.basicConfig(level=logging.DEBUG)
     s = connect('www.google.com', 80)
