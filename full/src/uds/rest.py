@@ -85,16 +85,16 @@ class RestApi:
         self._serverVersion = ''
 
     def get(
-        self, url: str, params: typing.Optional[typing.Mapping[str, str]] = None
+        self, path: str, params: typing.Optional[typing.Mapping[str, str]] = None
     ) -> typing.Any:
         if params:
-            url += '?' + '&'.join(
+            path += '?' + '&'.join(
                 '{}={}'.format(k, urllib.parse.quote(str(v).encode('utf8')))
                 for k, v in params.items()
             )
 
         return json.loads(
-            RestApi.getUrl(self._restApiUrl + url, self._callbackInvalidCert)
+            RestApi.getUrl(self._restApiUrl + path, self._callbackInvalidCert)
         )
 
     def processError(self, data: typing.Any) -> None:
