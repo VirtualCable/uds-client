@@ -1,0 +1,12 @@
+PyQt5
+cryptography
+certifi
+paramiko
+altgraph
+pywin32-ctypes
+pyinstaller-hooks-contrib
+pefile
+packaging
+pyinstaller
+pywin32
+pypiwin32
