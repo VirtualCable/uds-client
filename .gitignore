@@ -12,3 +12,7 @@ udsactor*.rpm
 
 __pycache__
 full/.vscode/
+/bin
+/udsclient*
+/udsclient-*.tar.gz
+/*.rpm
