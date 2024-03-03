@@ -9,6 +9,7 @@ udsactor*.rpm
 # Some convenient 
 *_enterprise.*
 *_ignore.*
+.python-version
 
 __pycache__
 full/.vscode/
