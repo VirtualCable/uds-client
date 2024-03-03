@@ -30,8 +30,40 @@
 Author: Adolfo Gómez, dkmaster at dkmon dot com
 '''
 import typing
+import os
+import os.path
+import tempfile
+import logging
+import sys
 
 from . import types
+
+
+# Feature enabler
+def _feature_requested(env_var: str) -> bool:
+    env_var_name = env_var.upper().replace('-', '_')
+    if env_var_name not in os.environ:
+        # Look for temp file with that name, if it exists, its true
+        # or if a file in the home directory with that name exists
+        if os.path.exists(os.path.join(tempfile.gettempdir(), env_var)) or os.path.exists(
+            os.path.join(os.path.expanduser('~'), env_var)
+        ):
+            return True
+
+    return os.getenv(env_var_name, 'false').lower() in ('true', 'yes', '1')
+
+
+DEBUG: typing.Final[bool] = _feature_requested('uds-debug-on')
+LOGLEVEL: typing.Final[int] = logging.DEBUG if DEBUG else logging.INFO
+
+LOGFILE: typing.Final[str] = os.getenv(
+    'UDS_LOG_FILE',
+    (
+        os.path.expanduser('~/udsclient.log')  # Linux or Mac on home folder
+        if 'linux' in sys.platform or 'darwin' in sys.platform
+        else os.path.join(tempfile.gettempdir(), 'udsclient.log')  # Windows or unknown on temp folder
+    ),
+)
 
 # UDS Client version
 VERSION: typing.Final[str] = '4.0.0'

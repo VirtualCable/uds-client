@@ -1,7 +1,7 @@
 #!/usr/bin/env -S python3 -s
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2014-2021 Virtual Cable S.L.U.
+# Copyright (c) 2014-2024 Virtual Cable S.L.U.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without modification,
@@ -27,8 +27,11 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+# pyright: reportUnknownMemberType=false
+# ,reportUnknownParameterType=false
+# ,reportUnknownArgumentType=false
 '''
-@author: Adolfo Gómez, dkmaster at dkmon dot com
+Author: Adolfo Gómez, dkmaster at dkmon dot com
 '''
 import sys
 import os
@@ -38,38 +41,40 @@ import webbrowser
 import threading
 import typing
 
-from uds.ui import QtCore, QtWidgets, QtGui, QSettings, Ui_MainWindow  # type: ignore
+from uds.ui import QtCore, QtWidgets, QtGui, QSettings, Ui_MainWindow
 from uds.rest import RestApi, RetryException, InvalidVersion
 
 # Just to ensure there are available on runtime
-from uds.tunnel import forward as tunnel_forwards  # type: ignore  # pylint: disable=unused-import
+from uds.tunnel import forward as tunnel_forwards  # pyright: ignore[reportUnusedImport]
 
 from uds.log import logger
-from uds import tools
+from uds import consts, tools
 from uds import VERSION
 
 
-class UDSClient(QtWidgets.QMainWindow):  # type: ignore
+class UDSClient(QtWidgets.QMainWindow):
     ticket: str = ''
     scrambler: str = ''
-    withError = False
-    animTimer: typing.Optional[QtCore.QTimer] = None
-    anim: int = 0
-    animInverted: bool = False
+    has_error = False
+    animation_timer: typing.Optional[QtCore.QTimer] = None
+    animation_value: int = 0
+    animation_reversed: bool = False
     api: RestApi
 
-    def __init__(self, api: RestApi, ticket: str, scrambler: str):
+    def __init__(self, api: RestApi, ticket: str, scrambler: str) -> None:
         QtWidgets.QMainWindow.__init__(self)
         self.api = api
         self.ticket = ticket
         self.scrambler = scrambler
-        self.setWindowFlags(QtCore.Qt.WindowType.FramelessWindowHint | QtCore.Qt.WindowType.WindowStaysOnTopHint)
+        self.setWindowFlags(
+            QtCore.Qt.WindowType.FramelessWindowHint | QtCore.Qt.WindowType.WindowStaysOnTopHint
+        )
 
         self.ui = Ui_MainWindow()
-        self.ui.setupUi(self)
+        self.ui.setupUi(self)  # type: ignore
 
         self.ui.progressBar.setValue(0)
-        self.ui.cancelButton.clicked.connect(self.cancelPushed)
+        self.ui.cancelButton.clicked.connect(self.on_cancel_pressed)
 
         self.ui.info.setText('Initializing...')
 
@@ -79,60 +84,59 @@ class UDSClient(QtWidgets.QMainWindow):  # type: ignore
         vpos = (screen_geometry.height() - mysize.height() - mysize.height()) // 2
         self.move(hpos, vpos)
 
-        self.animTimer = QtCore.QTimer()
-        self.animTimer.timeout.connect(self.updateAnim)
+        self.animation_timer = QtCore.QTimer()
+        self.animation_timer.timeout.connect(self.update_anum)
         # QtCore.QObject.connect(self.animTimer, QtCore.SIGNAL('timeout()'), self.updateAnim)
 
         self.activateWindow()
 
-        self.startAnim()
+        self.start_animation()
 
-    def closeWindow(self):
+    def close_window(self) -> None:
         self.close()
 
-    def showError(self, error):
+    def show_error(self, error: Exception) -> None:
         logger.error('got error: %s', error)
-        self.stopAnim()
-        self.ui.info.setText(
-            'UDS Plugin Error'
-        )  # In fact, main window is hidden, so this is not visible... :)
-        self.closeWindow()
+        self.stop_animation()
+        # In fact, main window is hidden, so this is not visible... :)
+        self.ui.info.setText('UDS Plugin Error')
+        self.close_window()
         QtWidgets.QMessageBox.critical(
             None,  # type: ignore
             'UDS Plugin Error',
             '{}'.format(error),
             QtWidgets.QMessageBox.StandardButton.Ok,
         )
-        self.withError = True
+        self.has_error = True
 
-    def cancelPushed(self):
+    def on_cancel_pressed(self) -> None:
         self.close()
 
-    def updateAnim(self):
-        self.anim += 2
-        if self.anim > 99:
-            self.animInverted = not self.animInverted
-            self.ui.progressBar.setInvertedAppearance(self.animInverted)
-            self.anim = 0
+    def update_anum(self) -> None:
+        self.animation_value += 2
+        if self.animation_value > 99:
+            self.animation_reversed = not self.animation_reversed
+            self.ui.progressBar.setInvertedAppearance(self.animation_reversed)
+            self.animation_value = 0
 
-        self.ui.progressBar.setValue(self.anim)
+        self.ui.progressBar.setValue(self.animation_value)
 
-    def startAnim(self):
+    def start_animation(self) -> None:
         self.ui.progressBar.setInvertedAppearance(False)
-        self.anim = 0
-        self.animInverted = False
-        self.ui.progressBar.setInvertedAppearance(self.animInverted)
-        if self.animTimer:
-            self.animTimer.start(40)
+        self.animation_value = 0
+        self.animation_reversed = False
+        self.ui.progressBar.setInvertedAppearance(self.animation_reversed)
+        if self.animation_timer:
+            self.animation_timer.start(40)
 
-    def stopAnim(self):
+    def stop_animation(self) -> None:
         self.ui.progressBar.setInvertedAppearance(False)
-        if self.animTimer:
-            self.animTimer.stop()
+        if self.animation_timer:
+            self.animation_timer.stop()
 
-    def getVersion(self):
+    def fetch_version(self) -> None:
         try:
-            self.api.getVersion()
+            self.api.get_version()
         except InvalidVersion as e:
             QtWidgets.QMessageBox.critical(
                 self,
@@ -141,59 +145,57 @@ class UDSClient(QtWidgets.QMainWindow):  # type: ignore
                 QtWidgets.QMessageBox.StandardButton.Ok,
             )
             webbrowser.open(e.downloadUrl)
-            self.closeWindow()
+            self.close_window()
             return
         except Exception as e:  # pylint: disable=broad-exception-caught
             if logger.getEffectiveLevel() == 10:
                 logger.exception('Get Version')
-            self.showError(e)
-            self.closeWindow()
+            self.show_error(e)
+            self.close_window()
             return
 
-        self.getTransportData()
+        self.fetch_transport_data()
 
-    def getTransportData(self):
+    def fetch_transport_data(self) -> None:
         try:
-            script, params = self.api.getScriptAndParams(self.ticket, self.scrambler)
-            self.stopAnim()
+            script, params = self.api.get_script_and_parameters(self.ticket, self.scrambler)
+            self.stop_animation()
 
             if 'darwin' in sys.platform:
                 self.showMinimized()
 
             # QtCore.QTimer.singleShot(3000, self.endScript)
             # self.hide()
-            self.closeWindow()
+            self.close_window()
 
-            exec(
-                script, globals(), {'parent': self, 'sp': params}
-            )  # pylint: disable=exec-used
+            exec(script, globals(), {'parent': self, 'sp': params})  # pylint: disable=exec-used
 
             # Execute the waiting tasks...
-            threading.Thread(target=endScript).start()
+            threading.Thread(target=end_script).start()
 
         except RetryException as e:
             self.ui.info.setText(str(e) + ', retrying access...')
             # Retry operation in ten seconds
-            QtCore.QTimer.singleShot(10000, self.getTransportData)
+            QtCore.QTimer.singleShot(10000, self.fetch_transport_data)
         except Exception as e:  # pylint: disable=broad-exception-caught
             if logger.getEffectiveLevel() == 10:
                 logger.exception('Get Transport Data')
-            self.showError(e)
+            self.show_error(e)
 
-    def start(self):
+    def start(self) -> None:
         """
         Starts proccess by requesting version info
         """
         self.ui.info.setText('Initializing...')
-        QtCore.QTimer.singleShot(100, self.getVersion)
+        QtCore.QTimer.singleShot(100, self.fetch_version)
 
 
-def endScript():
+def end_script() -> None:
     # Wait a bit before start processing ending sequence
     time.sleep(3)
     try:
         # Remove early stage files...
-        tools.unlinkFiles(early=True)
+        tools.unlink_files(early=True)
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.debug('Unlinking files on early stage: %s', e)
 
@@ -206,14 +208,14 @@ def endScript():
 
     try:
         logger.debug('Unlinking files')
-        tools.unlinkFiles(early=False)
+        tools.unlink_files(early=False)
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.debug('Unlinking files on later stage: %s', e)
 
     # Removing
     try:
         logger.debug('Executing threads before exit')
-        tools.execBeforeExit()
+        tools.exec_before_exit()
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.debug('execBeforeExit: %s', e)
 
@@ -221,7 +223,7 @@ def endScript():
 
 
 # Ask user to approve endpoint
-def approveHost(hostName: str):
+def verify_host_approval(hostName: str) -> bool:
     settings = QtCore.QSettings()
     settings.beginGroup('endpoints')
 
@@ -229,9 +231,7 @@ def approveHost(hostName: str):
     approved = bool(settings.value(hostName, False))
 
     errorString = '<p>The server <b>{}</b> must be approved:</p>'.format(hostName)
-    errorString += (
-        '<p>Only approve UDS servers that you trust to avoid security issues.</p>'
-    )
+    errorString += '<p>Only approve UDS servers that you trust to avoid security issues.</p>'
 
     if not approved:
         if (
@@ -250,11 +250,11 @@ def approveHost(hostName: str):
     return approved
 
 
-def sslError(hostname: str, serial):
+def ssl_error_processor(hostname: str, serial: str) -> bool:
     settings = QSettings()
     settings.beginGroup('ssl')
 
-    approved = settings.value(serial, False)
+    approved: bool = bool(settings.value(serial, False))
 
     if (
         approved
@@ -274,12 +274,12 @@ def sslError(hostname: str, serial):
 
 
 # Used only if command line says so
-def minimal(api: RestApi, ticket: str, scrambler: str):
+def minimal(api: RestApi, ticket: str, scrambler: str) -> int:
     try:
         logger.info('Minimal Execution')
         logger.debug('Getting version')
         try:
-            api.getVersion()
+            api.get_version()
         except InvalidVersion as e:
             QtWidgets.QMessageBox.critical(
                 None,  # type: ignore
@@ -290,19 +290,18 @@ def minimal(api: RestApi, ticket: str, scrambler: str):
             webbrowser.open(e.downloadUrl)
             return 0
         logger.debug('Transport data')
-        script, params = api.getScriptAndParams(ticket, scrambler)
+        script, params = api.get_script_and_parameters(ticket, scrambler)
 
         # Execute UDS transport script
         exec(script, globals(), {'parent': None, 'sp': params})
         # Execute the waiting task...
-        threading.Thread(target=endScript).start()
+        threading.Thread(target=end_script).start()
 
     except RetryException as e:
         QtWidgets.QMessageBox.warning(
             None,  # type: ignore
             'Service not ready',
-            '{}'.format('.\n'.join(str(e).split('.')))
-            + '\n\nPlease, retry again in a while.',
+            '{}'.format('.\n'.join(str(e).split('.'))) + '\n\nPlease, retry again in a while.',
             QtWidgets.QMessageBox.StandardButton.Ok,
         )
     except Exception as e:  # pylint: disable=broad-exception-caught
@@ -316,7 +315,7 @@ def minimal(api: RestApi, ticket: str, scrambler: str):
     return 0
 
 
-def main(args: typing.List[str]):
+def main(args: typing.List[str]) -> None:
     app = QtWidgets.QApplication(sys.argv)
     logger.debug('Initializing connector for %s(%s)', sys.platform, platform.machine())
 
@@ -340,20 +339,20 @@ def main(args: typing.List[str]):
         logger.debug('Now path is %s', os.environ['PATH'])
 
     # First parameter must be url
-    useMinimal = False
+    _use_minimal_interface = False  # TBD: This is not used, but it is set to True in the minimal function
     try:
-        uri = args[1]
+        uds_url = args[1]
 
-        if uri == '--minimal':
-            useMinimal = True
-            uri = args[2]  # And get URI
+        if uds_url == '--minimal':
+            _use_minimal_interface = True
+            uds_url = args[2]  # And get URI
 
-        if uri == '--test':
+        if uds_url == '--test':
             sys.exit(0)
 
-        logger.debug('URI: %s', uri)
+        logger.debug('URI: %s', uds_url)
         # Shows error if using http (uds:// ) version, not supported anymore
-        if uri[:6] == 'uds://':
+        if uds_url[:6] == 'uds://' and not consts.DEBUG:
             QtWidgets.QMessageBox.critical(
                 None,  # type: ignore
                 'Notice',
@@ -361,10 +360,10 @@ def main(args: typing.List[str]):
                 QtWidgets.QMessageBox.StandardButton.Ok,
             )
             sys.exit(1)
-        if uri[:7] != 'udss://':
+        if uds_url[:7] != 'udss://':
             raise Exception('Not supported protocol')  # Just shows "about" dialog
 
-        host, ticket, scrambler = uri.split('//')[1].split('/')  # type: ignore
+        host, ticket, scrambler = uds_url.split('//')[1].split('/')
         logger.debug(
             'host:%s, ticket:%s, scrambler:%s',
             host,
@@ -382,15 +381,13 @@ def main(args: typing.List[str]):
         sys.exit(1)
 
     # Setup REST api endpoint
-    api = RestApi(
-        f'https://{host}/uds/rest/client', sslError
-    )
+    api = RestApi(f'https://{host}/uds/rest/client', ssl_error_processor)
 
     try:
         logger.debug('Starting execution')
 
         # Approbe before going on
-        if approveHost(host) is False:
+        if verify_host_approval(host) is False:
             raise Exception('Host {} was not approved'.format(host))
 
         win = UDSClient(api, ticket, scrambler)
@@ -405,10 +402,7 @@ def main(args: typing.List[str]):
         logger.exception('Got an exception executing client:')
         exitVal = 128
         QtWidgets.QMessageBox.critical(
-            None,  # type: ignore
-            'Error', 
-            f'Fatal error: {e}',
-            QtWidgets.QMessageBox.StandardButton.Ok
+            None, 'Error', f'Fatal error: {e}', QtWidgets.QMessageBox.StandardButton.Ok  # type: ignore
         )
 
     logger.debug('Exiting')

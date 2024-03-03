@@ -34,49 +34,26 @@ import os
 import os.path
 import platform
 import sys
-import tempfile
-import typing
 
 from . import consts
 
-# First, try to use PyQt6, available on arm64, x86_64, i386, ...
-try:
-    from PyQt6 import QtCore  # type: ignore  # Just to test if it's available
-
-    QT: typing.Final[str] = 'PyQt6'
-except ImportError:  # If not found, it is using PyQt5
-    QT = 'PyQt5'  # type: ignore # (in fact, QT is only assined once)
-
 
 # Local variables
-LOGLEVEL = logging.INFO
-DEBUG = False
-
-# Update debug level if uds-debug-on exists
-if 'linux' in sys.platform or 'darwin' in sys.platform:
-    logFile = os.path.expanduser('~/udsclient.log')
-    if os.path.isfile(os.path.expanduser('~/uds-debug-on')):
-        LOGLEVEL = logging.DEBUG
-        DEBUG = True
-else:
-    logFile = os.path.join(tempfile.gettempdir(), 'udsclient.log')
-    if os.path.isfile(os.path.join(tempfile.gettempdir(), 'uds-debug-on')):
-        LOGLEVEL = logging.DEBUG
-        DEBUG = True
 
 try:
     logging.basicConfig(
-        filename=logFile,
+        filename=consts.LOGFILE,
         filemode='a',
         format='%(levelname)s %(asctime)s %(message)s',
-        level=LOGLEVEL,
+        level=consts.LOGLEVEL,
     )
 except Exception:
-    logging.basicConfig(format='%(levelname)s %(asctime)s %(message)s', level=LOGLEVEL)
+    logging.basicConfig(format='%(levelname)s %(asctime)s %(message)s', level=consts.LOGLEVEL)
 
 logger = logging.getLogger('udsclient')
 
-if DEBUG:
+if consts.DEBUG:
+    from . import ui
     # Include as much as platform info as possible
     logger.debug('Platform info:')
     logger.debug('  Platform: %s', platform.platform())
@@ -92,7 +69,7 @@ if DEBUG:
     logger.debug('  Python compiler: %s', platform.python_compiler())
     logger.debug('  Python build: %s', platform.python_build())
     # Also environment variables and any useful info
-    logger.debug('Qt framework: %s', QT)
+    logger.debug('Qt framework: %s', ui.QT_VERSION)
     logger.debug('Log level set to DEBUG')
     logger.debug('Environment variables:')
     for k, v in os.environ.items():

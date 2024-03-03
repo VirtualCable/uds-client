@@ -10,22 +10,22 @@ from uds.ui import QtCore, QtWidgets, QtGui, Ui_MacLauncher
 
 SCRIPT_NAME = 'UDSClientLauncher'
 
-class UdsApplication(QtWidgets.QApplication):   # type: ignore
+class UdsApplication(QtWidgets.QApplication):
     path: str
-    tunnels: typing.List[subprocess.Popen]
+    tunnels: typing.List[subprocess.Popen[typing.Any]]
 
     def __init__(self, argv: typing.List[str]) -> None:
         super().__init__(argv)
         self.path = os.path.join(os.path.dirname(sys.argv[0]).replace('Resources', 'MacOS'), SCRIPT_NAME)
         self.tunnels = []
-        self.lastWindowClosed.connect(self.closeTunnels)  # type: ignore
+        self.lastWindowClosed.connect(self.close_tunnels)
 
-    def cleanTunnels(self) -> None:
+    def clean_tunnels(self) -> None:
         '''
         Removes all finished tunnels from the list
         '''
 
-        def isRunning(p: subprocess.Popen):
+        def is_running(p: subprocess.Popen[typing.Any]) -> bool:
             try:
                 if p.poll() is None:
                     return True
@@ -34,9 +34,9 @@ class UdsApplication(QtWidgets.QApplication):   # type: ignore
             return False
 
         # Remove references to finished tunnels, they will be garbage collected
-        self.tunnels = [tunnel for tunnel in self.tunnels if isRunning(tunnel)]
+        self.tunnels = [tunnel for tunnel in self.tunnels if is_running(tunnel)]
 
-    def closeTunnels(self) -> None:
+    def close_tunnels(self) -> None:
         '''
         Finishes all running tunnels
         '''
@@ -47,27 +47,27 @@ class UdsApplication(QtWidgets.QApplication):   # type: ignore
                 logger.info('Found running tunnel %s, closing it', tunnel.pid)
                 tunnel.kill()
 
-    def event(self, evnt: QtCore.QEvent) -> bool:
+    def event(self, evnt: QtCore.QEvent) -> bool:  # pyright: ignore[reportIncompatibleMethodOverride]
         if evnt.type() == QtCore.QEvent.Type.FileOpen:
             fe = typing.cast(QtGui.QFileOpenEvent, evnt)
             logger.debug('Got url: %s', fe.url().url())
             fe.accept()
             logger.debug('Spawning %s', self.path)
             # First, remove all finished tunnel processed from check queue
-            self.cleanTunnels()
+            self.clean_tunnels()
             # And now add a new one
             self.tunnels.append(subprocess.Popen([self.path, fe.url().url()]))
 
         return super().event(evnt)
 
 
-def main(args: typing.List[str]):
+def main(args: typing.List[str]) -> None:
     if len(args) > 1:
         UDSClient.main(args)
     else:
         app = UdsApplication(sys.argv)
         window = QtWidgets.QMainWindow()
-        Ui_MacLauncher().setupUi(window)
+        Ui_MacLauncher().setupUi(window)  # type: ignore
 
         window.showMinimized()
 

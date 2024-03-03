@@ -44,49 +44,55 @@ def connect(host: str, port: int) -> socket.socket:
     # Get proxy settings
     proxy = urllib.request.getproxies().get('https', None)
     if proxy:
-        # If proxy is set, connect to it and try to connect to host:port
-        # First, extract proxy scheme to connect
-        proxyScheme = proxy[: proxy.index('://')]
-        # Remove scheme from proxy
-        proxy = proxy[proxy.index('://') + 3 :]
+        try:
+            # If proxy is set, connect to it and try to connect to host:port
+            # First, extract proxy scheme to connect
+            # proxy_scheme = proxy[: proxy.index('://')]
+            # Remove scheme from proxy
+            proxy = proxy[proxy.index('://') + 3 :]
 
-        # If user:password is present in proxy, it will be used
-        if '@' in proxy:
-            # Extract user:password
-            proxyUserPass = proxy[: proxy.index('@')]
-            # Remove user:password from proxy
-            proxy = proxy[proxy.index('@') + 1 :]
-            # Encode user and password for basic auth on proxy
-            proxyUserPass = base64.b64encode(proxyUserPass.encode('utf8')).decode('utf8')
-        else:
-            proxyUserPass = None
+            # If user:password is present in proxy, it will be used
+            if '@' in proxy:
+                # Extract user:password
+                proxy_user_password = proxy[: proxy.index('@')]
+                # Remove user:password from proxy
+                proxy = proxy[proxy.index('@') + 1 :]
+                # Encode user and password for basic auth on proxy
+                proxy_user_password = base64.b64encode(proxy_user_password.encode('utf8')).decode('utf8')
+            else:
+                proxy_user_password = None
 
-        # ProxyHost may be ipv4 or ipv6, so we need to split it
-        proxyHost, proxyPortStr = proxy.rsplit(':', 1)
-        proxyPort = int(proxyPortStr)
-        if proxyHost.startswith('['):
-            # ipv6
-            proxyHost = proxyHost[1:-1]
-        logging.debug('Connecting to proxy {}:{} to connect to {}:{}'.format(proxyHost, proxyPort, host, port))
-        s = socket.socket(socket.AF_INET6 if ':' in proxyHost else socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((proxyHost, proxyPort))
-        # if https proxy, we need to upgrade connection to https
-        s.sendall(f'CONNECT {host}:{port} HTTP/1.1\r\n'.encode('utf8'))
-        if proxyUserPass:
-            s.sendall(f'Proxy-Authorization: Basic {proxyUserPass}\r\n'.encode('utf8'))
-        s.sendall(b'\r\n')
-        # Read response
-        data = s.recv(4096)
-        if not data.startswith(b'HTTP/1.1 200'):
-            raise Exception(f'Proxy returned error: {data!r}')
-        # Return socket
-        return s
-    else:
-        # If no proxy is set, simply connect to host:port
-        logging.debug('Connecting to {}:{}'.format(host, port))
-        s = socket.socket(socket.AF_INET6 if ':' in host else socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((host, port))
-        return s
+            # ProxyHost may be ipv4 or ipv6, so we need to split it
+            proxy_host, proxy_port_str = proxy.rsplit(':', 1)
+            proxy_port = int(proxy_port_str)
+            if proxy_host.startswith('['):
+                # ipv6
+                proxy_host = proxy_host[1:-1]
+            logging.debug(
+                'Connecting to proxy {}:{} to connect to {}:{}'.format(proxy_host, proxy_port, host, port)
+            )
+            s = socket.socket(socket.AF_INET6 if ':' in proxy_host else socket.AF_INET, socket.SOCK_STREAM)
+            s.connect((proxy_host, proxy_port))
+            # if https proxy, we need to upgrade connection to https
+            s.sendall(f'CONNECT {host}:{port} HTTP/1.1\r\n'.encode('utf8'))
+            if proxy_user_password:
+                s.sendall(f'Proxy-Authorization: Basic {proxy_user_password}\r\n'.encode('utf8'))
+            s.sendall(b'\r\n')
+            # Read response
+            data = s.recv(4096)
+            if not data.startswith(b'HTTP/1.1 200'):
+                raise Exception(f'Proxy returned error: {data!r}')
+            # Return socket
+            return s
+        except Exception as e:
+            logging.error('Error connecting to proxy: %s. Trying direct connection', e)
+            # fall back to direct connection
+
+    # If no proxy is set, simply connect to host:port
+    logging.debug('Connecting to {}:{}'.format(host, port))
+    s = socket.socket(socket.AF_INET6 if ':' in host else socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((host, port))
+    return s
 
 
 if __name__ == "__main__":

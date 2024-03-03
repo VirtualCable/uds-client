@@ -42,27 +42,25 @@ import time
 import typing
 
 import certifi
+
 # For signature checking
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding, utils
+from cryptography.hazmat.primitives.asymmetric import padding
 
-try:
-    import psutil
-except ImportError:
-    psutil = None
+import psutil
 
 from . import consts
 from .log import logger
 
 _unlinkFiles: typing.List[typing.Tuple[str, bool]] = []
-_tasksToWait: typing.List[typing.Tuple[typing.Any, bool]] = []
+_tasks_to_Wait: typing.List[typing.Tuple[typing.Any, bool]] = []
 _execBeforeExit: typing.List[typing.Callable[[], None]] = []
 
 sys_fs_enc = sys.getfilesystemencoding() or 'mbcs'
 
 
-def saveTempFile(content: str, filename: typing.Optional[str] = None) -> str:
+def save_temp_file(content: str, filename: typing.Optional[str] = None) -> str:
     if filename is None:
         filename = ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(16))
         filename = filename + '.uds'
@@ -76,7 +74,7 @@ def saveTempFile(content: str, filename: typing.Optional[str] = None) -> str:
     return filename
 
 
-def readTempFile(filename: str) -> typing.Optional[str]:
+def read_temp_file(filename: str) -> typing.Optional[str]:
     filename = os.path.join(tempfile.gettempdir(), filename)
     try:
         with open(filename, 'r') as f:
@@ -85,7 +83,7 @@ def readTempFile(filename: str) -> typing.Optional[str]:
         return None
 
 
-def testServer(host: str, port: typing.Union[str, int], timeOut: int = 4) -> bool:
+def test_server(host: str, port: typing.Union[str, int], timeOut: int = 4) -> bool:
     try:
         sock = socket.create_connection((host, int(port)), timeOut)
         sock.close()
@@ -94,7 +92,7 @@ def testServer(host: str, port: typing.Union[str, int], timeOut: int = 4) -> boo
     return True
 
 
-def findApp(appName: str, extraPath: typing.Optional[str] = None) -> typing.Optional[str]:
+def find_application(appName: str, extraPath: typing.Optional[str] = None) -> typing.Optional[str]:
     searchPath = os.environ['PATH'].split(os.pathsep)
     if extraPath:
         searchPath += list(extraPath)
@@ -106,7 +104,7 @@ def findApp(appName: str, extraPath: typing.Optional[str] = None) -> typing.Opti
     return None
 
 
-def getHostName() -> str:
+def get_hostname() -> str:
     '''
     Returns current host name
     In fact, it's a wrapper for socket.gethostname()
@@ -119,7 +117,7 @@ def getHostName() -> str:
 # Queing operations (to be executed before exit)
 
 
-def addFileToUnlink(filename: str, early: bool = False) -> None:
+def register_for_delayed_deletion(filename: str, early: bool = False) -> None:
     '''
     Adds a file to the wait-and-unlink list
     '''
@@ -127,7 +125,7 @@ def addFileToUnlink(filename: str, early: bool = False) -> None:
     _unlinkFiles.append((filename, early))
 
 
-def unlinkFiles(early: bool = False) -> None:
+def unlink_files(early: bool = False) -> None:
     '''
     Removes all wait-and-unlink files
     '''
@@ -145,18 +143,18 @@ def unlinkFiles(early: bool = False) -> None:
                 logger.debug('File %s not deleted: %s', f[0], e)
 
 
-def addTaskToWait(task: typing.Any, includeSubprocess: bool = False) -> None:
+def add_task_to_wait(task: typing.Any, includeSubprocess: bool = False) -> None:
     logger.debug(
         'Added task %s to wait %s',
         task,
         'with subprocesses' if includeSubprocess else '',
     )
-    _tasksToWait.append((task, includeSubprocess))
+    _tasks_to_Wait.append((task, includeSubprocess))
 
 
 def waitForTasks() -> None:
-    logger.debug('Started to wait %s', _tasksToWait)
-    for task, waitForSubp in _tasksToWait:
+    logger.debug('Started to wait %s', _tasks_to_Wait)
+    for task, waitForSubp in _tasks_to_Wait:
         logger.debug('Waiting for task %s, subprocess wait: %s', task, waitForSubp)
         try:
             if hasattr(task, 'join'):
@@ -171,32 +169,32 @@ def waitForTasks() -> None:
                 hasattr(task, 'pid'),
             )
             if psutil and waitForSubp and hasattr(task, 'pid'):
-                subProcesses = list(
+                subprocesses: list['psutil.Process'] = list(
                     filter(
-                        lambda x: x.ppid() == task.pid,  # type: ignore
+                        lambda x: x.ppid() == task.pid,  # type x: psutil.Process
                         psutil.process_iter(attrs=('ppid',)),
                     )
                 )
-                logger.debug('Waiting for subprocesses... %s, %s', task.pid, subProcesses)
-                for i in subProcesses:
+                logger.debug('Waiting for subprocesses... %s, %s', task.pid, subprocesses)
+                for i in subprocesses:
                     logger.debug('Found %s', i)
                     i.wait()
         except Exception as e:
             logger.error('Waiting for tasks to finish error: %s', e)
 
 
-def addExecBeforeExit(fnc: typing.Callable[[], None]) -> None:
+def register_execute_before_exit(fnc: typing.Callable[[], None]) -> None:
     logger.debug('Added exec before exit: %s', fnc)
     _execBeforeExit.append(fnc)
 
 
-def execBeforeExit() -> None:
+def exec_before_exit() -> None:
     logger.debug('Esecuting exec before exit: %s', _execBeforeExit)
     for fnc in _execBeforeExit:
         fnc()
 
 
-def verifySignature(script: bytes, signature: bytes) -> bool:
+def verify_signature(script: bytes, signature: bytes) -> bool:
     '''
     Verifies with a public key from whom the data came that it was indeed
     signed by their private key
@@ -217,7 +215,7 @@ def verifySignature(script: bytes, signature: bytes) -> bool:
     return True
 
 
-def getCaCertsFile() -> typing.Optional[str]:
+def get_cacerts_file() -> typing.Optional[str]:
     # First, try certifi...
 
     # If environment contains CERTIFICATE_BUNDLE_PATH, use it
@@ -246,5 +244,23 @@ def getCaCertsFile() -> typing.Optional[str]:
     return None
 
 
-def isMac() -> bool:
+def is_mac_os() -> bool:
     return 'darwin' in sys.platform
+
+
+# old compat names, to ensure compatibility with old code
+# Basically, this will be here until v5.0. On 4.5 (or even later) Broker plugins will update
+# (making them imcompatible with 3.x versions)
+addTaskToWait = add_task_to_wait
+saveTempFile = save_temp_file
+readTempFile = read_temp_file
+testServer = test_server
+findApp = find_application
+getHostName = get_hostname
+addFileToUnlink = register_for_delayed_deletion
+unlinkFiles = unlink_files
+isMac = is_mac_os
+getCaCertsFile = get_cacerts_file
+verifySignature = verify_signature
+execBeforeExit = exec_before_exit
+addExecBeforeExit = register_execute_before_exit

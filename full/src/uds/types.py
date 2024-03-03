@@ -33,7 +33,7 @@ import enum
 import sys
 
 
-class OsType(enum.StrEnum):
+class OsType(enum.Enum):
     LINUX = 'Linux'
     WINDOWS = 'Windows'
     MAC = 'Mac OS'
@@ -48,6 +48,9 @@ class OsType(enum.StrEnum):
         if sys.platform.startswith('darwin')
         else UNKNOWN
     )
+    
+    def __str__(self) -> str:
+        return str(self.value)
 
 
 # ForwarServer states

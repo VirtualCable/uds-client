@@ -11,3 +11,4 @@ udsactor*.rpm
 *_ignore.*
 
 __pycache__
+full/.vscode/

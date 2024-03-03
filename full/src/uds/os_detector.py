@@ -31,17 +31,13 @@
 @author: Adolfo Gómez, dkmaster at dkmon dot com
 '''
 import sys
+from . import types
 
-LINUX = 'Linux'
-WINDOWS = 'Windows'
-MAC_OS_X = 'Mac OS X'
-
-
-def getOs():
+def get_osname() -> types.OsType:
     if sys.platform.startswith('linux'):
-        return LINUX
+        return types.OsType.LINUX
     if sys.platform.startswith('win'):
-        return WINDOWS
+        return types.OsType.WINDOWS
     if sys.platform.startswith('darwin'):
-        return MAC_OS_X
-    return 'other'
+        return types.OsType.MAC
+    return types.OsType.UNKNOWN

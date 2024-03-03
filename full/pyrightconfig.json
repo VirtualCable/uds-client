@@ -1,0 +1,13 @@
+{
+    "include": [
+        "src"
+    ],
+    "exclude": [
+        "**/ui/**",
+        "**/__pycache__",
+    ],
+    "typeCheckingMode": "strict",
+    "reportPrivateUsage": false,
+    "reportUnusedImport": true,
+    "reportMissingTypeStubs": false,
+}

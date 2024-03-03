@@ -69,20 +69,20 @@ class InvalidVersion(UDSException):
 
 class RestApi:
 
-    _restApiUrl: str  # base Rest API URL
-    _callbackInvalidCert: typing.Optional[CertCallbackType]
-    _serverVersion: str
+    _rest_api_endpoint: str  # base Rest API URL
+    _on_invalid_certificate: typing.Optional[CertCallbackType]
+    _server_version: str
 
     def __init__(
         self,
-        restApiUrl,
-        callbackInvalidCert: typing.Optional[CertCallbackType] = None,
+        rest_api_endpoint: str,
+        on_invalid_certificate: typing.Optional[CertCallbackType] = None,
     ) -> None:  # parent not used
-        logger.debug('Setting request URL to %s', restApiUrl)
+        logger.debug('Setting request URL to %s', rest_api_endpoint)
 
-        self._restApiUrl = restApiUrl
-        self._callbackInvalidCert = callbackInvalidCert
-        self._serverVersion = ''
+        self._rest_api_endpoint = rest_api_endpoint
+        self._on_invalid_certificate = on_invalid_certificate
+        self._server_version = ''
 
     def get(
         self, path: str, params: typing.Optional[typing.Mapping[str, str]] = None
@@ -94,39 +94,39 @@ class RestApi:
             )
 
         return json.loads(
-            RestApi.getUrl(self._restApiUrl + path, self._callbackInvalidCert)
+            RestApi.get_url(self._rest_api_endpoint + path, self._on_invalid_certificate)
         )
 
-    def processError(self, data: typing.Any) -> None:
+    def process_error(self, data: typing.Any) -> None:
         if 'error' in data:
             if data.get('retryable', '0') == '1':
                 raise RetryException(data['error'])
 
             raise UDSException(data['error'])
 
-    def getVersion(self) -> str:
+    def get_version(self) -> str:
         '''Gets and stores the serverVersion.
         Also checks that the version is valid for us. If not,
         will raise an "InvalidVersion' exception'''
 
         downloadUrl = ''
-        if not self._serverVersion:
+        if not self._server_version:
             data = self.get('')
-            self.processError(data)
-            self._serverVersion = data['result']['requiredVersion']
+            self.process_error(data)
+            self._server_version = data['result']['requiredVersion']
             downloadUrl = data['result']['downloadUrl']
 
         try:
-            if self._serverVersion > consts.VERSION:
+            if self._server_version > consts.VERSION:
                 raise InvalidVersion(downloadUrl)
 
-            return self._serverVersion
+            return self._server_version
         except InvalidVersion:
             raise
         except Exception as e:
             raise UDSException(e)
 
-    def getScriptAndParams(
+    def get_script_and_parameters(
         self, ticket: str, scrambler: str
     ) -> typing.Tuple[str, typing.Any]:
         '''Gets the transport script, validates it if necesary
@@ -134,14 +134,14 @@ class RestApi:
         try:
             data = self.get(
                 '/{}/{}'.format(ticket, scrambler),
-                params={'hostname': tools.getHostName(), 'version': consts.VERSION},
+                params={'hostname': tools.get_hostname(), 'version': consts.VERSION},
             )
         except Exception as e:
             logger.exception('Got exception on getTransportData')
             raise e
 
         logger.debug('Transport data received')
-        self.processError(data)
+        self.process_error(data)
 
         params = None
 
@@ -157,7 +157,7 @@ class RestApi:
             res['signature'],
             json.loads(bz2.decompress(base64.b64decode(res['params']))),
         )
-        if tools.verifySignature(script, signature) is False:
+        if tools.verify_signature(script, signature) is False:
             logger.error('Signature is invalid')
 
             raise Exception(
@@ -180,8 +180,8 @@ class RestApi:
         ctx.set_ciphers(consts.SECURE_CIPHERS)
 
         # If we have the certificates file, we use it
-        if tools.getCaCertsFile() is not None:
-            ctx.load_verify_locations(tools.getCaCertsFile())
+        if tools.get_cacerts_file() is not None:
+            ctx.load_verify_locations(tools.get_cacerts_file())
         hostname = urllib.parse.urlparse(url)[1]
         serial = ''
 
@@ -209,7 +209,7 @@ class RestApi:
         ctx.verify_mode = ssl.CERT_REQUIRED
         ctx.check_hostname = True
 
-        def urlopen(url: str):
+        def _open_url(url: str) -> typing.Any:
             # Generate the request with the headers
             req = urllib.request.Request(
                 url,
@@ -220,7 +220,7 @@ class RestApi:
             return urllib.request.urlopen(req, context=ctx)
 
         try:
-            response = urlopen(url)
+            response = _open_url(url)
         except urllib.error.URLError as e:
             if isinstance(e.reason, ssl.SSLCertVerificationError):
                 # Ask about invalid certificate
@@ -228,7 +228,7 @@ class RestApi:
                     if certErrorCallback(hostname, serial):
                         ctx.check_hostname = False
                         ctx.verify_mode = ssl.CERT_NONE
-                        response = urlopen(url)
+                        response = _open_url(url)
                 else:
                     raise
             else:
@@ -237,7 +237,7 @@ class RestApi:
         return response
 
     @staticmethod
-    def getUrl(
+    def get_url(
         url: str, certErrorCallback: typing.Optional[CertCallbackType] = None
     ) -> bytes:
         with RestApi._open(url, certErrorCallback) as response:

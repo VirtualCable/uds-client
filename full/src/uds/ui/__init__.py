@@ -29,23 +29,37 @@
 '''
 Author: Adolfo Gómez, dkmaster at dkmon dot com
 '''
-# First, try to use PyQt6, available on arm64, x86_64, i386, ...
+import typing
+
+# First, try to use PySide6, available on arm64, x86_64, i386, ...
 try:
-    from PyQt6 import QtCore, QtWidgets, QtGui  # type: ignore
-    from PyQt6.QtCore import QSettings  # type: ignore
+    from PySide6 import QtCore, QtWidgets, QtGui
+    from PySide6.QtCore import QSettings
 
     from .qt6.UDSLauncherMac import Ui_MacLauncher
     from .qt6.UDSWindow import Ui_MainWindow
     from .qt6 import UDSResources_rc
-    QT_VERSION = 6
+    _version = 'PySide6'
+# second, try to use PyQt6, available on arm64, x86_64, i386, ...
+except ImportError:
+    try:
+        from PyQt6 import QtCore, QtWidgets, QtGui  # type: ignore
+        from PyQt6.QtCore import QSettings  # type: ignore
 
-except ImportError:  # If not found, try to use PyQt5 (not available on arm64)
-    from PyQt5 import QtCore, QtWidgets, QtGui  # type: ignore
-    from PyQt5.QtCore import QSettings  # type: ignore
+        from .qt6.UDSLauncherMac import Ui_MacLauncher
+        from .qt6.UDSWindow import Ui_MainWindow
+        from .qt6 import UDSResources_rc
+        _version = 'PyQt6'
 
-    from .qt5.UDSLauncherMac import Ui_MacLauncher  # type: ignore
-    from .qt5.UDSWindow import Ui_MainWindow  # type: ignore
-    from .qt5 import UDSResources_rc  # type: ignore
-    QT_VERSION = 5
+    except ImportError:  # If not found, try to use PyQt5 (not available on arm64)
+        from PyQt5 import QtCore, QtWidgets, QtGui  # type: ignore
+        from PyQt5.QtCore import QSettings  # type: ignore
+
+        from .qt5.UDSLauncherMac import Ui_MacLauncher  # type: ignore
+        from .qt5.UDSWindow import Ui_MainWindow  # type: ignore
+        from .qt5 import UDSResources_rc  # type: ignore
+        _version = 'PyQt5'
+
+QT_VERSION: typing.Final[str] = _version
 
 __all__ = ['QtCore', 'QtWidgets', 'QtGui', 'Ui_MacLauncher', 'Ui_MainWindow', 'UDSResources_rc', 'QSettings', 'QT_VERSION']

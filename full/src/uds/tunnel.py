@@ -32,7 +32,6 @@ import socket
 import socketserver
 import ssl
 import threading
-import threading
 import select
 import typing
 import logging
@@ -133,8 +132,8 @@ class ForwardServer(socketserver.ThreadingTCPServer):
             # context.minimum_version = ssl.TLSVersion.TLSv1_2 if tools.isMac() else ssl.TLSVersion.TLSv1_3
             context.minimum_version = ssl.TLSVersion.TLSv1_3
 
-            if tools.getCaCertsFile() is not None:
-                context.load_verify_locations(tools.getCaCertsFile())  # Load certifi certificates
+            if tools.get_cacerts_file() is not None:
+                context.load_verify_locations(tools.get_cacerts_file())  # Load certifi certificates
 
             # If ignore remote certificate
             if self.check_certificate is False:
@@ -186,7 +185,7 @@ class ForwardServer(socketserver.ThreadingTCPServer):
 
 class Handler(socketserver.BaseRequestHandler):
     # Override Base type
-    server: ForwardServer
+    server: ForwardServer  # pyright: ignore[reportIncompatibleVariableOverride]
 
     # server: ForwardServer
     def handle(self) -> None:
@@ -232,7 +231,7 @@ class Handler(socketserver.BaseRequestHandler):
             self.server.stop()
 
     # Processes data forwarding
-    def process(self, remote: ssl.SSLSocket):
+    def process(self, remote: ssl.SSLSocket) -> None:
         self.server.status = types.ForwardState.TUNNEL_PROCESSING
         logger.debug('Processing tunnel with ticket %s', self.server.ticket)
         # Process data until stop requested or connection closed
@@ -251,7 +250,7 @@ class Handler(socketserver.BaseRequestHandler):
                     self.request.sendall(data)
             logger.debug('Finished tunnel with ticket %s', self.server.ticket)
         except Exception as e:
-            pass
+            logger.info('Remote connection closed: %s', e)
 
 
 def _run(server: ForwardServer) -> None:
@@ -269,8 +268,8 @@ def forward(
     ticket: str,
     timeout: int = 0,
     local_port: int = 0,
-    check_certificate=True,
-    keep_listening=True,
+    check_certificate: bool = True,
+    keep_listening: bool = True,
 ) -> ForwardServer:
     fs = ForwardServer(
         remote=remote,
