@@ -39,6 +39,7 @@ import platform
 import time
 import webbrowser
 import threading
+import urllib.parse
 import typing
 
 from uds.ui import QtCore, QtWidgets, QtGui, QSettings, Ui_MainWindow  # pyright: ignore
@@ -48,7 +49,7 @@ from uds.rest import RestApi, RetryException, InvalidVersion
 from uds.tunnel import forward as tunnel_forwards  # pyright: ignore[reportUnusedImport]
 
 from uds.log import logger
-from uds import consts, tools
+from uds import consts, exceptions, tools
 from uds import VERSION
 
 
@@ -315,6 +316,61 @@ def minimal(api: RestApi, ticket: str, scrambler: str) -> int:
     return 0
 
 
+def parse_arguments(args: typing.List[str]) -> typing.Tuple[str, str, str, bool]:
+    """
+    Parses the command line arguments and returns a tuple containing the host, ticket, scrambler, and a flag indicating whether to use the minimal interface.
+
+    Args:
+        args (List[str]): The command line arguments. (including the program name as the first argument)
+
+    Returns:
+        Tuple[str, str, str, bool]: A tuple containing the host, ticket, scrambler, and a flag indicating whether to use the minimal interface.
+
+    Raises:
+        Exception: If the number of arguments is less than 2.
+        IDSArgumentException: If the uds_url is '--test'.
+        UDSMessageException: If the uds_url starts with 'uds://' and the DEBUG flag is False.
+        UDSMessageException: If the uds_url does not start with 'udss://'.
+    """
+    if len(args) < 2:
+        raise Exception()
+
+    use_minimal_interface = False
+    uds_url = args[1]
+    
+    if uds_url == '--minimal':
+        use_minimal_interface = True
+        uds_url = args[2]  # And get URI
+        
+    if uds_url == '--test':
+        raise exceptions.UDSArgumentException('test')
+    
+    try:
+        urlinfo = urllib.parse.urlparse(uds_url)
+        ticket, scrambler = urlinfo.path.split('/')[1:3]
+    except Exception:
+        raise exceptions.UDSMessageException('Invalid UDS URL')
+
+    # Check if minimal interface is requested on the URL
+    if 'minimal' in urllib.parse.parse_qs(urlinfo.query):
+        use_minimal_interface = True
+    
+    if urlinfo.scheme == 'uds':
+        if not consts.DEBUG:
+            raise exceptions.UDSMessageException(
+                'UDS Client Version {} does not support HTTP protocol Anymore.'.format(VERSION)
+            )
+    elif urlinfo.scheme != 'udss':
+        raise exceptions.UDSMessageException('Not supported protocol')  # Just shows "about" dialog
+
+    return (
+        urlinfo.netloc,
+        ticket,
+        scrambler,
+        use_minimal_interface,
+    )
+
+
 def main(args: typing.List[str]) -> int:
     app = QtWidgets.QApplication(sys.argv)
     logger.debug('Initializing connector for %s(%s)', sys.platform, platform.machine())
@@ -339,38 +395,21 @@ def main(args: typing.List[str]) -> int:
         logger.debug('Now path is %s', os.environ['PATH'])
 
     # First parameter must be url
-    _use_minimal_interface = False  # TBD: This is not used, but it is set to True in the minimal function
     try:
-        uds_url = args[1]
-
-        if uds_url == '--minimal':
-            _use_minimal_interface = True
-            uds_url = args[2]  # And get URI
-
-        if uds_url == '--test':
-            sys.exit(0)
-
-        logger.debug('URI: %s', uds_url)
-        # Shows error if using http (uds:// ) version, not supported anymore
-        if uds_url[:6] == 'uds://' and not consts.DEBUG:
-            QtWidgets.QMessageBox.critical(
-                None,  # type: ignore
-                'Notice',
-                f'UDS Client Version {VERSION} does not support HTTP protocol Anymore.',
-                QtWidgets.QMessageBox.StandardButton.Ok,
-            )
-            sys.exit(1)
-        if uds_url[:7] != 'udss://':
-            raise Exception('Not supported protocol')  # Just shows "about" dialog
-
-        host, ticket, scrambler = uds_url.split('//')[1].split('/')
-        logger.debug(
-            'host:%s, ticket:%s, scrambler:%s',
-            host,
-            ticket,
-            scrambler,
+        host, ticket, scrambler, _use_minimal_interface = parse_arguments(args)
+    except exceptions.UDSMessageException as e:
+        logger.debug('Detected execution without valid URI, exiting: %s', e)
+        QtWidgets.QMessageBox.critical(
+            None,  # type: Ignore
+            f'UDS Client Version {VERSION}',
+            f'{e}',
+            QtWidgets.QMessageBox.StandardButton.Ok,
         )
-    except Exception:  # pylint: disable=broad-except
+        return 1
+    except exceptions.UDSArgumentException as e:
+        # Currently only test, return 0
+        return 0
+    except Exception:
         logger.debug('Detected execution without valid URI, exiting')
         QtWidgets.QMessageBox.critical(
             None,  # type: ignore
@@ -378,7 +417,7 @@ def main(args: typing.List[str]) -> int:
             f'UDS Client Version {VERSION}',
             QtWidgets.QMessageBox.StandardButton.Ok,
         )
-        sys.exit(1)
+        return 1
 
     # Setup REST api endpoint
     api = RestApi(f'https://{host}/uds/rest/client', ssl_error_processor)
@@ -398,7 +437,7 @@ def main(args: typing.List[str]) -> int:
         exit_code = app.exec()
         logger.debug('Main execution finished correctly: %s', exit_code)
 
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except Exception as e:
         logger.exception('Got an exception executing client:')
         exit_code = 128
         QtWidgets.QMessageBox.critical(
@@ -413,4 +452,3 @@ if __name__ == "__main__":
     exit_code = main(sys.argv)
     # Set exit code
     sys.exit(exit_code)
-

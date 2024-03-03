@@ -56,6 +56,7 @@ if consts.DEBUG:
     from . import ui
     # Include as much as platform info as possible
     logger.debug('Platform info:')
+    logger.debug('  UDSClient version: %s', consts.VERSION)
     logger.debug('  Platform: %s', platform.platform())
     logger.debug('  Node: %s', platform.node())
     logger.debug('  System: %s', platform.system())
@@ -75,7 +76,7 @@ if consts.DEBUG:
     for k, v in os.environ.items():
         logger.debug('  %s=%s', k, v)
 
-    # usefull info for debugging
+    # useful info for debugging
     logger.debug('Python path: %s', sys.path)
     logger.debug('Python executable: %s', sys.executable)
     logger.debug('Python version: %s', sys.version)
