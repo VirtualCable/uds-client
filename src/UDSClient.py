@@ -315,7 +315,7 @@ def minimal(api: RestApi, ticket: str, scrambler: str) -> int:
     return 0
 
 
-def main(args: typing.List[str]) -> None:
+def main(args: typing.List[str]) -> int:
     app = QtWidgets.QApplication(sys.argv)
     logger.debug('Initializing connector for %s(%s)', sys.platform, platform.machine())
 
@@ -395,19 +395,22 @@ def main(args: typing.List[str]) -> None:
 
         win.start()
 
-        exitVal = app.exec()
-        logger.debug('Execution finished correctly')
+        exit_code = app.exec()
+        logger.debug('Main execution finished correctly: %s', exit_code)
 
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.exception('Got an exception executing client:')
-        exitVal = 128
+        exit_code = 128
         QtWidgets.QMessageBox.critical(
             None, 'Error', f'Fatal error: {e}', QtWidgets.QMessageBox.StandardButton.Ok  # type: ignore
         )
 
     logger.debug('Exiting')
-    sys.exit(exitVal)
+    return exit_code
 
 
 if __name__ == "__main__":
-    main(sys.argv)
+    exit_code = main(sys.argv)
+    # Set exit code
+    sys.exit(exit_code)
+

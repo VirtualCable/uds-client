@@ -96,6 +96,13 @@ class ForwardServer(socketserver.ThreadingTCPServer):
         self.keep_listening = keep_listening
         self.stop_flag = threading.Event()  # False initial
         self.current_connections = 0
+        
+        logger.debug('Remote: %s', remote)
+        logger.debug('Remote IPv6: %s', self.remote_ipv6)
+        logger.debug('Ticket: %s', ticket)
+        logger.debug('Check certificate: %s', check_certificate)
+        logger.debug('Keep listening: %s', keep_listening)
+        logger.debug('Timeout: %s', timeout)
 
         self.status = types.ForwardState.TUNNEL_LISTENING
         self.can_stop = False
@@ -195,7 +202,7 @@ class Handler(socketserver.BaseRequestHandler):
         # If server new connections processing are over time...
         if self.server.stoppable and not self.server.keep_listening:
             self.server.status = types.ForwardState.TUNNEL_ERROR
-            logger.info('Rejected timedout connection')
+            logger.error('Rejected timedout connection')
             self.request.close()  # End connection without processing it
             return
 
