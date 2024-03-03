@@ -41,7 +41,7 @@ import webbrowser
 import threading
 import typing
 
-from uds.ui import QtCore, QtWidgets, QtGui, QSettings, Ui_MainWindow
+from uds.ui import QtCore, QtWidgets, QtGui, QSettings, Ui_MainWindow  # pyright: ignore
 from uds.rest import RestApi, RetryException, InvalidVersion
 
 # Just to ensure there are available on runtime
