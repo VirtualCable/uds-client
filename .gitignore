@@ -17,3 +17,6 @@ full/.vscode/
 /udsclient*
 /udsclient-*.tar.gz
 /*.rpm
+
+igelimage
+thinproimage

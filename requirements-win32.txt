@@ -2,7 +2,6 @@ PyQt5
 psutil
 cryptography
 certifi
-paramiko
 altgraph
 pywin32-ctypes
 pyinstaller-hooks-contrib
