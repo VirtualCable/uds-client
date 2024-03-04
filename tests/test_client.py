@@ -33,12 +33,14 @@ import typing
 from unittest import TestCase
 
 import UDSClient
-from uds import exceptions, consts
+from uds import exceptions, consts, rest
+
+from .utils import fixtures
 
 logger = logging.getLogger(__name__)
 
 
-class TestTunnel(TestCase):
+class TestClient(TestCase):
     def test_commandline(self):
         def _check_url(url: str, minimal: typing.Optional[str] = None, with_minimal: bool = False) -> None:
             host, ticket, scrambler, use_minimal = UDSClient.parse_arguments(
@@ -54,16 +56,16 @@ class TestTunnel(TestCase):
             UDSClient.parse_arguments(['udsclient'])
 
         # Valid command line, but not an URI. should return UDSArgumentException
-        with self.assertRaises(exceptions.UDSArgumentException):
+        with self.assertRaises(exceptions.ArgumentException):
             UDSClient.parse_arguments(['udsclient', '--test'])
 
         # unkonwn protocol, should return UDSArgumentException
-        with self.assertRaises(exceptions.UDSMessageException):
+        with self.assertRaises(exceptions.MessageException):
             UDSClient.parse_arguments(['udsclient', 'unknown://' + 'a' * 2048])
 
         # uds protocol, but withoout debug mode, should rais exception.UDSMessagException
         consts.DEBUG = False
-        with self.assertRaises(exceptions.UDSMessageException):
+        with self.assertRaises(exceptions.MessageException):
             _check_url('uds://a/b/c')
 
         # Set DEBUG mode (on consts), now should work
@@ -77,3 +79,16 @@ class TestTunnel(TestCase):
             _check_url('udss://a/b/c', '--minimal', with_minimal=True)
             # No matter what is passed as value of minimal, if present, it will be used
             _check_url('udss://a/b/c?minimal=11', with_minimal=True)
+
+    def test_rest(self):
+        # This is a simple test, we will test the rest api is mocked correctly
+        with fixtures.patch_rest_api() as api:
+            self.assertEqual(api.get_version(), fixtures.SERVER_VERSION)
+            self.assertEqual(api.get_script_and_parameters('ticket', 'scrambler'), (fixtures.SCRIPT, fixtures.PARAMETERS))
+            
+            from_api = rest.RestApi.api('host', lambda x, y: True)
+            # Repeat tests, should return same results
+            self.assertEqual(from_api.get_version(), fixtures.SERVER_VERSION)
+            self.assertEqual(from_api.get_script_and_parameters('ticket', 'scrambler'), (fixtures.SCRIPT, fixtures.PARAMETERS))
+            # And also, the api is the same
+            self.assertEqual(from_api, api)

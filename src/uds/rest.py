@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2017-2021 Virtual Cable S.L.U.
+# Copyright (c) 2017-2024 Virtual Cable S.L.U.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without modification,
@@ -43,7 +43,7 @@ import urllib.request
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 
-from . import consts, tools
+from . import consts, tools, exceptions
 from .log import logger
 
 # Callback for error on cert
@@ -51,21 +51,6 @@ from .log import logger
 # If returns True, ignores error
 CertCallbackType = typing.Callable[[str, str], bool]
 
-# Exceptions
-class UDSException(Exception):
-    pass
-
-
-class RetryException(UDSException):
-    pass
-
-
-class InvalidVersion(UDSException):
-    downloadUrl: str
-
-    def __init__(self, downloadUrl: str) -> None:
-        super().__init__(downloadUrl)
-        self.downloadUrl = downloadUrl
 
 class RestApi:
 
@@ -84,25 +69,20 @@ class RestApi:
         self._on_invalid_certificate = on_invalid_certificate
         self._server_version = ''
 
-    def get(
-        self, path: str, params: typing.Optional[typing.Mapping[str, str]] = None
-    ) -> typing.Any:
+    def get(self, path: str, params: typing.Optional[typing.Mapping[str, str]] = None) -> typing.Any:
         if params:
             path += '?' + '&'.join(
-                '{}={}'.format(k, urllib.parse.quote(str(v).encode('utf8')))
-                for k, v in params.items()
+                '{}={}'.format(k, urllib.parse.quote(str(v).encode('utf8'))) for k, v in params.items()
             )
 
-        return json.loads(
-            RestApi.get_url(self._rest_api_endpoint + path, self._on_invalid_certificate)
-        )
+        return json.loads(RestApi.get_url(self._rest_api_endpoint + path, self._on_invalid_certificate))
 
     def process_error(self, data: typing.Any) -> None:
         if 'error' in data:
             if data.get('retryable', '0') == '1':
-                raise RetryException(data['error'])
+                raise exceptions.RetryException(data['error'])
 
-            raise UDSException(data['error'])
+            raise exceptions.UDSException(data['error'])
 
     def get_version(self) -> str:
         '''Gets and stores the serverVersion.
@@ -118,17 +98,15 @@ class RestApi:
 
         try:
             if self._server_version > consts.VERSION:
-                raise InvalidVersion(downloadUrl)
+                raise exceptions.InvalidVersion(downloadUrl)
 
             return self._server_version
-        except InvalidVersion:
+        except exceptions.InvalidVersion:
             raise
         except Exception as e:
-            raise UDSException(e)
+            raise exceptions.UDSException(e) from e
 
-    def get_script_and_parameters(
-        self, ticket: str, scrambler: str
-    ) -> typing.Tuple[str, typing.Any]:
+    def get_script_and_parameters(self, ticket: str, scrambler: str) -> typing.Tuple[str, typing.Any]:
         '''Gets the transport script, validates it if necesary
         and returns it'''
         try:
@@ -160,18 +138,14 @@ class RestApi:
         if tools.verify_signature(script, signature) is False:
             logger.error('Signature is invalid')
 
-            raise Exception(
-                'Invalid UDS code signature. Please, report to administrator'
-            )
+            raise Exception('Invalid UDS code signature. Please, report to administrator')
 
         return script.decode(), params
 
         # exec(script.decode("utf-8"), globals(), {'parent': self, 'sp': params})
 
     @staticmethod
-    def _open(
-        url: str, certErrorCallback: typing.Optional[CertCallbackType] = None
-    ) -> typing.Any:
+    def _open(url: str, certErrorCallback: typing.Optional[CertCallbackType] = None) -> typing.Any:
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
@@ -237,9 +211,11 @@ class RestApi:
         return response
 
     @staticmethod
-    def get_url(
-        url: str, certErrorCallback: typing.Optional[CertCallbackType] = None
-    ) -> bytes:
+    def api(host: str, on_invalid_certificate: CertCallbackType) -> 'RestApi':
+        return RestApi(f'https://{host}/uds/rest/client', on_invalid_certificate)
+
+    @staticmethod
+    def get_url(url: str, certErrorCallback: typing.Optional[CertCallbackType] = None) -> bytes:
         with RestApi._open(url, certErrorCallback) as response:
             resp = response.read()
 

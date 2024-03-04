@@ -43,7 +43,7 @@ import urllib.parse
 import typing
 
 from uds.ui import QtCore, QtWidgets, QtGui, QSettings, Ui_MainWindow  # pyright: ignore
-from uds.rest import RestApi, RetryException, InvalidVersion
+from uds.rest import RestApi
 
 # Just to ensure there are available on runtime
 from uds.tunnel import forward as tunnel_forwards  # pyright: ignore[reportUnusedImport]
@@ -138,7 +138,7 @@ class UDSClient(QtWidgets.QMainWindow):
     def fetch_version(self) -> None:
         try:
             self.api.get_version()
-        except InvalidVersion as e:
+        except exceptions.InvalidVersion as e:
             QtWidgets.QMessageBox.critical(
                 self,
                 'Upgrade required',
@@ -174,7 +174,7 @@ class UDSClient(QtWidgets.QMainWindow):
             # Execute the waiting tasks...
             threading.Thread(target=end_script).start()
 
-        except RetryException as e:
+        except exceptions.RetryException as e:
             self.ui.info.setText(str(e) + ', retrying access...')
             # Retry operation in ten seconds
             QtCore.QTimer.singleShot(10000, self.fetch_transport_data)
@@ -251,7 +251,7 @@ def verify_host_approval(hostName: str) -> bool:
     return approved
 
 
-def ssl_error_processor(hostname: str, serial: str) -> bool:
+def ssl_certificate_validator(hostname: str, serial: str) -> bool:
     settings = QSettings()
     settings.beginGroup('ssl')
 
@@ -281,7 +281,7 @@ def minimal(api: RestApi, ticket: str, scrambler: str) -> int:
         logger.debug('Getting version')
         try:
             api.get_version()
-        except InvalidVersion as e:
+        except exceptions.InvalidVersion as e:
             QtWidgets.QMessageBox.critical(
                 None,  # type: ignore
                 'Upgrade required',
@@ -298,7 +298,7 @@ def minimal(api: RestApi, ticket: str, scrambler: str) -> int:
         # Execute the waiting task...
         threading.Thread(target=end_script).start()
 
-    except RetryException as e:
+    except exceptions.RetryException as e:
         QtWidgets.QMessageBox.warning(
             None,  # type: ignore
             'Service not ready',
@@ -337,31 +337,31 @@ def parse_arguments(args: typing.List[str]) -> typing.Tuple[str, str, str, bool]
 
     use_minimal_interface = False
     uds_url = args[1]
-    
+
     if uds_url == '--minimal':
         use_minimal_interface = True
         uds_url = args[2]  # And get URI
-        
+
     if uds_url == '--test':
-        raise exceptions.UDSArgumentException('test')
-    
+        raise exceptions.ArgumentException('test')
+
     try:
         urlinfo = urllib.parse.urlparse(uds_url)
         ticket, scrambler = urlinfo.path.split('/')[1:3]
     except Exception:
-        raise exceptions.UDSMessageException('Invalid UDS URL')
+        raise exceptions.MessageException('Invalid UDS URL')
 
     # Check if minimal interface is requested on the URL
     if 'minimal' in urllib.parse.parse_qs(urlinfo.query):
         use_minimal_interface = True
-    
+
     if urlinfo.scheme == 'uds':
         if not consts.DEBUG:
-            raise exceptions.UDSMessageException(
+            raise exceptions.MessageException(
                 'UDS Client Version {} does not support HTTP protocol Anymore.'.format(VERSION)
             )
     elif urlinfo.scheme != 'udss':
-        raise exceptions.UDSMessageException('Not supported protocol')  # Just shows "about" dialog
+        raise exceptions.MessageException('Not supported protocol')  # Just shows "about" dialog
 
     return (
         urlinfo.netloc,
@@ -397,7 +397,7 @@ def main(args: typing.List[str]) -> int:
     # First parameter must be url
     try:
         host, ticket, scrambler, _use_minimal_interface = parse_arguments(args)
-    except exceptions.UDSMessageException as e:
+    except exceptions.MessageException as e:
         logger.debug('Detected execution without valid URI, exiting: %s', e)
         QtWidgets.QMessageBox.critical(
             None,  # type: Ignore
@@ -406,7 +406,7 @@ def main(args: typing.List[str]) -> int:
             QtWidgets.QMessageBox.StandardButton.Ok,
         )
         return 1
-    except exceptions.UDSArgumentException as e:
+    except exceptions.ArgumentException as e:
         # Currently only test, return 0
         return 0
     except Exception:
@@ -419,15 +419,18 @@ def main(args: typing.List[str]) -> int:
         )
         return 1
 
-    # Setup REST api endpoint
-    api = RestApi(f'https://{host}/uds/rest/client', ssl_error_processor)
+    # Setup REST api and ssl certificate validator
+    api = RestApi.api(
+        host,
+        on_invalid_certificate=ssl_certificate_validator,
+    )
 
     try:
         logger.debug('Starting execution')
 
         # Approbe before going on
         if verify_host_approval(host) is False:
-            raise Exception('Host {} was not approved'.format(host))
+            raise exceptions.MessageException('Host {} was not approved'.format(host))
 
         win = UDSClient(api, ticket, scrambler)
         win.show()
@@ -438,10 +441,16 @@ def main(args: typing.List[str]) -> int:
         logger.debug('Main execution finished correctly: %s', exit_code)
 
     except Exception as e:
-        logger.exception('Got an exception executing client:')
+        if not isinstance(e, exceptions.MessageException):
+            logger.exception('Got an exception executing client:')
+        else:
+            logger.info('Message from error: %s', e)
         exit_code = 128
         QtWidgets.QMessageBox.critical(
-            None, 'Error', f'Fatal error: {e}', QtWidgets.QMessageBox.StandardButton.Ok  # type: ignore
+            None,
+            'Error',
+            f'Fatal error: {e}',
+            QtWidgets.QMessageBox.StandardButton.Ok,
         )
 
     logger.debug('Exiting')
