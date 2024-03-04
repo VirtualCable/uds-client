@@ -38,6 +38,7 @@ make DESTDIR=targz DISTRO=targz VERSION=${VERSION} install
 # And make FULL CLIENT .tar.gz for x86 and raspberry
 make DESTDIR=appimage DISTRO=x86_64 VERSION=${VERSION} build-appimage
 make DESTDIR=appimage DISTRO=armhf VERSION=${VERSION} build-appimage
+make DESTDIR=appimage DISTRO=aarch64 VERSION=${VERSION} build-appimage
 make DESTDIR=appimage DISTRO=i686 VERSION=${VERSION} build-appimage
 
 # Now create igel version

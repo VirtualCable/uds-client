@@ -60,6 +60,9 @@ endif
 ifeq ($(DISTRO),armhf)
 	cat udsclient-appimage-x86_64.recipe | sed -e s/"version: 0.0.0"/"version: $(VERSION)"/g | sed -e s/amd64/armhf/g | sed -e s/x86_64/armhf/g > appimage.recipe
 endif
+ifeq ($(DISTRO),aarch64)
+	cat udsclient-appimage-x86_64.recipe | sed -e s/"version: 0.0.0"/"version: $(VERSION)"/g | sed -e s/amd64/arm64/g | sed -e s/x86_64/aarch64/g > appimage.recipe
+endif
 ifeq ($(DISTRO),i686)
 	cat udsclient-appimage-x86_64.recipe | sed -e s/"version: 0.0.0"/"version: $(VERSION)"/g | sed -e s/amd64/i386/g | sed -e s/x86_64/i686/g > appimage.recipe
 endif

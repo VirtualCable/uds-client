@@ -24,7 +24,7 @@ AppDir:
     # Set the python executable as entry point
     exec: usr/bin/python3
     # Set the application main script path as argument. Use '$@' to forward CLI parameters
-    exec_args: "$APPDIR/usr/src/UDSClient.py $@"
+    exec_args: '$APPDIR/usr/src/UDSClient.py $@'
 
   apt:
     arch: amd64
@@ -58,3 +58,4 @@ AppImage:
   # update-information: None
   sign-key: 592AF43A64B8559137FA2458AA4ECFEE784E6BA7
   arch: x86_64
+  comp: xz
