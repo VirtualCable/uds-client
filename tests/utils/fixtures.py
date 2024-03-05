@@ -33,7 +33,8 @@ import contextlib
 import typing
 from unittest import mock
 
-from uds import rest
+import UDSClient
+from uds import rest, ui
 
 from . import autospec
 
@@ -42,13 +43,14 @@ SCRIPT: str = '''
 # TODO: add testing script here
 '''
 PARAMETERS: typing.MutableMapping[str, typing.Any] = {
-# TODO: add parameters here
+    # TODO: add parameters here
 }
 
 REST_METHODS_INFO: typing.List[autospec.AutoSpecMethodInfo] = [
     autospec.AutoSpecMethodInfo(rest.RestApi.get_version, return_value=SERVER_VERSION),
     autospec.AutoSpecMethodInfo(rest.RestApi.get_script_and_parameters, return_value=(SCRIPT, PARAMETERS)),
 ]
+
 
 def create_client_mock() -> mock.Mock:
     """
@@ -60,10 +62,21 @@ def create_client_mock() -> mock.Mock:
 @contextlib.contextmanager
 def patch_rest_api(
     **kwargs: typing.Any,
-) -> typing.Generator[mock.Mock, None, None]:
+) -> typing.Generator['rest.RestApi', None, None]:
     client = create_client_mock()
+    patcher = None
     try:
-        mock.patch('uds.rest.RestApi.api', return_value=client).start()
+        patcher = mock.patch('uds.rest.RestApi.api', return_value=client)
+        patcher.start()
         yield client
     finally:
-        mock.patch.stopall()
+        if patcher:
+            patcher.stop()
+
+
+@contextlib.contextmanager
+def patched_uds_client() -> typing.Generator['UDSClient.UDSClient', None, None]:
+    app = ui.QtWidgets.QApplication([])
+    with patch_rest_api() as client:
+        yield UDSClient.UDSClient(client, 'ticket', 'scrambler')
+    app.quit()

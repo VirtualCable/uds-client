@@ -53,8 +53,10 @@ import psutil
 from . import consts
 from .log import logger
 
-_unlinkFiles: typing.List[typing.Tuple[str, bool]] = []
-_tasks_to_Wait: typing.List[typing.Tuple[typing.Any, bool]] = []
+# Global variables is fine, no more than one thread will be running
+# at the same time for the same process, so no need to lock
+_unlink_files: typing.List[typing.Tuple[str, bool]] = []
+_tasks_to_wait: typing.List[typing.Tuple[typing.Any, bool]] = []
 _execBeforeExit: typing.List[typing.Callable[[], None]] = []
 
 sys_fs_enc = sys.getfilesystemencoding() or 'mbcs'
@@ -122,7 +124,7 @@ def register_for_delayed_deletion(filename: str, early: bool = False) -> None:
     Adds a file to the wait-and-unlink list
     '''
     logger.debug('Added file %s to unlink on %s stage', filename, 'early' if early else 'later')
-    _unlinkFiles.append((filename, early))
+    _unlink_files.append((filename, early))
 
 
 def unlink_files(early: bool = False) -> None:
@@ -130,7 +132,7 @@ def unlink_files(early: bool = False) -> None:
     Removes all wait-and-unlink files
     '''
     logger.debug('Unlinking files on %s stage', 'early' if early else 'later')
-    filesToUnlink = list(filter(lambda x: x[1] == early, _unlinkFiles))
+    filesToUnlink = list(filter(lambda x: x[1] == early, _unlink_files))
     if filesToUnlink:
         logger.debug('Files to unlink: %s', filesToUnlink)
         # Wait 2 seconds before deleting anything on early and 5 on later stages
@@ -143,19 +145,19 @@ def unlink_files(early: bool = False) -> None:
                 logger.debug('File %s not deleted: %s', f[0], e)
 
 
-def add_task_to_wait(task: typing.Any, includeSubprocess: bool = False) -> None:
+def add_task_to_wait(task: typing.Any, with_subprocesses: bool = False) -> None:
     logger.debug(
         'Added task %s to wait %s',
         task,
-        'with subprocesses' if includeSubprocess else '',
+        'with subprocesses' if with_subprocesses else '',
     )
-    _tasks_to_Wait.append((task, includeSubprocess))
+    _tasks_to_wait.append((task, with_subprocesses))
 
 
-def waitForTasks() -> None:
-    logger.debug('Started to wait %s', _tasks_to_Wait)
-    for task, waitForSubp in _tasks_to_Wait:
-        logger.debug('Waiting for task %s, subprocess wait: %s', task, waitForSubp)
+def wait_for_tasks() -> None:
+    logger.debug('Started to wait %s', _tasks_to_wait)
+    for task, wait_subprocesses in _tasks_to_wait:
+        logger.debug('Waiting for task %s, subprocess wait: %s', task, wait_subprocesses)
         try:
             if hasattr(task, 'join'):
                 task.join()
@@ -165,10 +167,10 @@ def waitForTasks() -> None:
             logger.debug(
                 'Psutil: %s, waitForSubp: %s, hasattr: %s',
                 psutil,
-                waitForSubp,
+                wait_subprocesses,
                 hasattr(task, 'pid'),
             )
-            if psutil and waitForSubp and hasattr(task, 'pid'):
+            if psutil and wait_subprocesses and hasattr(task, 'pid'):
                 subprocesses: list['psutil.Process'] = list(
                     filter(
                         lambda x: x.ppid() == task.pid,  # type x: psutil.Process
@@ -252,15 +254,16 @@ def is_mac_os() -> bool:
 # Basically, this will be here until v5.0. On 4.5 (or even later) Broker plugins will update
 # (making them imcompatible with 3.x versions)
 addTaskToWait = add_task_to_wait
+# waitForTasks = wait_for_tasks  # Not used on scripts
 saveTempFile = save_temp_file
 readTempFile = read_temp_file
 testServer = test_server
 findApp = find_application
-getHostName = get_hostname
+# getHostName = get_hostname  # Not used on scripts
 addFileToUnlink = register_for_delayed_deletion
-unlinkFiles = unlink_files
-isMac = is_mac_os
-getCaCertsFile = get_cacerts_file
-verifySignature = verify_signature
-execBeforeExit = exec_before_exit
-addExecBeforeExit = register_execute_before_exit
+# unlinkFiles = unlink_files  # Not used on existing scripts
+# isMac = is_mac_os  # Not used on scripts  # Not used on existing scripts
+# getCaCertsFile = get_cacerts_file  # Not used on scripts
+# verifySignature = verify_signature  # Not used on scripts
+# execBeforeExit = exec_before_exit  # Not used on scripts
+# addExecBeforeExit = register_execute_before_exit  # Not used on existing scripts

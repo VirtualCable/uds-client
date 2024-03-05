@@ -30,7 +30,7 @@ Author: Adolfo Gómez, dkmaster at dkmon dot com
 '''
 import logging
 import typing
-from unittest import TestCase
+from unittest import TestCase, mock
 
 import UDSClient
 from uds import exceptions, consts, rest
@@ -92,3 +92,11 @@ class TestClient(TestCase):
             self.assertEqual(from_api.get_script_and_parameters('ticket', 'scrambler'), (fixtures.SCRIPT, fixtures.PARAMETERS))
             # And also, the api is the same
             self.assertEqual(from_api, api)
+
+    def test_udsclient(self):
+        # This is a simple test, we will test the rest api is mocked correctly
+        with fixtures.patched_uds_client() as client:
+            # patch UDSClient module waiting_tasks_processor to avoid waiting for tasks
+            with mock.patch('UDSClient.waiting_tasks_processor'):
+                client.fetch_version()
+            

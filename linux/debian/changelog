@@ -2,9 +2,9 @@ udsclient3 (4.0.0) stable; urgency=medium
 
   * Upgraded to 4.0.0 release
 
- -- Adolfo Gómez García <agomez@virtualcable.es>  Fri, 1 Jul 2022 15:12:10 +0200
+ -- Adolfo Gómez García <agomez@virtualcable.es>  Fri, 1 Jul 2023 15:12:10 +0200
 
-udsclient3 (4.0.0) stable; urgency=medium
+udsclient3 (3.6.0) stable; urgency=medium
 
   * Upgraded to 3.6.0 release
 

@@ -40,7 +40,7 @@ try:
     from .pyside6.UDSWindow import Ui_MainWindow
     from .pyside6 import UDSResources_rc
     _version = 'PySide6'
-# second, try to use PyQt6, available on arm64, x86_64, i386, ...
+# second, try to use PyQt6, available on arm64, x86_64, i386, and also as packages for different os (debian, ubuntu, fedora, opensuse, ...)
 except ImportError:
     try:
         from PyQt6 import QtCore, QtWidgets, QtGui  # type: ignore

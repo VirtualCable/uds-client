@@ -33,6 +33,7 @@
 '''
 Author: Adolfo Gómez, dkmaster at dkmon dot com
 '''
+import contextlib
 import sys
 import os
 import platform
@@ -86,10 +87,8 @@ class UDSClient(QtWidgets.QMainWindow):
         self.move(hpos, vpos)
 
         self.animation_timer = QtCore.QTimer()
-        self.animation_timer.timeout.connect(self.update_anum)
+        self.animation_timer.timeout.connect(self.update_anim)
         # QtCore.QObject.connect(self.animTimer, QtCore.SIGNAL('timeout()'), self.updateAnim)
-
-        self.activateWindow()
 
         self.start_animation()
 
@@ -102,18 +101,13 @@ class UDSClient(QtWidgets.QMainWindow):
         # In fact, main window is hidden, so this is not visible... :)
         self.ui.info.setText('UDS Plugin Error')
         self.close_window()
-        QtWidgets.QMessageBox.critical(
-            None,  # type: ignore
-            'UDS Plugin Error',
-            '{}'.format(error),
-            QtWidgets.QMessageBox.StandardButton.Ok,
-        )
+        UDSClient.error_message('UDS Plugin Error', f'{error}')
         self.has_error = True
 
     def on_cancel_pressed(self) -> None:
         self.close()
 
-    def update_anum(self) -> None:
+    def update_anim(self) -> None:
         self.animation_value += 2
         if self.animation_value > 99:
             self.animation_reversed = not self.animation_reversed
@@ -139,11 +133,9 @@ class UDSClient(QtWidgets.QMainWindow):
         try:
             self.api.get_version()
         except exceptions.InvalidVersion as e:
-            QtWidgets.QMessageBox.critical(
-                self,
+            UDSClient.error_message(
                 'Upgrade required',
                 'A newer connector version is required.\nA browser will be opened to download it.',
-                QtWidgets.QMessageBox.StandardButton.Ok,
             )
             webbrowser.open(e.downloadUrl)
             self.close_window()
@@ -171,8 +163,7 @@ class UDSClient(QtWidgets.QMainWindow):
 
             exec(script, globals(), {'parent': self, 'sp': params})  # pylint: disable=exec-used
 
-            # Execute the waiting tasks...
-            threading.Thread(target=end_script).start()
+            self.process_waiting_tasks()
 
         except exceptions.RetryException as e:
             self.ui.info.setText(str(e) + ', retrying access...')
@@ -183,6 +174,19 @@ class UDSClient(QtWidgets.QMainWindow):
                 logger.exception('Get Transport Data')
             self.show_error(e)
 
+    def process_waiting_tasks(self) -> None:
+            """
+            Process the waiting tasks in a separate thread.
+
+            This way, the gui don't get blocked by the waiting tasks.
+
+            Returns:
+                None
+            """
+
+            threading.Thread(target=waiting_tasks_processor).start()
+            # And simply return
+
     def start(self) -> None:
         """
         Starts proccess by requesting version info
@@ -190,8 +194,50 @@ class UDSClient(QtWidgets.QMainWindow):
         self.ui.info.setText('Initializing...')
         QtCore.QTimer.singleShot(100, self.fetch_version)
 
+    @staticmethod
+    def warning_message(title: str, message: str, *, yes_no: bool = False) -> bool:
+        buttons = (
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No
+            if yes_no
+            else QtWidgets.QMessageBox.StandardButton.Ok
+        )
+        return (
+            QtWidgets.QMessageBox.warning(
+                None,  # type: ignore
+                title,
+                message,
+                buttons,
+            )
+            == QtWidgets.QMessageBox.StandardButton.Yes  # If no yes_no, does not matter this comparison
+        )
 
-def end_script() -> None:
+    @staticmethod
+    def error_message(title: str, message: str, *, yes_no: bool = False) -> bool:
+        buttons = (
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No
+            if yes_no
+            else QtWidgets.QMessageBox.StandardButton.Ok
+        )
+        return (
+            QtWidgets.QMessageBox.critical(
+                None,
+                title,
+                message,
+                buttons,
+            )
+            == QtWidgets.QMessageBox.StandardButton.Yes  # If no yes_no, does not matter this comparison
+        )
+
+    @staticmethod
+    @contextlib.contextmanager
+    def settings(group: str) -> typing.Iterator[QSettings]:
+        settings = QSettings()
+        settings.beginGroup(group)
+        yield settings
+        settings.endGroup()
+
+
+def waiting_tasks_processor() -> None:
     # Wait a bit before start processing ending sequence
     time.sleep(3)
     try:
@@ -203,7 +249,7 @@ def end_script() -> None:
     # After running script, wait for stuff
     try:
         logger.debug('Wating for tasks to finish...')
-        tools.waitForTasks()
+        tools.wait_for_tasks()
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.debug('Watiting for tasks to finish: %s', e)
 
@@ -225,52 +271,31 @@ def end_script() -> None:
 
 # Ask user to approve endpoint
 def verify_host_approval(hostName: str) -> bool:
-    settings = QtCore.QSettings()
-    settings.beginGroup('endpoints')
+    with UDSClient.settings('endpoints') as settings:
+        approved = bool(settings.value(hostName, False))
 
-    # approved = settings.value(hostName, False).toBool()
-    approved = bool(settings.value(hostName, False))
+        errorString = '<p>The server <b>{}</b> must be approved:</p>'.format(hostName)
+        errorString += '<p>Only approve UDS servers that you trust to avoid security issues.</p>'
 
-    errorString = '<p>The server <b>{}</b> must be approved:</p>'.format(hostName)
-    errorString += '<p>Only approve UDS servers that you trust to avoid security issues.</p>'
+        if not approved:
+            if UDSClient.warning_message('ACCESS Warning', errorString, yes_no=True):
+                settings.setValue(hostName, True)
+                approved = True
 
-    if not approved:
-        if (
-            QtWidgets.QMessageBox.warning(
-                None,  # type: ignore
-                'ACCESS Warning',
-                errorString,
-                QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
-            )
-            == QtWidgets.QMessageBox.StandardButton.Yes
-        ):
-            settings.setValue(hostName, True)
-            approved = True
-
-    settings.endGroup()
     return approved
 
 
 def ssl_certificate_validator(hostname: str, serial: str) -> bool:
-    settings = QSettings()
-    settings.beginGroup('ssl')
-
-    approved: bool = bool(settings.value(serial, False))
-
-    if (
-        approved
-        or QtWidgets.QMessageBox.warning(
-            None,  # type: ignore
+    with UDSClient.settings('ssl') as settings:
+        approved: bool = bool(settings.value(serial, False))
+        if approved or UDSClient.warning_message(
             'SSL Warning',
             f'Could not check SSL certificate for {hostname}.\nDo you trust this host?',
-            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
-        )
-        == QtWidgets.QMessageBox.StandardButton.Yes
-    ):
-        approved = True
-        settings.setValue(serial, True)
+            yes_no=True,
+        ):
+            approved = True
+            settings.setValue(serial, True)
 
-    settings.endGroup()
     return approved
 
 
@@ -282,11 +307,9 @@ def minimal(api: RestApi, ticket: str, scrambler: str) -> int:
         try:
             api.get_version()
         except exceptions.InvalidVersion as e:
-            QtWidgets.QMessageBox.critical(
-                None,  # type: ignore
+            UDSClient.error_message(
                 'Upgrade required',
                 'A newer connector version is required.\nA browser will be opened to download it.',
-                QtWidgets.QMessageBox.StandardButton.Ok,
             )
             webbrowser.open(e.downloadUrl)
             return 0
@@ -296,23 +319,16 @@ def minimal(api: RestApi, ticket: str, scrambler: str) -> int:
         # Execute UDS transport script
         exec(script, globals(), {'parent': None, 'sp': params})
         # Execute the waiting task...
-        threading.Thread(target=end_script).start()
+        threading.Thread(target=waiting_tasks_processor).start()
 
     except exceptions.RetryException as e:
-        QtWidgets.QMessageBox.warning(
-            None,  # type: ignore
+        UDSClient.error_message(
             'Service not ready',
             '{}'.format('.\n'.join(str(e).split('.'))) + '\n\nPlease, retry again in a while.',
-            QtWidgets.QMessageBox.StandardButton.Ok,
         )
     except Exception as e:  # pylint: disable=broad-exception-caught
         # logger.exception('Got exception on getTransportData')
-        QtWidgets.QMessageBox.critical(
-            None,  # type: ignore
-            'Error',
-            '{}'.format(str(e)) + '\n\nPlease, retry again in a while.',
-            QtWidgets.QMessageBox.StandardButton.Ok,
-        )
+        UDSClient.error_message('Error', f'{e}\n\nPlease, retry again in a while.')
     return 0
 
 
@@ -399,11 +415,9 @@ def main(args: typing.List[str]) -> int:
         host, ticket, scrambler, _use_minimal_interface = parse_arguments(args)
     except exceptions.MessageException as e:
         logger.debug('Detected execution without valid URI, exiting: %s', e)
-        QtWidgets.QMessageBox.critical(
-            None,  # type: Ignore
+        UDSClient.error_message(
             f'UDS Client Version {VERSION}',
             f'{e}',
-            QtWidgets.QMessageBox.StandardButton.Ok,
         )
         return 1
     except exceptions.ArgumentException as e:
@@ -411,12 +425,11 @@ def main(args: typing.List[str]) -> int:
         return 0
     except Exception:
         logger.debug('Detected execution without valid URI, exiting')
-        QtWidgets.QMessageBox.critical(
-            None,  # type: ignore
+        UDSClient.error_message(
             'Notice',
             f'UDS Client Version {VERSION}',
-            QtWidgets.QMessageBox.StandardButton.Ok,
         )
+
         return 1
 
     # Setup REST api and ssl certificate validator
@@ -433,7 +446,9 @@ def main(args: typing.List[str]) -> int:
             raise exceptions.MessageException('Host {} was not approved'.format(host))
 
         win = UDSClient(api, ticket, scrambler)
+        # Show and activate window, so it's on top
         win.show()
+        win.activateWindow()
 
         win.start()
 
@@ -446,11 +461,9 @@ def main(args: typing.List[str]) -> int:
         else:
             logger.info('Message from error: %s', e)
         exit_code = 128
-        QtWidgets.QMessageBox.critical(
-            None,
+        UDSClient.error_message(
             'Error',
             f'Fatal error: {e}',
-            QtWidgets.QMessageBox.StandardButton.Ok,
         )
 
     logger.debug('Exiting')

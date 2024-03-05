@@ -53,9 +53,9 @@ class UdsApplication(QtWidgets.QApplication):
             logger.debug('Got url: %s', fe.url().url())
             fe.accept()
             logger.debug('Spawning %s', self.path)
-            # First, remove all finished tunnel processed from check queue
+            # First, remove all finished tunnel processed from check queue, to keelp things clean
             self.clean_tunnels()
-            # And now add a new one
+            # And now add a new one, calling self with the url
             self.tunnels.append(subprocess.Popen([self.path, fe.url().url()]))
 
         return super().event(evnt)
