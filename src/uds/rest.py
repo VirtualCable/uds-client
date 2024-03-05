@@ -56,7 +56,7 @@ class RestApi:
 
     _rest_api_endpoint: str  # base Rest API URL
     _on_invalid_certificate: typing.Optional[CertCallbackType]
-    _server_version: str
+    _required_version: str
 
     def __init__(
         self,
@@ -67,7 +67,7 @@ class RestApi:
 
         self._rest_api_endpoint = rest_api_endpoint
         self._on_invalid_certificate = on_invalid_certificate
-        self._server_version = ''
+        self._required_version = ''
 
     def get(self, path: str, params: typing.Optional[typing.Mapping[str, str]] = None) -> typing.Any:
         if params:
@@ -79,7 +79,8 @@ class RestApi:
 
     def process_error(self, data: typing.Any) -> None:
         if 'error' in data:
-            if data.get('retryable', '0') == '1':
+            # Get retrayable from data, if not present, use old key
+            if data.get('is_retrayable', data.get('retryable', '0')) == '1':
                 raise exceptions.RetryException(data['error'])
 
             raise exceptions.UDSException(data['error'])
@@ -89,19 +90,25 @@ class RestApi:
         Also checks that the version is valid for us. If not,
         will raise an "InvalidVersion' exception'''
 
-        downloadUrl = ''
-        if not self._server_version:
-            data = self.get('')
+        client_link = ''
+        if not self._required_version:
+            data = self.get('')  # Version is returned on 'main' path
             self.process_error(data)
-            self._server_version = data['result']['requiredVersion']
-            downloadUrl = data['result']['downloadUrl']
+            # get server version, using new key but, if not present, use old one
+            # Note: old version will be removed on 5.0.0 (As all 4.0 brokers will already return the new keys)
+            if 'requiredVersion' in data['result']:
+                self._required_version = data['result']['requiredVersion']
+                client_link = data['result']['downloadUrl']
+            else:
+                self._required_version = data['result']['required_version']
+                client_link = data['result']['client_link']
 
         try:
-            if self._server_version > consts.VERSION:
-                raise exceptions.InvalidVersion(downloadUrl)
+            if self._required_version > consts.VERSION:
+                raise exceptions.InvalidVersionException(client_link, self._required_version)
 
-            return self._server_version
-        except exceptions.InvalidVersion:
+            return self._required_version
+        except exceptions.InvalidVersionException:
             raise
         except Exception as e:
             raise exceptions.UDSException(e) from e

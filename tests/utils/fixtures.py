@@ -34,11 +34,13 @@ import typing
 from unittest import mock
 
 import UDSClient
+from uds import consts, exceptions
 from uds import rest, ui
 
 from . import autospec
 
-SERVER_VERSION: str = '4.0.0'
+REQUIRED_VERSION: str = '4.0.0'
+CLIENT_LINK: str = 'https://sample.client.link/udsclient.downloadable'
 SCRIPT: str = '''
 # TODO: add testing script here
 '''
@@ -46,8 +48,17 @@ PARAMETERS: typing.MutableMapping[str, typing.Any] = {
     # TODO: add parameters here
 }
 
+
+def check_version() -> str:
+    if REQUIRED_VERSION == 'fail':
+        raise Exception('Version check failed miserably! :) (just for testing)')
+    if consts.VERSION < REQUIRED_VERSION:
+        raise exceptions.InvalidVersionException(CLIENT_LINK, REQUIRED_VERSION)
+    return REQUIRED_VERSION
+
+
 REST_METHODS_INFO: typing.List[autospec.AutoSpecMethodInfo] = [
-    autospec.AutoSpecMethodInfo(rest.RestApi.get_version, return_value=SERVER_VERSION),
+    autospec.AutoSpecMethodInfo(rest.RestApi.get_version, method=check_version),
     autospec.AutoSpecMethodInfo(rest.RestApi.get_script_and_parameters, return_value=(SCRIPT, PARAMETERS)),
 ]
 
@@ -78,5 +89,14 @@ def patch_rest_api(
 def patched_uds_client() -> typing.Generator['UDSClient.UDSClient', None, None]:
     app = ui.QtWidgets.QApplication([])
     with patch_rest_api() as client:
-        yield UDSClient.UDSClient(client, 'ticket', 'scrambler')
+        uds_client = UDSClient.UDSClient(client, 'ticket', 'scrambler')
+        # Now, patch object:
+        # - process_waiting_tasks so we do not launch any task
+        # - error_message so we do not show any error message
+        # - warning_message so we do not show any warning message
+        # error_message and warning_message are static methods, so we need to patch them on the class
+        with mock.patch.object(uds_client, 'process_waiting_tasks'), mock.patch(
+            'UDSClient.UDSClient.error_message'
+        ), mock.patch('UDSClient.UDSClient.warning_message'):
+            yield uds_client
     app.quit()

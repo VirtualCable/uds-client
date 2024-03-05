@@ -30,6 +30,8 @@ Author: Adolfo Gómez, dkmaster at dkmon dot com
 '''
 import logging
 import typing
+import sys
+import os
 from unittest import TestCase, mock
 
 import UDSClient
@@ -41,6 +43,11 @@ logger = logging.getLogger(__name__)
 
 
 class TestClient(TestCase):
+    def setUp(self) -> None:
+        # If linux, and do not have X11, we will skip the tests
+        if sys.platform == 'linux' and 'DISPLAY' not in os.environ:
+            self.skipTest('Skipping test on linux without X11')
+
     def test_commandline(self):
         def _check_url(url: str, minimal: typing.Optional[str] = None, with_minimal: bool = False) -> None:
             host, ticket, scrambler, use_minimal = UDSClient.parse_arguments(
@@ -83,20 +90,70 @@ class TestClient(TestCase):
     def test_rest(self):
         # This is a simple test, we will test the rest api is mocked correctly
         with fixtures.patch_rest_api() as api:
-            self.assertEqual(api.get_version(), fixtures.SERVER_VERSION)
-            self.assertEqual(api.get_script_and_parameters('ticket', 'scrambler'), (fixtures.SCRIPT, fixtures.PARAMETERS))
-            
+            self.assertEqual(api.get_version(), fixtures.REQUIRED_VERSION)
+            self.assertEqual(
+                api.get_script_and_parameters('ticket', 'scrambler'), (fixtures.SCRIPT, fixtures.PARAMETERS)
+            )
+
             from_api = rest.RestApi.api('host', lambda x, y: True)
             # Repeat tests, should return same results
-            self.assertEqual(from_api.get_version(), fixtures.SERVER_VERSION)
-            self.assertEqual(from_api.get_script_and_parameters('ticket', 'scrambler'), (fixtures.SCRIPT, fixtures.PARAMETERS))
+            self.assertEqual(from_api.get_version(), fixtures.REQUIRED_VERSION)
+            self.assertEqual(
+                from_api.get_script_and_parameters('ticket', 'scrambler'),
+                (fixtures.SCRIPT, fixtures.PARAMETERS),
+            )
             # And also, the api is the same
             self.assertEqual(from_api, api)
 
     def test_udsclient(self):
-        # This is a simple test, we will test the rest api is mocked correctly
         with fixtures.patched_uds_client() as client:
             # patch UDSClient module waiting_tasks_processor to avoid waiting for tasks
             with mock.patch('UDSClient.waiting_tasks_processor'):
+                # Patch builting "exec"
+                with mock.patch('builtins.exec') as builtins_exec:
+                    # Desencadenate the full process
+                    client.fetch_version()
+
+                    # These are in fact mocks, but type checker does not know that
+                    client.api.get_version.assert_called_with()  # type: ignore
+                    client.api.get_script_and_parameters.assert_called_with(client.ticket, client.scrambler)  # type: ignore
+
+                    # Builtin exec should be called with:
+                    #  - The script
+                    #  - The globals, because the globals in scripts may be different, we use mock.ANY
+                    #  - The locals ->  {'parent': self, 'sp': params}, where self is the client and params is the parameters
+                    builtins_exec.assert_called_with(
+                        fixtures.SCRIPT, mock.ANY, {'parent': client, 'sp': fixtures.PARAMETERS}
+                    )
+
+                    # And also, process_waiting_tasks should be called, to process remaining tasks
+                    client.process_waiting_tasks.assert_called_with()  # type: ignore
+
+                    logger.debug('Testing fetch_script')
+
+    def test_udsclient_invalid_version(self):
+        with fixtures.patched_uds_client() as client:
+            with mock.patch('webbrowser.open') as webbrowser_open:
+                fixtures.REQUIRED_VERSION = '.'.join(
+                    str(int(x) + 1) for x in consts.VERSION.split('.')
+                )  # This will make the version greater than the required
                 client.fetch_version()
-            
+
+                # error message should be called to show the required new version
+                # but we do not check message content, just that it was called
+                # It's an static method, so we can check it directly
+                UDSClient.UDSClient.error_message.assert_called()  # type: ignore
+                webbrowser_open.assert_called_with(fixtures.CLIENT_LINK)
+
+    def test_udsclient_error_version(self):
+        with fixtures.patched_uds_client() as client:
+            with mock.patch('webbrowser.open') as webbrowser_open:
+                fixtures.REQUIRED_VERSION = 'fail'
+                client.fetch_version()
+
+                # error message should be called to show problem checking version
+                UDSClient.UDSClient.error_message.assert_called()  # type: ignore
+                # webrowser should not be called
+                webbrowser_open.assert_not_called()
+
+                self.assertTrue(client.has_error)

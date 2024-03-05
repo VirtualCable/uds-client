@@ -48,7 +48,16 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
-import psutil
+try:
+    import psutil
+
+    def process_iter(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
+        return psutil.process_iter(*args, **kwargs)    
+    
+except ImportError:
+    def process_iter(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
+        return []
+    
 
 from . import consts
 from .log import logger
@@ -164,17 +173,11 @@ def wait_for_tasks() -> None:
             elif hasattr(task, 'wait'):
                 task.wait()
             # If wait for spanwed process (look for process with task pid) and we can look for them...
-            logger.debug(
-                'Psutil: %s, waitForSubp: %s, hasattr: %s',
-                psutil,
-                wait_subprocesses,
-                hasattr(task, 'pid'),
-            )
             if psutil and wait_subprocesses and hasattr(task, 'pid'):
                 subprocesses: list['psutil.Process'] = list(
                     filter(
                         lambda x: x.ppid() == task.pid,  # type x: psutil.Process
-                        psutil.process_iter(attrs=('ppid',)),
+                        process_iter(attrs=('ppid',)),
                     )
                 )
                 logger.debug('Waiting for subprocesses... %s, %s', task.pid, subprocesses)

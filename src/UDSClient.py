@@ -34,6 +34,7 @@
 Author: Adolfo Gómez, dkmaster at dkmon dot com
 '''
 import contextlib
+import logging
 import sys
 import os
 import platform
@@ -96,7 +97,7 @@ class UDSClient(QtWidgets.QMainWindow):
         self.close()
 
     def show_error(self, error: Exception) -> None:
-        logger.error('got error: %s', error)
+        logger.error('Error: %s', error)
         self.stop_animation()
         # In fact, main window is hidden, so this is not visible... :)
         self.ui.info.setText('UDS Plugin Error')
@@ -132,16 +133,16 @@ class UDSClient(QtWidgets.QMainWindow):
     def fetch_version(self) -> None:
         try:
             self.api.get_version()
-        except exceptions.InvalidVersion as e:
+        except exceptions.InvalidVersionException as e:
             UDSClient.error_message(
                 'Upgrade required',
-                'A newer connector version is required.\nA browser will be opened to download it.',
+                f'UDS Client version {e.required_version} is required.\nA browser will be opened to download it.',
             )
-            webbrowser.open(e.downloadUrl)
+            webbrowser.open(e.link)
             self.close_window()
             return
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            if logger.getEffectiveLevel() == 10:
+        except Exception as e:
+            if logger.getEffectiveLevel() == logging.DEBUG:
                 logger.exception('Get Version')
             self.show_error(e)
             self.close_window()
@@ -169,8 +170,9 @@ class UDSClient(QtWidgets.QMainWindow):
             self.ui.info.setText(str(e) + ', retrying access...')
             # Retry operation in ten seconds
             QtCore.QTimer.singleShot(10000, self.fetch_transport_data)
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            if logger.getEffectiveLevel() == 10:
+        except Exception as e:
+            # If debug is enabled, show exception
+            if logger.getEffectiveLevel() == logging.DEBUG:
                 logger.exception('Get Transport Data')
             self.show_error(e)
 
@@ -192,7 +194,7 @@ class UDSClient(QtWidgets.QMainWindow):
         Starts proccess by requesting version info
         """
         self.ui.info.setText('Initializing...')
-        QtCore.QTimer.singleShot(100, self.fetch_version)
+        QtCore.QTimer.singleShot(100, self.fetch_version)  # Will make it async, not blocking the gui
 
     @staticmethod
     def warning_message(title: str, message: str, *, yes_no: bool = False) -> bool:
@@ -306,12 +308,12 @@ def minimal(api: RestApi, ticket: str, scrambler: str) -> int:
         logger.debug('Getting version')
         try:
             api.get_version()
-        except exceptions.InvalidVersion as e:
+        except exceptions.InvalidVersionException as e:
             UDSClient.error_message(
                 'Upgrade required',
                 'A newer connector version is required.\nA browser will be opened to download it.',
             )
-            webbrowser.open(e.downloadUrl)
+            webbrowser.open(e.link)
             return 0
         logger.debug('Transport data')
         script, params = api.get_script_and_parameters(ticket, scrambler)

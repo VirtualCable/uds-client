@@ -14,9 +14,10 @@ class RetryException(UDSException):
     pass
 
 
-class InvalidVersion(UDSException):
-    downloadUrl: str
+class InvalidVersionException(UDSException):
+    link: str
 
-    def __init__(self, downloadUrl: str) -> None:
-        super().__init__(downloadUrl)
-        self.downloadUrl = downloadUrl
+    def __init__(self, client_link: str, required_version: str) -> None:
+        super().__init__(client_link)
+        self.link = client_link
+        self.required_version = required_version
