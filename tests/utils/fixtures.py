@@ -101,10 +101,7 @@ def patch_rest_api(
 
 @contextlib.contextmanager
 def patched_uds_client() -> typing.Generator['UDSClient.UDSClient', None, None]:
-    if not ui.QtWidgets.QApplication.instance():
-        app = ui.QtWidgets.QApplication([])
-    else:
-        app = ui.QtWidgets.QApplication.instance()
+    app = ui.QtWidgets.QApplication.instance() or ui.QtWidgets.QApplication([])
     with patch_rest_api() as client:
         uds_client = UDSClient.UDSClient(client, 'ticket', 'scrambler')
         # Now, patch object:
