@@ -119,7 +119,7 @@ class RestApi:
         try:
             data = self.get(
                 '/{}/{}'.format(ticket, scrambler),
-                params={'hostname': tools.get_hostname(), 'version': consts.VERSION},
+                params={'hostname': tools.gethostname(), 'version': consts.VERSION},
             )
         except Exception as e:
             logger.exception('Got exception on getTransportData')

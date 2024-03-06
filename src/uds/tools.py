@@ -48,24 +48,28 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
+from uds import types
+
 try:
     import psutil
 
     def process_iter(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
-        return psutil.process_iter(*args, **kwargs)    
-    
+        return psutil.process_iter(*args, **kwargs)
+
 except ImportError:
+
     def process_iter(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
         return []
-    
+
 
 from . import consts
 from .log import logger
 
+
 # Global variables is fine, no more than one thread will be running
 # at the same time for the same process, so no need to lock
-_unlink_files: typing.List[typing.Tuple[str, bool]] = []
-_tasks_to_wait: typing.List[typing.Tuple[typing.Any, bool]] = []
+_unlink_files: typing.List[types.RemovableFile] = []
+_awaitable_tasks: typing.List[types.AwaitableTask] = []
 _execBeforeExit: typing.List[typing.Callable[[], None]] = []
 
 sys_fs_enc = sys.getfilesystemencoding() or 'mbcs'
@@ -94,28 +98,28 @@ def read_temp_file(filename: str) -> typing.Optional[str]:
         return None
 
 
-def test_server(host: str, port: typing.Union[str, int], timeOut: int = 4) -> bool:
+def test_server(host: str, port: typing.Union[str, int], timeout: int = 4) -> bool:
     try:
-        sock = socket.create_connection((host, int(port)), timeOut)
+        sock = socket.create_connection((host, int(port)), timeout)
         sock.close()
     except Exception:
         return False
     return True
 
 
-def find_application(appName: str, extraPath: typing.Optional[str] = None) -> typing.Optional[str]:
+def find_application(application_name: str, extra_path: typing.Optional[str] = None) -> typing.Optional[str]:
     searchPath = os.environ['PATH'].split(os.pathsep)
-    if extraPath:
-        searchPath += list(extraPath)
+    if extra_path:
+        searchPath += list(extra_path)
 
     for path in searchPath:
-        fileName = os.path.join(path, appName)
+        fileName = os.path.join(path, application_name)
         if os.path.isfile(fileName) and (os.stat(fileName).st_mode & stat.S_IXUSR) != 0:
             return fileName
     return None
 
 
-def get_hostname() -> str:
+def gethostname() -> str:
     '''
     Returns current host name
     In fact, it's a wrapper for socket.gethostname()
@@ -128,64 +132,72 @@ def get_hostname() -> str:
 # Queing operations (to be executed before exit)
 
 
-def register_for_delayed_deletion(filename: str, early: bool = False) -> None:
+def register_for_delayed_deletion(filename: str, early_stage: bool = False) -> None:
     '''
     Adds a file to the wait-and-unlink list
     '''
-    logger.debug('Added file %s to unlink on %s stage', filename, 'early' if early else 'later')
-    _unlink_files.append((filename, early))
+    logger.debug('Added file %s to unlink on %s stage', filename, 'early' if early_stage else 'later')
+    _unlink_files.append(types.RemovableFile(filename, early_stage))
 
 
-def unlink_files(early: bool = False) -> None:
+def unlink_files(early_stage: bool = False) -> None:
     '''
     Removes all wait-and-unlink files
     '''
-    logger.debug('Unlinking files on %s stage', 'early' if early else 'later')
-    filesToUnlink = list(filter(lambda x: x[1] == early, _unlink_files))
-    if filesToUnlink:
-        logger.debug('Files to unlink: %s', filesToUnlink)
+    logger.debug('Unlinking files on %s stage', 'early' if early_stage else 'later')
+    files_to_unlink = list(filter(lambda x: x.early_stage == early_stage, _unlink_files))
+    if files_to_unlink:
+        logger.debug('Files to unlink: %s', files_to_unlink)
         # Wait 2 seconds before deleting anything on early and 5 on later stages
-        time.sleep(1 + 2 * (1 + int(early)))
+        time.sleep(1 + 2 * (1 + int(early_stage)))
 
-        for f in filesToUnlink:
+        for f in files_to_unlink:
             try:
-                os.unlink(f[0])
+                os.unlink(f.path)
             except Exception as e:
                 logger.debug('File %s not deleted: %s', f[0], e)
 
+    # Remove all processed files from list
+    _unlink_files[:] = list(filter(lambda x: x.early_stage != early_stage, _unlink_files))
 
-def add_task_to_wait(task: typing.Any, with_subprocesses: bool = False) -> None:
+
+def add_task_to_wait(task: typing.Any, wait_subprocesses: bool = False) -> None:
     logger.debug(
         'Added task %s to wait %s',
         task,
-        'with subprocesses' if with_subprocesses else '',
+        'with subprocesses' if wait_subprocesses else '',
     )
-    _tasks_to_wait.append((task, with_subprocesses))
+    _awaitable_tasks.append(types.AwaitableTask(task, wait_subprocesses))
 
 
 def wait_for_tasks() -> None:
-    logger.debug('Started to wait %s', _tasks_to_wait)
-    for task, wait_subprocesses in _tasks_to_wait:
-        logger.debug('Waiting for task %s, subprocess wait: %s', task, wait_subprocesses)
+    logger.debug('Started to wait %s', _awaitable_tasks)
+    for awaitable_task in _awaitable_tasks:
+        logger.debug(
+            'Waiting for task %s, subprocess wait: %s', awaitable_task.task, awaitable_task.wait_subprocesses
+        )
         try:
-            if hasattr(task, 'join'):
-                task.join()
-            elif hasattr(task, 'wait'):
-                task.wait()
+            if hasattr(awaitable_task.task, 'join'):
+                awaitable_task.task.join()
+            elif hasattr(awaitable_task.task, 'wait'):
+                awaitable_task.task.wait()
             # If wait for spanwed process (look for process with task pid) and we can look for them...
-            if psutil and wait_subprocesses and hasattr(task, 'pid'):
+            if awaitable_task.wait_subprocesses and hasattr(awaitable_task.task, 'pid'):
                 subprocesses: list['psutil.Process'] = list(
                     filter(
-                        lambda x: x.ppid() == task.pid,  # type x: psutil.Process
+                        lambda x: x.ppid() == awaitable_task.task.pid,  # type x: psutil.Process
                         process_iter(attrs=('ppid',)),
                     )
                 )
-                logger.debug('Waiting for subprocesses... %s, %s', task.pid, subprocesses)
+                logger.debug('Waiting for subprocesses... %s, %s', awaitable_task.task.pid, subprocesses)
                 for i in subprocesses:
                     logger.debug('Found %s', i)
                     i.wait()
         except Exception as e:
             logger.error('Waiting for tasks to finish error: %s', e)
+
+    # Empty the list
+    _awaitable_tasks[:] = typing.cast(list[types.AwaitableTask], [])
 
 
 def register_execute_before_exit(fnc: typing.Callable[[], None]) -> None:

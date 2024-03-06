@@ -39,5 +39,5 @@ def get_osname() -> types.OsType:
     if sys.platform.startswith('win'):
         return types.OsType.WINDOWS
     if sys.platform.startswith('darwin'):
-        return types.OsType.MAC
+        return types.OsType.MACOS
     return types.OsType.UNKNOWN

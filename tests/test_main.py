@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2022 Virtual Cable S.L.U.
+# Copyright (c) 2024 Virtual Cable S.L.U.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without modification,
@@ -47,6 +47,10 @@ class TestClient(TestCase):
         # If linux, and do not have X11, we will skip the tests
         if sys.platform == 'linux' and 'DISPLAY' not in os.environ:
             self.skipTest('Skipping test on linux without X11')
+            
+        # Ensure altered values are reset
+        fixtures.SCRIPT = fixtures.TESTING_SCRIPT
+        fixtures.REQUIRED_VERSION = fixtures.TESTING_VERSION
 
     def test_commandline(self) -> None:
         def _check_url(url: str, minimal: typing.Optional[str] = None, with_minimal: bool = False) -> None:
@@ -158,8 +162,9 @@ class TestClient(TestCase):
 
                 self.assertTrue(client.has_error)
 
-    def test_fetch_transport_data(self) -> None:
+    def test_fetch_transport_data_failed(self) -> None:
         with fixtures.patched_uds_client() as client:
+            fixtures.SCRIPT = 'fail'
             client.fetch_transport_data()
 
             # error message should be called to show problem checking version

@@ -39,11 +39,13 @@ from uds import rest, ui
 
 from . import autospec
 
-REQUIRED_VERSION: str = '4.0.0'
+TESTING_VERSION: str = '4.0.0'
+REQUIRED_VERSION: str = TESTING_VERSION
 CLIENT_LINK: str = 'https://sample.client.link/udsclient.downloadable'
-SCRIPT: str = '''
+TESTING_SCRIPT: str = '''
 # TODO: add testing script here
 '''
+SCRIPT: str = TESTING_SCRIPT
 PARAMETERS: typing.MutableMapping[str, typing.Any] = {
     # TODO: add parameters here
 }
@@ -56,7 +58,10 @@ def check_version() -> str:
         raise exceptions.InvalidVersionException(CLIENT_LINK, REQUIRED_VERSION)
     return REQUIRED_VERSION
 
-def script_and_parameters(ticket: str, scrambler: str) -> typing.Tuple[str, typing.MutableMapping[str, typing.Any]]:
+
+def script_and_parameters(
+    ticket: str, scrambler: str
+) -> typing.Tuple[str, typing.MutableMapping[str, typing.Any]]:
     global SCRIPT
     if SCRIPT == 'fail':
         raise Exception('Script retrieval failed miserably! :) (just for testing)')
@@ -96,7 +101,10 @@ def patch_rest_api(
 
 @contextlib.contextmanager
 def patched_uds_client() -> typing.Generator['UDSClient.UDSClient', None, None]:
-    app = ui.QtWidgets.QApplication([])
+    if not ui.QtWidgets.QApplication.instance():
+        app = ui.QtWidgets.QApplication([])
+    else:
+        app = ui.QtWidgets.QApplication.instance()
     with patch_rest_api() as client:
         uds_client = UDSClient.UDSClient(client, 'ticket', 'scrambler')
         # Now, patch object:
@@ -109,3 +117,4 @@ def patched_uds_client() -> typing.Generator['UDSClient.UDSClient', None, None]:
         ), mock.patch('UDSClient.UDSClient.warning_message'):
             yield uds_client
     app.quit()
+    del app

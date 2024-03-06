@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2014-2021 Virtual Cable S.L.U.
+# Copyright (c) 2024 Virtual Cable S.L.U.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without modification,
@@ -25,48 +25,34 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 '''
 Author: Adolfo Gómez, dkmaster at dkmon dot com
 '''
-import typing
-import enum
-import sys
+import logging
+from unittest import TestCase, mock
+
+from uds import log, consts
+
+logger = logging.getLogger(__name__)
 
 
-class OsType(enum.Enum):
-    LINUX = 'Linux'
-    WINDOWS = 'Windows'
-    MACOS = 'MacOS'
-    UNKNOWN = 'Unknown'
-
-    DETECTED_SO = (
-        LINUX
-        if sys.platform.startswith('linux')
-        else (
-            WINDOWS
-            if sys.platform.startswith('win')
-            else MACOS if sys.platform.startswith('darwin') else UNKNOWN
-        )
-    )
-
-    def __str__(self) -> str:
-        return str(self.value)
-
-
-# ForwarServer states
-class ForwardState(enum.IntEnum):
-    TUNNEL_LISTENING = 0
-    TUNNEL_OPENING = 1
-    TUNNEL_PROCESSING = 2
-    TUNNEL_ERROR = 3
-
-
-class RemovableFile(typing.NamedTuple):
-    path: str
-    early_stage: bool = False
-
-class AwaitableTask(typing.NamedTuple):
-    task: typing.Any
-    wait_subprocesses: bool = False
-    
+class TestClient(TestCase):
+    def test_log(self) -> None:
+        for debug in (True, False):
+            consts.DEBUG = debug
+            # patch logging and recall _init from log
+            with mock.patch('logging.basicConfig') as basicConfig:
+                with mock.patch('logging.getLogger') as mock_getLogger:
+                    log._init()
+                    basicConfig.assert_called_once_with(
+                        filename=log.consts.LOGFILE,
+                        filemode='a',
+                        format='%(levelname)s %(asctime)s %(message)s',
+                        level=log.consts.LOGLEVEL,
+                    )
+                    mock_getLogger.assert_called_once_with('udsclient')
+                    # Debug is True, so it should not call debug
+                    if debug:
+                        mock_getLogger.return_value.debug.assert_called()
+                    else:
+                        mock_getLogger.return_value.debug.assert_not_called()

@@ -39,52 +39,60 @@ from . import consts
 
 
 # Local variables
+def _init() -> 'logging.Logger':
+    try:
+        logging.basicConfig(
+            filename=consts.LOGFILE,
+            filemode='a',
+            format='%(levelname)s %(asctime)s %(message)s',
+            level=consts.LOGLEVEL,
+        )
+    except Exception:
+        logging.basicConfig(format='%(levelname)s %(asctime)s %(message)s', level=consts.LOGLEVEL)
 
-try:
-    logging.basicConfig(
-        filename=consts.LOGFILE,
-        filemode='a',
-        format='%(levelname)s %(asctime)s %(message)s',
-        level=consts.LOGLEVEL,
-    )
-except Exception:
-    logging.basicConfig(format='%(levelname)s %(asctime)s %(message)s', level=consts.LOGLEVEL)
+    logger = logging.getLogger('udsclient')
 
-logger = logging.getLogger('udsclient')
+    if consts.DEBUG:
+        from . import ui  # To incldue qt version
 
-if consts.DEBUG:
-    from . import ui
-    # Include as much as platform info as possible
-    logger.debug('Platform info:')
-    logger.debug('  UDSClient version: %s', consts.VERSION)
-    logger.debug('  Platform: %s', platform.platform())
-    logger.debug('  Node: %s', platform.node())
-    logger.debug('  System: %s', platform.system())
-    logger.debug('  Release: %s', platform.release())
-    logger.debug('  Version: %s', platform.version())
-    logger.debug('  Machine: %s', platform.machine())
-    logger.debug('  Processor: %s', platform.processor())
-    logger.debug('  Architecture: %s', platform.architecture())
-    logger.debug('  Python version: %s', platform.python_version())
-    logger.debug('  Python implementation: %s', platform.python_implementation())
-    logger.debug('  Python compiler: %s', platform.python_compiler())
-    logger.debug('  Python build: %s', platform.python_build())
-    # Also environment variables and any useful info
-    logger.debug('Qt framework: %s', ui.QT_VERSION)
-    logger.debug('Log level set to DEBUG')
-    logger.debug('Environment variables:')
-    for k, v in os.environ.items():
-        logger.debug('  %s=%s', k, v)
+        # Include as much as platform info as possible
+        logger.debug('Platform info:')
+        logger.debug('  UDSClient version: %s', consts.VERSION)
+        logger.debug('  Platform: %s', platform.platform())
+        logger.debug('  Node: %s', platform.node())
+        logger.debug('  System: %s', platform.system())
+        logger.debug('  Release: %s', platform.release())
+        logger.debug('  Version: %s', platform.version())
+        logger.debug('  Machine: %s', platform.machine())
+        logger.debug('  Processor: %s', platform.processor())
+        logger.debug('  Architecture: %s', platform.architecture())
+        logger.debug('  Python version: %s', platform.python_version())
+        logger.debug('  Python implementation: %s', platform.python_implementation())
+        logger.debug('  Python compiler: %s', platform.python_compiler())
+        logger.debug('  Python build: %s', platform.python_build())
+        # Also environment variables and any useful info
+        logger.debug('Qt framework: %s', ui.QT_VERSION)
+        logger.debug('Log level set to DEBUG')
+        logger.debug('Environment variables:')
+        for k, v in os.environ.items():
+            logger.debug('  %s=%s', k, v)
 
-    # useful info for debugging
-    logger.debug('Python path: %s', sys.path)
-    logger.debug('Python executable: %s', sys.executable)
-    logger.debug('Python version: %s', sys.version)
-    logger.debug('Python version info: %s', sys.version_info)
-    logger.debug('Python prefix: %s', sys.prefix)
-    logger.debug('Python base prefix: %s', sys.base_prefix)
-    logger.debug('Python executable: %s', sys.executable)
-    logger.debug('Python argv: %s', sys.argv)
-    logger.debug('Python modules path: %s', sys.path)
-    logger.debug('Python modules path (site): %s', sys.path_importer_cache)
-    logger.debug('Python modules path (site): %s', sys.path_hooks)
+        # useful info for debugging
+        logger.debug('Python path: %s', sys.path)
+        logger.debug('Python executable: %s', sys.executable)
+        logger.debug('Python version: %s', sys.version)
+        logger.debug('Python version info: %s', sys.version_info)
+        logger.debug('Python prefix: %s', sys.prefix)
+        logger.debug('Python base prefix: %s', sys.base_prefix)
+        logger.debug('Python executable: %s', sys.executable)
+        logger.debug('Python argv: %s', sys.argv)
+        logger.debug('Python modules path: %s', sys.path)
+        logger.debug('Python modules importer cache path: %s', sys.path_importer_cache)
+        logger.debug('Python modules hooks path: %s', sys.path_hooks)
+        logger.debug('Python modules meta path: %s', sys.meta_path)
+
+    return logger
+
+
+# Initialize logger
+logger = _init()

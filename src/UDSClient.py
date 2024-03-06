@@ -243,7 +243,7 @@ def waiting_tasks_processor() -> None:
     time.sleep(3)
     try:
         # Remove early stage files...
-        tools.unlink_files(early=True)
+        tools.unlink_files(early_stage=True)
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.debug('Unlinking files on early stage: %s', e)
 
@@ -256,7 +256,7 @@ def waiting_tasks_processor() -> None:
 
     try:
         logger.debug('Unlinking files')
-        tools.unlink_files(early=False)
+        tools.unlink_files(early_stage=False)
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.debug('Unlinking files on later stage: %s', e)
 
