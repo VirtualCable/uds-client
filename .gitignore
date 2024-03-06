@@ -10,6 +10,7 @@ udsactor*.rpm
 *_enterprise.*
 *_ignore.*
 .python-version
+.coverage
 
 __pycache__
 full/.vscode/
