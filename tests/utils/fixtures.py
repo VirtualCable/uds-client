@@ -56,10 +56,19 @@ def check_version() -> str:
         raise exceptions.InvalidVersionException(CLIENT_LINK, REQUIRED_VERSION)
     return REQUIRED_VERSION
 
+def script_and_parameters(ticket: str, scrambler: str) -> typing.Tuple[str, typing.MutableMapping[str, typing.Any]]:
+    global SCRIPT
+    if SCRIPT == 'fail':
+        raise Exception('Script retrieval failed miserably! :) (just for testing)')
+    elif SCRIPT == 'retry':
+        # Will not be on loop forever, because there will be only one call
+        raise exceptions.RetryException('Just for testing')
+    return SCRIPT, PARAMETERS
+
 
 REST_METHODS_INFO: typing.List[autospec.AutoSpecMethodInfo] = [
     autospec.AutoSpecMethodInfo(rest.RestApi.get_version, method=check_version),
-    autospec.AutoSpecMethodInfo(rest.RestApi.get_script_and_parameters, return_value=(SCRIPT, PARAMETERS)),
+    autospec.AutoSpecMethodInfo(rest.RestApi.get_script_and_parameters, method=script_and_parameters),
 ]
 
 

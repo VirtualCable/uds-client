@@ -48,7 +48,7 @@ class TestClient(TestCase):
         if sys.platform == 'linux' and 'DISPLAY' not in os.environ:
             self.skipTest('Skipping test on linux without X11')
 
-    def test_commandline(self):
+    def test_commandline(self) -> None:
         def _check_url(url: str, minimal: typing.Optional[str] = None, with_minimal: bool = False) -> None:
             host, ticket, scrambler, use_minimal = UDSClient.parse_arguments(
                 ['udsclient'] + ([url] if not minimal else [minimal, url])
@@ -87,7 +87,7 @@ class TestClient(TestCase):
             # No matter what is passed as value of minimal, if present, it will be used
             _check_url('udss://a/b/c?minimal=11', with_minimal=True)
 
-    def test_rest(self):
+    def test_rest(self) -> None:
         # This is a simple test, we will test the rest api is mocked correctly
         with fixtures.patch_rest_api() as api:
             self.assertEqual(api.get_version(), fixtures.REQUIRED_VERSION)
@@ -105,7 +105,7 @@ class TestClient(TestCase):
             # And also, the api is the same
             self.assertEqual(from_api, api)
 
-    def test_udsclient(self):
+    def test_udsclient(self) -> None:
         with fixtures.patched_uds_client() as client:
             # patch UDSClient module waiting_tasks_processor to avoid waiting for tasks
             with mock.patch('UDSClient.waiting_tasks_processor'):
@@ -131,7 +131,7 @@ class TestClient(TestCase):
 
                     logger.debug('Testing fetch_script')
 
-    def test_udsclient_invalid_version(self):
+    def test_udsclient_invalid_version(self) -> None:
         with fixtures.patched_uds_client() as client:
             with mock.patch('webbrowser.open') as webbrowser_open:
                 fixtures.REQUIRED_VERSION = '.'.join(
@@ -145,7 +145,7 @@ class TestClient(TestCase):
                 UDSClient.UDSClient.error_message.assert_called()  # type: ignore
                 webbrowser_open.assert_called_with(fixtures.CLIENT_LINK)
 
-    def test_udsclient_error_version(self):
+    def test_udsclient_error_version(self) -> None:
         with fixtures.patched_uds_client() as client:
             with mock.patch('webbrowser.open') as webbrowser_open:
                 fixtures.REQUIRED_VERSION = 'fail'
@@ -157,3 +157,21 @@ class TestClient(TestCase):
                 webbrowser_open.assert_not_called()
 
                 self.assertTrue(client.has_error)
+
+    def test_fetch_transport_data(self) -> None:
+        with fixtures.patched_uds_client() as client:
+            client.fetch_transport_data()
+
+            # error message should be called to show problem checking version
+            UDSClient.UDSClient.error_message.assert_called()  # type: ignore
+
+            self.assertTrue(client.has_error)
+
+    def test_fetch_transport_data_retry(self) -> None:
+        with fixtures.patched_uds_client() as client:
+            with mock.patch('uds.ui.QtCore.QTimer.singleShot') as singleShot:
+                fixtures.SCRIPT = 'retry'
+                client.fetch_transport_data()
+
+                # We should have a single shot timer to retry
+                singleShot.assert_called_with(mock.ANY, client.fetch_transport_data)

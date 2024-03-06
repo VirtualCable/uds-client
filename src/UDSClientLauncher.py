@@ -6,13 +6,23 @@ import typing
 from uds.log import logger
 import UDSClient
 
+# Basically, this will be the main file for the Mac OS X application
+# It will be called from the Info.plist file, and will be responsible for
+# launching the UDSClient application, and also for handling the URL
+# that will be passed to it.
+# In order to do so, we will call "ourselves" with the URL as parameter, and
+# in that case, we will process the URL and launch the UDSClient application
+# If no url is passed, UDSClientLauncher will be instantiated, waiting for
+# the event that will be generated when the application is called with the
+# URL as parameter.
+
 from uds.ui import QtCore, QtWidgets, QtGui, Ui_MacLauncher
 
 SCRIPT_NAME = 'UDSClientLauncher'
 
-class UdsApplication(QtWidgets.QApplication):
+class UDSClientLauncher(QtWidgets.QApplication):
     path: str
-    tunnels: typing.List[subprocess.Popen[typing.Any]]
+    tunnels: 'typing.List[subprocess.Popen[typing.Any]]'
 
     def __init__(self, argv: typing.List[str]) -> None:
         super().__init__(argv)
@@ -25,7 +35,7 @@ class UdsApplication(QtWidgets.QApplication):
         Removes all finished tunnels from the list
         '''
 
-        def is_running(p: subprocess.Popen[typing.Any]) -> bool:
+        def _is_running(p: subprocess.Popen[typing.Any]) -> bool:
             try:
                 if p.poll() is None:
                     return True
@@ -34,7 +44,7 @@ class UdsApplication(QtWidgets.QApplication):
             return False
 
         # Remove references to finished tunnels, they will be garbage collected
-        self.tunnels = [tunnel for tunnel in self.tunnels if is_running(tunnel)]
+        self.tunnels = [tunnel for tunnel in self.tunnels if _is_running(tunnel)]
 
     def close_tunnels(self) -> None:
         '''
@@ -65,7 +75,7 @@ def main(args: typing.List[str]) -> None:
     if len(args) > 1:
         UDSClient.main(args)
     else:
-        app = UdsApplication(sys.argv)
+        app = UDSClientLauncher([])  # no args for launcher needed
         window = QtWidgets.QMainWindow()
         Ui_MacLauncher().setupUi(window)  # type: ignore
 

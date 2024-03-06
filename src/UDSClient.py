@@ -158,11 +158,10 @@ class UDSClient(QtWidgets.QMainWindow):
             if 'darwin' in sys.platform:
                 self.showMinimized()
 
-            # QtCore.QTimer.singleShot(3000, self.endScript)
-            # self.hide()
             self.close_window()
 
-            exec(script, globals(), {'parent': self, 'sp': params})  # pylint: disable=exec-used
+            # Execute UDS transport script, signed and checked
+            exec(script, globals(), {'parent': self, 'sp': params})
 
             self.process_waiting_tasks()
 
