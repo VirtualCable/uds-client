@@ -121,7 +121,9 @@ class TestTunnel(TestCase):
         """
         with mock.patch('uds.tunnel._run') as run:
             with mock.patch('uds.tunnel.ForwardServer') as ForwardServer:
-                fs = tunnel.forward(('localhost', 1234), fixtures.TICKET, 1, 1222, check_certificate=False, use_ipv6=False)
+                fs = tunnel.forward(
+                    ('localhost', 1234), fixtures.TICKET, 1, 1222, check_certificate=False, use_ipv6=False
+                )
                 # Ensure that thread is invoked with _run as target, and fs as argument
                 run.assert_called_once_with(fs)
                 # And that ForwardServer is called with the correct parameters
@@ -134,8 +136,6 @@ class TestTunnel(TestCase):
                     ipv6_remote=False,
                     keep_listening=True,
                 )
-
-        # Ensure server is stopped, we have not used it.. send some data to make it fail an stop
 
     def test_forward_stoppable(self) -> None:
         # Patch fs._set_stoppable to check if it is called
