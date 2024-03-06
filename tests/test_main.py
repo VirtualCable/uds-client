@@ -57,9 +57,9 @@ class TestClient(TestCase):
             host, ticket, scrambler, use_minimal = UDSClient.parse_arguments(
                 ['udsclient'] + ([url] if not minimal else [minimal, url])
             )
-            self.assertEqual(host, 'a')
-            self.assertEqual(ticket, 'b')
-            self.assertEqual(scrambler, 'c')
+            self.assertEqual(host, 'host')
+            self.assertEqual(ticket, fixtures.TICKET)
+            self.assertEqual(scrambler, 'scrambler')
             self.assertEqual(use_minimal, with_minimal)
 
         # Invalid command line, should return simeple Exception
@@ -76,20 +76,22 @@ class TestClient(TestCase):
 
         # uds protocol, but withoout debug mode, should rais exception.UDSMessagException
         consts.DEBUG = False
+        UDS_URL = f'uds://host/{fixtures.TICKET}/scrambler'
+        UDSS_URL = f'udss://host/{fixtures.TICKET}/scrambler'
         with self.assertRaises(exceptions.MessageException):
-            _check_url('uds://a/b/c')
+            _check_url(UDS_URL)
 
         # Set DEBUG mode (on consts), now should work
         consts.DEBUG = True
-        _check_url('uds://a/b/c')
+        _check_url(UDS_URL)
 
         # Now, a valid URI ssl (udss://)
         for debug in [True, False]:
             consts.DEBUG = debug
-            _check_url('udss://a/b/c')
-            _check_url('udss://a/b/c', '--minimal', with_minimal=True)
+            _check_url(UDSS_URL)
+            _check_url(UDSS_URL, '--minimal', with_minimal=True)
             # No matter what is passed as value of minimal, if present, it will be used
-            _check_url('udss://a/b/c?minimal=11', with_minimal=True)
+            _check_url(f'{UDSS_URL}/b/c?minimal=11', with_minimal=True)
 
     def test_rest(self) -> None:
         # This is a simple test, we will test the rest api is mocked correctly

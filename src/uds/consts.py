@@ -107,6 +107,8 @@ LISTEN_ADDRESS: typing.Final[str] = '127.0.0.1'
 LISTEN_ADDRESS_V6: typing.Final[str] = '::1'
 RESPONSE_OK: typing.Final[bytes] = b'OK'
 
+# Ticket length
+TICKET_LENGTH: typing.Final[int] = 48
 
 # Constants strings for protocol
 HANDSHAKE_V1: typing.Final[bytes] = b'\x5AMGB\xA5\x01\x00'

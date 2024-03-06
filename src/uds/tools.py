@@ -70,7 +70,7 @@ from .log import logger
 # at the same time for the same process, so no need to lock
 _unlink_files: typing.List[types.RemovableFile] = []
 _awaitable_tasks: typing.List[types.AwaitableTask] = []
-_execBeforeExit: typing.List[typing.Callable[[], None]] = []
+_execute_before_exit: typing.List[typing.Callable[[], None]] = []
 
 sys_fs_enc = sys.getfilesystemencoding() or 'mbcs'
 
@@ -158,7 +158,7 @@ def unlink_files(early_stage: bool = False) -> None:
                 logger.debug('File %s not deleted: %s', f[0], e)
 
     # Remove all processed files from list
-    _unlink_files[:] = list(filter(lambda x: x.early_stage != early_stage, _unlink_files))
+    _unlink_files[:] = list(set(_unlink_files) - set(files_to_unlink))
 
 
 def add_task_to_wait(task: typing.Any, wait_subprocesses: bool = False) -> None:
@@ -197,18 +197,22 @@ def wait_for_tasks() -> None:
             logger.error('Waiting for tasks to finish error: %s', e)
 
     # Empty the list
-    _awaitable_tasks[:] = typing.cast(list[types.AwaitableTask], [])
+    _awaitable_tasks.clear()
 
 
 def register_execute_before_exit(fnc: typing.Callable[[], None]) -> None:
     logger.debug('Added exec before exit: %s', fnc)
-    _execBeforeExit.append(fnc)
+    _execute_before_exit.append(fnc)
 
 
-def exec_before_exit() -> None:
-    logger.debug('Esecuting exec before exit: %s', _execBeforeExit)
-    for fnc in _execBeforeExit:
-        fnc()
+def execute_before_exit() -> None:
+    logger.debug('Esecuting exec before exit: %s', _execute_before_exit)
+    for fnc in _execute_before_exit:
+        try:
+            fnc()
+        except Exception as e:
+            logger.error('Error executing before exit: %s', e)
+    _execute_before_exit.clear()
 
 
 def verify_signature(script: bytes, signature: bytes) -> bool:
@@ -261,8 +265,14 @@ def get_cacerts_file() -> typing.Optional[str]:
     return None
 
 
-def is_mac_os() -> bool:
+def is_macos() -> bool:
     return 'darwin' in sys.platform
+
+def is_linux() -> bool:
+    return 'linux' in sys.platform
+
+def is_windows() -> bool:
+    return 'win' in sys.platform
 
 
 # old compat names, to ensure compatibility with old code

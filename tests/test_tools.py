@@ -32,10 +32,13 @@ import logging
 import os
 import socket
 import sys
+import typing
 
 from unittest import TestCase, mock
 
 from uds import tools, types
+
+from .utils import fixtures
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +107,10 @@ class TestClient(TestCase):
                     unlink.reset_mock()
                     tools.unlink_files(early_stage)
                     self.assertEqual(unlink.call_count, 10)
-                    self.assertEqual(unlink.call_args_list, [mock.call(str(x)) for x in range(10)])
+                    # Assert called, but ensure order is not important
+                    self.assertEqual(
+                        set(i[0][0] for i in unlink.call_args_list), set(str(x) for x in range(10))
+                    )
 
         # Now, tools._unlink_files should be empty
         self.assertEqual(len(tools._unlink_files), 0)
@@ -134,10 +140,83 @@ class TestClient(TestCase):
 
             # Now, tools._awaitable_tasks should be empty
             self.assertEqual(len(tools._awaitable_tasks), 0)
-            
+
             # And every mock should have been called twice, with no arguments
             join_mock.join.assert_called_with()
             wait_mock.wait.assert_called_with()
-            
+
             # also process_iter should have been called twice, once for each type of wait with wait_subprocesses True value
             self.assertEqual(_process_iter.call_count, 2)
+
+    def test_register_execute_before_exit(self) -> None:
+        # Just call it, nothing to test here
+        tools.register_execute_before_exit(mock.sentinel.first)
+        tools.register_execute_before_exit(mock.sentinel.second)
+
+        self.assertIn(mock.sentinel.first, tools._execute_before_exit)
+        self.assertIn(mock.sentinel.second, tools._execute_before_exit)
+
+    def test_execute_before_exit(self) -> None:
+        # Just call it, nothing to test here
+        # Mock tools.process_iter
+        with mock.patch('uds.tools.process_iter') as _process_iter:
+            for m in (mock.Mock(), mock.Mock()):
+                tools._execute_before_exit.append(m)
+
+            tools.execute_before_exit()
+
+            # Now, tools._execute_before_exit should be empty
+            self.assertEqual(len(tools._execute_before_exit), 0)
+
+            # And every mock should have been called once, with no arguments
+            for m in tools._execute_before_exit:
+                typing.cast('mock.Mock', m).assert_called_with()
+
+    def test_verify_signature(self) -> None:
+        # Just call it, nothing to test here
+        # Mock tools.process_iter
+        self.assertTrue(tools.verify_signature(fixtures.SIGNED_STRING.encode(), fixtures.SIGNATURE.encode()))
+        # Padding chars on signature are ignored, so this should also return True
+        self.assertTrue(
+            tools.verify_signature(fixtures.SIGNED_STRING.encode(), fixtures.SIGNATURE.encode() + b'xxxx')
+        )
+        # But if the string changes, it should return False
+        self.assertFalse(
+            tools.verify_signature(fixtures.SIGNED_STRING.encode() + b'x', fixtures.SIGNATURE.encode())
+        )
+        # And if the signature changes, it should return False
+        self.assertFalse(
+            tools.verify_signature(
+                fixtures.SIGNED_STRING.encode(), fixtures.SIGNATURE.encode().replace(b'x', b'y')
+            )
+        )
+
+    def test_get_cacerts_file(self) -> None:
+        # Just call it, nothing to test here
+        path = tools.get_cacerts_file()
+        if path is None:
+            self.fail('No cacerts file found')
+
+        self.assertTrue(os.path.exists(path))
+
+    def test_is_macos(self) -> None:
+        with mock.patch('sys.platform', 'darwin'):
+            self.assertTrue(tools.is_macos())
+        with mock.patch('sys.platform', 'linux'):
+            self.assertFalse(tools.is_macos())
+        with mock.patch('sys.platform', 'win'):
+            self.assertFalse(tools.is_macos())
+
+    def test_compat_functions(self) -> None:
+        # addTaskToWait = add_task_to_wait
+        # saveTempFile = save_temp_file
+        # readTempFile = read_temp_file
+        # testServer = test_server
+        # findApp = find_application
+        # addFileToUnlink = register_for_delayed_deletion
+        self.assertEqual(tools.addTaskToWait, tools.add_task_to_wait)
+        self.assertEqual(tools.saveTempFile, tools.save_temp_file)
+        self.assertEqual(tools.readTempFile, tools.read_temp_file)
+        self.assertEqual(tools.testServer, tools.test_server)
+        self.assertEqual(tools.findApp, tools.find_application)
+        self.assertEqual(tools.addFileToUnlink, tools.register_for_delayed_deletion)

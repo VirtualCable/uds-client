@@ -28,6 +28,7 @@
 '''
 @author: Adolfo Gómez, dkmaster at dkmon dot com
 '''
+import contextlib
 import socket
 import socketserver
 import ssl
@@ -72,9 +73,10 @@ class ForwardServer(socketserver.ThreadingTCPServer):
         ipv6_listen: bool = False,
         ipv6_remote: bool = False,
     ) -> None:
-        # Negative values for timeout, means "accept always connections"
-        # "but if no connection is stablished on timeout (positive)"
-        # "stop the listener"
+        # Negative values for timeout, means:
+        #   * accept always connections, but if no connection is stablished on timeout
+        #     (positive), stop the listener
+        #
         # Note that this is for backwards compatibility, better use "keep_listening"
         if timeout < 0:
             keep_listening = True
@@ -96,20 +98,20 @@ class ForwardServer(socketserver.ThreadingTCPServer):
         self.keep_listening = keep_listening
         self.stop_flag = threading.Event()  # False initial
         self.current_connections = 0
-        
+
+        self.status = types.ForwardState.TUNNEL_LISTENING
+        self.can_stop = False
+
+        timeout = timeout or 60
+        self.timer = threading.Timer(timeout, ForwardServer._set_stoppable, args=(self,))
+        self.timer.start()
+
         logger.debug('Remote: %s', remote)
         logger.debug('Remote IPv6: %s', self.remote_ipv6)
         logger.debug('Ticket: %s', ticket)
         logger.debug('Check certificate: %s', check_certificate)
         logger.debug('Keep listening: %s', keep_listening)
         logger.debug('Timeout: %s', timeout)
-
-        self.status = types.ForwardState.TUNNEL_LISTENING
-        self.can_stop = False
-
-        timeout = timeout or 60
-        self.timer = threading.Timer(timeout, ForwardServer.__checkStarted, args=(self,))
-        self.timer.start()
 
     def stop(self) -> None:
         if not self.stop_flag.is_set():
@@ -120,35 +122,15 @@ class ForwardServer(socketserver.ThreadingTCPServer):
                 self.timer = None
             self.shutdown()
 
-    def connect(self) -> ssl.SSLSocket:
-        with socket.socket(
-            socket.AF_INET6 if self.remote_ipv6 else socket.AF_INET, socket.SOCK_STREAM
-        ) as rsocket:
-            logger.info('CONNECT to %s', self.remote)
-
-            rsocket.connect(self.remote)
-
-            rsocket.sendall(consts.HANDSHAKE_V1)  # No response expected, just the handshake
-
-            context = ssl.create_default_context()
-
-            # Do not "recompress" data, use only "base protocol" compression
-            context.options |= ssl.OP_NO_COMPRESSION
-            # Macs with default installed python, does not support mininum tls version set to TLSv1.3
-            # USe "brew" version instead, or uncomment next line and comment the next one
-            # context.minimum_version = ssl.TLSVersion.TLSv1_2 if tools.isMac() else ssl.TLSVersion.TLSv1_3
-            context.minimum_version = ssl.TLSVersion.TLSv1_3
-
-            if tools.get_cacerts_file() is not None:
-                context.load_verify_locations(tools.get_cacerts_file())  # Load certifi certificates
-
-            # If ignore remote certificate
-            if self.check_certificate is False:
-                context.check_hostname = False
-                context.verify_mode = ssl.CERT_NONE
-                logger.warning('Certificate checking is disabled!')
-
-            return context.wrap_socket(rsocket, server_hostname=self.remote[0])
+    @contextlib.contextmanager
+    def connection(self) -> typing.Generator[ssl.SSLSocket, None, None]:
+        ssl_sock: typing.Optional[ssl.SSLSocket] = None
+        try:
+            ssl_sock = ForwardServer._connect(self.remote, self.remote_ipv6, self.check_certificate)
+            yield ssl_sock
+        finally:
+            if ssl_sock:
+                ssl_sock.close()
 
     def check(self) -> bool:
         if self.status == types.ForwardState.TUNNEL_ERROR:
@@ -156,21 +138,28 @@ class ForwardServer(socketserver.ThreadingTCPServer):
 
         logger.debug('Checking tunnel availability')
 
+        with self.connection() as ssl_socket:
+            return ForwardServer._test(ssl_socket)
+
+    @contextlib.contextmanager
+    def open_tunnel(self) -> typing.Generator[ssl.SSLSocket, None, None]:
+        self.current_connections += 1
+        # Open remote connection
         try:
-            with self.connect() as ssl_socket:
-                ssl_socket.sendall(consts.CMD_TEST)
-                resp = ssl_socket.recv(2)
-                if resp != consts.RESPONSE_OK:
-                    raise Exception({'Invalid  tunnelresponse: {resp}'})
-                logger.debug('Tunnel is available!')
-                return True
+            with self.connection() as ssl_socket:
+                ForwardServer._open_tunnel(ssl_socket, self.ticket)
+
+                yield ssl_socket
         except ssl.SSLError as e:
-            logger.error(f'Certificate error connecting to {self.server_address}: {e!s}')
-            # will surpas the "check" method on script caller, arriving to the UDSClient error handler
-            raise Exception(f'Certificate error connecting to {self.server_address}') from e
+            logger.error(f'Certificate error connecting to {self.remote!s}: {e!s}')
+            self.status = types.ForwardState.TUNNEL_ERROR
+            self.stop()
         except Exception as e:
-            logger.error('Error connecting to tunnel server %s: %s', self.server_address, e)
-        return False
+            logger.error(f'Error connecting to {self.remote!s}: {e!s}')
+            self.status = types.ForwardState.TUNNEL_ERROR
+            self.stop()
+        finally:
+            self.current_connections -= 1
 
     @property
     def stoppable(self) -> bool:
@@ -178,7 +167,7 @@ class ForwardServer(socketserver.ThreadingTCPServer):
         return self.can_stop
 
     @staticmethod
-    def __checkStarted(fs: 'ForwardServer') -> None:
+    def _set_stoppable(fs: 'ForwardServer') -> None:
         # As soon as the timer is fired, the server can be stopped
         # This means that:
         #  * If not connections are stablished, the server will be stopped
@@ -186,15 +175,81 @@ class ForwardServer(socketserver.ThreadingTCPServer):
         logger.debug('New connection limit reached')
         fs.timer = None
         fs.can_stop = True
+        # If timer fired, and no connections are stablished, stop the server
         if fs.current_connections <= 0:
             fs.stop()
+
+    @staticmethod
+    def _test(ssl_socket: ssl.SSLSocket) -> bool:
+        try:
+            ssl_socket.sendall(consts.CMD_TEST)
+            resp = ssl_socket.recv(2)
+            if resp != consts.RESPONSE_OK:
+                raise Exception({'Invalid  tunnelresponse: {resp}'})
+            logger.debug('Tunnel is available!')
+            return True
+        except ssl.SSLError as e:
+            logger.error(f'Certificate error connecting to {ssl_socket.getsockname()}: {e!s}')
+            # will surpas the "check" method on script caller, arriving to the UDSClient error handler
+            raise Exception(f'Certificate error connecting to {ssl_socket.getsockname()}') from e
+        except Exception as e:
+            logger.error('Error connecting to tunnel server %s: %s', ssl_socket.getsockname(), e)
+        return False
+
+    @staticmethod
+    def _open_tunnel(ssl_socket: ssl.SSLSocket, ticket: str) -> None:
+        # Send handhshake + command + ticket
+        ssl_socket.sendall(consts.CMD_OPEN + ticket.encode())
+        # Check response is OK
+        data = ssl_socket.recv(2)
+        if data != consts.RESPONSE_OK:
+            data += ssl_socket.recv(128)
+            raise Exception(f'Error received: {data.decode(errors="ignore")}')  # Notify error
+
+    @staticmethod
+    def _connect(
+        remote_addr: typing.Tuple[str, int],
+        use_ipv6: bool = False,
+        check_certificate: bool = True,
+    ) -> ssl.SSLSocket:
+        with socket.socket(socket.AF_INET6 if use_ipv6 else socket.AF_INET, socket.SOCK_STREAM) as rsocket:
+            logger.info('CONNECT to %s', remote_addr)
+
+            rsocket.connect(remote_addr)
+
+            rsocket.sendall(consts.HANDSHAKE_V1)  # No response expected, just the handshake
+
+            # Now, upgrade to ssl
+            context = ssl.create_default_context()
+
+            # Do not "recompress" data, use only "base protocol" compression
+            context.options |= ssl.OP_NO_COMPRESSION
+            # Macs with default installed python, does not support mininum tls version set to TLSv1.3
+            # USe "brew" version instead, or uncomment next line and comment the next one
+            # context.minimum_version = ssl.TLSVersion.TLSv1_2 if tools.isMac() else ssl.TLSVersion.TLSv1_3
+            # Disallow old versions of TLS
+            # context.minimum_version = ssl.TLSVersion.TLSv1_2
+            # Secure ciphers, use this is enabled tls 1.2
+            # context.set_ciphers('ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384')
+
+            context.minimum_version = ssl.TLSVersion.TLSv1_3
+
+            if tools.get_cacerts_file() is not None:
+                context.load_verify_locations(tools.get_cacerts_file())  # Load certifi certificates
+
+            # If ignore remote certificate
+            if check_certificate is False:
+                context.check_hostname = False
+                context.verify_mode = ssl.CERT_NONE
+                logger.warning('Certificate checking is disabled!')
+
+            return context.wrap_socket(rsocket, server_hostname=remote_addr[0])
 
 
 class Handler(socketserver.BaseRequestHandler):
     # Override Base type
     server: ForwardServer  # pyright: ignore[reportIncompatibleVariableOverride]
 
-    # server: ForwardServer
     def handle(self) -> None:
         if self.server.status == types.ForwardState.TUNNEL_LISTENING:
             self.server.status = types.ForwardState.TUNNEL_OPENING  # Only update state on first connection
@@ -206,23 +261,18 @@ class Handler(socketserver.BaseRequestHandler):
             self.request.close()  # End connection without processing it
             return
 
-        self.server.current_connections += 1
+        # Open remote connection
+        self.establish_and_handle_tunnel()
 
+        # If no more connections are stablished, and server is stoppable, do it now
+        if self.server.current_connections <= 0 and self.server.stoppable:
+            self.server.stop()
+
+    def establish_and_handle_tunnel(self) -> None:
         # Open remote connection
         try:
-            logger.debug('Ticket %s', self.server.ticket)
-            with self.server.connect() as ssl_socket:
-                # Send handhshake + command + ticket
-                ssl_socket.sendall(consts.CMD_OPEN + self.server.ticket.encode())
-                # Check response is OK
-                data = ssl_socket.recv(2)
-                if data != consts.RESPONSE_OK:
-                    data += ssl_socket.recv(128)
-                    raise Exception(f'Error received: {data.decode(errors="ignore")}')  # Notify error
-
-                # All is fine, now we can tunnel data
-
-                self.process(remote=ssl_socket)
+            with self.server.open_tunnel() as ssl_socket:
+                self.handle_tunnel(remote=ssl_socket)
         except ssl.SSLError as e:
             logger.error(f'Certificate error connecting to {self.server.remote!s}: {e!s}')
             self.server.status = types.ForwardState.TUNNEL_ERROR
@@ -234,23 +284,21 @@ class Handler(socketserver.BaseRequestHandler):
         finally:
             self.server.current_connections -= 1
 
-        if self.server.current_connections <= 0 and self.server.stoppable:
-            self.server.stop()
-
     # Processes data forwarding
-    def process(self, remote: ssl.SSLSocket) -> None:
+    def handle_tunnel(self, remote: ssl.SSLSocket) -> None:
         self.server.status = types.ForwardState.TUNNEL_PROCESSING
         logger.debug('Processing tunnel with ticket %s', self.server.ticket)
         # Process data until stop requested or connection closed
         try:
             while not self.server.stop_flag.is_set():
+                # Wait for data from either side
                 r, _w, _x = select.select([self.request, remote], [], [], 1.0)
-                if self.request in r:
+                if self.request in r:  # If request (local) has data, send to remote
                     data = self.request.recv(consts.BUFFER_SIZE)
                     if not data:
                         break
                     remote.sendall(data)
-                if remote in r:
+                if remote in r:  # If remote has data, send to request (local)
                     data = remote.recv(consts.BUFFER_SIZE)
                     if not data:
                         break
@@ -261,13 +309,27 @@ class Handler(socketserver.BaseRequestHandler):
 
 
 def _run(server: ForwardServer) -> None:
-    logger.debug(
-        'Starting forwarder: %s -> %s',
-        server.server_address,
-        server.remote,
-    )
-    server.serve_forever()
-    logger.debug('Stoped forwarder %s -> %s', server.server_address, server.remote)
+    """
+    Runs the forwarder server.
+    This method is intended to be run in a separate thread.
+
+    Args:
+        server (ForwardServer): The forward server instance.
+
+    Returns:
+        None
+    """
+
+    def _runner() -> None:
+        logger.debug(
+            'Starting forwarder: %s -> %s',
+            server.server_address,
+            server.remote,
+        )
+        server.serve_forever()
+        logger.debug('Stopped forwarder %s -> %s', server.server_address, server.remote)
+
+    threading.Thread(target=_runner).start()
 
 
 def forward(
@@ -277,16 +339,34 @@ def forward(
     local_port: int = 0,
     check_certificate: bool = True,
     keep_listening: bool = True,
+    use_ipv6: bool = False,
 ) -> ForwardServer:
+    """
+    Forward a connection to a remote server.
+
+    Args:
+        remote (Tuple[str, int]): The address and port of the remote server.
+        ticket (str): The ticket used for authentication.
+        timeout (int, optional): When the server will stop listening for new connections (default is 0, which means never).
+        local_port (int, optional): The local port to bind to (default is 0, which means any available port).
+        check_certificate (bool, optional): Whether to check the server's SSL certificate (default is True).
+        keep_listening (bool, optional): Whether to keep listening for new connections (default is True).
+
+    Returns:
+        ForwardServer: An instance of the ForwardServer class.
+
+    """
     fs = ForwardServer(
         remote=remote,
         ticket=ticket,
         timeout=timeout,
         local_port=local_port,
         check_certificate=check_certificate,
+        ipv6_remote=use_ipv6,
         keep_listening=keep_listening,
     )
-    # Starts a new thread
-    threading.Thread(target=_run, args=(fs,)).start()
+    # Starts a new thread for processing the server,
+    # so the main thread can continue processing other tasks
+    _run(fs)
 
     return fs

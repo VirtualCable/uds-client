@@ -50,6 +50,27 @@ PARAMETERS: typing.MutableMapping[str, typing.Any] = {
     # TODO: add parameters here
 }
 
+SIGNED_STRING: str = 'This is the string to test signature'
+SIGNATURE: str = (
+    'rLL5ykPFWSk2L3RVlCOlCLfngEwMg6cWIZ35DrxRBjt77xvf'
+    'OZYcFuDqma5zBJ43RgI4XUvLdMCeU2KZh/gHoQjIiXYBdg76'
+    'B0E6h3JvE6Nl71+q9KrTlk/lp8JoroZcLCPwFzMzb/1rxCO+'
+    'dplDbVyw5J08fK31oEKTIw0O1JlgkxK+zFhQalfwZvr4n0mS'
+    'g9awpPAAAOYn7p9/i9As+QDden62kvU/G4iZ4w6/1YU9LmAW'
+    'urxMhrIGejmaPnPzmHtovBzUxFVVr6eK9AdleDqHoxGSqqga'
+    'qmiMfKXktdkSKnBfizqpCt2gshzq6QH0iwwHDlfQ+PNe1Fta'
+    'xgNAFfBZjlF4Masnpn8vhvLhmZpa9oQVRkFIPvRUAKn9H7pf'
+    'gUzWYlHTRpqVthZyo72B2R3bKVpdk0RF8UiQgzM8BYfMuc51'
+    'HZSyy4u6P2tPqAI7IT30v2Y/s15Xa+uOKs6lP7yUlME4isDG'
+    'OIkiQ3usOYK+kjdissWbjFPLQZ2sLYISe67zBAHvskHSfc5s'
+    '5jfKkB6+AbqzkIxHc7ZAcwBqnSOh4gMVwUfBKzLKhCTJxeEs'
+    'mp85Q3z2ONmoHsDqU6KGXgW2hshA6zYB5c3hukz+zVbfaYhE'
+    '+EaxYpW7de4XU0EkEuNdbDC+7F3CqJ/aSoCKNVmLUW9WphMq'
+    'xZORjLTCR/c='
+)
+
+TICKET: str = 'x' * consts.TICKET_LENGTH
+
 
 def check_version() -> str:
     if REQUIRED_VERSION == 'fail':
@@ -105,7 +126,7 @@ def patched_uds_client() -> typing.Generator['UDSClient.UDSClient', None, None]:
     with patch_rest_api() as client:
         uds_client = UDSClient.UDSClient(client, 'ticket', 'scrambler')
         # Now, patch object:
-        # - process_waiting_tasks so we do not launch any task
+        # - process_waiting_tasks so we do not wait for processing tasks
         # - error_message so we do not show any error message
         # - warning_message so we do not show any warning message
         # error_message and warning_message are static methods, so we need to patch them on the class

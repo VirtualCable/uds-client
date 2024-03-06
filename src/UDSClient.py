@@ -263,7 +263,7 @@ def waiting_tasks_processor() -> None:
     # Removing
     try:
         logger.debug('Executing threads before exit')
-        tools.exec_before_exit()
+        tools.execute_before_exit()
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.debug('execBeforeExit: %s', e)
 
@@ -379,6 +379,10 @@ def parse_arguments(args: typing.List[str]) -> typing.Tuple[str, str, str, bool]
             )
     elif urlinfo.scheme != 'udss':
         raise exceptions.MessageException('Not supported protocol')  # Just shows "about" dialog
+    
+    # If ticket length is not valid
+    if len(ticket) != consts.TICKET_LENGTH:
+        raise exceptions.MessageException(f'Invalid ticket: {ticket}')
 
     return (
         urlinfo.netloc,
