@@ -276,7 +276,7 @@ def is_windows() -> bool:
 
 
 # old compat names, to ensure compatibility with old code
-# Basically, this will be here until v5.0. On 4.5 (or even later) Broker plugins will update
+# Will update server scripts to use new names as soon as previos 4.0 versions are not supported anymore
 # (making them imcompatible with 3.x versions)
 addTaskToWait = add_task_to_wait
 # waitForTasks = wait_for_tasks  # Not used on scripts
