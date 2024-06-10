@@ -37,6 +37,7 @@ def get_osname() -> types.OsType:
     if sys.platform.startswith('linux'):
         return types.OsType.LINUX
     if sys.platform.startswith('win'):
+    	import win32crypt
         return types.OsType.WINDOWS
     if sys.platform.startswith('darwin'):
         return types.OsType.MACOS
