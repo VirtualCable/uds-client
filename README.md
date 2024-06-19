@@ -8,3 +8,7 @@ This project is the UDS Client moved to its own repository, so it's easier to ma
 ### Windows
 
 See [BUILD-Windows.md](BUILD-Windows.md)
+
+### Linux
+
+See [BUILD-Linux.md](BUILD-Linux.md)
