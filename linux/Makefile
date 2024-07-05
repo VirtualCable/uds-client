@@ -30,11 +30,10 @@ install:
 	# Cleans up .pyc and cache folders
 	rm -f $(PYC) $(CACHES)
 	
-	cp $(SOURCEDIR)/uds/*.py $(LIBDIR)/uds
+	cp -rf $(SOURCEDIR)/uds/* $(LIBDIR)/uds
 
-	cp $(SOURCEDIR)/UDS*.py $(LIBDIR)
-	
-	
+	cp -r $(SOURCEDIR)/UDS*.py $(LIBDIR)
+
 	# URL Catchers elements for gnome/kde
 	cp desktop/UDSClient.desktop $(APPSDIR)
 	

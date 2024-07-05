@@ -33,8 +33,8 @@ import typing
 
 # First, try to use PySide6, available on arm64, x86_64, i386, ...
 try:
-    from PySide6 import QtCore, QtWidgets, QtGui
-    from PySide6.QtCore import QSettings
+    from PySide6 import QtCore, QtWidgets, QtGui  # type: ignore
+    from PySide6.QtCore import QSettings          # type: ignore
 
     from .pyside6.UDSLauncherMac import Ui_MacLauncher
     from .pyside6.UDSWindow import Ui_MainWindow

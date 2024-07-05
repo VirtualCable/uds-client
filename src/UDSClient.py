@@ -221,7 +221,7 @@ class UDSClient(QtWidgets.QMainWindow):
         )
         return (
             QtWidgets.QMessageBox.critical(
-                None,
+                typing.cast(QtWidgets.QWidget, None),
                 title,
                 message,
                 buttons,
