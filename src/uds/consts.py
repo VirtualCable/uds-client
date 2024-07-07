@@ -108,7 +108,7 @@ LISTEN_ADDRESS_V6: typing.Final[str] = '::1'
 RESPONSE_OK: typing.Final[bytes] = b'OK'
 
 # Ticket length
-TICKET_LENGTH: typing.Final[int] = 48
+TICKET_LENGTH: typing.Final[int] = 40  # Ticket length FOR UDS
 
 # Constants strings for protocol
 HANDSHAKE_V1: typing.Final[bytes] = b'\x5AMGB\xA5\x01\x00'
