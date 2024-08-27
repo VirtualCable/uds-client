@@ -42,8 +42,6 @@ from . import tools, consts, types
 
 logger = logging.getLogger(__name__)
 
-PayLoadType = typing.Optional[typing.Tuple[typing.Optional[bytes], typing.Optional[bytes]]]
-
 
 class ForwardServer(socketserver.ThreadingTCPServer):
     daemon_threads = True
