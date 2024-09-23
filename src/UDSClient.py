@@ -161,7 +161,12 @@ class UDSClient(QtWidgets.QMainWindow):
             self.close_window()
 
             # Execute UDS transport script, signed and checked
-            exec(script, globals(), {'parent': self, 'sp': params})
+            vars = {
+                '__builtins__': __builtins__,
+                'parent': self,
+                'sp': params,
+            }
+            exec(script, vars)
 
             self.process_waiting_tasks()
 
