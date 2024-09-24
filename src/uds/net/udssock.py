@@ -98,7 +98,7 @@ def connect(host: str, port: int) -> socket.socket:
 if __name__ == "__main__":
     import os
 
-    os.environ['http_proxy'] = 'http://proxy:3128'
+    os.environ['https_proxy'] = 'http://proxy:3128'
     logging.basicConfig(level=logging.DEBUG)
     s = connect('www.google.com', 80)
     s.sendall(b'GET / HTTP/1.0\r\nHost: www.google.com\r\n\r\n')

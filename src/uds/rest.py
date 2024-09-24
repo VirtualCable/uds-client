@@ -222,8 +222,8 @@ class RestApi:
         return RestApi(f'https://{host}/uds/rest/client', on_invalid_certificate)
 
     @staticmethod
-    def get_url(url: str, certErrorCallback: typing.Optional[CertCallbackType] = None) -> bytes:
-        with RestApi._open(url, certErrorCallback) as response:
+    def get_url(url: str, cert_error_callback: typing.Optional[CertCallbackType] = None) -> bytes:
+        with RestApi._open(url, cert_error_callback) as response:
             resp = response.read()
 
         return resp

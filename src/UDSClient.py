@@ -209,7 +209,7 @@ class UDSClient(QtWidgets.QMainWindow):
         )
         return (
             QtWidgets.QMessageBox.warning(
-                None,  # type: ignore
+                typing.cast(QtWidgets.QWidget, None),
                 title,
                 message,
                 buttons,
@@ -410,12 +410,12 @@ def main(args: typing.List[str]) -> int:
         logger.debug('Mac OS *NOT* Detected')
         app.setStyle('plastique')
     else:
-        logger.debug('Platform is Mac OS, adding homebrew possible paths')
+        logger.debug('Platform is Mac OS, adding homebrew well known paths')
         os.environ['PATH'] += ''.join(
             os.pathsep + i
             for i in (
-                '/usr/local/bin',
                 '/opt/homebrew/bin',
+                '/usr/local/bin',
             )
         )
         logger.debug('Now path is %s', os.environ['PATH'])
