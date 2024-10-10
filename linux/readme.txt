@@ -1,5 +1,6 @@
-UDSClient is the client connector needed to get acccess to services managed by UDS Broker.
+UDSClient for Linux
 
-For raspberry Pi, AppImage does not works with 1.1.0 (works with 1.0.3)
+This is the UDSClient for Linux. It is a Python3 application that connects to UDS Broker to get access to services.
 
-Please, visit http://www.udsenterprise.com for more information
+Please, visit http://github.com/virtualcable/openuds for more information.
+
