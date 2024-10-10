@@ -29,7 +29,7 @@ AppDir:
   apt:
     arch: amd64
     sources:
-      - sourceline: 'deb [arch=amd64] http://ftp.de.debian.org/debian/ bookworm main contrib non-free'
+      - sourceline: 'deb [arch=amd64] http://ftp.nl.debian.org/debian/ trixie main contrib non-free'
         key_url: 'https://ftp-master.debian.org/keys/archive-key-11.asc'
 
     include:
@@ -39,8 +39,8 @@ AppDir:
       - python3-cryptography
       - python3-certifi
       - python3-psutil
-      - freerdp2-x11
-      - freerdp2-wayland
+      - freerdp3-x11
+      - freerdp3-wayland
       - x2goclient
       - openssh-sftp-server
     exclude: []
@@ -53,6 +53,27 @@ AppDir:
       # Path to the site-packages dir or other modules dirs
       # See https://docs.python.org/3/using/cmdline.html#envvar-PYTHONPATH
       PYTHONPATH: '${APPDIR}/usr/lib/python3.9/site-packages'
+      # Allow to use the system's libssl without legacy algorithms
+      CRYPTOGRAPHY_OPENSSL_NO_LEGACY: 1
+
+  after_runtime: |
+    set -eu
+
+    # python3 is linked against 'lib64/ld-linux-x86-64.so.2' but 'compat/lib64' is missing
+    compat="${TARGET_APPDIR}/runtime/compat"
+    if [ ! -e "${compat}/lib64" ] && [ -d "${compat}/usr/lib64" ]; then
+      ln -s "usr/lib64" "${compat}/"
+    fi
+    # For aarch64, the path is 'lib/aarch64-linux-gnu"
+    if [ ! -e "${compat}/lib/aarch64-linux-gnu" ] && [ -d "${compat}/usr/lib/aarch64-linux-gnu" ]; then
+      # Ensure 'lib' is a symlink to 'usr/lib
+      ln -s "usr/lib" "${compat}/"
+    fi
+    usr_bin="${TARGET_APPDIR}/usr/bin"
+    # create symlink for xfreerdp
+    if [ ! -e "${usr_bin}/xfreerdp" ] && [ -e "${usr_bin}/xfreerdp3" ]; then
+      ln -s "${usr_bin}/xfreerdp3" "${usr_bin}/xfreerdp"
+    fi
 
 AppImage:
   # update-information: None
