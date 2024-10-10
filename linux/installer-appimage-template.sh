@@ -1,9 +1,14 @@
 #!/bin/sh
 
-# Check for root
+# If not root, try to elevate
 if ! [ $(id -u) = 0 ]; then
-   echo "This script must be run as root" 
-   exit 1
+    echo "Trying to elevate to root for installation..."
+    if [ -x "$(command -v sudo)" ]; then
+        exec sudo $0
+    else
+        echo "Please, run this script as root or install sudo."
+        exit 1
+    fi
 fi
 
 # If -r flag, remove the appimage

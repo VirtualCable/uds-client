@@ -72,7 +72,7 @@ AppDir:
     usr_bin="${TARGET_APPDIR}/usr/bin"
     # create symlink for xfreerdp
     if [ ! -e "${usr_bin}/xfreerdp" ] && [ -e "${usr_bin}/xfreerdp3" ]; then
-      ln -s "${usr_bin}/xfreerdp3" "${usr_bin}/xfreerdp"
+      ln -s "xfreerdp3" "${usr_bin}/xfreerdp"
     fi
 
 AppImage:
