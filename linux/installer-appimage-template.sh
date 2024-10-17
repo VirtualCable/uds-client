@@ -27,4 +27,7 @@ chmod 755 /usr/bin/UDSClient-0.0.0-x86_64.AppImage
 cp UDSClient.desktop /usr/share/applications
 update-desktop-database
 
+# Important note: Neeed libfuse2 installed in the system
+echo "*** IMPORTANT ***"
+echo "Please, install libfuse2 package in your system to be able to run the AppImage."
 echo "Installation process done."
