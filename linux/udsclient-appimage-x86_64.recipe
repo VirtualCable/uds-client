@@ -35,14 +35,16 @@ AppDir:
     include:
       - python3
       - python3-pkg-resources
-      - python3-pyqt6
+      - python3-pyqt5
       - python3-cryptography
       - python3-certifi
       - python3-psutil
       - freerdp3-x11
       - freerdp3-wayland
       - x2goclient
+      - libqt5gui5
       - openssh-sftp-server
+      - dash
     exclude: []
 
   runtime:
@@ -63,6 +65,9 @@ AppDir:
     compat="${TARGET_APPDIR}/runtime/compat"
     if [ ! -e "${compat}/lib64" ] && [ -d "${compat}/usr/lib64" ]; then
       ln -s "usr/lib64" "${compat}/"
+    fi
+    if [ ! -e "${compat}/lib" ] && [ -d "${compat}/usr/lib" ]; then
+      ln -s "usr/lib" "${compat}/"
     fi
     # For aarch64, the path is 'lib/aarch64-linux-gnu"
     if [ ! -e "${compat}/lib/aarch64-linux-gnu" ] && [ -d "${compat}/usr/lib/aarch64-linux-gnu" ]; then

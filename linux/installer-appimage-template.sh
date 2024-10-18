@@ -4,7 +4,7 @@
 if ! [ $(id -u) = 0 ]; then
     echo "Trying to elevate to root for installation..."
     if [ -x "$(command -v sudo)" ]; then
-        exec sudo $0
+        exec sudo $0 $@
     else
         echo "Please, run this script as root or install sudo."
         exit 1
@@ -28,6 +28,12 @@ cp UDSClient.desktop /usr/share/applications
 update-desktop-database
 
 # Important note: Neeed libfuse2 installed in the system
-echo "*** IMPORTANT ***"
+echo ""
+echo ""
+echo "******************"
+echo "*** IMPORTANT! ***"
+echo "******************"
 echo "Please, install libfuse2 package in your system to be able to run the AppImage."
+echo ""
+echo ""
 echo "Installation process done."
