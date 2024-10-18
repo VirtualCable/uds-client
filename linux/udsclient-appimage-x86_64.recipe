@@ -44,7 +44,6 @@ AppDir:
       - x2goclient
       - libqt5gui5
       - openssh-sftp-server
-      - dash
     exclude: []
 
   runtime:
@@ -60,6 +59,13 @@ AppDir:
 
   after_runtime: |
     set -eu
+    # Substitute the x2gclient on usr/bin with the one on libexec
+    x2go_bin="${TARGET_APPDIR}/usr/bin/x2goclient"
+    x2go_libexec="${TARGET_APPDIR}/usr/libexec/x2goclient"
+    if [ -e "${x2go_libexec}" ] && [ -e "${x2go_bin}" ]; then
+      mv "${x2go_bin}" "${x2go_bin}.bak"
+      ln -s "../libexec/x2goclient" "${x2go_bin}"
+    fi
 
     # python3 is linked against 'lib64/ld-linux-x86-64.so.2' but 'compat/lib64' is missing
     compat="${TARGET_APPDIR}/runtime/compat"
