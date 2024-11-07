@@ -41,6 +41,7 @@ AppDir:
       - python3-psutil
       - freerdp3-x11
       - freerdp3-wayland
+      - openssl-provider-legacy
       - x2goclient
       - libqt5gui5
       - openssh-sftp-server
