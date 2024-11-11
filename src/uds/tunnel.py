@@ -261,17 +261,21 @@ class Handler(socketserver.BaseRequestHandler):
             return
 
         # Open remote connection
-        self.establish_and_handle_tunnel()
+        if self.establish_and_handle_tunnel() is False:
+            # If tunnel failed after connection,
+            # wait a bit before stop accepting new connections...
+            # This may give some time to client to reconnect
+            time.sleep(5)
 
         # If no more connections are stablished, and server is stoppable, do it now
         if self.server.current_connections <= 0 and self.server.stoppable:
             self.server.stop()
 
-    def establish_and_handle_tunnel(self) -> None:
+    def establish_and_handle_tunnel(self) -> bool:
         # Open remote connection
         try:
             with self.server.open_tunnel() as ssl_socket:
-                self.handle_tunnel(remote=ssl_socket)
+                return self.handle_tunnel(remote=ssl_socket)
         # All these exceptions are from the tunnel opening process
         except ssl.SSLError as e:
             logger.error(f'Certificate error connecting to {self.server.remote!s}: {e!s}')
@@ -283,9 +287,11 @@ class Handler(socketserver.BaseRequestHandler):
             self.server.stop()
         finally:
             self.server.current_connections -= 1
+            
+        return True  # Tunnel finished correctly, but not established
 
     # Processes data forwarding
-    def handle_tunnel(self, remote: ssl.SSLSocket) -> None:
+    def handle_tunnel(self, remote: ssl.SSLSocket) -> bool:
         self.server.status = types.ForwardState.TUNNEL_PROCESSING
         logger.debug('Processing tunnel with ticket %s', self.server.ticket)
         # Process data until stop requested or connection closed
@@ -304,11 +310,10 @@ class Handler(socketserver.BaseRequestHandler):
                         break
                     self.request.sendall(data)
             logger.debug('Finished tunnel with ticket %s', self.server.ticket)
+            return True  # Tunnel finished correctly
         except Exception as e:
             logger.error('Remote connection failure: %s. Retrying...', e)
-            # Wait a bit before stopping listener, so if the
-            # client retries, it will be able to connect
-            time.sleep(4)
+            return False  # Tunnel failed, wait a bit before stop accepting new connections...
 
 
 def _run(server: ForwardServer) -> None:
