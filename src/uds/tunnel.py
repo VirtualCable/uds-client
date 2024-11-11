@@ -34,6 +34,7 @@ import socketserver
 import ssl
 import threading
 import select
+import time
 import typing
 import logging
 
@@ -269,8 +270,19 @@ class Handler(socketserver.BaseRequestHandler):
     def establish_and_handle_tunnel(self) -> None:
         # Open remote connection
         try:
-            with self.server.open_tunnel() as ssl_socket:
-                self.handle_tunnel(remote=ssl_socket)
+            # If the tunnel open fails, will raise an exception
+            # and the tunnel will be closed
+            # if the tunnel is opened, but some error handling connection happens,
+            # the tunnel will be try to be re-opened (where it can give an exception, and the tunnel will be closed)
+            while True:
+                with self.server.open_tunnel() as ssl_socket:
+                    try:
+                        self.handle_tunnel(remote=ssl_socket)
+                        break
+                    except Exception as e:
+                        logger.error('Remote connection failure: %s. Retrying...', e)
+                        time.sleep(1)   # Wait a bit before retrying
+        # All these exceptions are from the tunnel opening process
         except ssl.SSLError as e:
             logger.error(f'Certificate error connecting to {self.server.remote!s}: {e!s}')
             self.server.status = types.ForwardState.TUNNEL_ERROR
@@ -302,8 +314,8 @@ class Handler(socketserver.BaseRequestHandler):
                         break
                     self.request.sendall(data)
             logger.debug('Finished tunnel with ticket %s', self.server.ticket)
-        except Exception as e:
-            logger.info('Remote connection closed: %s', e)
+        except Exception:
+            raise
 
 
 def _run(server: ForwardServer) -> None:
