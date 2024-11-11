@@ -263,6 +263,10 @@ class Handler(socketserver.BaseRequestHandler):
         # Open remote connection
         self.establish_and_handle_tunnel()
 
+        # Wait a bit before stopping listener, so if the
+        # client retries, it will be able to connect
+        time.sleep(3)  # Wait 3 seconds before stopping the server
+
         # If no more connections are stablished, and server is stoppable, do it now
         if self.server.current_connections <= 0 and self.server.stoppable:
             self.server.stop()
@@ -306,8 +310,6 @@ class Handler(socketserver.BaseRequestHandler):
             logger.debug('Finished tunnel with ticket %s', self.server.ticket)
         except Exception as e:
             logger.error('Remote connection failure: %s. Retrying...', e)
-            # Wait a bit before closing the connection
-            time.sleep(1)
 
 
 def _run(server: ForwardServer) -> None:
