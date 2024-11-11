@@ -312,7 +312,8 @@ class Handler(socketserver.BaseRequestHandler):
             logger.debug('Finished tunnel with ticket %s', self.server.ticket)
             return True  # Tunnel finished correctly
         except Exception as e:
-            logger.error('Remote connection failure: %s. Retrying...', e)
+            logger.error('Remote connection failure: %s.', e)
+            self.request.close()  # Close local connection abruptly
             return False  # Tunnel failed, wait a bit before stop accepting new connections...
 
 
