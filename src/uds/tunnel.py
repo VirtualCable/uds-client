@@ -313,7 +313,10 @@ class Handler(socketserver.BaseRequestHandler):
             return True  # Tunnel finished correctly
         except Exception as e:
             logger.error('Remote connection failure: %s.', e)
-            self.request.close()  # Close local connection abruptly
+            try:
+                self.request.close()  # Close local connection abruptly
+            except Exception:
+                pass  # Ignore errors closing local connection
             return False  # Tunnel failed, wait a bit before stop accepting new connections...
 
 
