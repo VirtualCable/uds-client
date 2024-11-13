@@ -69,13 +69,18 @@ class RestApi:
         self._on_invalid_certificate = on_invalid_certificate
         self._required_version = ''
 
-    def get(self, path: str, params: typing.Optional[typing.Mapping[str, str]] = None) -> typing.Any:
+    def request(
+        self,
+        path: str,
+        params: typing.Optional[typing.Mapping[str, str]] = None,
+        data: typing.Optional[str] = None,
+    ) -> typing.Any:
         if params:
             path += '?' + '&'.join(
                 '{}={}'.format(k, urllib.parse.quote(str(v).encode('utf8'))) for k, v in params.items()
             )
 
-        return json.loads(RestApi.get_url(self._rest_api_endpoint + path, self._on_invalid_certificate))
+        return json.loads(RestApi.request_url(self._rest_api_endpoint + path, self._on_invalid_certificate))
 
     def process_error(self, data: typing.Any) -> None:
         if 'error' in data:
@@ -92,7 +97,7 @@ class RestApi:
 
         client_link = ''
         if not self._required_version:
-            data = self.get('')  # Version is returned on 'main' path
+            data = self.request('')  # Version is returned on 'main' path
             self.process_error(data)
             # get server version, using new key but, if not present, use old one
             # Note: old version will be removed on 5.0.0 (As all 4.0 brokers will already return the new keys)
@@ -113,11 +118,13 @@ class RestApi:
         except Exception as e:
             raise exceptions.UDSException(e) from e
 
-    def get_script_and_parameters(self, ticket: str, scrambler: str) -> typing.Tuple[str, typing.Any]:
+    def get_script_and_parameters(
+        self, ticket: str, scrambler: str
+    ) -> typing.Tuple[str, typing.Any, typing.Dict[str, typing.Any]]:
         '''Gets the transport script, validates it if necesary
         and returns it'''
         try:
-            data = self.get(
+            data = self.request(
                 '/{}/{}'.format(ticket, scrambler),
                 params={'hostname': tools.gethostname(), 'version': consts.VERSION},
             )
@@ -130,7 +137,7 @@ class RestApi:
 
         params = None
 
-        res = data['result']
+        res: typing.Dict[str, typing.Any] = data['result']
         # We have three elements on result:
         # * Script
         # * Signature
@@ -147,12 +154,28 @@ class RestApi:
 
             raise Exception('Invalid UDS code signature. Please, report to administrator')
 
-        return script.decode(), params
+        return script.decode(), params, res.get('log', {})
 
         # exec(script.decode("utf-8"), globals(), {'parent': self, 'sp': params})
 
+    def send_log(self, log_ticket: str, log_data: str) -> None:
+        '''Sends log data to server'''
+        try:
+            data = self.request(
+                '/{}/log'.format(log_ticket),
+                data=json.dumps({'log': log_data.encode('utf-8')}),
+                params={'hostname': tools.gethostname(), 'version': consts.VERSION},
+            )
+        except Exception as e:
+            logger.exception('Got exception on sendLog')
+            raise e
+
+        self.process_error(data)
+
     @staticmethod
-    def _open(url: str, certErrorCallback: typing.Optional[CertCallbackType] = None) -> typing.Any:
+    def _open(
+        url: str, certErrorCallback: typing.Optional[CertCallbackType] = None, data: 'bytes|None' = None
+    ) -> typing.Any:
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
@@ -198,7 +221,7 @@ class RestApi:
                     'User-Agent': consts.USER_AGENT,
                 },
             )
-            return urllib.request.urlopen(req, context=ctx)
+            return urllib.request.urlopen(req, data, context=ctx)
 
         try:
             response = _open_url(url)
@@ -222,8 +245,10 @@ class RestApi:
         return RestApi(f'https://{host}/uds/rest/client', on_invalid_certificate)
 
     @staticmethod
-    def get_url(url: str, cert_error_callback: typing.Optional[CertCallbackType] = None) -> bytes:
-        with RestApi._open(url, cert_error_callback) as response:
+    def request_url(
+        url: str, cert_error_callback: typing.Optional[CertCallbackType] = None, data: 'str|None' = None
+    ) -> bytes:
+        with RestApi._open(url, cert_error_callback, data=data.encode() if data else None) as response:
             resp = response.read()
 
         return resp

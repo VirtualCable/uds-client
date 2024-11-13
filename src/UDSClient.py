@@ -50,7 +50,7 @@ from uds.rest import RestApi
 # Just to ensure there are available on runtime
 from uds.tunnel import forward as tunnel_forwards  # pyright: ignore[reportUnusedImport]
 
-from uds.log import logger
+from uds.log import logger, get_remote_log, init_remote_log
 from uds import consts, exceptions, tools
 from uds import VERSION
 
@@ -152,7 +152,10 @@ class UDSClient(QtWidgets.QMainWindow):
 
     def fetch_transport_data(self) -> None:
         try:
-            script, params = self.api.get_script_and_parameters(self.ticket, self.scrambler)
+            script, params, log_data = self.api.get_script_and_parameters(self.ticket, self.scrambler)
+
+            init_remote_log(log_data)  # Initialize for remote logging if requested by server
+
             self.stop_animation()
 
             if 'darwin' in sys.platform:
@@ -181,17 +184,17 @@ class UDSClient(QtWidgets.QMainWindow):
             self.show_error(e)
 
     def process_waiting_tasks(self) -> None:
-            """
-            Process the waiting tasks in a separate thread.
+        """
+        Process the waiting tasks in a separate thread.
 
-            This way, the gui don't get blocked by the waiting tasks.
+        This way, the gui don't get blocked by the waiting tasks.
 
-            Returns:
-                None
-            """
+        Returns:
+            None
+        """
 
-            threading.Thread(target=waiting_tasks_processor).start()
-            # And simply return
+        threading.Thread(target=waiting_tasks_processor, args=(self.api,)).start()
+        # And simply return
 
     def start(self) -> None:
         """
@@ -243,7 +246,7 @@ class UDSClient(QtWidgets.QMainWindow):
         settings.endGroup()
 
 
-def waiting_tasks_processor() -> None:
+def waiting_tasks_processor(api: RestApi) -> None:
     # Wait a bit before start processing ending sequence
     time.sleep(3)
     try:
@@ -273,19 +276,27 @@ def waiting_tasks_processor() -> None:
         logger.debug('execBeforeExit: %s', e)
 
     logger.debug('endScript done')
+    
+    # Process remote logging if requested
+    try:
+        log_ticket, log_data = get_remote_log()
+        if log_ticket != '':
+            api.send_log(log_ticket, log_data)
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.error('Sending log data: %s', e)
 
 
 # Ask user to approve endpoint
-def verify_host_approval(hostName: str) -> bool:
+def verify_host_approval(hostname: str) -> bool:
     with UDSClient.settings('endpoints') as settings:
-        approved = bool(settings.value(hostName, False))
+        approved = bool(settings.value(hostname, False))
 
-        errorString = '<p>The server <b>{}</b> must be approved:</p>'.format(hostName)
+        errorString = '<p>The server <b>{}</b> must be approved:</p>'.format(hostname)
         errorString += '<p>Only approve UDS servers that you trust to avoid security issues.</p>'
 
         if not approved:
             if UDSClient.warning_message('ACCESS Warning', errorString, yes_no=True):
-                settings.setValue(hostName, True)
+                settings.setValue(hostname, True)
                 approved = True
 
     return approved
@@ -320,12 +331,27 @@ def minimal(api: RestApi, ticket: str, scrambler: str) -> int:
             webbrowser.open(e.link)
             return 0
         logger.debug('Transport data')
-        script, params = api.get_script_and_parameters(ticket, scrambler)
 
-        # Execute UDS transport script
-        exec(script, globals(), {'parent': None, 'sp': params})
-        # Execute the waiting task...
-        threading.Thread(target=waiting_tasks_processor).start()
+        script, params, log_data = api.get_script_and_parameters(ticket, scrambler)
+
+        init_remote_log(log_data)  # Initialize for remote logging if requested by server
+
+        # A catch-all-calls class, to avoid errors on script becasue no parent
+        class CatchAll:
+            def __getattr__(self, name: str) -> 'CatchAll':
+                return self
+
+            def __call__(self, *args: typing.Any, **kwargs: typing.Any) -> 'CatchAll':
+                return self
+
+        vars = {
+            '__builtins__': __builtins__,
+            'parent': CatchAll(),
+            'sp': params,
+        }
+        exec(script, vars)
+
+        threading.Thread(target=waiting_tasks_processor, args=(api,)).start()
 
     except exceptions.RetryException as e:
         UDSClient.error_message(
@@ -384,7 +410,7 @@ def parse_arguments(args: typing.List[str]) -> typing.Tuple[str, str, str, bool]
             )
     elif urlinfo.scheme != 'udss':
         raise exceptions.MessageException('Not supported protocol')  # Just shows "about" dialog
-    
+
     # If ticket length is not valid
     if len(ticket) != consts.TICKET_LENGTH:
         raise exceptions.MessageException(f'Invalid ticket: {ticket}')
