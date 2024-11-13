@@ -201,12 +201,12 @@ def wait_for_tasks() -> None:
 
 
 def register_execute_before_exit(fnc: typing.Callable[[], None]) -> None:
-    logger.debug('Added exec before exit: %s', fnc)
+    logger.debug('Registered exec before exit: %s', fnc)
     _execute_before_exit.append(fnc)
 
 
 def execute_before_exit() -> None:
-    logger.debug('Esecuting exec before exit: %s', _execute_before_exit)
+    logger.debug('Executing exec before exit: %s', _execute_before_exit)
     for fnc in _execute_before_exit:
         try:
             fnc()

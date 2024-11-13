@@ -41,7 +41,7 @@ from . import consts
 
 
 # Local variables
-_log_stream = io.StringIO()  # Used to store log for remote log
+_log_stream: typing.Optional[io.StringIO] = None  # Used to store log for remote log
 _log_ticket = ''  # Used to store ticket for remote log
 
 
@@ -67,6 +67,7 @@ def _platform_debug_info(logger: 'logging.Logger') -> None:
     logger.debug('Qt framework: %s', ui.QT_VERSION)
     logger.debug('Log level set to DEBUG')
     logger.debug('Environment variables:')
+
     for k, v in os.environ.items():
         logger.debug('  %s=%s', k, v)
 
@@ -105,24 +106,48 @@ def _init() -> 'logging.Logger':
 
 
 def init_remote_log(log_data: typing.Dict[str, typing.Any]) -> None:
+    global _log_ticket, _log_stream
+
     try:
         if log_data.get('ticket') is not None:
+            _log_ticket = log_data['ticket']
+
+            _log_stream = io.StringIO()
+
+            logger.debug('** Remote log requested : %s', log_data)
+
             log_level = log_data.get('level', logging.INFO)
             stream_handler = logging.StreamHandler(_log_stream)
-            stream_handler.setLevel(log_level)
+            stream_handler.setLevel(logging.DEBUG)
+            logger.debug('Setting log level as requested to %s', stream_handler.level)
+            
+            formatter = logging.Formatter('%(levelname)s %(asctime)s %(message)s')
+            stream_handler.setFormatter(formatter)
+            logger.addHandler(stream_handler)
+            
+            # Dissable logging to parent handlers, so we only log to the stream handler
+            # if local debug is not enabled
+            if not consts.DEBUG:
+                logger.propagate = False
+            
+            # Ensure log level is set to the requested one
+            logger.setLevel(log_level)
+            
+            logger.debug('Handlers: %s', logger.handlers)
+            
+            # Repeat platform info for remote (will be duplicated locally if debug is enabled, but that's ok)
+            _platform_debug_info(logger)
 
-        _log_stream.truncate(0)
-        # Repeat platform info for remote (will be duplicated locally if debug is enabled, but that's ok)
-        _platform_debug_info(logger)
-
-        _log_ticket = log_data.get('ticket', '')
     except Exception as e:
         logger.error('Error setting log level as requested to %s: %s', log_data.get('level'), e)
 
 
 def get_remote_log() -> typing.Tuple[str, str]:
+    if _log_stream is None:
+        return '', ''
+
     return _log_ticket, _log_stream.getvalue()
 
 
 # Initialize logger
-logger = _init()
+logger: 'logging.Logger' = _init()

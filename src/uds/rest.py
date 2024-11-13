@@ -80,7 +80,7 @@ class RestApi:
                 '{}={}'.format(k, urllib.parse.quote(str(v).encode('utf8'))) for k, v in params.items()
             )
 
-        return json.loads(RestApi.request_url(self._rest_api_endpoint + path, self._on_invalid_certificate))
+        return json.loads(RestApi.request_url(self._rest_api_endpoint + path, self._on_invalid_certificate, data=data))
 
     def process_error(self, data: typing.Any) -> None:
         if 'error' in data:
@@ -163,7 +163,7 @@ class RestApi:
         try:
             data = self.request(
                 '/{}/log'.format(log_ticket),
-                data=json.dumps({'log': log_data.encode('utf-8')}),
+                data=json.dumps({'log': log_data}),
                 params={'hostname': tools.gethostname(), 'version': consts.VERSION},
             )
         except Exception as e:

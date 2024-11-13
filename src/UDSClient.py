@@ -280,10 +280,12 @@ def waiting_tasks_processor(api: RestApi) -> None:
     # Process remote logging if requested
     try:
         log_ticket, log_data = get_remote_log()
-        if log_ticket != '':
-            api.send_log(log_ticket, log_data)
+        logger.debug('** Remote log data: %s, %s', log_ticket, len(log_data))
+        if log_ticket != '' and len(log_data) > 0:
+            logger.debug('** Sending log data: %s, %s', log_ticket, len(log_data))
+            api.send_log(log_ticket, log_data[-65536:])  # Limit to 64K
     except Exception as e:  # pylint: disable=broad-exception-caught
-        logger.error('Sending log data: %s', e)
+        logger.error('** Error sending log data: %s', e)
 
 
 # Ask user to approve endpoint
