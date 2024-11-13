@@ -182,6 +182,7 @@ class UDSClient(QtWidgets.QMainWindow):
             if logger.getEffectiveLevel() == logging.DEBUG:
                 logger.exception('Get Transport Data')
             self.show_error(e)
+            process_remote_log(self.api)
 
     def process_waiting_tasks(self) -> None:
         """
@@ -245,6 +246,17 @@ class UDSClient(QtWidgets.QMainWindow):
         yield settings
         settings.endGroup()
 
+def process_remote_log(api: RestApi) -> None:
+    # Process remote logging if requested
+    try:
+        log_ticket, log_data = get_remote_log()
+        logger.debug('** Remote log data: %s, %s', log_ticket, len(log_data))
+        if log_ticket != '' and len(log_data) > 0:
+            logger.debug('** Sending log data: %s, %s', log_ticket, len(log_data))
+            api.send_log(log_ticket, log_data[-65536:])  # Limit to 64K
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.error('** Error sending log data: %s', e)
+
 
 def waiting_tasks_processor(api: RestApi) -> None:
     # Wait a bit before start processing ending sequence
@@ -277,15 +289,7 @@ def waiting_tasks_processor(api: RestApi) -> None:
 
     logger.debug('endScript done')
     
-    # Process remote logging if requested
-    try:
-        log_ticket, log_data = get_remote_log()
-        logger.debug('** Remote log data: %s, %s', log_ticket, len(log_data))
-        if log_ticket != '' and len(log_data) > 0:
-            logger.debug('** Sending log data: %s, %s', log_ticket, len(log_data))
-            api.send_log(log_ticket, log_data[-65536:])  # Limit to 64K
-    except Exception as e:  # pylint: disable=broad-exception-caught
-        logger.error('** Error sending log data: %s', e)
+    process_remote_log(api)
 
 
 # Ask user to approve endpoint
