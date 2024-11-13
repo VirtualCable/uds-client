@@ -255,7 +255,7 @@ class Handler(socketserver.BaseRequestHandler):
         # If server new connections processing are over time...
         if self.server.stoppable and not self.server.keep_listening:
             self.server.status = types.ForwardState.TUNNEL_ERROR
-            logger.error('Rejected timedout connection')
+            logger.error('Rejected connection out of time')
             self.request.close()  # End connection without processing it
             return
 
@@ -264,6 +264,7 @@ class Handler(socketserver.BaseRequestHandler):
 
         # If no more connections are stablished, and server is stoppable, do it now
         if self.server.current_connections <= 0 and self.server.stoppable:
+            logger.info('No more connections, stopping server')
             self.server.stop()
 
     def establish_and_handle_tunnel(self) -> None:
@@ -288,22 +289,45 @@ class Handler(socketserver.BaseRequestHandler):
         logger.debug('Processing tunnel with ticket %s', self.server.ticket)
         # Process data until stop requested or connection closed
         try:
+            readables = [self.request, remote]
+            writables: typing.List[typing.Any] = []
+            exceptionables = [self.request, remote]
+
             while not self.server.stop_flag.is_set():
                 # Wait for data from either side
-                r, _w, _x = select.select([self.request, remote], [], [], 1.0)
-                if self.request in r:  # If request (local) has data, send to remote
+                readable, _writable, exceptional = select.select(readables, writables, exceptionables, 1)
+                for err in exceptional:
+                    raise Exception(f'Error on connection: {err}')
+
+                if self.request in readable:  # If request (local) has data, send to remote
                     data = self.request.recv(consts.BUFFER_SIZE)
+                    # End of data, close connection
                     if not data:
+                        # close remote and local connections
+                        logger.debug('End of local data, closing connection')
                         break
                     remote.sendall(data)
-                if remote in r:  # If remote has data, send to request (local)
+                if remote in readable:  # If remote has data, send to request (local)
                     data = remote.recv(consts.BUFFER_SIZE)
                     if not data:
+                        # close local (request) and remote connections
+                        logger.debug('End of remote data, closing connection')
                         break
                     self.request.sendall(data)
             logger.debug('Finished tunnel with ticket %s', self.server.ticket)
         except Exception as e:
             logger.info('Remote connection closed: %s', e)
+
+        finally:
+            try:
+                self.request.close()
+            except Exception as e:
+                logger.error('Error closing local connection: %s', e)
+
+            try:
+                remote.close()
+            except Exception as e:
+                logger.error('Error closing remote connection: %s', e)
 
 
 def _run(server: ForwardServer) -> None:
