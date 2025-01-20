@@ -31,6 +31,8 @@ AppDir:
     sources:
       - sourceline: 'deb [arch=amd64] http://ftp.nl.debian.org/debian/ trixie main contrib non-free'
         key_url: 'https://ftp-master.debian.org/keys/archive-key-11.asc'
+      # - sourceline: 'deb [arch=amd64] https://packages.x2go.org/debian bookworm extras main'
+      #   key_url: 'https://images.udsenterprise.com/files/x2go.key'
 
     include:
       - python3
@@ -42,7 +44,7 @@ AppDir:
       - freerdp3-x11
       - freerdp3-wayland
       # - x2goclient
-      - libqt5gui5
+      - libqt5gui5t64
       - openssh-sftp-server
     exclude: []
 
