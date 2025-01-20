@@ -141,7 +141,9 @@ class ForwardServer(socketserver.ThreadingTCPServer):
 
     @contextlib.contextmanager
     def open_tunnel(self) -> typing.Generator[ssl.SSLSocket, None, None]:
+        logger.debug('Tunnel opening')
         self.current_connections += 1
+        logger.debug('Opening tunnel with ticket %s, connections: %s', self.ticket, self.current_connections)
         # Open remote connection
         try:
             with self.connection() as ssl_socket:
@@ -157,6 +159,7 @@ class ForwardServer(socketserver.ThreadingTCPServer):
             self.status = types.ForwardState.TUNNEL_ERROR
             self.stop()
         finally:
+            logger.debug('Decrementing connections to %s', self.current_connections-1)
             self.current_connections -= 1
 
     @property
@@ -174,6 +177,7 @@ class ForwardServer(socketserver.ThreadingTCPServer):
         fs.timer = None
         fs.can_stop = True
         # If timer fired, and no connections are stablished, stop the server
+        logger.debug('Current connections: %s', fs.current_connections)
         if fs.current_connections <= 0:
             fs.stop()
 
@@ -284,7 +288,7 @@ class Handler(socketserver.BaseRequestHandler):
     # Processes data forwarding
     def handle_tunnel(self, remote: ssl.SSLSocket) -> None:
         self.server.status = types.ForwardState.TUNNEL_PROCESSING
-        logger.debug('Processing tunnel with ticket %s', self.server.ticket)
+        logger.debug('Start processing tunnel for ticket %s', self.server.ticket)
         # Process data until stop requested or connection closed
         try:
             readables = [self.request, remote]
