@@ -280,8 +280,6 @@ class Handler(socketserver.BaseRequestHandler):
             logger.error(f'Error connecting to {self.server.remote!s}: {e!s}')
             self.server.status = types.ForwardState.TUNNEL_ERROR
             self.server.stop()
-        finally:
-            self.server.current_connections -= 1
 
     # Processes data forwarding
     def handle_tunnel(self, remote: ssl.SSLSocket) -> None:
