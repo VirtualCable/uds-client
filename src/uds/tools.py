@@ -110,7 +110,7 @@ def test_server(host: str, port: typing.Union[str, int], timeout: int = 4) -> bo
 def find_application(application_name: str, extra_path: typing.Optional[str] = None) -> typing.Optional[str]:
     searchPath = os.environ['PATH'].split(os.pathsep)
     if extra_path:
-        searchPath += list(extra_path)
+        searchPath.append(extra_path)
 
     for path in searchPath:
         fileName = os.path.join(path, application_name)
