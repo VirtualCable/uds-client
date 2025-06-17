@@ -131,7 +131,7 @@ Change the path where you store your source code on line 7 to:
                 <RegistryKey Root="HKCR" Key="uds">
                     <RegistryValue Type="string" Name="URL Protocol" Value="" />
                 </RegistryKey>
-                <RegistryValue Root="HKCR" Key="udss\shell\open\command" Type="string" Value='"[INSTALLFOLDER]\[ProductName]\[ProductName]exe" %1' />
+                <RegistryValue Root="HKCR" Key="udss\shell\open\command" Type="string" Value='"[INSTALLFOLDER]\[ProductName]\[ProductName].exe" %1' />
                 <RegistryValue Root="HKCR" Key="udss" Type="string"  Value='URL:Uds Protocol SSL' />
                 <RegistryKey Root="HKCR" Key="udss">
                     <RegistryValue Type="string" Name="URL Protocol" Value="" />
