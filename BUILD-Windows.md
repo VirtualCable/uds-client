@@ -30,6 +30,10 @@ Open Command Prompt (CMD) and execute the following commands:
 ```
     pyrcc5 -o .\UDSResources_rc.py .\UDSResources.qrc
 ```
+or
+```
+    pyside6-rcc -o .\UDSResources_rc.py .\UDSResources.qrc
+```
 
 ## Create PyInstaller Spec File
 
