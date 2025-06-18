@@ -1,0 +1,84 @@
+name: Build UDSClient exe installer
+on:
+  push:
+    branches: [ master, v4.0 ]
+  pull_request:
+    branches: [ master, v4.0 ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        shell: powershell
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements-win64.txt
+
+    - name: Build Picture to Icon
+      run: |
+        cd src
+        pyside6-rcc -o .\UDSResources_rc.py .\UDSResources.qrc
+
+    - name: Create PyInstaller Spec File
+      run: |
+        cd src
+        pyi-makespec --onefile --paths="c:\hostedtoolcache\windows\python\3.10.11\x64\lib\site-packages" --hidden-import=win32crypt --hidden-import=certifi --windowed UDSClient.py
+
+    - name: Generate PyInstaller build
+      run: |
+        cd src
+        pyinstaller --noconfirm UDSClient.spec
+
+    - name: Extract version from Python file
+      run: |
+        $lines = Get-Content src/uds/consts.py
+        foreach ($line in $lines) {
+          if ($line -match "VERSION:\s*\S+\s*=\s*'([\d\.]+)'") {
+            $version = $matches[1]
+            echo "VERSION=$version" >> $env:GITHUB_ENV
+            break
+          }
+        }
+        if (-not $version) {
+          throw "VERSION not found in consts.py"
+        }
+
+    - name: Install NSIS
+      run: |
+        choco install nsis -y
+        echo "C:\Program Files (x86)\NSIS" >> $env:GITHUB_PATH
+
+    - name: Prepare files for installer
+      run: |
+        New-Item -ItemType Directory -Path src\UDSClient
+        Copy-Item src\dist\UDSClient.exe -Destination src\UDSClient\
+
+    - name: Patch .nsi with version
+      run: |
+        $nsi = Get-Content .github/UDSClient.nsi
+        $nsi = $nsi -replace '!define VERSION .*', "!define VERSION ${{ env.VERSION }}"
+        Set-Content src/UDSClient.nsi $nsi
+
+    - name: Build NSIS Installer
+      run: |
+        cd src
+        makensis UDSClient.nsi
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: UDSClient-installers-${{ env.VERSION }}-${{ github.sha }}
+        path: src\openUDS-Client_Installer-${{ env.VERSION }}.exe
