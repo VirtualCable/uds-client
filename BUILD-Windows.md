@@ -131,7 +131,7 @@ Change the path where you store your source code on line 7 to:
             <Component Id="VDIClientComponent" Guid="{77f76869-ba64-4853-8758-6b262cdfc0e3}">          
                 <File Id="VDIClientEXE" Source="!(wix.UDSCLIENTDIR)\uds-client\src\dist\UDSClient.exe" KeyPath="yes" />
                 <RegistryValue Root="HKCR" Key="uds\shell\open\command" Type="string"  Value='"[INSTALLFOLDER]\[ProductName]\[ProductName].exe" %1' />
-                <RegistryValue Root="HKCR" Key="uds" Type="string"  Value='URL:Uds Protocol SSL' />
+                <RegistryValue Root="HKCR" Key="uds" Type="string"  Value='URL:Uds Protocol' />
                 <RegistryKey Root="HKCR" Key="uds">
                     <RegistryValue Type="string" Name="URL Protocol" Value="" />
                 </RegistryKey>
