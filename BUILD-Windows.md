@@ -30,6 +30,10 @@ Open Command Prompt (CMD) and execute the following commands:
 ```
     pyrcc5 -o .\UDSResources_rc.py .\UDSResources.qrc
 ```
+or
+```
+    pyside6-rcc -o .\UDSResources_rc.py .\UDSResources.qrc
+```
 
 ## Create PyInstaller Spec File
 
@@ -127,11 +131,11 @@ Change the path where you store your source code on line 7 to:
             <Component Id="VDIClientComponent" Guid="{77f76869-ba64-4853-8758-6b262cdfc0e3}">          
                 <File Id="VDIClientEXE" Source="!(wix.UDSCLIENTDIR)\uds-client\src\dist\UDSClient.exe" KeyPath="yes" />
                 <RegistryValue Root="HKCR" Key="uds\shell\open\command" Type="string"  Value='"[INSTALLFOLDER]\[ProductName]\[ProductName].exe" %1' />
-                <RegistryValue Root="HKCR" Key="uds" Type="string"  Value='URL:Uds Protocol SSL' />
+                <RegistryValue Root="HKCR" Key="uds" Type="string"  Value='URL:Uds Protocol' />
                 <RegistryKey Root="HKCR" Key="uds">
                     <RegistryValue Type="string" Name="URL Protocol" Value="" />
                 </RegistryKey>
-                <RegistryValue Root="HKCR" Key="udss\shell\open\command" Type="string" Value='"[INSTALLFOLDER]\[ProductName]\[ProductName]exe" %1' />
+                <RegistryValue Root="HKCR" Key="udss\shell\open\command" Type="string" Value='"[INSTALLFOLDER]\[ProductName]\[ProductName].exe" %1' />
                 <RegistryValue Root="HKCR" Key="udss" Type="string"  Value='URL:Uds Protocol SSL' />
                 <RegistryKey Root="HKCR" Key="udss">
                     <RegistryValue Type="string" Name="URL Protocol" Value="" />
