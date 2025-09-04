@@ -418,7 +418,7 @@ def parse_arguments(args: typing.List[str]) -> typing.Tuple[str, str, str, bool]
         raise exceptions.MessageException('Not supported protocol')  # Just shows "about" dialog
 
     # If ticket length is not valid
-    if len(ticket) != consts.TICKET_LENGTH:
+    if len(ticket) not in  (consts.TICKET_LENGTH, consts.LEGACY_TICKET_LENGTH):
         raise exceptions.MessageException(f'Invalid ticket: {ticket}')
 
     return (
