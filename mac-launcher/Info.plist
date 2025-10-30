@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+ "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Nombre visible de la app -->
+  <key>CFBundleName</key>
+  <string>UrlOpener</string>
+
+  <!-- Nombre del ejecutable (debe coincidir con el binario en Contents/MacOS) -->
+  <key>CFBundleExecutable</key>
+  <string>url_opener</string>
+
+  <!-- Identificador único de la app -->
+  <key>CFBundleIdentifier</key>
+  <string>org.openuds.url_opener</string>
+
+  <!-- Versión corta y de build -->
+  <key>CFBundleShortVersionString</key>
+  <string>1.0</string>
+  <key>CFBundleVersion</key>
+  <string>1</string>
+
+  <!-- Tipo de paquete: aplicación -->
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+
+  <!-- Icono opcional -->
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
+
+  <!-- Esquemas de URL personalizados -->
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeRole</key>
+      <string>Viewer</string>
+      <key>CFBundleURLName</key>
+      <string>UDS Client</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>uds2</string>
+        <string>udss2</string>
+      </array>
+    </dict>
+  </array>
+
+  <!-- Configuración de la app en macOS moderno -->
+  <key>LSMinimumSystemVersion</key>
+  <string>10.13</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+</dict>
+</plist>
