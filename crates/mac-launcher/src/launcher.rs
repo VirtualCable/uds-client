@@ -29,7 +29,6 @@ define_class!(
         // Para esquemas de URL (uds2://…)
         #[unsafe(method(application:openURLs:))]
         fn application_open_urls(&self, _app: &NSApplication, urls: &NSArray<NSURL>) {
-            // log_message("URLs Opened");
             for url in urls {
                 let _s = url
                     .absoluteString()

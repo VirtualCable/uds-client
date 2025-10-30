@@ -1,3 +1,3 @@
 [workspace]
-members = ["crates/builder", "mac-launcher"]
+members = ["crates/builder", "crates/mac-launcher", "crates/shared"]
 resolver = "3"
