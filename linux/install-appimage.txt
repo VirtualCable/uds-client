@@ -1,6 +1,0 @@
-Note:
-In order to run the appimage-builder, you need to have a version of app-image greater than 1.1.0, 
-At current date (2024, march) the latest version is 1.1.0, so you need to install it from the source code.
-This is needed to build correctly the arm64 appimage. If you don't need to build the arm64 appimage, you can install the appimage-builder from pip.
-
-pip install git+https://github.com/AppImageCrafters/appimage-builder.git
