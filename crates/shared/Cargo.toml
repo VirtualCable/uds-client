@@ -16,14 +16,17 @@ anyhow = "1.0.100"
 chrono = { version = "0.4.42" }
 
 hostname = "0.4.1"
+regex = "1.12.2"
+windows = { version = "0.62.2", features = [
+    "Win32_Foundation",
+    "Win32_System_Registry",
+    "Win32_Security_Cryptography",
+] }
+widestring = "1.2.1"
+base64 = "0.22.1"
 
 # JavaScript engine
 boa_engine = "0.21.0"
-# Tokio for boa async support
-tokio = { version = "1.48.0", features = [
-    "macros",
-    "rt",
-    "time",
-    "sync",
-    "signal",
-] }
+
+
+[dev-dependencies]
