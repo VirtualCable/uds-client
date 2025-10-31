@@ -33,10 +33,29 @@ fn read_hkcu_fn(_: &JsValue, args: &[JsValue], _: &mut Context) -> JsResult<JsVa
     {
         let (key, value_name) = extract_js_args!(args, String, String);
 
-        crate::js::windows::read_hkcu(&key, &value_name)
+        crate::js::windows::read_key(crate::js::windows::KeyType::HKCU, &key, &value_name)
             .map_err(|e| JsNativeError::error().with_message(format!("Error: {}", e)))?;
 
         Ok(JsValue::undefined())
+    }
+}
+
+// windows only: read HKLM key/value pair. return string / error
+fn read_hklm_fn(_: &JsValue, args: &[JsValue], _: &mut Context) -> JsResult<JsValue> {
+    #[cfg(not(target_os = "windows"))]
+    return Err(boa_engine::error::JsError::type_error(
+        "read_hklm is only available on Windows",
+    ));
+
+    #[cfg(target_os = "windows")]
+    {
+        let (key, value_name) = extract_js_args!(args, String, String);
+
+        let result =
+            crate::js::windows::read_key(crate::js::windows::KeyType::HKLM, &key, &value_name)
+                .map_err(|e| JsNativeError::error().with_message(format!("Error: {}", e)))?;
+
+        Ok(JsValue::from(JsString::from(result)))
     }
 }
 
@@ -107,7 +126,8 @@ pub fn register(ctx: &mut Context) -> Result<()> {
             ("test_server", test_server_fn, 3),
             ("crypt_protect_data", crypt_protect_data_fn, 1),
             ("write_hkcu", write_hkcu_fn, 3),
-            ("read_hkcu", read_hkcu_fn, 2)
+            ("read_hkcu", read_hkcu_fn, 2),
+            ("read_hklm", read_hklm_fn, 2),
         ]
     );
     Ok(())

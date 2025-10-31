@@ -68,7 +68,13 @@ pub(super) fn write_hkcu(key: &str, value_name: &str, value_data: &str) -> Resul
     Ok(())
 }
 
-pub(super) fn read_hkcu(key: &str, value_name: &str) -> anyhow::Result<String> {
+#[derive(PartialEq, Eq, Hash)]
+pub(super) enum KeyType {
+    HKCU,
+    HKLM,
+}
+
+pub(super) fn read_key(key_type: KeyType, key: &str, value_name: &str) -> anyhow::Result<String> {
     let mut hkey: HKEY = HKEY::default();
 
     // Keep the widestrings alive
@@ -79,7 +85,18 @@ pub(super) fn read_hkcu(key: &str, value_name: &str) -> anyhow::Result<String> {
 
     unsafe {
         // Abrimos la clave en HKCU
-        RegOpenKeyExW(HKEY_CURRENT_USER, key, None, KEY_READ, &mut hkey).ok()?;
+        RegOpenKeyExW(
+            if key_type == KeyType::HKCU {
+                HKEY_CURRENT_USER
+            } else {
+                windows::Win32::System::Registry::HKEY_LOCAL_MACHINE
+            },
+            key,
+            None,
+            KEY_READ,
+            &mut hkey,
+        )
+        .ok()?;
 
         let mut data_type = REG_NONE;
         let mut data_len: u32 = 0;
