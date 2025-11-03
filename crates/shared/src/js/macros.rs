@@ -33,7 +33,7 @@ macro_rules! register_js_module {
 }
 
 macro_rules! extract_js_args {
-    ($args:expr, $($t:ty),* $(,)?) => {
+    ($args:expr, $ctx:expr, $($t:ty),* $(,)?) => {
         {
             let mut _i = 0;
             (
@@ -41,7 +41,12 @@ macro_rules! extract_js_args {
                     {
                         let val = $args.get(_i);
                         _i += 1;
-                        <$t as FromJsValue>::from_js(val)
+                        if let Some(js_val) = val {
+                            js_val.try_js_into::<$t>($ctx)
+                                .unwrap_or_default()
+                        } else {
+                            <$t>::default()
+                        }
                     }
                 ),*
             )

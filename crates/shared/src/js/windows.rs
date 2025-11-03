@@ -70,8 +70,8 @@ pub(super) fn write_hkcu(key: &str, value_name: &str, value_data: &str) -> Resul
 
 #[derive(PartialEq, Eq, Hash)]
 pub(super) enum KeyType {
-    HKCU,
-    HKLM,
+    Hkcu,
+    Hklm,
 }
 
 pub(super) fn read_key(key_type: KeyType, key: &str, value_name: &str) -> anyhow::Result<String> {
@@ -86,7 +86,7 @@ pub(super) fn read_key(key_type: KeyType, key: &str, value_name: &str) -> anyhow
     unsafe {
         // Abrimos la clave en HKCU
         RegOpenKeyExW(
-            if key_type == KeyType::HKCU {
+            if key_type == KeyType::Hkcu {
                 HKEY_CURRENT_USER
             } else {
                 windows::Win32::System::Registry::HKEY_LOCAL_MACHINE

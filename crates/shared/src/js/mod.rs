@@ -6,7 +6,6 @@ use boa_engine::{Context, JsResult, JsValue, Source};
 #[macro_use]
 mod macros;
 
-mod traits;
 mod helpers;
 
 // Windows specific functions for data protection and registry access
@@ -15,6 +14,7 @@ mod windows;
 
 // Js modules
 mod utils;
+mod process;
 
 
 pub fn exec_script(ctx: &mut Context, script: &str) -> JsResult<JsValue> {

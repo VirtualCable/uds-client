@@ -1,11 +1,11 @@
 use anyhow::Result;
 use boa_engine::{Context, JsNativeError, JsResult, JsString, JsValue};
 
-use super::{helpers, traits::FromJsValue};
+use super::{helpers};
 use crate::log;
 
 // windows_only: write to HKCU the key/value pair (string, string, string)
-fn write_hkcu_fn(_: &JsValue, args: &[JsValue], _: &mut Context) -> JsResult<JsValue> {
+fn write_hkcu_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     #[cfg(not(target_os = "windows"))]
     return Err(boa_engine::error::JsError::type_error(
         "write_hkcu is only available on Windows",
@@ -13,7 +13,7 @@ fn write_hkcu_fn(_: &JsValue, args: &[JsValue], _: &mut Context) -> JsResult<JsV
 
     #[cfg(target_os = "windows")]
     {
-        let (key, value_name, value_data) = extract_js_args!(args, String, String, String);
+        let (key, value_name, value_data) = extract_js_args!(args, ctx, String, String, String);
 
         crate::js::windows::write_hkcu(&key, &value_name, &value_data)
             .map_err(|e| JsNativeError::error().with_message(format!("Error: {}", e)))?;
@@ -23,7 +23,7 @@ fn write_hkcu_fn(_: &JsValue, args: &[JsValue], _: &mut Context) -> JsResult<JsV
 }
 
 // windows_only: read from HKCU the key/value pair. return string / error
-fn read_hkcu_fn(_: &JsValue, args: &[JsValue], _: &mut Context) -> JsResult<JsValue> {
+fn read_hkcu_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     #[cfg(not(target_os = "windows"))]
     return Err(boa_engine::error::JsError::type_error(
         "read_hkcu is only available on Windows",
@@ -31,9 +31,9 @@ fn read_hkcu_fn(_: &JsValue, args: &[JsValue], _: &mut Context) -> JsResult<JsVa
 
     #[cfg(target_os = "windows")]
     {
-        let (key, value_name) = extract_js_args!(args, String, String);
+        let (key, value_name) = extract_js_args!(args, ctx, String, String);
 
-        crate::js::windows::read_key(crate::js::windows::KeyType::HKCU, &key, &value_name)
+        crate::js::windows::read_key(crate::js::windows::KeyType::Hkcu, &key, &value_name)
             .map_err(|e| JsNativeError::error().with_message(format!("Error: {}", e)))?;
 
         Ok(JsValue::undefined())
@@ -41,7 +41,7 @@ fn read_hkcu_fn(_: &JsValue, args: &[JsValue], _: &mut Context) -> JsResult<JsVa
 }
 
 // windows only: read HKLM key/value pair. return string / error
-fn read_hklm_fn(_: &JsValue, args: &[JsValue], _: &mut Context) -> JsResult<JsValue> {
+fn read_hklm_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     #[cfg(not(target_os = "windows"))]
     return Err(boa_engine::error::JsError::type_error(
         "read_hklm is only available on Windows",
@@ -49,10 +49,10 @@ fn read_hklm_fn(_: &JsValue, args: &[JsValue], _: &mut Context) -> JsResult<JsVa
 
     #[cfg(target_os = "windows")]
     {
-        let (key, value_name) = extract_js_args!(args, String, String);
+        let (key, value_name) = extract_js_args!(args, ctx, String, String);
 
         let result =
-            crate::js::windows::read_key(crate::js::windows::KeyType::HKLM, &key, &value_name)
+            crate::js::windows::read_key(crate::js::windows::KeyType::Hklm, &key, &value_name)
                 .map_err(|e| JsNativeError::error().with_message(format!("Error: {}", e)))?;
 
         Ok(JsValue::from(JsString::from(result)))
@@ -60,7 +60,7 @@ fn read_hklm_fn(_: &JsValue, args: &[JsValue], _: &mut Context) -> JsResult<JsVa
 }
 
 // windows_only: crypt_protect_data(input: String), return encrypted string as base64 JsValue
-fn crypt_protect_data_fn(_: &JsValue, args: &[JsValue], _: &mut Context) -> JsResult<JsValue> {
+fn crypt_protect_data_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     #[cfg(not(target_os = "windows"))]
     return Err(boa_engine::error::JsError::type_error(
         "crypt_protect_data is only available on Windows",
@@ -68,11 +68,7 @@ fn crypt_protect_data_fn(_: &JsValue, args: &[JsValue], _: &mut Context) -> JsRe
 
     #[cfg(target_os = "windows")]
     {
-        let input = args
-            .first()
-            .and_then(JsValue::as_string)
-            .map(|s| s.to_std_string_escaped())
-            .unwrap_or_default();
+        let input = extract_js_args!(args, ctx, String);
 
         let encrypted = crate::js::windows::crypt_protect_data(&input)
             .map_err(|e| JsNativeError::error().with_message(format!("Error: {}", e)))?;
@@ -82,8 +78,8 @@ fn crypt_protect_data_fn(_: &JsValue, args: &[JsValue], _: &mut Context) -> JsRe
 }
 
 // test server (host: String, port: u16, timeout_ms: u64), return bool i
-fn test_server_fn(_: &JsValue, args: &[JsValue], _: &mut Context) -> JsResult<JsValue> {
-    let (host, port, timeout_ms) = extract_js_args!(args, String, u16, u64);
+fn test_server_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let (host, port, timeout_ms) = extract_js_args!(args, ctx, String, u16, u64);
     // If timeout_ms is 0, use a default value of 500ms
     let timeout_ms = if timeout_ms == 0 { 500 } else { timeout_ms };
 
@@ -92,16 +88,16 @@ fn test_server_fn(_: &JsValue, args: &[JsValue], _: &mut Context) -> JsResult<Js
 }
 
 // expandvars(input: String), return expanded string from env vars
-fn expandvars_fn(_: &JsValue, args: &[JsValue], _: &mut Context) -> JsResult<JsValue> {
-    let input = extract_js_args!(args, String);
+fn expandvars_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let input = extract_js_args!(args, ctx, String);
 
     let expanded = helpers::expand_vars(&input).unwrap_or(input);
     Ok(JsValue::from(JsString::from(expanded)))
 }
 
 // log(level: String, msg: String)
-fn log_fn(_: &JsValue, args: &[JsValue], _: &mut Context) -> JsResult<JsValue> {
-    let (level, msg) = extract_js_args!(args, String, String);
+fn log_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let (level, msg) = extract_js_args!(args, ctx, String, String);
 
     // Use the shared log module to log the message
     match level.as_str() {
@@ -115,7 +111,6 @@ fn log_fn(_: &JsValue, args: &[JsValue], _: &mut Context) -> JsResult<JsValue> {
     Ok(JsValue::undefined())
 }
 
-#[allow(dead_code)]
 pub fn register(ctx: &mut Context) -> Result<()> {
     register_js_module!(
         ctx,
@@ -144,6 +139,7 @@ mod tests {
 
     #[test]
     fn test_utils_log() -> Result<()> {
+        log::setup_logging("debug", log::LogType::Tests);
         let mut ctx = Context::default();
 
         // Register the utils module
@@ -164,6 +160,7 @@ mod tests {
 
     #[test]
     fn test_utils_expandvars_windows() -> Result<()> {
+        log::setup_logging("debug", log::LogType::Tests);
         let mut ctx = Context::default();
 
         // Register the utils module
@@ -200,6 +197,7 @@ mod tests {
     #[test]
     #[ignore = "Requires a server to access internet"]
     fn test_utils_test_server_works() -> Result<()> {
+        log::setup_logging("debug", log::LogType::Tests);
         let mut ctx = Context::default();
 
         // Register the utils module
@@ -223,6 +221,7 @@ mod tests {
     #[cfg(test)]
     #[test]
     fn test_utils_test_server_fails() -> Result<()> {
+        log::setup_logging("debug", log::LogType::Tests);
         let mut ctx = Context::default();
 
         // Register the utils module
@@ -248,6 +247,7 @@ mod tests {
     #[cfg(target_os = "windows")]
     fn test_utils_crypt_protect_data() -> Result<()> {
         log::setup_logging("debug", log::LogType::Tests);
+        log::setup_logging("debug", log::LogType::Tests);
         let mut ctx = Context::default();
         // Register the utils module
         register(&mut ctx)?;
@@ -261,7 +261,8 @@ mod tests {
         let result = exec_script(&mut ctx, script)
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
 
-        let result: String = FromJsValue::from_js(Some(&result));
+        let result: String = result.try_js_into(&mut ctx)
+            .map_err(|e| anyhow::anyhow!("Failed to convert result from JsValue: {}", e))?;
 
         log::info!("Encrypted result: {}", result);
 
