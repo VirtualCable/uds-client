@@ -2,7 +2,10 @@ use std::env;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use boa_engine::{Context, JsResult, JsString, JsValue};
+use boa_engine::{
+    Context, JsResult, JsString, JsValue,
+    error::{JsError, JsNativeError},
+};
 use is_executable::IsExecutable; // Trait for is_executable method
 
 use crate::log;
@@ -44,7 +47,7 @@ fn find_executable_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsRes
 }
 
 // Execute app on background and returns app handle or error
-pub fn execute_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+pub fn launch_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let (app_path, app_args) = extract_js_args!(args, ctx, String, Vec<String>);
 
     log::debug!(
@@ -52,25 +55,60 @@ pub fn execute_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<
         app_path,
         app_args
     );
+    let app_args_re: Vec<&str> = app_args.iter().map(|s| s.as_str()).collect();
+    crate::system::launcher::launch(&app_path, app_args_re.as_slice(), None)
+        .map(JsValue::from)
+        .map_err(|e| JsError::from_native(JsNativeError::typ().with_message(format!("{}", e))))
+}
 
-    let mut command = std::process::Command::new(app_path);
-    command.args(app_args);
+pub fn is_running_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let process_id = extract_js_args!(args, ctx, u32);
 
-    match command.spawn() {
-        Ok(child) => Ok(JsValue::from(child.id())),
-        Err(e) => Err(boa_engine::error::JsNativeError::range()
-            .with_message(format!("Failed to execute application: {}", e))
-            .into()),
-    }
+    let running = crate::system::launcher::is_running(process_id);
+
+    Ok(JsValue::from(running))
+}
+
+pub fn kill_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let process_id = extract_js_args!(args, ctx, u32);
+
+    let stopped = crate::system::launcher::stop(process_id)
+        .map(|_| JsValue::null())
+        .map_err(|e| JsError::from_native(JsNativeError::typ().with_message(format!("{}", e))))?;
+
+    Ok(stopped)
+}
+
+pub fn wait_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let process_id = extract_js_args!(args, ctx, u32);
+
+    crate::system::launcher::wait(process_id)
+        .map(|_| JsValue::null())
+        .map_err(|e| JsError::from_native(JsNativeError::typ().with_message(format!("{}", e))))
+}
+
+pub fn wait_timeout_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let (process_id, timeout_ms) = extract_js_args!(args, ctx, u32, u32);
+
+    let timeout = std::time::Duration::from_millis(timeout_ms as u64);
+
+    let triggered = crate::system::launcher::wait_timeout(process_id, timeout)
+        .map_err(|e| JsError::from_native(JsNativeError::typ().with_message(format!("{}", e))))?;
+
+    Ok(JsValue::from(triggered))
 }
 
 pub fn register(ctx: &mut Context) -> Result<()> {
     register_js_module!(
         ctx,
-        "Utils",
+        "Process",
         [
             ("find_executable", find_executable_fn, 2),
-            ("execute", execute_fn, 2),
+            ("launch", launch_fn, 2),
+            ("is_running", is_running_fn, 1),
+            ("kill", kill_fn, 1),
+            ("wait", wait_fn, 1),
+            ("wait_timeout", wait_timeout_fn, 2),
         ]
     );
     Ok(())
@@ -95,12 +133,12 @@ mod tests {
         // Test finding an existing executable
         #[cfg(target_os = "windows")]
         let script = r#"
-            let result = Utils.find_executable("cmd.exe", []);
+            let result = Process.find_executable("cmd.exe", []);
             result;
         "#;
         #[cfg(not(target_os = "windows"))]
         let script = r#"
-            let result = Utils.find_executable("bash");  // Second argument is optional
+            let result = Process.find_executable("bash");  // Second argument is optional
             result;
         "#;
         let result = exec_script(&mut ctx, script)
@@ -113,6 +151,71 @@ mod tests {
         log::info!("Found executable at: {}", result);
 
         assert!(!result.is_empty(), "Expected to find executable path");
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "Depends on system environment"]
+    fn test_launch_is_running_stop() -> Result<()> {
+        log::setup_logging("debug", log::LogType::Tests);
+        let mut ctx = Context::default();
+
+        // Register the process module
+        register(&mut ctx)?;
+
+        // Launch powershell on windows, ls on linux/mac
+        #[cfg(target_os = "windows")]
+        let script_launch = r#"
+            let app_path = Process.find_executable("powershell.exe", []);
+            let handle = Process.launch(app_path, ["-NoExit", "-Command", "Start-Sleep -Seconds 6"]);
+            handle;
+        "#;
+        #[cfg(not(target_os = "windows"))]
+        let script_launch = r#"
+            let handle = Process.launch("sleep", ["6"]);
+            handle;
+        "#;
+        let result = exec_script(&mut ctx, script_launch)
+            .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
+
+        // Wait a second to ensure the process starts
+        std::thread::sleep(std::time::Duration::from_secs(1));
+
+        let process_id: u32 = result
+            .try_js_into(&mut ctx)
+            .map_err(|e| anyhow::anyhow!("Failed to convert result from JsValue: {}", e))?;
+
+        log::info!("Launched process with ID: {}", process_id);
+
+        let script_is_running = r#"
+            let isRunning = Process.is_running(handle);
+            isRunning;
+        "#;
+        let result_is_running = exec_script(&mut ctx, script_is_running)
+            .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
+
+        let is_running: bool = result_is_running
+            .try_js_into(&mut ctx)
+            .map_err(|e| anyhow::anyhow!("Failed to convert result from JsValue: {}", e))?;
+
+        log::info!("Process is running: {}", is_running);
+
+        // Kill the process
+        let script_kill = r#"
+            Process.kill(handle);
+            let finished = Process.wait_timeout(handle, 7000);
+            finished;
+        "#;
+        let result = exec_script(&mut ctx, script_kill)
+            .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
+
+        let finished: bool = result
+            .try_js_into(&mut ctx)
+            .map_err(|e| anyhow::anyhow!("Failed to convert result from JsValue: {}", e))?;
+        log::info!("Process finished after kill: {}", finished);
+
+        assert!(finished, "Expected process to finish after kill");
 
         Ok(())
     }

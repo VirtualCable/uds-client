@@ -10,10 +10,12 @@ mod helpers;
 
 // Js modules
 mod utils;
+mod log;
 mod process;
 
 pub fn init_ctx(ctx: &mut Context) -> Result<()> {
     utils::register(ctx)?;
+    log::register(ctx)?;
     process::register(ctx)?;
     Ok(())
 }

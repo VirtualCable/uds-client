@@ -2,7 +2,6 @@ use anyhow::Result;
 use boa_engine::{Context, JsNativeError, JsResult, JsString, JsValue};
 
 use super::helpers;
-use crate::log;
 
 #[cfg(target_os = "windows")]
 use crate::system::{
@@ -116,28 +115,11 @@ fn expandvars_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<J
     Ok(JsValue::from(JsString::from(expanded)))
 }
 
-// log(level: String, msg: String)
-fn log_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
-    let (level, msg) = extract_js_args!(args, ctx, String, String);
-
-    // Use the shared log module to log the message
-    match level.as_str() {
-        "trace" => log::trace!("{}", msg),
-        "debug" => log::debug!("{}", msg),
-        "info" => log::info!("{}", msg),
-        "warn" => log::warn!("{}", msg),
-        "error" => log::error!("{}", msg),
-        _ => log::info!("{}", msg), // Default to info level
-    };
-    Ok(JsValue::undefined())
-}
-
 pub fn register(ctx: &mut Context) -> Result<()> {
     register_js_module!(
         ctx,
         "Utils",
         [
-            ("log", log_fn, 2),
             ("expandvars", expandvars_fn, 1),
             ("test_server", test_server_fn, 3),
             ("crypt_protect_data", crypt_protect_data_fn, 1),
@@ -155,6 +137,7 @@ mod tests {
     use super::super::exec_script;
     use super::*;
     use base64::{Engine as _, engine::general_purpose};
+    use crate::log;
 
     use anyhow::Result;
     use boa_engine::Context;

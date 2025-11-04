@@ -202,19 +202,16 @@ pub fn execute_app(
     // And if the wait result is the second handle (the event handle), it means the stop notifier was triggered
     if wait_result != WAIT_OBJECT_0 {
         // That is WAIT_OBJECT_0 + 1 or WAIT_TIMEOUT, that is, event_handler
-        let reason = if wait_result == WAIT_TIMEOUT {
-            "Session timeout"
-        } else {
-            "Execution deadline reached"
-        };
-        log::info!("{reason}, killing process");
+        log::debug!("Stop triggered, killing process");
 
         if let Err(e) = terminate_job(job.clone()) {
             log::error!("Failed to terminate job {}: {:?}", job, e);
+        } else {
+            log::debug!("Process terminated successfully");
         }
         stop_event.signal();
     } else {
-        log::info!("Main app exited. Waiting for respawned processes...");
+        log::debug!("Main app exited. Waiting for respawned processes...");
         wait_for_job(job.clone(), stop_event.clone())?;
     }
 

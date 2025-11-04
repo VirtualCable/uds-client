@@ -79,3 +79,21 @@ pub fn stop(process_id: u32) -> anyhow::Result<()> {
         Err(anyhow::anyhow!("Process ID {} not found", process_id))
     }
 }
+
+pub fn wait(process_id: u32) -> anyhow::Result<()> {
+    if let Some(info) = PROCESS_INFOS.lock().unwrap().get(&process_id) {
+        info.stop.wait();
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!("Process ID {} not found", process_id))
+    }
+}
+
+pub fn wait_timeout(process_id: u32, timeout: std::time::Duration) -> anyhow::Result<bool> {
+    if let Some(info) = PROCESS_INFOS.lock().unwrap().get(&process_id) {
+        let triggered = info.stop.wait_timeout(timeout);
+        Ok(triggered)
+    } else {
+        Err(anyhow::anyhow!("Process ID {} not found", process_id))
+    }
+}

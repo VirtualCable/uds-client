@@ -12,4 +12,5 @@ pub use unix::execute_app;
 
 pub mod trigger;
 
-mod launch_app;
+pub mod launcher;
+
