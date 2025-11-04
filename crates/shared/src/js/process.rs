@@ -98,7 +98,7 @@ pub fn wait_timeout_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsRe
     Ok(JsValue::from(triggered))
 }
 
-pub fn register(ctx: &mut Context) -> Result<()> {
+pub(super) fn register(ctx: &mut Context) -> Result<()> {
     register_js_module!(
         ctx,
         "Process",

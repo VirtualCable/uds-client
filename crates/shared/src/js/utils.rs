@@ -1,5 +1,5 @@
 use anyhow::Result;
-use boa_engine::{Context, JsNativeError, JsResult, JsString, JsValue};
+use boa_engine::{Context, JsResult, JsString, JsValue, error::JsNativeError};
 
 use super::helpers;
 
@@ -115,7 +115,7 @@ fn expandvars_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<J
     Ok(JsValue::from(JsString::from(expanded)))
 }
 
-pub fn register(ctx: &mut Context) -> Result<()> {
+pub(super) fn register(ctx: &mut Context) -> Result<()> {
     register_js_module!(
         ctx,
         "Utils",
@@ -136,8 +136,8 @@ pub fn register(ctx: &mut Context) -> Result<()> {
 mod tests {
     use super::super::exec_script;
     use super::*;
-    use base64::{Engine as _, engine::general_purpose};
     use crate::log;
+    use base64::{Engine as _, engine::general_purpose};
 
     use anyhow::Result;
     use boa_engine::Context;
