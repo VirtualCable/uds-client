@@ -8,10 +8,6 @@ mod macros;
 
 mod helpers;
 
-// Windows specific functions for data protection and registry access
-#[cfg(target_os = "windows")]
-mod windows;
-
 // Js modules
 mod utils;
 mod process;

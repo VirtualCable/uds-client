@@ -1,53 +1,14 @@
 use anyhow::Result;
-use std::ptr;
-
-use base64::{Engine as _, engine::general_purpose};
 
 use windows::{
-    Win32::{
-        Foundation::{HLOCAL, LocalFree},
-        Security::Cryptography::{CRYPT_INTEGER_BLOB, CryptProtectData},
-        System::Registry::{
-            HKEY, HKEY_CURRENT_USER, KEY_READ, KEY_SET_VALUE, REG_NONE, REG_SZ, RRF_RT_REG_SZ,
-            RegCloseKey, RegGetValueW, RegOpenKeyExW, RegSetValueExW,
-        },
+    Win32::System::Registry::{
+        HKEY, HKEY_CURRENT_USER, KEY_READ, KEY_SET_VALUE, REG_DWORD, REG_NONE, REG_SZ,
+        RRF_RT_REG_SZ, RegCloseKey, RegGetValueW, RegOpenKeyExW, RegSetValueExW,
     },
     core::PCWSTR,
 };
 
-pub(super) fn crypt_protect_data(input: &str) -> Result<String> {
-    let wide = widestring::U16CString::from_str(input)?;
-    let input_bytes = unsafe {
-        std::slice::from_raw_parts(
-            wide.as_ptr() as *const u8,
-            wide.as_slice_with_nul().len() * 2,
-        )
-    };
-
-    let in_blob = CRYPT_INTEGER_BLOB {
-        cbData: input_bytes.len() as u32,
-        pbData: input_bytes.as_ptr() as *mut u8,
-    };
-
-    let mut out_blob = CRYPT_INTEGER_BLOB {
-        cbData: 0,
-        pbData: ptr::null_mut(),
-    };
-
-    unsafe { CryptProtectData(&in_blob, None, None, None, None, 0, &mut out_blob) }?;
-
-    let encrypted =
-        unsafe { std::slice::from_raw_parts(out_blob.pbData, out_blob.cbData as usize).to_vec() };
-
-    unsafe {
-        LocalFree(Some(HLOCAL(out_blob.pbData as *mut _)));
-    }
-
-    let encoded = general_purpose::STANDARD.encode(&encrypted);
-    Ok(encoded)
-}
-
-pub(super) fn write_hkcu(key: &str, value_name: &str, value_data: &str) -> Result<()> {
+pub fn write_hkcu_str(key: &str, value_name: &str, value_data: &str) -> Result<()> {
     let mut hkey = HKEY::default();
 
     // Keep the widestrings alive
@@ -68,13 +29,34 @@ pub(super) fn write_hkcu(key: &str, value_name: &str, value_data: &str) -> Resul
     Ok(())
 }
 
+pub fn write_hkcu_dword(key: &str, value_name: &str, value_data: u32) -> Result<()> {
+    let mut hkey = HKEY::default();
+    // Keep the widestrings alive
+    let key_w = widestring::U16CString::from_str(key)?; // To avoid dropping
+    let key = PCWSTR::from_raw(key_w.as_ptr());
+    let value_name_w = widestring::U16CString::from_str(value_name)?; // To avoid dropping
+    let value_name = PCWSTR::from_raw(value_name_w.as_ptr());
+
+    unsafe {
+        RegOpenKeyExW(HKEY_CURRENT_USER, key, None, KEY_SET_VALUE, &mut hkey).ok()?;
+
+        // DWORD must be passed as a byte slice; use little-endian bytes for the u32
+        let data_bytes = value_data.to_le_bytes();
+        RegSetValueExW(hkey, value_name, None, REG_DWORD, Some(&data_bytes)).ok()?;
+
+        RegCloseKey(hkey).ok()?;
+    }
+
+    Ok(())
+}
+
 #[derive(PartialEq, Eq, Hash)]
 pub(super) enum KeyType {
     Hkcu,
     Hklm,
 }
 
-pub(super) fn read_key(key_type: KeyType, key: &str, value_name: &str) -> anyhow::Result<String> {
+fn read_key_str(key_type: KeyType, key: &str, value_name: &str) -> anyhow::Result<String> {
     let mut hkey: HKEY = HKEY::default();
 
     // Keep the widestrings alive
@@ -132,4 +114,12 @@ pub(super) fn read_key(key_type: KeyType, key: &str, value_name: &str) -> anyhow
 
         Ok(widestring::U16CString::from_vec_truncate(buffer).to_string_lossy())
     }
+}
+
+pub fn read_hklm_str(key: &str, value_name: &str) -> anyhow::Result<String> {
+    read_key_str(KeyType::Hklm, key, value_name)
+}
+
+pub fn read_hkcu_str(key: &str, value_name: &str) -> anyhow::Result<String> {
+    read_key_str(KeyType::Hkcu, key, value_name)
 }

@@ -1,8 +1,13 @@
 use anyhow::Result;
 use boa_engine::{Context, JsNativeError, JsResult, JsString, JsValue};
 
-use super::{helpers};
+use super::helpers;
 use crate::log;
+
+#[cfg(target_os = "windows")]
+use crate::system::{
+    crypt_protect_data, read_hkcu_str, read_hklm_str, write_hkcu_dword, write_hkcu_str,
+};
 
 // windows_only: write to HKCU the key/value pair (string, string, string)
 fn write_hkcu_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
@@ -15,7 +20,24 @@ fn write_hkcu_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<J
     {
         let (key, value_name, value_data) = extract_js_args!(args, ctx, String, String, String);
 
-        crate::js::windows::write_hkcu(&key, &value_name, &value_data)
+        write_hkcu_str(&key, &value_name, &value_data)
+            .map_err(|e| JsNativeError::error().with_message(format!("Error: {}", e)))?;
+
+        Ok(JsValue::undefined())
+    }
+}
+
+fn write_hkcu_dword_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    #[cfg(not(target_os = "windows"))]
+    return Err(boa_engine::error::JsError::type_error(
+        "write_hkcu_dword is only available on Windows",
+    ));
+
+    #[cfg(target_os = "windows")]
+    {
+        let (key, value_name, value_data) = extract_js_args!(args, ctx, String, String, u32);
+
+        write_hkcu_dword(&key, &value_name, value_data)
             .map_err(|e| JsNativeError::error().with_message(format!("Error: {}", e)))?;
 
         Ok(JsValue::undefined())
@@ -33,7 +55,7 @@ fn read_hkcu_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
     {
         let (key, value_name) = extract_js_args!(args, ctx, String, String);
 
-        crate::js::windows::read_key(crate::js::windows::KeyType::Hkcu, &key, &value_name)
+        read_hkcu_str(&key, &value_name)
             .map_err(|e| JsNativeError::error().with_message(format!("Error: {}", e)))?;
 
         Ok(JsValue::undefined())
@@ -51,9 +73,8 @@ fn read_hklm_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
     {
         let (key, value_name) = extract_js_args!(args, ctx, String, String);
 
-        let result =
-            crate::js::windows::read_key(crate::js::windows::KeyType::Hklm, &key, &value_name)
-                .map_err(|e| JsNativeError::error().with_message(format!("Error: {}", e)))?;
+        let result = read_hklm_str(&key, &value_name)
+            .map_err(|e| JsNativeError::error().with_message(format!("Error: {}", e)))?;
 
         Ok(JsValue::from(JsString::from(result)))
     }
@@ -70,7 +91,7 @@ fn crypt_protect_data_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> Js
     {
         let input = extract_js_args!(args, ctx, String);
 
-        let encrypted = crate::js::windows::crypt_protect_data(&input)
+        let encrypted = crypt_protect_data(&input)
             .map_err(|e| JsNativeError::error().with_message(format!("Error: {}", e)))?;
 
         Ok(JsValue::from(JsString::from(encrypted)))
@@ -121,6 +142,7 @@ pub fn register(ctx: &mut Context) -> Result<()> {
             ("test_server", test_server_fn, 3),
             ("crypt_protect_data", crypt_protect_data_fn, 1),
             ("write_hkcu", write_hkcu_fn, 3),
+            ("write_hkcu_dword", write_hkcu_dword_fn, 3),
             ("read_hkcu", read_hkcu_fn, 2),
             ("read_hklm", read_hklm_fn, 2),
         ]
@@ -159,7 +181,7 @@ mod tests {
     }
 
     #[test]
-    fn test_utils_expandvars_windows() -> Result<()> {
+    fn test_utils_expandvars() -> Result<()> {
         log::setup_logging("debug", log::LogType::Tests);
         let mut ctx = Context::default();
 
@@ -261,7 +283,8 @@ mod tests {
         let result = exec_script(&mut ctx, script)
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
 
-        let result: String = result.try_js_into(&mut ctx)
+        let result: String = result
+            .try_js_into(&mut ctx)
             .map_err(|e| anyhow::anyhow!("Failed to convert result from JsValue: {}", e))?;
 
         log::info!("Encrypted result: {}", result);
