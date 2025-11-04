@@ -13,12 +13,14 @@ mod utils;
 mod log;
 mod process;
 mod tasks;
+mod file;
 
 pub fn init_ctx(ctx: &mut Context) -> Result<()> {
     utils::register(ctx)?;
     log::register(ctx)?;
     process::register(ctx)?;
     tasks::register(ctx)?;
+    file::register(ctx)?;
     Ok(())
 }
 

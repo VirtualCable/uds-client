@@ -1,5 +1,8 @@
-use std::net::{TcpStream, ToSocketAddrs};
-use std::time::Duration;
+use std::{
+    fs::File, io::Write, net::{TcpStream, ToSocketAddrs}, time::Duration
+};
+
+use rand::{Rng, distr::Alphabetic};
 
 use anyhow::{Context as _, Result};
 use regex::Regex;
@@ -48,4 +51,30 @@ pub(super) fn test_server(host: &str, port: u16, timeout_ms: u64) -> bool {
         }
         Err(_) => false,
     }
+}
+
+
+// File related helpers
+pub(super) fn create_temp_file(content: &str, extension: Option<&str>) -> Result<String> {
+    // Create a random filename with the given extension on temp dir
+    // Try 3 times to avoid collisions
+    for _ in 0..3 {
+        let tmp_filename = std::env::temp_dir().join(format!("tmp_file_{}.{}", 
+            rand::rng()
+                .sample_iter(&Alphabetic)
+                .take(10)
+                .map(char::from)
+                .collect::<String>(),
+            extension.unwrap_or("tmp")
+        ));
+        let mut file_create_result = File::create(&tmp_filename);
+        if let Ok(ref mut file) = file_create_result {
+            if let Err(e) = file.write_all(content.as_bytes()) {
+                return Err(anyhow::anyhow!("Failed to write to temp file: {}", e));
+            }
+            return Ok(tmp_filename.to_string_lossy().into_owned());
+        }
+    }
+
+    Err(anyhow::anyhow!("Failed to create temp file after 3 attempts"))
 }
