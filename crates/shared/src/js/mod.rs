@@ -16,6 +16,11 @@ mod windows;
 mod utils;
 mod process;
 
+pub fn init_ctx(ctx: &mut Context) -> Result<()> {
+    utils::register(ctx)?;
+    process::register(ctx)?;
+    Ok(())
+}
 
 pub fn exec_script(ctx: &mut Context, script: &str) -> JsResult<JsValue> {
     // runtime de un solo hilo
@@ -24,7 +29,7 @@ pub fn exec_script(ctx: &mut Context, script: &str) -> JsResult<JsValue> {
 
 pub fn run_js(script: &str) -> Result<()> {
     let mut ctx = Context::default();
-    utils::register(&mut ctx)?;
+    init_ctx(&mut ctx)?;
 
     let res = exec_script(&mut ctx, script);
     if res.is_err() {

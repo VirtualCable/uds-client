@@ -19,7 +19,11 @@ fn find_executable_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsRes
     // Append extra paths provided as argument
     search_paths.extend(extra_path.into_iter().map(PathBuf::from));
 
-    log::debug!("Searching for executable '{}' in paths: {:?}", app_name, search_paths);
+    log::debug!(
+        "Searching for executable '{}' in paths: {:?}",
+        app_name,
+        search_paths
+    );
 
     // look for the executable in the search paths
     let found = search_paths.iter().find_map(|dir| {
@@ -39,9 +43,36 @@ fn find_executable_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsRes
     }
 }
 
-#[allow(dead_code)]
+// Execute app on background and returns app handle or error
+pub fn execute_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let (app_path, app_args) = extract_js_args!(args, ctx, String, Vec<String>);
+
+    log::debug!(
+        "Executing application: {} with args: {:?}",
+        app_path,
+        app_args
+    );
+
+    let mut command = std::process::Command::new(app_path);
+    command.args(app_args);
+
+    match command.spawn() {
+        Ok(child) => Ok(JsValue::from(child.id())),
+        Err(e) => Err(boa_engine::error::JsNativeError::range()
+            .with_message(format!("Failed to execute application: {}", e))
+            .into()),
+    }
+}
+
 pub fn register(ctx: &mut Context) -> Result<()> {
-    register_js_module!(ctx, "Utils", [("find_executable", find_executable_fn, 2),]);
+    register_js_module!(
+        ctx,
+        "Utils",
+        [
+            ("find_executable", find_executable_fn, 2),
+            ("execute", execute_fn, 2),
+        ]
+    );
     Ok(())
 }
 
