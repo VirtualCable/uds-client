@@ -292,7 +292,15 @@ mod tests {
             let stop = stop.clone();
             move || execute_app(application, parameters, Some(stop), Some(folder_name))
         });
-        thread::sleep(Duration::from_millis(200));
+        thread::sleep(Duration::from_millis(400));
+        assert!(
+            !handle.is_finished(),
+            "Application thread should be running before stop_notifier is triggered"
+        );
+        assert!(
+            !stop.is_set(),
+            "Stop notifier should not be set before triggering"
+        );
         stop.set();
         let result = handle.join().unwrap();
         assert!(
