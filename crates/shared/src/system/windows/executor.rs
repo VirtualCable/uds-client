@@ -58,10 +58,9 @@ struct ProcessInfo {
     tid: u32,
 }
 
-#[allow(dead_code)]
 pub fn execute_app(
     application: &str,
-    parameters: &str,
+    parameters: &[&str],
     stop: Option<trigger::Trigger>,
     cwd: Option<&str>,
 ) -> anyhow::Result<()> {
@@ -72,8 +71,21 @@ pub fn execute_app(
     if !parameters.is_empty() {
         // Ensure parameters are trimmed and joined with a space
         cleaned_params += " ";
-        cleaned_params += parameters
-    };
+        // If space is in parameters, we need to quote them
+        cleaned_params += &parameters
+            .iter()
+            .map(|p| {
+                let trimmed = p.trim();
+                if trimmed.contains(' ') {
+                    // Remove existing quotes and add new ones
+                    "\"".to_string() + trimmed.trim_matches('"') + "\""
+                } else {
+                    trimmed.to_string()
+                }
+            })
+            .collect::<Vec<String>>()
+            .join(" ");
+    }
 
     // Pre-check: does the executable exist?
     if !std::path::Path::new(application).exists() {
@@ -243,10 +255,11 @@ mod tests {
             .collect();
         let temp_file = temp_dir.join(format!("test_exec_wait_application_{}.txt", random_suffix));
         let temp_file_str = temp_file.to_string_lossy();
-        let parameters = format!(
-            "-Command \"New-Item -Path '{}' -ItemType File -Force; Start-Sleep -Seconds 1\"",
-            temp_file_str
-        );
+        let cmd = format!("New-Item -Path '{}' -ItemType File -Force; Start-Sleep -Seconds 1", temp_file_str);
+        let parameters = [
+            "-Command",
+            &cmd,
+        ];
         let application = r"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
         let result = execute_app(application, &parameters, None, Some(folder_name));
         (result, temp_file)
@@ -272,8 +285,7 @@ mod tests {
         log::setup_logging("debug", log::LogType::Tests);
         let folder_name = "C:\\";
         let application = r"C:\\Path\\To\\NonExistentApp.exe";
-        let parameters = "";
-        let result = execute_app(application, parameters, None, Some(folder_name));
+        let result = execute_app(application, &[], None, Some(folder_name));
         assert!(
             result.is_err(),
             "Expected error for invalid application path, got: {:?}",
@@ -287,10 +299,9 @@ mod tests {
         let stop = trigger::Trigger::new();
         let folder_name = "C:\\";
         let application = r"c:\\windows\\notepad.exe";
-        let parameters = "";
         let handle = thread::spawn({
             let stop = stop.clone();
-            move || execute_app(application, parameters, Some(stop), Some(folder_name))
+            move || execute_app(application, &[], Some(stop), Some(folder_name))
         });
         thread::sleep(Duration::from_millis(400));
         assert!(

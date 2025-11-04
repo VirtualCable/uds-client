@@ -8,5 +8,6 @@ mod unix;
 #[cfg(not(target_os = "windows"))]
 pub use unix::execute_app;
 
-
 pub mod trigger;
+
+mod launch_app;
