@@ -1,15 +1,19 @@
 use super::{event::Event, safe::SafeHandle};
 use std::collections::HashSet;
 use std::slice;
-use windows::Win32::Foundation::HANDLE;
-use windows::Win32::System::JobObjects::{
-    CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOBOBJECT_BASIC_ACCOUNTING_INFORMATION,
-    JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectBasicAccountingInformation,
-    JobObjectExtendedLimitInformation, QueryInformationJobObject, SetInformationJobObject,
-    TerminateJobObject,
+use windows::Win32::{
+    Foundation::{HANDLE, HWND},
+    System::JobObjects::{
+        CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOBOBJECT_BASIC_ACCOUNTING_INFORMATION,
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectBasicAccountingInformation,
+        JobObjectExtendedLimitInformation, QueryInformationJobObject, SetInformationJobObject,
+        TerminateJobObject,
+    },
+    UI::WindowsAndMessaging::IsWindowVisible,
 };
 
-use crate::log;
+use crate::{log};
+use super::utils::check_if_any_visible_window;
 
 #[allow(dead_code)]
 pub fn create_job_object() -> SafeHandle {
@@ -98,19 +102,66 @@ pub fn get_job_active_process_ids(job: HANDLE) -> Vec<usize> {
 }
 
 pub fn wait_for_job(job: SafeHandle, stop_event: Event) -> anyhow::Result<()> {
+    let mut last_visible_window: Option<isize> = None;
     // Store the time, so the first 10 seconds we don't check for the window visibility
+    let start: std::time::Instant = std::time::Instant::now();
     loop {
-        // If the last visible window is not visible, we need to check the job state
-        let pids = get_job_active_process_ids(job.get());
-        if pids.is_empty() {
-            log::debug!(
-                "No active processes found in job {}, exiting wait loop.",
-                job
-            );
-            break;
+        // If last_visible_window is Some, check if it still is visible
+        let still_visible: bool = if let Some(hwnd) = last_visible_window {
+            if unsafe { IsWindowVisible(HWND(hwnd as _)) }.as_bool() {
+                log::debug!(
+                    "Last visible window {:?} is still visible, continuing wait loop.",
+                    hwnd
+                );
+                true
+            } else {
+                log::debug!(
+                    "Last visible window {:?} is no longer visible, checking job state.",
+                    hwnd
+                );
+                false
+            }
+        } else {
+            log::debug!("No last visible window to check, continuing wait loop.");
+            false
+        };
+
+        if !still_visible {
+            // If the last visible window is not visible, we need to check the job state
+            log::debug!("Checking job state for job: {:?}", job);
+            let pids = get_job_active_process_ids(job.get());
+            if pids.is_empty() {
+                log::debug!(
+                    "No active processes found in job {}, exiting wait loop.",
+                    job
+                );
+                break;
+            }
+
+            if start.elapsed().as_secs() > 10 {
+                // Encapsulate to avoid Send trait issues
+                let visible_window = check_if_any_visible_window(&pids);
+                log::debug!(
+                    "Job {} has {} active processes, has visible windows: {:?}",
+                    job,
+                    pids.len(),
+                    visible_window
+                );
+
+                if visible_window.is_none() {
+                    log::debug!(
+                        "No visible windows found for job {}, exiting wait loop.",
+                        job
+                    );
+                    break;
+                }
+                if let Some(hwnd) = visible_window {
+                    last_visible_window = Some(hwnd.0 as isize);
+                }
+            }
         }
         // Read the event_handler to see if we should stop waiting
-        if stop_event.wait_timeout(std::time::Duration::from_millis(300)) {
+        if stop_event.wait_timeout(std::time::Duration::from_millis(100)) {
             log::debug!("Event signaled, exiting wait loop for job: {:?}", job);
             // Ensure job is terminated
             if let Err(e) = terminate_job(job.clone()) {

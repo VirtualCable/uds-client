@@ -4,6 +4,7 @@ mod executor;
 mod jobs;
 mod registry;
 mod safe;
+mod utils;
 
 pub use executor::execute_app;
 pub use crypt::crypt_protect_data;
