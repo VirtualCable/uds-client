@@ -4,13 +4,16 @@ use boa_engine::{
     error::{JsError, JsNativeError},
 };
 
+use is_executable::IsExecutable; // Trait for is_executable method
+
 use super::helpers::create_temp_file;
 
 // create temp file with a content, return path
 fn create_temp_file_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
-    let (content, extension) = extract_js_args!(args, ctx, String, Option<String>);
+    let (folder, content, extension) =
+        extract_js_args!(args, ctx, Option<String>, Option<String>, Option<String>);
 
-    match create_temp_file(&content, extension.as_deref()) {
+    match create_temp_file(folder.as_deref(), content.as_deref(), extension.as_deref()) {
         Ok(path) => Ok(JsValue::from(JsString::from(path))),
         Err(e) => Err(JsError::from(
             JsNativeError::error().with_message(format!("Error creating temp file: {}", e)),
@@ -38,6 +41,18 @@ fn write_file_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<J
     }
 }
 
+fn file_exists_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let path = extract_js_args!(args, ctx, String);
+    let exists = std::path::Path::new(&path).exists();
+    Ok(JsValue::from(exists))
+}
+
+fn file_is_executable_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let path = extract_js_args!(args, ctx, String);
+    let is_executable = std::path::Path::new(&path).is_executable();
+    Ok(JsValue::from(is_executable))
+}
+
 fn get_temp_dir_fn(_: &JsValue, _: &[JsValue], _: &mut Context) -> JsResult<JsValue> {
     let temp_dir = std::env::temp_dir();
     Ok(JsValue::from(JsString::from(temp_dir.to_string_lossy())))
@@ -62,15 +77,14 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
         ctx,
         "File",
         [
-            ("create_temp_file", create_temp_file_fn, 2),
-            ("read_file", read_file_fn, 1),
-            ("write_file", write_file_fn, 2),
-            ("get_temp_dir", get_temp_dir_fn, 0),
-            ("get_home_dir", get_home_dir_fn, 0)
+            ("createTempFile", create_temp_file_fn, 3),
+            ("read", read_file_fn, 1),
+            ("write", write_file_fn, 2),
+            ("exists", file_exists_fn, 1),
+            ("isExecutable", file_is_executable_fn, 1),
+            ("getTempDirectory", get_temp_dir_fn, 0),
+            ("getHomeDirectory", get_home_dir_fn, 0),
         ]
     );
     Ok(())
 }
-
-// home folder, return path
-// temp folder, return path

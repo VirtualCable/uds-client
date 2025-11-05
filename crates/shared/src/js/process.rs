@@ -103,12 +103,12 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
         ctx,
         "Process",
         [
-            ("find_executable", find_executable_fn, 2),
+            ("findExecutable", find_executable_fn, 2),
             ("launch", launch_fn, 2),
-            ("is_running", is_running_fn, 1),
+            ("isRunning", is_running_fn, 1),
             ("kill", kill_fn, 1),
             ("wait", wait_fn, 1),
-            ("wait_timeout", wait_timeout_fn, 2),
+            ("waitTimeout", wait_timeout_fn, 2),
         ]
     );
     Ok(())
@@ -133,12 +133,12 @@ mod tests {
         // Test finding an existing executable
         #[cfg(target_os = "windows")]
         let script = r#"
-            let result = Process.find_executable("cmd.exe", []);
+            let result = Process.findExecutable("cmd.exe", []);
             result;
         "#;
         #[cfg(not(target_os = "windows"))]
         let script = r#"
-            let result = Process.find_executable("bash");  // Second argument is optional
+            let result = Process.findExecutable("bash");  // Second argument is optional
             result;
         "#;
         let result = exec_script(&mut ctx, script)
@@ -167,7 +167,7 @@ mod tests {
         // Launch powershell on windows, ls on linux/mac
         #[cfg(target_os = "windows")]
         let script_launch = r#"
-            let app_path = Process.find_executable("powershell.exe", []);
+            let app_path = Process.findExecutable("powershell.exe", []);
             let handle = Process.launch(app_path, ["-NoExit", "-Command", "Start-Sleep -Seconds 6"]);
             handle;
         "#;
@@ -189,7 +189,7 @@ mod tests {
         log::info!("Launched process with ID: {}", process_id);
 
         let script_is_running = r#"
-            let isRunning = Process.is_running(handle);
+            let isRunning = Process.isRunning(handle);
             isRunning;
         "#;
         let result_is_running = exec_script(&mut ctx, script_is_running)
@@ -204,7 +204,7 @@ mod tests {
         // Kill the process
         let script_kill = r#"
             Process.kill(handle);
-            let finished = Process.wait_timeout(handle, 7000);
+            let finished = Process.waitTimeout(handle, 7000);
             finished;
         "#;
         let result = exec_script(&mut ctx, script_kill)

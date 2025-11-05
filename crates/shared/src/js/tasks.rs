@@ -84,10 +84,10 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
         ctx,
         "Tasks",
         [
-            ("add_early_unlinkable_file", add_early_unlinkable_file_fn, 1),
-            ("add_late_unlinkable_file", add_late_unlinkable_file_fn, 1),
-            ("add_waitable_app", add_waitable_app_fn, 1),
-            ("start_tunnel", start_tunel_fn, 8),
+            ("addEarlyUnlinkableFile", add_early_unlinkable_file_fn, 1),
+            ("addLateUnlinkableFile", add_late_unlinkable_file_fn, 1),
+            ("addWaitableApp", add_waitable_app_fn, 1),
+            ("startTunnel", start_tunel_fn, 8),
         ]
     );
     Ok(())
@@ -109,7 +109,7 @@ mod tests {
         register(&mut ctx)?;
 
         let script = r#"
-            Tasks.add_early_unlinkable_file("file_to_delete_early.txt");
+            Tasks.addEarlyUnlinkableFile("file_to_delete_early.txt");
         "#;
         _ = exec_script(&mut ctx, script);
         Ok(())
@@ -122,7 +122,7 @@ mod tests {
         register(&mut ctx)?;
 
         let script = r#"
-            Tasks.add_late_unlinkable_file("file_to_delete_late.txt");
+            Tasks.addLateUnlinkableFile("file_to_delete_late.txt");
         "#;
         _ = exec_script(&mut ctx, script);
         Ok(())
@@ -134,7 +134,7 @@ mod tests {
         let mut ctx = Context::default();
         register(&mut ctx)?;
         let script = r#"
-            Tasks.add_waitable_app(12345);
+            Tasks.addWaitableApp(12345);
         "#;
         _ = exec_script(&mut ctx, script);
         Ok(())

@@ -1,5 +1,8 @@
 use std::{
-    fs::File, io::Write, net::{TcpStream, ToSocketAddrs}, time::Duration
+    fs::File,
+    io::Write,
+    net::{TcpStream, ToSocketAddrs},
+    time::Duration,
 };
 
 use rand::{Rng, distr::Alphabetic};
@@ -53,13 +56,25 @@ pub(super) fn test_server(host: &str, port: u16, timeout_ms: u64) -> bool {
     }
 }
 
-
 // File related helpers
-pub(super) fn create_temp_file(content: &str, extension: Option<&str>) -> Result<String> {
-    // Create a random filename with the given extension on temp dir
+pub(super) fn create_temp_file(
+    folder: Option<&str>,
+    content: Option<&str>,
+    extension: Option<&str>,
+) -> Result<String> {
+    // Create a random filename with the given extension on temp dir or specified folder
+    // Tries to create the folder
+    let folder = if let Some(folder_path) = folder {
+        std::fs::create_dir_all(folder_path)
+            .with_context(|| format!("Failed to create directory: {}", folder_path))?;
+        std::path::PathBuf::from(folder_path)
+    } else {
+        std::env::temp_dir()
+    };
     // Try 3 times to avoid collisions
     for _ in 0..3 {
-        let tmp_filename = std::env::temp_dir().join(format!("tmp_file_{}.{}", 
+        let tmp_filename = folder.join(format!(
+            "tmp_file_{}.{}",
             rand::rng()
                 .sample_iter(&Alphabetic)
                 .take(10)
@@ -68,7 +83,9 @@ pub(super) fn create_temp_file(content: &str, extension: Option<&str>) -> Result
             extension.unwrap_or("tmp")
         ));
         let mut file_create_result = File::create(&tmp_filename);
-        if let Ok(ref mut file) = file_create_result {
+        if let Ok(ref mut file) = file_create_result
+            && let Some(content) = content
+        {
             if let Err(e) = file.write_all(content.as_bytes()) {
                 return Err(anyhow::anyhow!("Failed to write to temp file: {}", e));
             }
@@ -76,5 +93,7 @@ pub(super) fn create_temp_file(content: &str, extension: Option<&str>) -> Result
         }
     }
 
-    Err(anyhow::anyhow!("Failed to create temp file after 3 attempts"))
+    Err(anyhow::anyhow!(
+        "Failed to create temp file after 3 attempts"
+    ))
 }

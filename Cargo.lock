@@ -1416,6 +1416,8 @@ dependencies = [
  "is_executable",
  "rand",
  "regex",
+ "serde",
+ "serde_json",
  "tracing",
  "tracing-log",
  "tracing-subscriber",

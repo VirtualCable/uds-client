@@ -120,13 +120,13 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
         ctx,
         "Utils",
         [
-            ("expandvars", expandvars_fn, 1),
-            ("test_server", test_server_fn, 3),
-            ("crypt_protect_data", crypt_protect_data_fn, 1),
-            ("write_hkcu", write_hkcu_fn, 3),
-            ("write_hkcu_dword", write_hkcu_dword_fn, 3),
-            ("read_hkcu", read_hkcu_fn, 2),
-            ("read_hklm", read_hklm_fn, 2),
+            ("expandVars", expandvars_fn, 1),
+            ("testServer", test_server_fn, 3),
+            ("cryptProtectData", crypt_protect_data_fn, 1),
+            ("writeHkcu", write_hkcu_fn, 3),
+            ("writeHkcuDword", write_hkcu_dword_fn, 3),
+            ("readHkcu", read_hkcu_fn, 2),
+            ("readHklm", read_hklm_fn, 2),
         ]
     );
     Ok(())
@@ -177,12 +177,12 @@ mod tests {
         // Run a test script
         #[cfg(target_os = "windows")]
         let script = r#"
-            let expanded = Utils.expandvars("Hello, %TEST_VALUE% %ANOTHER_VAR%!");
+            let expanded = Utils.expandVars("Hello, %TEST_VALUE% %ANOTHER_VAR%!");
             expanded
         "#;
         #[cfg(not(target_os = "windows"))]
         let script = r#"
-            let expanded = Utils.expandvars("Hello, ${TEST_VALUE} ${ANOTHER_VAR}!");
+            let expanded = Utils.expandVars("Hello, ${TEST_VALUE} ${ANOTHER_VAR}!");
             expanded
         "#;
 
@@ -210,7 +210,7 @@ mod tests {
 
         // Run a test script
         let script = r#"
-            let isOpen = Utils.test_server("google.com", 80, 500);
+            let isOpen = Utils.testServer("google.com", 80, 500);
             isOpen
         "#;
 
@@ -234,7 +234,7 @@ mod tests {
 
         // Run a test script
         let script = r#"
-            let isOpen = Utils.test_server("invalid.host", 80, 500);
+            let isOpen = Utils.testServer("invalid.host", 80, 500);
             isOpen
         "#;
 
@@ -259,7 +259,7 @@ mod tests {
 
         // Run a test script
         let script = r#"
-            let encrypted = Utils.crypt_protect_data("SensitiveData123");
+            let encrypted = Utils.cryptProtectData("SensitiveData123");
             encrypted
         "#;
 
