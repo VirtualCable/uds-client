@@ -14,5 +14,6 @@ pub struct TunnelConnectInfo {
 
 pub fn start_tunnel(_info: TunnelConnectInfo) -> Result<u32> {
     // TODO: implement tunnel launching
+    // Must open the tunnel on a thread, but wait for the tunne to be fully established
     Ok(0)
 }

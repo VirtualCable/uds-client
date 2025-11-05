@@ -16,9 +16,9 @@ macro_rules! register_js_module {
                     boa_engine::js_string!($name),
                     boa_engine::property::PropertyDescriptorBuilder::new()
                         .value(fn_obj)
-                        .writable(true)
-                        .enumerable(true)
-                        .configurable(true),
+                        .writable(false)   // Cannot be overwritten
+                        .enumerable(false)  // Not listed in for..in loops
+                        .configurable(false),  // Cannot be deleted or reconfigured
                 );
             }
         )*
