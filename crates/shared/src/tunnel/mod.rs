@@ -1,6 +1,7 @@
 use anyhow::Result;
 
 mod connection;
+mod proxy;
 mod consts;
 
 pub struct TunnelConnectInfo {
