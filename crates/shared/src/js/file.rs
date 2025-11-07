@@ -84,7 +84,8 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
             ("isExecutable", file_is_executable_fn, 1),
             ("getTempDirectory", get_temp_dir_fn, 0),
             ("getHomeDirectory", get_home_dir_fn, 0),
-        ]
+        ],
+        []
     );
     Ok(())
 }

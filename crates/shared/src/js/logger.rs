@@ -43,13 +43,16 @@ pub fn register(ctx: &mut Context) -> Result<()> {
     register_js_module!(
         ctx,
         "Logger",
+        // Sync functions
         [
             ("debug", debug_fn, 1),
             ("trace", trace_fn, 1),
             ("info", info_fn, 1),
             ("warn", warn_fn, 1),
             ("error", error_fn, 1),
-        ]
+        ],
+        // Async functions, none here
+        [],
     );
     Ok(())
 }
@@ -62,8 +65,8 @@ mod tests {
     use anyhow::Result;
     use boa_engine::Context;
 
-    #[test]
-    fn test_log() -> Result<()> {
+    #[tokio::test]
+    async fn test_log() -> Result<()> {
         log::setup_logging("trace", log::LogType::Tests);
         let mut ctx = Context::default();
 
@@ -80,7 +83,7 @@ mod tests {
             Logger.warn("Warn message");
             Logger.error("Error message");
         "#,
-        )
+        ).await
         .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
 
         Ok(())

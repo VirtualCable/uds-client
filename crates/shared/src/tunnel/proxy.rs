@@ -1,17 +1,17 @@
+#![allow(dead_code)]  // TODO: remove soon :)
 use crate::system::trigger::Trigger;
 use anyhow::Result;
-use tokio::io::split;
+use tokio::io::{WriteHalf, ReadHalf, split};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tokio::runtime::Builder;
 use tokio_rustls::TlsStream;
 
 async fn start_proxy(
-    tls_stream: TlsStream<TcpStream>,
+    mut tls_reader: ReadHalf<TlsStream<TcpStream>>,
+    mut tls_writer: WriteHalf<TlsStream<TcpStream>>,
     client_stream: TcpStream,
     trigger: Trigger,
 ) -> Result<()> {
-    let (mut tls_reader, mut tls_writer) = split(tls_stream);
     let (mut client_reader, mut client_writer) = split(client_stream);
 
     // Task 1: client -> TLS
@@ -23,21 +23,28 @@ async fn start_proxy(
                 tokio::select! {
                     res = client_reader.read(&mut buf) => {
                         match res {
-                            Ok(0) => break, // client closed
+                            Ok(0) => {
+                                // client closed, shut down TLS write side (close_notify will be sent)
+                                let _ = tls_writer.shutdown().await;
+                                break;
+                            }
                             Ok(n) => {
                                 if let Err(e) = tls_writer.write_all(&buf[..n]).await {
                                     eprintln!("TLS write error: {e}");
+                                    let _ = tls_writer.shutdown().await;
                                     break;
                                 }
                             }
                             Err(e) => {
                                 eprintln!("Client read error: {e}");
+                                let _ = tls_writer.shutdown().await;
                                 break;
                             }
                         }
                     }
                     _ = trigger.async_wait() => {
-                        // Trigger fired, exit loop
+                        // Trigger fired, enviamos close_notify
+                        let _ = tls_writer.shutdown().await;
                         break;
                     }
                 }
@@ -54,20 +61,28 @@ async fn start_proxy(
                 tokio::select! {
                     res = tls_reader.read(&mut buf) => {
                         match res {
-                            Ok(0) => break, // TLS closed
+                            Ok(0) => {
+                                // tls closed, close client
+                                let _ = client_writer.shutdown().await;
+                                break;
+                            }
                             Ok(n) => {
                                 if let Err(e) = client_writer.write_all(&buf[..n]).await {
                                     eprintln!("Client write error: {e}");
+                                    let _ = client_writer.shutdown().await;
                                     break;
                                 }
                             }
                             Err(e) => {
                                 eprintln!("TLS read error: {e}");
+                                let _ = client_writer.shutdown().await;
                                 break;
                             }
                         }
                     }
                     _ = trigger.async_wait() => {
+                        // Trigger fired, cerramos cliente
+                        let _ = client_writer.shutdown().await;
                         break;
                     }
                 }
@@ -77,23 +92,4 @@ async fn start_proxy(
 
     let _ = tokio::try_join!(writer_task, reader_task);
     Ok(())
-}
-
-pub fn spawn_proxy_thread(
-    tls_stream: TlsStream<TcpStream>,
-    client_stream: TcpStream,
-    trigger: Trigger,
-) {
-    std::thread::spawn(move || {
-        let rt = Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-
-        rt.block_on(async move {
-            if let Err(e) = start_proxy(tls_stream, client_stream, trigger).await {
-                eprintln!("Proxy error: {e}");
-            }
-        });
-    });
 }

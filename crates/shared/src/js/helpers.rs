@@ -1,9 +1,5 @@
-use std::{
-    fs::File,
-    io::Write,
-    net::{TcpStream, ToSocketAddrs},
-    time::Duration,
-};
+use std::{fs::File, io::Write, net::ToSocketAddrs, time::Duration};
+use tokio::{net::TcpStream, time::timeout};
 
 use rand::{Rng, distr::Alphabetic};
 
@@ -40,14 +36,17 @@ pub(super) fn expand_vars(input: &str) -> Result<String> {
     Ok(result.into_owned())
 }
 
-pub(super) fn test_server(host: &str, port: u16, timeout_ms: u64) -> bool {
+pub(super) async fn test_server(host: &str, port: u16, timeout_ms: u64) -> bool {
     let addr = format!("{}:{}", host, port);
-    let timeout = Duration::from_millis(timeout_ms);
+    let timeout_dur = Duration::from_millis(timeout_ms);
 
     match addr.to_socket_addrs() {
         Ok(mut addrs) => {
             if let Some(sockaddr) = addrs.next() {
-                TcpStream::connect_timeout(&sockaddr, timeout).is_ok()
+                match timeout(timeout_dur, TcpStream::connect(sockaddr)).await {
+                    Ok(Ok(_stream)) => true,  // Connection successful
+                    _ => false,
+                }
             } else {
                 false
             }

@@ -1,126 +1,134 @@
-use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
-use std::thread;
-use std::time::Duration;
 
-use rustls::{ServerConfig, StreamOwned};
-use rustls::server::ServerConnection;
-use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+use anyhow::Result;
 use rcgen::generate_simple_self_signed;
+use rustls::ServerConfig;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
+use tokio_rustls::{TlsAcceptor, server::TlsStream};
 
 use super::consts::*;
-use crate::{system::trigger::Trigger, log};
+use crate::{log, system::trigger::Trigger};
 
 /// Build an in-memory self-signed TLS ServerConfig suitable for tests.
 fn build_test_tls_config() -> Arc<ServerConfig> {
     // Generate a self-signed cert + key
     let cert = generate_simple_self_signed(vec!["localhost".into()]).unwrap();
 
-    // Access certificate and signing key
+    // Cert y clave
     let cert_der = CertificateDer::from(cert.cert.der().to_vec());
-    // rcgen returns a PKCS#8 DER-encoded private key; wrap it as a PKCS#8 key and then convert to PrivateKeyDer
     let pkcs8 = PrivatePkcs8KeyDer::from(cert.signing_key.serialize_der());
     let key_der = PrivateKeyDer::from(pkcs8);
 
-    // Build server config
-    let server_config = ServerConfig::builder()
-        .with_no_client_auth()
-        .with_single_cert(vec![cert_der], key_der)
-        .expect("Failed to create ServerConfig");
-
-    Arc::new(server_config)
+    // Config servidor
+    Arc::new(
+        ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(vec![cert_der], key_der)
+            .expect("Failed to create ServerConfig"),
+    )
 }
 
-
-/// Handle a single client: clear handshake, TLS upgrade, command loop over TLS.
-fn handle_client(mut tcp: TcpStream, config: Arc<ServerConfig>, trigger: Trigger) {
-    // Handshake
+/// clear Handshake + upgrade TLS + command loop
+async fn handle_client(mut tcp: TcpStream, acceptor: TlsAcceptor, trigger: Trigger) -> Result<()> {
+    // Paso 1: handshake en TCP plano
     let mut buf = vec![0u8; HANDSHAKE_V1.len()];
-    match tcp.read(&mut buf) {
-        Ok(n) if &buf[..n] == HANDSHAKE_V1 => {
-            log::debug!("Handshake received correctly");
-        }
-        Ok(n) => {
-            log::warn!("Invalid handshake: {:?}", &buf[..n]);
-            return;
-        }
-        Err(e) => {
-            log::warn!("Handshake read error: {:?}", e);
-            return;
-        }
+    tcp.read_exact(&mut buf).await?;
+    if buf != HANDSHAKE_V1 {
+        log::warn!("Invalid handshake: {:?}", &buf);
+        return Ok(());
     }
+    log::debug!("Handshake received correctly");
 
-    // Configure read timeout so read() returns periodically (to poll the trigger)
-    tcp.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
+    // Paso 2: upgrade a TLS
+    // Nota: TlsAcceptor envuelve la creación de ServerConnection y handshake async
+    let tls_stream: TlsStream<TcpStream> = acceptor.accept(tcp).await?;
 
-    // Upgrade to TLS
-    let conn = ServerConnection::new(config).unwrap();
-    let mut tls = StreamOwned::new(conn, tcp);
-
-    // Command loop over TLS (non-blocking via timeout)
+    // Paso 3: bucle de comandos sobre TLS
+    let (mut tls_reader, mut tls_writer) = tokio::io::split(tls_stream);
     let mut buf = vec![0u8; BUFFER_SIZE];
+
     loop {
-        if trigger.is_set() {
-            break;
-        }
+        tokio::select! {
+            res = tls_reader.read(&mut buf) => {
+                match res {
+                    Ok(0) => {
+                        // Peer cerró; cierre ordenado nuestro lado
+                        let _ = tls_writer.shutdown().await;
+                        break;
+                    }
+                    Ok(n) => {
+                        let data = &buf[..n];
+                        log::debug!("Command received: {:?}", data);
 
-        match tls.read(&mut buf) {
-            Ok(0) => break, // connection closed
-            Ok(n) => {
-                let data = &buf[..n];
-                log::debug!("Command received: {:?}", data);
+                        let resp = if data == CMD_TEST || data == CMD_OPEN {
+                            RESPONSE_OK
+                        } else {
+                            b"ERR"
+                        };
 
-                if data == CMD_TEST || data == CMD_OPEN {
-                    let _ = tls.write_all(RESPONSE_OK);
-                } else {
-                    let _ = tls.write_all(b"ERR");
+                        if let Err(e) = tls_writer.write_all(resp).await {
+                            log::warn!("TLS write error: {:?}", e);
+                            let _ = tls_writer.shutdown().await;
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("TLS read error: {:?}", e);
+                        let _ = tls_writer.shutdown().await;
+                        break;
+                    }
                 }
             }
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                // No data available now; continue to poll trigger
-                continue;
-            }
-            Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
-                // Timeout: opportunity to poll trigger; keep looping
-                continue;
-            }
-            Err(e) => {
-                log::warn!("TLS read error: {:?}", e);
+            _ = trigger.async_wait() => {
+                // Cancelación externa: cierre ordenado
+                let _ = tls_writer.shutdown().await;
                 break;
             }
         }
     }
 
     log::debug!("Client closed");
+    Ok(())
 }
 
-/// Test server: accepts non-blocking, spawns a thread per client, stops on trigger.
-pub fn run_test_server(port: u16, trigger: Trigger) {
+/// Test server async: acepta conexiones y maneja cada cliente en tarea Tokio; se detiene por trigger.
+pub async fn run_test_server(port: u16, trigger: Trigger) -> Result<()> {
     let addr = format!("127.0.0.1:{}", port);
-    let listener = TcpListener::bind(&addr).expect("Failed to bind test server");
-    listener.set_nonblocking(true).unwrap();
+    let listener = TcpListener::bind(&addr).await?;
     log::info!("Test server listening on {}", addr);
 
     let config = build_test_tls_config();
+    let acceptor = TlsAcceptor::from(config);
 
-    while !trigger.is_set() {
-        match listener.accept() {
-            Ok((stream, _)) => {
-                let cfg = config.clone();
-                let trig = trigger.clone();
-                thread::spawn(move || handle_client(stream, cfg, trig));
+    loop {
+        tokio::select! {
+            res = listener.accept() => {
+                match res {
+                    Ok((stream, _peer)) => {
+                        let acceptor = acceptor.clone();
+                        let trig = trigger.clone();
+                        tokio::spawn(async move {
+                            if let Err(e) = handle_client(stream, acceptor, trig).await {
+                                log::warn!("Client handling error: {:?}", e);
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        log::warn!("Accept error: {:?}", e);
+                        // Dependiendo del caso, puedes continue o break. Aquí seguimos.
+                        continue;
+                    }
+                }
             }
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                // No pending connections; keep polling trigger
-                continue;
-            }
-            Err(e) => {
-                log::warn!("Accept error: {:?}", e);
+            _ = trigger.async_wait() => {
+                log::info!("Test server stopped by trigger");
                 break;
             }
         }
     }
 
-    log::info!("Test server stopped by trigger");
+    Ok(())
 }

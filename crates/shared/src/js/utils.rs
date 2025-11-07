@@ -1,4 +1,5 @@
 use anyhow::Result;
+use std::cell::RefCell;
 use boa_engine::{Context, JsResult, JsString, JsValue, error::JsNativeError};
 
 use super::helpers;
@@ -97,17 +98,22 @@ fn crypt_protect_data_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> Js
     }
 }
 
-// test server (host: String, port: u16, timeout_ms: u64), return bool i
-fn test_server_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
-    let (host, port, timeout_ms) = extract_js_args!(args, ctx, String, u16, u64);
+async fn test_server_fn(
+    _: &JsValue,
+    args: &[JsValue],
+    ctx: &RefCell<&mut Context>,
+) -> JsResult<JsValue> {
+    let (host, port, timeout_ms) = {
+        let mut ctx = ctx.borrow_mut();
+        extract_js_args!(args, &mut ctx, String, u16, u64)
+    };
     // If timeout_ms is 0, use a default value of 500ms
     let timeout_ms = if timeout_ms == 0 { 500 } else { timeout_ms };
 
-    let result = helpers::test_server(&host, port, timeout_ms);
+    let result = helpers::test_server(&host, port, timeout_ms).await;
     Ok(JsValue::from(result))
 }
 
-// expandvars(input: String), return expanded string from env vars
 fn expandvars_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let input = extract_js_args!(args, ctx, String);
 
@@ -119,54 +125,34 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
     register_js_module!(
         ctx,
         "Utils",
+        // Sync functions
         [
             ("expandVars", expandvars_fn, 1),
-            ("testServer", test_server_fn, 3),
             ("cryptProtectData", crypt_protect_data_fn, 1),
             ("writeHkcu", write_hkcu_fn, 3),
             ("writeHkcuDword", write_hkcu_dword_fn, 3),
             ("readHkcu", read_hkcu_fn, 2),
             ("readHklm", read_hklm_fn, 2),
-        ]
+        ],
+        // Async functions, test server can have some delay
+        [("testServer", test_server_fn, 3)],
     );
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::super::exec_script;
+    use super::super::{create_context, exec_script};
     use super::*;
     use crate::log;
     use base64::{Engine as _, engine::general_purpose};
 
     use anyhow::Result;
-    use boa_engine::Context;
 
-    #[test]
-    fn test_utils_log() -> Result<()> {
+    #[tokio::test]
+    async fn test_utils_expandvars() -> Result<()> {
         log::setup_logging("debug", log::LogType::Tests);
-        let mut ctx = Context::default();
-
-        // Register the utils module
-        register(&mut ctx)?;
-
-        // Run a test script
-        exec_script(
-            &mut ctx,
-            r#"
-            Utils.log("info", "This works!");
-            Utils.log("debug", "This is a test");
-        "#,
-        )
-        .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_utils_expandvars() -> Result<()> {
-        log::setup_logging("debug", log::LogType::Tests);
-        let mut ctx = Context::default();
+        let mut ctx = create_context()?;
 
         // Register the utils module
         register(&mut ctx)?;
@@ -187,6 +173,7 @@ mod tests {
         "#;
 
         let result = exec_script(&mut ctx, script)
+            .await
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
 
         // Verify the result
@@ -199,11 +186,11 @@ mod tests {
     }
 
     #[cfg(test)]
-    #[test]
+    #[tokio::test]
     #[ignore = "Requires a server to access internet"]
-    fn test_utils_test_server_works() -> Result<()> {
+    async fn test_utils_test_server_works() -> Result<()> {
         log::setup_logging("debug", log::LogType::Tests);
-        let mut ctx = Context::default();
+        let mut ctx = create_context()?;
 
         // Register the utils module
         register(&mut ctx)?;
@@ -215,6 +202,7 @@ mod tests {
         "#;
 
         let result = exec_script(&mut ctx, script)
+            .await
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
 
         // Verify the result
@@ -224,10 +212,10 @@ mod tests {
     }
 
     #[cfg(test)]
-    #[test]
-    fn test_utils_test_server_fails() -> Result<()> {
+    #[tokio::test]
+    async fn test_utils_test_server_fails() -> Result<()> {
         log::setup_logging("debug", log::LogType::Tests);
-        let mut ctx = Context::default();
+        let mut ctx = create_context()?;
 
         // Register the utils module
         register(&mut ctx)?;
@@ -239,6 +227,7 @@ mod tests {
         "#;
 
         let result = exec_script(&mut ctx, script)
+            .await
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
 
         // Verify the result
@@ -248,12 +237,12 @@ mod tests {
     }
 
     #[cfg(test)]
-    #[test]
+    #[tokio::test]
     #[cfg(target_os = "windows")]
-    fn test_utils_crypt_protect_data() -> Result<()> {
+    async fn test_utils_crypt_protect_data() -> Result<()> {
         log::setup_logging("debug", log::LogType::Tests);
         log::setup_logging("debug", log::LogType::Tests);
-        let mut ctx = Context::default();
+        let mut ctx = create_context()?;
         // Register the utils module
         register(&mut ctx)?;
 
@@ -264,6 +253,7 @@ mod tests {
         "#;
 
         let result = exec_script(&mut ctx, script)
+            .await
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
 
         let result: String = result

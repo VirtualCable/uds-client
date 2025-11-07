@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use boa_engine::{Context, JsResult, JsValue, Source, js_string};
+use boa_engine::{Context, JsValue, js_string};
 
 use crate::log;
 
@@ -8,6 +8,7 @@ use crate::log;
 #[macro_use]
 mod macros;
 
+mod executor;
 mod helpers;
 
 // Js modules
@@ -17,7 +18,9 @@ mod process;
 mod tasks;
 mod utils;
 
-pub fn init_ctx(ctx: &mut Context) -> Result<()> {
+pub use executor::{create_context, exec_script};
+
+fn init_runtime(ctx: &mut Context) -> Result<()> {
     utils::register(ctx)?;
     logger::register(ctx)?;
     process::register(ctx)?;
@@ -26,15 +29,11 @@ pub fn init_ctx(ctx: &mut Context) -> Result<()> {
     Ok(())
 }
 
-pub fn exec_script(ctx: &mut Context, script: &str) -> JsResult<JsValue> {
-    // runtime de un solo hilo
-    ctx.eval(Source::from_bytes(script))
-}
-
-pub fn run_js(script: &str, data: Option<serde_json::Value>) -> Result<()> {
+pub async fn run_js(script: &str, data: Option<serde_json::Value>) -> Result<()> {
     log::debug!("Running JS script:\n");
-    let mut ctx = Context::default();
-    init_ctx(&mut ctx)?;
+    let mut ctx = create_context()?;
+    init_runtime(&mut ctx)?;
+
     if let Some(data) = data {
         let js_value = JsValue::from_json(&data, &mut ctx)
             .map_err(|e| anyhow::anyhow!("Failed to convert JSON data to JsValue: {}", e))?;
@@ -54,7 +53,7 @@ pub fn run_js(script: &str, data: Option<serde_json::Value>) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to register global property: {}", e))?;
     }
 
-    let res = exec_script(&mut ctx, script);
+    let res = exec_script(&mut ctx, script).await;
     if res.is_err() {
         Err(anyhow::anyhow!(
             "JavaScript execution error: {}",
@@ -70,13 +69,13 @@ mod tests {
     use super::*;
     use crate::log;
     use anyhow::Result;
-    use boa_engine::Context;
 
-    #[test]
-    fn test_init_ctx() -> Result<()> {
+    #[tokio::test]
+    async fn test_init_ctx() -> Result<()> {
         log::setup_logging("debug", log::LogType::Tests);
-        let mut ctx = Context::default();
-        init_ctx(&mut ctx)?;
+        let mut ctx = create_context()?;
+        init_runtime(&mut ctx)?;
+
         // Run a simple script to verify that modules are registered
         let script = r#"
             let tempDir = File.getTempDirectory();
@@ -84,6 +83,7 @@ mod tests {
             tempDir + " | " + homeDir;
         "#;
         let result = exec_script(&mut ctx, script)
+            .await
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
 
         let result: String = result
@@ -103,16 +103,17 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_exec_script() -> Result<()> {
+    #[tokio::test]
+    async fn test_exec_script() -> Result<()> {
         log::setup_logging("debug", log::LogType::Tests);
-        let mut ctx = Context::default();
+        let mut ctx = create_context()?;
         let script = r#"
             let a = 5;
             let b = 10;
             a + b;
         "#;
         let result = exec_script(&mut ctx, script)
+            .await
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
         let result: i32 = result
             .try_js_into(&mut ctx)
@@ -121,8 +122,8 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_run_js_with_data() -> Result<()> {
+    #[tokio::test]
+    async fn test_run_js_with_data() -> Result<()> {
         log::setup_logging("debug", log::LogType::Tests);
         let script = r#"
             let result = data.value1 + data.value2;
@@ -132,9 +133,7 @@ mod tests {
             "value1": 20,
             "value2": 22
         });
-        let mut ctx = Context::default();
-        init_ctx(&mut ctx)?;
-        run_js(script, Some(data))?;
+        run_js(script, Some(data)).await?;
         Ok(())
     }
 }
