@@ -18,7 +18,7 @@ mod process;
 mod tasks;
 mod utils;
 
-pub use executor::{create_context, exec_script};
+pub use executor::{create_context, exec_script_with_result, exec_script};
 
 fn init_runtime(ctx: &mut Context) -> Result<()> {
     utils::register(ctx)?;
@@ -82,7 +82,7 @@ mod tests {
             let homeDir = File.getHomeDirectory();
             tempDir + " | " + homeDir;
         "#;
-        let result = exec_script(&mut ctx, script)
+        let result = exec_script_with_result(&mut ctx, script)
             .await
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
 
@@ -112,7 +112,7 @@ mod tests {
             let b = 10;
             a + b;
         "#;
-        let result = exec_script(&mut ctx, script)
+        let result = exec_script_with_result(&mut ctx, script)
             .await
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
         let result: i32 = result

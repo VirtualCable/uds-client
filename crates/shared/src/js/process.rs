@@ -119,7 +119,7 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{exec_script, create_context};
+    use super::super::{exec_script_with_result, create_context};
     use super::*;
 
     use crate::log;
@@ -143,7 +143,7 @@ mod tests {
             let result = Process.findExecutable("bash");  // Second argument is optional
             result;
         "#;
-        let result = exec_script(&mut ctx, script).await
+        let result = exec_script_with_result(&mut ctx, script).await
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
 
         let result: String = result
@@ -178,7 +178,7 @@ mod tests {
             let handle = Process.launch("sleep", ["6"]);
             handle;
         "#;
-        let result = exec_script(&mut ctx, script_launch).await
+        let result = exec_script_with_result(&mut ctx, script_launch).await
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
 
         // Wait a second to ensure the process starts
@@ -194,7 +194,7 @@ mod tests {
             let isRunning = Process.isRunning(handle);
             isRunning;
         "#;
-        let result_is_running = exec_script(&mut ctx, script_is_running).await
+        let result_is_running = exec_script_with_result(&mut ctx, script_is_running).await
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
 
         let is_running: bool = result_is_running
@@ -209,7 +209,7 @@ mod tests {
             let finished = Process.waitTimeout(handle, 7000);
             finished;
         "#;
-        let result = exec_script(&mut ctx, script_kill).await
+        let result = exec_script_with_result(&mut ctx, script_kill).await
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
 
         let finished: bool = result

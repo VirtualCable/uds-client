@@ -142,8 +142,9 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{create_context, exec_script};
+    use super::super::create_context;
     use super::*;
+    use crate::js::exec_script_with_result;
     use crate::log;
     use base64::{Engine as _, engine::general_purpose};
 
@@ -172,7 +173,7 @@ mod tests {
             expanded
         "#;
 
-        let result = exec_script(&mut ctx, script)
+        let result = exec_script_with_result(&mut ctx, script)
             .await
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
 
@@ -199,7 +200,7 @@ mod tests {
 
         // Run a test script
         // Note: Results from `Utils.testServer` are asynchronous
-        // To get results, we need to use `.then` or `await` in the script
+        // To get results, we need to use `.then` or `await` in the script mode (the one that can return a value)
         let script = r#"
             Utils.testServer("google.com", 80, 500).then(result => {
             Logger.debug("Test server result: " + result);
@@ -207,7 +208,7 @@ mod tests {
         });
         "#;
 
-        let result = exec_script(&mut ctx, script)
+        let result = exec_script_with_result(&mut ctx, script)
             .await
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
 
@@ -225,14 +226,18 @@ mod tests {
 
         // Register the utils module
         register(&mut ctx)?;
+        // And log
+        super::super::logger::register(&mut ctx)?;
 
         // Run a test script
         let script = r#"
-            let isOpen = Utils.testServer("invalid.host", 80, 500);
-            isOpen
+            Utils.testServer("invalid.host", 80, 500).then(isOpen => {
+            Logger.debug("Test server result: " + isOpen);
+            return isOpen;
+        });
         "#;
 
-        let result = exec_script(&mut ctx, script)
+        let result = exec_script_with_result(&mut ctx, script)
             .await
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
 
@@ -258,7 +263,7 @@ mod tests {
             encrypted
         "#;
 
-        let result = exec_script(&mut ctx, script)
+        let result = exec_script_with_result(&mut ctx, script)
             .await
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
 
