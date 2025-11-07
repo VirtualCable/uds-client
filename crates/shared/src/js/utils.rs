@@ -1,6 +1,6 @@
 use anyhow::Result;
-use std::cell::RefCell;
 use boa_engine::{Context, JsResult, JsString, JsValue, error::JsNativeError};
+use std::cell::RefCell;
 
 use super::helpers;
 
@@ -194,11 +194,17 @@ mod tests {
 
         // Register the utils module
         register(&mut ctx)?;
+        // And the log
+        super::super::logger::register(&mut ctx)?;
 
         // Run a test script
+        // Note: Results from `Utils.testServer` are asynchronous
+        // To get results, we need to use `.then` or `await` in the script
         let script = r#"
-            let isOpen = Utils.testServer("google.com", 80, 500);
-            isOpen
+            Utils.testServer("google.com", 80, 500).then(result => {
+            Logger.debug("Test server result: " + result);
+            return result;
+        });
         "#;
 
         let result = exec_script(&mut ctx, script)

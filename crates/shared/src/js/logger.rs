@@ -59,16 +59,17 @@ pub fn register(ctx: &mut Context) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use crate::js::create_context;
+
     use super::super::exec_script;
     use super::*;
 
     use anyhow::Result;
-    use boa_engine::Context;
 
     #[tokio::test]
     async fn test_log() -> Result<()> {
         log::setup_logging("trace", log::LogType::Tests);
-        let mut ctx = Context::default();
+        let mut ctx = create_context()?;
 
         // Register the utils module
         register(&mut ctx)?;
