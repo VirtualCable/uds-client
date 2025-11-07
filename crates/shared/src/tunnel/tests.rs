@@ -19,12 +19,14 @@ async fn test_connect_and_upgrade() {
     // Give the server a moment to start
     tokio::time::sleep(Duration::from_millis(500)).await;
     log::debug!("Starting test_connect_and_upgrade");
-    let mut tls_stream = connect_and_upgrade("localhost", 44910, false)
+    let (reader, mut writer) = connect_and_upgrade("localhost", 44910, false)
         .await
         .expect("Failed to connect and upgrade to TLS");
     // If we reach here, the connection and upgrade were successful
-    tls_stream.shutdown().await.ok();
-    drop(tls_stream);
+    log::debug!("Connected and upgraded to TLS successfully");
+    writer.shutdown().await.ok(); 
+    drop(writer);
+    drop(reader);
     trigger.set();
     server_handle.await.unwrap();
 }

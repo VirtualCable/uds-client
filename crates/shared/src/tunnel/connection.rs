@@ -7,7 +7,7 @@ use rustls::{ClientConfig, RootCertStore};
 use rustls_native_certs::load_native_certs;
 use tokio::io::{ReadHalf, WriteHalf};
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncReadExt, AsyncWriteExt, split},
     net::TcpStream,
 };
 use tokio_rustls::{TlsConnector, client::TlsStream};
@@ -19,7 +19,7 @@ pub async fn connect_and_upgrade(
     server: &str,
     port: u16,
     check_certificate: bool,
-) -> Result<TlsStream<TcpStream>> {
+) -> Result<(ReadHalf<TlsStream<TcpStream>>, WriteHalf<TlsStream<TcpStream>>)> {
     // Ensures TLS is initialized, with default ciphers right now
 
     let addr = format!("{}:{}", server, port);
@@ -69,7 +69,7 @@ pub async fn connect_and_upgrade(
         .await
         .context("TLS handshake failed")?;
 
-    Ok(tls_stream)
+    Ok(split(tls_stream))
 }
 
 pub async fn send_cmd(
@@ -111,4 +111,25 @@ pub async fn open_connection(
     // Convert ticket to bytes and send OPEN command
     let cmd_open = [consts::CMD_OPEN, ticket.as_bytes()].concat();
     send_cmd(reader, writer, &cmd_open).await
+}
+
+pub async fn create_listener(
+    local_port: Option<u16>,
+    enable_ipv6: bool,
+) -> Result<tokio::net::TcpListener> {
+    let addr = format!(
+        "{}:{}",
+        if enable_ipv6 {
+            consts::LISTEN_ADDRESS_V6
+        } else {
+            consts::LISTEN_ADDRESS
+        },
+        local_port.unwrap_or(0)
+    );
+
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
+        .context("Failed to create TCP listener")?;
+
+    Ok(listener)
 }

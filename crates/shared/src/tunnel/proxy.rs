@@ -1,12 +1,15 @@
 #![allow(dead_code)]  // TODO: remove soon :)
 use crate::system::trigger::Trigger;
+use crate::tunnel::consts;
 use anyhow::Result;
 use tokio::io::{WriteHalf, ReadHalf, split};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tokio_rustls::TlsStream;
+use tokio_rustls::client::TlsStream;
 
-async fn start_proxy(
+use crate::log;
+
+pub async fn start_proxy(
     mut tls_reader: ReadHalf<TlsStream<TcpStream>>,
     mut tls_writer: WriteHalf<TlsStream<TcpStream>>,
     client_stream: TcpStream,
@@ -18,7 +21,7 @@ async fn start_proxy(
     let writer_task = tokio::spawn({
         let trigger = trigger.clone();
         async move {
-            let mut buf = [0u8; 16 * 1024];
+            let mut buf = [0u8; consts::BUFFER_SIZE];
             loop {
                 tokio::select! {
                     res = client_reader.read(&mut buf) => {
@@ -30,20 +33,20 @@ async fn start_proxy(
                             }
                             Ok(n) => {
                                 if let Err(e) = tls_writer.write_all(&buf[..n]).await {
-                                    eprintln!("TLS write error: {e}");
+                                    log::error!("TLS write error: {e}");
                                     let _ = tls_writer.shutdown().await;
                                     break;
                                 }
                             }
                             Err(e) => {
-                                eprintln!("Client read error: {e}");
-                                let _ = tls_writer.shutdown().await;
+                                log::error!("Client read error: {e}");
+                                let _ = tls_writer.shutdown().await;  // Ensure close_notify is sent
                                 break;
                             }
                         }
                     }
                     _ = trigger.async_wait() => {
-                        // Trigger fired, enviamos close_notify
+                        // Trigger fired, ensure send close_notify
                         let _ = tls_writer.shutdown().await;
                         break;
                     }
@@ -56,7 +59,7 @@ async fn start_proxy(
     let reader_task = tokio::spawn({
         let trigger = trigger.clone();
         async move {
-            let mut buf = [0u8; 16 * 1024];
+            let mut buf = [0u8; consts::BUFFER_SIZE];
             loop {
                 tokio::select! {
                     res = tls_reader.read(&mut buf) => {
@@ -68,13 +71,13 @@ async fn start_proxy(
                             }
                             Ok(n) => {
                                 if let Err(e) = client_writer.write_all(&buf[..n]).await {
-                                    eprintln!("Client write error: {e}");
+                                    log::debug!("Client write error: {e}");
                                     let _ = client_writer.shutdown().await;
                                     break;
                                 }
                             }
                             Err(e) => {
-                                eprintln!("TLS read error: {e}");
+                                log::debug!("TLS read error: {e}");
                                 let _ = client_writer.shutdown().await;
                                 break;
                             }
