@@ -9,6 +9,7 @@ use tokio::io::{ReadHalf, WriteHalf};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, split},
     net::TcpStream,
+    time::timeout,
 };
 use tokio_rustls::{TlsConnector, client::TlsStream};
 
@@ -72,7 +73,7 @@ pub async fn connect_and_upgrade(
     Ok(split(tls_stream))
 }
 
-pub async fn send_cmd(
+async fn send_cmd(
     reader: &mut ReadHalf<TlsStream<TcpStream>>,
     writer: &mut WriteHalf<TlsStream<TcpStream>>,
     cmd: &[u8],
@@ -96,21 +97,33 @@ pub async fn send_cmd(
     Ok(())
 }
 
-pub async fn test_connection(
+pub async fn send_test_cmd(
     reader: &mut ReadHalf<TlsStream<TcpStream>>,
     writer: &mut WriteHalf<TlsStream<TcpStream>>,
 ) -> Result<()> {
-    send_cmd(reader, writer, consts::CMD_TEST).await
+    // Send CMD_TEST with timeout
+    timeout(
+        consts::CMD_TIMEOUT_SECS,
+        send_cmd(reader, writer, consts::CMD_TEST),
+    )
+    .await
+    .context("CMD_TEST timed out")?
 }
 
-pub async fn open_connection(
+pub async fn send_open_cmd(
     reader: &mut ReadHalf<TlsStream<TcpStream>>,
     writer: &mut WriteHalf<TlsStream<TcpStream>>,
     ticket: &str,
 ) -> Result<()> {
-    // Convert ticket to bytes and send OPEN command
+    // Convert ticket to bytes and send OPEN command with timeout
+
     let cmd_open = [consts::CMD_OPEN, ticket.as_bytes()].concat();
-    send_cmd(reader, writer, &cmd_open).await
+    timeout(
+        consts::CMD_TIMEOUT_SECS,
+        send_cmd(reader, writer, &cmd_open),
+    )
+    .await
+    .context("CMD_OPEN timed out")?
 }
 
 pub async fn create_listener(

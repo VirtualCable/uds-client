@@ -9,7 +9,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::{TlsAcceptor, server::TlsStream};
 
-use super::consts::*;
+use super::consts;
 use crate::{log, system::trigger::Trigger};
 
 /// Build an in-memory self-signed TLS ServerConfig suitable for tests.
@@ -17,12 +17,12 @@ fn build_test_tls_config() -> Arc<ServerConfig> {
     // Generate a self-signed cert + key
     let cert = generate_simple_self_signed(vec!["localhost".into()]).unwrap();
 
-    // Cert y clave
+    // Cert and key
     let cert_der = CertificateDer::from(cert.cert.der().to_vec());
     let pkcs8 = PrivatePkcs8KeyDer::from(cert.signing_key.serialize_der());
     let key_der = PrivateKeyDer::from(pkcs8);
 
-    // Config servidor
+    // Server config
     Arc::new(
         ServerConfig::builder()
             .with_no_client_auth()
@@ -33,22 +33,22 @@ fn build_test_tls_config() -> Arc<ServerConfig> {
 
 /// clear Handshake + upgrade TLS + command loop
 async fn handle_client(mut tcp: TcpStream, acceptor: TlsAcceptor, trigger: Trigger) -> Result<()> {
-    // Paso 1: handshake en TCP plano
-    let mut buf = vec![0u8; HANDSHAKE_V1.len()];
+    // handshake in plain TCP
+    let mut buf = vec![0u8; consts::HANDSHAKE_V1.len()];
     tcp.read_exact(&mut buf).await?;
-    if buf != HANDSHAKE_V1 {
+    if buf != consts::HANDSHAKE_V1 {
         log::warn!("Invalid handshake: {:?}", &buf);
         return Ok(());
     }
     log::debug!("Handshake received correctly");
 
-    // Paso 2: upgrade a TLS
-    // Nota: TlsAcceptor envuelve la creación de ServerConnection y handshake async
+    // upgrade to TLS
+    // Note: TlsAcceptor wraps the creation of ServerConnection and async handshake
     let tls_stream: TlsStream<TcpStream> = acceptor.accept(tcp).await?;
 
-    // Paso 3: bucle de comandos sobre TLS
+    // Step 3: command loop over TLS
     let (mut tls_reader, mut tls_writer) = tokio::io::split(tls_stream);
-    let mut buf = vec![0u8; BUFFER_SIZE];
+    let mut buf = vec![0u8; consts::BUFFER_SIZE];
 
     loop {
         tokio::select! {
@@ -63,10 +63,27 @@ async fn handle_client(mut tcp: TcpStream, acceptor: TlsAcceptor, trigger: Trigg
                         let data = &buf[..n];
                         log::debug!("Command received: {:?}", data);
 
-                        let resp = if data == CMD_TEST || data == CMD_OPEN {
-                            RESPONSE_OK
+                        let resp = if let Some(slice) = data.get(..consts::CMD_LENGTH) {
+                            if slice == consts::CMD_TEST {
+                                log::debug!("CMD_TEST received");
+                                consts::RESPONSE_OK
+                            } else if slice == consts::CMD_OPEN {
+                                log::debug!("CMD_OPEN received");
+                                // Read the ticket, for simplicity assume rest of data is ticket
+                                let ticket = &data[consts::CMD_LENGTH..];
+                                if ticket.len() != consts::TICKET_LENGTH {
+                                    log::warn!("Invalid ticket length");
+                                    break;
+                                }
+                                log::debug!("Ticket: {:?}", ticket);
+                                consts::RESPONSE_OK
+                            } else {
+                                log::warn!("Unknown command: {:?}", slice);
+                                b"NOThe command is unknown"
+                            }
                         } else {
-                            b"ERR"
+                            log::warn!("Received data too short for command");
+                            b"NOThe command is too short"
                         };
 
                         if let Err(e) = tls_writer.write_all(resp).await {
@@ -94,7 +111,7 @@ async fn handle_client(mut tcp: TcpStream, acceptor: TlsAcceptor, trigger: Trigg
     Ok(())
 }
 
-/// Test server async: acepta conexiones y maneja cada cliente en tarea Tokio; se detiene por trigger.
+/// Test server async: accepts connections, upgrades to TLS, and handles commands.
 pub async fn run_test_server(port: u16, trigger: Trigger) -> Result<()> {
     let addr = format!("127.0.0.1:{}", port);
     let listener = TcpListener::bind(&addr).await?;
@@ -118,7 +135,6 @@ pub async fn run_test_server(port: u16, trigger: Trigger) -> Result<()> {
                     }
                     Err(e) => {
                         log::warn!("Accept error: {:?}", e);
-                        // Dependiendo del caso, puedes continue o break. Aquí seguimos.
                         continue;
                     }
                 }

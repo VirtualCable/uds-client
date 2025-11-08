@@ -35,7 +35,7 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
                     info.port,
                     info.check_certificate,
                 ).await?;
-                connection::open_connection(&mut reader, &mut writer, &info.ticket).await?;
+                connection::send_open_cmd(&mut reader, &mut writer, &info.ticket).await?;
                 // Start proxying in a new task
                 tokio::spawn({
                     let trigger = trigger.clone();
@@ -75,7 +75,7 @@ pub async fn start_tunnel(info: TunnelConnectInfo) -> Result<u16> {
             connection::connect_and_upgrade(&info.addr, info.port, info.check_certificate).await?;
 
         // Test to ensure connection is valid
-        connection::test_connection(&mut reader, &mut writer).await?;
+        connection::send_test_cmd(&mut reader, &mut writer).await?;
     }
 
     // Open listener here to get the actual port, but move the listener into the tunnel runner
