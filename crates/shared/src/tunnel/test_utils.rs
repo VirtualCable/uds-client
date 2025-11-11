@@ -262,6 +262,7 @@ pub async fn create_runner(port: u16) -> Result<(JoinHandle<()>, JoinHandle<()>,
         tunnel_runner(info, listener).await.unwrap();
     });
     // Shuld be running now, wait a moment
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     Ok((server_handle, runner_handle, listen_port))
 }
 
