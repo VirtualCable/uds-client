@@ -10,15 +10,15 @@ use crate::system::{
 };
 
 // windows_only: write to HKCU the key/value pair (string, string, string)
-fn write_hkcu_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+fn write_hkcu_fn(_: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
     #[cfg(not(target_os = "windows"))]
-    return Err(boa_engine::error::JsError::type_error(
+    return Err(JsNativeError::error().with_message(
         "write_hkcu is only available on Windows",
-    ));
+    ).into());
 
     #[cfg(target_os = "windows")]
     {
-        let (key, value_name, value_data) = extract_js_args!(args, ctx, String, String, String);
+        let (key, value_name, value_data) = extract_js_args!(_args, _ctx, String, String, String);
 
         write_hkcu_str(&key, &value_name, &value_data)
             .map_err(|e| JsNativeError::error().with_message(format!("Error: {}", e)))?;
@@ -27,15 +27,15 @@ fn write_hkcu_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<J
     }
 }
 
-fn write_hkcu_dword_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+fn write_hkcu_dword_fn(_: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
     #[cfg(not(target_os = "windows"))]
-    return Err(boa_engine::error::JsError::type_error(
+    return Err(JsNativeError::error().with_message(
         "write_hkcu_dword is only available on Windows",
-    ));
+    ).into());
 
     #[cfg(target_os = "windows")]
     {
-        let (key, value_name, value_data) = extract_js_args!(args, ctx, String, String, u32);
+        let (key, value_name, value_data) = extract_js_args!(_args, _ctx, String, String, u32);
 
         write_hkcu_dword(&key, &value_name, value_data)
             .map_err(|e| JsNativeError::error().with_message(format!("Error: {}", e)))?;
@@ -45,15 +45,15 @@ fn write_hkcu_dword_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsRe
 }
 
 // windows_only: read from HKCU the key/value pair. return string / error
-fn read_hkcu_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+fn read_hkcu_fn(_: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
     #[cfg(not(target_os = "windows"))]
-    return Err(boa_engine::error::JsError::type_error(
+    return Err(JsNativeError::error().with_message(
         "read_hkcu is only available on Windows",
-    ));
+    ).into());
 
     #[cfg(target_os = "windows")]
     {
-        let (key, value_name) = extract_js_args!(args, ctx, String, String);
+        let (key, value_name) = extract_js_args!(_args, _ctx, String, String);
 
         read_hkcu_str(&key, &value_name)
             .map_err(|e| JsNativeError::error().with_message(format!("Error: {}", e)))?;
@@ -63,15 +63,15 @@ fn read_hkcu_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
 }
 
 // windows only: read HKLM key/value pair. return string / error
-fn read_hklm_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+fn read_hklm_fn(_: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
     #[cfg(not(target_os = "windows"))]
-    return Err(boa_engine::error::JsError::type_error(
+    return Err(JsNativeError::error().with_message(
         "read_hklm is only available on Windows",
-    ));
+    ).into());
 
     #[cfg(target_os = "windows")]
     {
-        let (key, value_name) = extract_js_args!(args, ctx, String, String);
+        let (key, value_name) = extract_js_args!(_args, _ctx, String, String);
 
         let result = read_hklm_str(&key, &value_name)
             .map_err(|e| JsNativeError::error().with_message(format!("Error: {}", e)))?;
@@ -81,15 +81,15 @@ fn read_hklm_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
 }
 
 // windows_only: crypt_protect_data(input: String), return encrypted string as base64 JsValue
-fn crypt_protect_data_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+fn crypt_protect_data_fn(_: &JsValue, _rgs: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
     #[cfg(not(target_os = "windows"))]
-    return Err(boa_engine::error::JsError::type_error(
+    return Err(JsNativeError::error().with_message(
         "crypt_protect_data is only available on Windows",
-    ));
+    ).into());
 
     #[cfg(target_os = "windows")]
     {
-        let input = extract_js_args!(args, ctx, String);
+        let input = extract_js_args!(_args, _ctx, String);
 
         let encrypted = crypt_protect_data(&input)
             .map_err(|e| JsNativeError::error().with_message(format!("Error: {}", e)))?;
@@ -146,7 +146,6 @@ mod tests {
     use super::*;
     use crate::js::exec_script_with_result;
     use crate::log;
-    use base64::{Engine as _, engine::general_purpose};
 
     use anyhow::Result;
 
@@ -251,7 +250,7 @@ mod tests {
     #[tokio::test]
     #[cfg(target_os = "windows")]
     async fn test_utils_crypt_protect_data() -> Result<()> {
-        log::setup_logging("debug", log::LogType::Tests);
+        use base64::{Engine as _, engine::general_purpose};
         log::setup_logging("debug", log::LogType::Tests);
         let mut ctx = create_context()?;
         // Register the utils module

@@ -3,6 +3,7 @@ use std::time::Duration;
 use anyhow::Result;
 
 use super::super::trigger;
+use crate::log;
 
 pub fn execute_app(
     application: &str,
