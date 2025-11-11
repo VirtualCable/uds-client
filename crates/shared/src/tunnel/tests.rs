@@ -53,15 +53,17 @@ async fn test_connect_and_upgrade_invalid_server() {
     log::setup_logging("debug", log::LogType::Tests);
     crate::tls::init_tls(None);
     log::debug!("Starting test_connect_and_upgrade_invalid_server");
-    let result = connect_and_upgrade("invalid.server.name", 44910, false).await;
+    let result = connect_and_upgrade("invalid.server.name", 44915, false).await;
     assert!(result.is_err(), "Connection to invalid server should fail");
     log::debug!("test_connect_and_upgrade_invalid_server completed successfully");
 }
 
+// Even we use diferrent ports, STOP_TRIGGER is shared, so tests must be serialized
 #[tokio::test]
+#[serial_test::serial(runner)]
 async fn test_tunnel_runner_starts_and_stop() {
     let trigger = STOP_TRIGGER.clone();
-    let (server_handle, runner_handle, listen_port) = create_runner(44915)
+    let (server_handle, runner_handle, listen_port) = create_runner(44916)
         .await
         .expect("Failed to create test server and runner");
 
@@ -77,9 +79,10 @@ async fn test_tunnel_runner_starts_and_stop() {
 }
 
 #[tokio::test]
+#[serial_test::serial(runner)]
 async fn test_tunnel_runner_some_data() {
     let trigger = STOP_TRIGGER.clone();
-    let (server_handle, runner_handle, listen_port) = create_runner(44916)
+    let (server_handle, runner_handle, listen_port) = create_runner(44917)
         .await
         .expect("Failed to create test server and runner");
 

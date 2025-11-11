@@ -223,8 +223,8 @@ pub async fn connect(
     });
     // Give the server a moment to start
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-    log::debug!("Starting test_test_cmd_invalid_ticket");
-    let (reader, writer) = super::connection::connect_and_upgrade("localhost", 44913, false)
+    log::debug!("Starting client connection to test server");
+    let (reader, writer) = super::connection::connect_and_upgrade("localhost", port, false)
         .await
         .expect("Failed to connect and upgrade to TLS");
 
