@@ -1,1 +1,8 @@
 target/
+# Debian source builds
+# Some convenient 
+*_enterprise.*
+*_ignore.*
+/bin
+/udsclient*
+
