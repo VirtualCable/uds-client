@@ -2,25 +2,29 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use rustls::pki_types::ServerName;
-use rustls::{ClientConfig, RootCertStore};
+use rustls::{
+    pki_types::ServerName,
+    {ClientConfig, RootCertStore},
+};
 use rustls_native_certs::load_native_certs;
-use tokio::io::{ReadHalf, WriteHalf};
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt, split},
+    io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf, split},
     net::TcpStream,
     time::timeout,
 };
 use tokio_rustls::{TlsConnector, client::TlsStream};
 
 use super::consts;
-use crate::tls::noverify;
+use crate::{log, tls::noverify};
 
 pub async fn connect_and_upgrade(
     server: &str,
     port: u16,
     check_certificate: bool,
-) -> Result<(ReadHalf<TlsStream<TcpStream>>, WriteHalf<TlsStream<TcpStream>>)> {
+) -> Result<(
+    ReadHalf<TlsStream<TcpStream>>,
+    WriteHalf<TlsStream<TcpStream>>,
+)> {
     // Ensures TLS is initialized, with default ciphers right now
 
     let addr = format!("{}:{}", server, port);
@@ -139,10 +143,11 @@ pub async fn create_listener(
         },
         local_port.unwrap_or(0)
     );
-
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .context("Failed to create TCP listener")?;
+
+    log::debug!("TCP listener created on {}", addr);
 
     Ok(listener)
 }

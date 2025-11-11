@@ -5,11 +5,16 @@ use rcgen::generate_simple_self_signed;
 use rustls::ServerConfig;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
-use tokio_rustls::{TlsAcceptor, server::TlsStream};
+use rand::{Rng, distr::Alphanumeric, rng};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf, split},
+    net::{TcpListener, TcpStream},
+    task::JoinHandle,
+};
+use tokio_rustls::{TlsAcceptor, client, server};
 
-use super::consts;
+use super::{STOP_TRIGGER, TunnelConnectInfo, consts, tunnel_runner};
+use crate::system::trigger;
 use crate::{log, system::trigger::Trigger};
 
 /// Build an in-memory self-signed TLS ServerConfig suitable for tests.
@@ -31,6 +36,50 @@ fn build_test_tls_config() -> Arc<ServerConfig> {
     )
 }
 
+async fn echo_all_data(
+    reader: &mut ReadHalf<server::TlsStream<TcpStream>>,
+    writer: &mut WriteHalf<server::TlsStream<TcpStream>>,
+    trigger: &Trigger,
+) -> Result<()> {
+    let mut buf = vec![0u8; consts::BUFFER_SIZE];
+
+    loop {
+        tokio::select! {
+            res = reader.read(&mut buf) => {
+                match res {
+                    Ok(0) => {
+                        // Peer closed; orderly shutdown our side
+                        let _ = writer.shutdown().await;
+                        break;
+                    }
+                    Ok(n) => {
+                        let data = &buf[..n];
+                        log::debug!("Echoing back {} bytes", n);
+                        if let Err(e) = writer.write_all(data).await {
+                            log::warn!("TLS write error: {:?}", e);
+                            let _ = writer.shutdown().await;
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("TLS read error: {:?}", e);
+                        let _ = writer.shutdown().await;
+                        break;
+                    }
+                }
+            }
+            _ = trigger.async_wait() => {
+                // External cancellation: orderly shutdown
+                let _ = writer.shutdown().await;
+                break;
+            }
+        }
+    }
+
+    log::debug!("Echo task closed");
+    Ok(())
+}
+
 /// clear Handshake + upgrade TLS + command loop
 async fn handle_client(mut tcp: TcpStream, acceptor: TlsAcceptor, trigger: Trigger) -> Result<()> {
     // handshake in plain TCP
@@ -44,10 +93,10 @@ async fn handle_client(mut tcp: TcpStream, acceptor: TlsAcceptor, trigger: Trigg
 
     // upgrade to TLS
     // Note: TlsAcceptor wraps the creation of ServerConnection and async handshake
-    let tls_stream: TlsStream<TcpStream> = acceptor.accept(tcp).await?;
+    let tls_stream: server::TlsStream<TcpStream> = acceptor.accept(tcp).await?;
 
     // Step 3: command loop over TLS
-    let (mut tls_reader, mut tls_writer) = tokio::io::split(tls_stream);
+    let (mut tls_reader, mut tls_writer) = split(tls_stream);
     let mut buf = vec![0u8; consts::BUFFER_SIZE];
 
     loop {
@@ -63,10 +112,10 @@ async fn handle_client(mut tcp: TcpStream, acceptor: TlsAcceptor, trigger: Trigg
                         let data = &buf[..n];
                         log::debug!("Command received: {:?}", data);
 
-                        let resp = if let Some(slice) = data.get(..consts::CMD_LENGTH) {
+                        let (start_echoing, resp): (bool, &[u8]) = if let Some(slice) = data.get(..consts::CMD_LENGTH) {
                             if slice == consts::CMD_TEST {
                                 log::debug!("CMD_TEST received");
-                                consts::RESPONSE_OK
+                                (false, consts::RESPONSE_OK)
                             } else if slice == consts::CMD_OPEN {
                                 log::debug!("CMD_OPEN received");
                                 // Read the ticket, for simplicity assume rest of data is ticket
@@ -76,19 +125,25 @@ async fn handle_client(mut tcp: TcpStream, acceptor: TlsAcceptor, trigger: Trigg
                                     break;
                                 }
                                 log::debug!("Ticket: {:?}", ticket);
-                                consts::RESPONSE_OK
+                                (true, consts::RESPONSE_OK)
                             } else {
                                 log::warn!("Unknown command: {:?}", slice);
-                                b"NOThe command is unknown"
+                                (false, b"NOThe command is unknown")
                             }
                         } else {
                             log::warn!("Received data too short for command");
-                            b"NOThe command is too short"
+                            (false, b"NOThe command is too short")
                         };
 
                         if let Err(e) = tls_writer.write_all(resp).await {
                             log::warn!("TLS write error: {:?}", e);
                             let _ = tls_writer.shutdown().await;
+                            break;
+                        }
+
+                        if start_echoing {
+                            log::debug!("Starting to echo all data");
+                            echo_all_data(&mut tls_reader, &mut tls_writer, &trigger).await?;
                             break;
                         }
                     }
@@ -100,7 +155,7 @@ async fn handle_client(mut tcp: TcpStream, acceptor: TlsAcceptor, trigger: Trigg
                 }
             }
             _ = trigger.async_wait() => {
-                // Cancelación externa: cierre ordenado
+                // External cancellation: orderly shutdown
                 let _ = tls_writer.shutdown().await;
                 break;
             }
@@ -147,4 +202,73 @@ pub async fn run_test_server(port: u16, trigger: Trigger) -> Result<()> {
     }
 
     Ok(())
+}
+
+pub async fn connect(
+    port: u16,
+) -> Result<(
+    ReadHalf<client::TlsStream<TcpStream>>,
+    WriteHalf<client::TlsStream<TcpStream>>,
+    tokio::task::JoinHandle<()>,
+    trigger::Trigger,
+)> {
+    log::setup_logging("debug", log::LogType::Tests);
+    crate::tls::init_tls(None);
+    let trigger = Trigger::new();
+    let server_handle = tokio::spawn({
+        let trigger = trigger.clone();
+        async move {
+            run_test_server(port, trigger).await.unwrap();
+        }
+    });
+    // Give the server a moment to start
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    log::debug!("Starting test_test_cmd_invalid_ticket");
+    let (reader, writer) = super::connection::connect_and_upgrade("localhost", 44913, false)
+        .await
+        .expect("Failed to connect and upgrade to TLS");
+
+    Ok((reader, writer, server_handle, trigger))
+}
+
+pub async fn create_runner(port: u16) -> Result<(JoinHandle<()>, JoinHandle<()>, u16)> {
+    log::setup_logging("debug", log::LogType::Tests);
+    crate::tls::init_tls(None);
+
+    let trigger = STOP_TRIGGER.clone();
+
+    let server_handle = tokio::spawn({
+        let trigger = trigger.clone();
+        async move {
+            run_test_server(port, trigger).await.unwrap();
+        }
+    });
+
+    let info = TunnelConnectInfo {
+        addr: "localhost".to_string(),
+        port,
+        ticket: create_ticket(),
+        local_port: None,
+        check_certificate: false,
+        listen_timeout_ms: 5000,
+        keep_listening_after_timeout: false,
+        enable_ipv6: false,
+    };
+    let listener = super::connection::create_listener(info.local_port, info.enable_ipv6)
+        .await
+        .unwrap();
+    let listen_port = listener.local_addr()?.port();
+    let runner_handle = tokio::spawn(async move {
+        tunnel_runner(info, listener).await.unwrap();
+    });
+    // Shuld be running now, wait a moment
+    Ok((server_handle, runner_handle, listen_port))
+}
+
+pub fn create_ticket() -> String {
+    rng()
+        .sample_iter(&Alphanumeric)
+        .take(consts::TICKET_LENGTH)
+        .map(char::from)
+        .collect::<String>()
 }

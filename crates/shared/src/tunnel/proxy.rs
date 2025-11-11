@@ -1,10 +1,11 @@
-#![allow(dead_code)]  // TODO: remove soon :)
+#![allow(dead_code)] // TODO: remove soon :)
 use crate::system::trigger::Trigger;
 use crate::tunnel::consts;
 use anyhow::Result;
-use tokio::io::{WriteHalf, ReadHalf, split};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpStream;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf, split},
+    net::TcpStream,
+};
 use tokio_rustls::client::TlsStream;
 
 use crate::log;

@@ -17,10 +17,10 @@ pub struct TunnelConnectInfo {
     pub enable_ipv6: bool,       // whether to enable ipv6 (local and remote)
 }
 
-static TRIGGER: std::sync::OnceLock<Trigger> = std::sync::OnceLock::new();
+pub static STOP_TRIGGER: std::sync::LazyLock<Trigger> = std::sync::LazyLock::new(Trigger::new);
 
 pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Result<()> {
-    let trigger = TRIGGER.get_or_init(Trigger::new);
+    let trigger = STOP_TRIGGER.clone();
 
     loop {
         // Accept incoming connection until triggered
