@@ -251,3 +251,52 @@ pub async fn exec_script_with_result(ctx: &mut Context, script: &str) -> Result<
 
     Ok(script_result)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Test tha we can execute and get result from a simple script
+    #[tokio::test]
+    async fn test_exec_script_with_result() -> Result<()> {
+        let mut ctx = create_context()?;
+
+        let script = r#"
+            function add(a, b) {
+                return a + b;
+            }
+            add(2, 3)
+        "#;
+
+        let result = exec_script_with_result(&mut ctx, script)
+            .await
+            .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
+
+        assert_eq!(result, JsValue::from(5));
+
+        Ok(())
+    }
+
+    // Test that we can execute and get result from a script that returns an exception
+    #[tokio::test]
+    async fn test_exec_script_with_exception() -> Result<()> {
+        let mut ctx = create_context()?;
+
+        let script = r#"
+            function throwError() {
+                throw new Error("Test error");
+            }
+            throwError();
+        "#;
+
+        let result = exec_script_with_result(&mut ctx, script)
+            .await;
+
+        assert!(result.is_err());
+        // Get the error message
+        let err_msg = format!("{}", result.err().unwrap());
+        assert!(err_msg.contains("Test error"));
+
+        Ok(())
+    }
+}

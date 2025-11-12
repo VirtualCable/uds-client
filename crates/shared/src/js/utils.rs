@@ -81,7 +81,7 @@ fn read_hklm_fn(_: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<
 }
 
 // windows_only: crypt_protect_data(input: String), return encrypted string as base64 JsValue
-fn crypt_protect_data_fn(_: &JsValue, _rgs: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
+fn crypt_protect_data_fn(_: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
     #[cfg(not(target_os = "windows"))]
     return Err(JsNativeError::error().with_message(
         "crypt_protect_data is only available on Windows",
