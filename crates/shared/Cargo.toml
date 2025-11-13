@@ -39,11 +39,6 @@ rand = "0.9.2"
 rustls = "0.23.35"
 rustls-native-certs = "0.8.2"
 
-# Signature check. rsa has a RUSTSEC-2023-0071 advisory, but it's not relevant for our use case 
-# (we only use it for signature verification, not signing)
-rsa = { version="0.9.8", features = ["sha2"] }
-sha2 = "0.10"
-
 # non blocking TLS streams
 tokio-rustls = "0.26.4"
 tokio = { version = "1.48.0", features = [
@@ -58,7 +53,11 @@ futures = "0.3.31"
 async-trait = "0.1.89"
 
 # HTTP client
-reqwest = { version = "0.12.24", features = ["json", "rustls-tls", "system-proxy"] }
+reqwest = { version = "0.12.24", features = [
+    "json",
+    "rustls-tls",
+    "system-proxy",
+] }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62.2", features = [
@@ -72,6 +71,10 @@ windows = { version = "0.62.2", features = [
 ] }
 widestring = "1.2.1"
 
+# On a separate crate due to the dependency on the ML DSA crate
+# which is not needed elsewhere
+[dependencies.mldsa-verify]
+path = "../mldsa-verify"
 
 [dev-dependencies]
 rcgen = "0.14.5"
