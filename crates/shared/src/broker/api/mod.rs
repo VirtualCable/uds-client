@@ -41,13 +41,13 @@ pub trait BrokerApi: Send + Sync {
     async fn send_log(&self, log_str: String) -> Result<()>;
 }
 
-pub struct UDSBrokerApi {
+pub struct UdsBrokerApi {
     client: Client,
     broker_url: String,
     hostname: String,
 }
 
-impl UDSBrokerApi {
+impl UdsBrokerApi {
     pub fn new(
         broker_url: &str,
         timeout: Option<std::time::Duration>,
@@ -89,7 +89,7 @@ impl UDSBrokerApi {
 }
 
 #[async_trait]
-impl BrokerApi for UDSBrokerApi {
+impl BrokerApi for UdsBrokerApi {
     async fn get_version_info(&self) -> Result<types::Version> {
         log::debug!("Getting version info from broker at {}", self.broker_url);
         let response = self
@@ -147,3 +147,6 @@ impl BrokerApi for UDSBrokerApi {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests;

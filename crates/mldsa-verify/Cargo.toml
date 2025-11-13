@@ -1,0 +1,9 @@
+[package]
+name = "mldsa-verify"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ml-dsa = "0.0.4"
+rand = "0.8"
+base64 = "0.22.1"

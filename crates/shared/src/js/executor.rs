@@ -283,10 +283,7 @@ mod tests {
         let mut ctx = create_context()?;
 
         let script = r#"
-            function throwError() {
-                throw new Error("Test error");
-            }
-            throwError();
+            throw new Error("Test error");
         "#;
 
         let result = exec_script_with_result(&mut ctx, script)
