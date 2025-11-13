@@ -53,6 +53,12 @@ fn file_is_executable_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> Js
     Ok(JsValue::from(is_executable))
 }
 
+fn is_directory_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let path = extract_js_args!(args, ctx, String);
+    let is_directory = std::path::Path::new(&path).is_dir();
+    Ok(JsValue::from(is_directory))
+}
+
 fn get_temp_dir_fn(_: &JsValue, _: &[JsValue], _: &mut Context) -> JsResult<JsValue> {
     let temp_dir = std::env::temp_dir();
     Ok(JsValue::from(JsString::from(temp_dir.to_string_lossy())))
@@ -82,10 +88,111 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
             ("write", write_file_fn, 2),
             ("exists", file_exists_fn, 1),
             ("isExecutable", file_is_executable_fn, 1),
+            ("isDirectory", is_directory_fn, 1),
             ("getTempDirectory", get_temp_dir_fn, 0),
             ("getHomeDirectory", get_home_dir_fn, 0),
         ],
         []
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use boa_engine::js_string;
+
+    use super::*;
+    use crate::log;
+    use crate::js::{create_context, exec_script_with_result};
+
+    #[tokio::test]
+    async fn test_file_module() {
+        log::setup_logging("debug", log::LogType::Tests);
+        let mut ctx = create_context().unwrap();
+        register(&mut ctx).unwrap();
+
+        // Test createTempFile
+        let script = r#"
+            const tempFilePath = File.createTempFile(null, "Hello, World!", "txt");
+            const content = File.read(tempFilePath);
+            File.write(tempFilePath, "New Content");
+            const newContent = File.read(tempFilePath);
+            const exists = File.exists(tempFilePath);
+            const isExecutable = File.isExecutable(tempFilePath);
+            const isDirectory = File.isDirectory(tempFilePath);
+            const tempDir = File.getTempDirectory();
+            const homeDir = File.getHomeDirectory();
+            ({
+                tempFilePath,
+                content,
+                newContent,
+                exists,
+                isExecutable,
+                isDirectory,
+                tempDir,
+                homeDir
+            });
+        "#;
+
+        let result = exec_script_with_result(&mut ctx, script).await.unwrap();
+
+        let obj = result.as_object().unwrap();
+
+        let temp_file_path: String = obj
+            .get(js_string!("tempFilePath"), &mut ctx)
+            .unwrap()
+            .try_js_into(&mut ctx)
+            .unwrap();
+        assert!(!temp_file_path.is_empty());
+        log::info!("Temp file created at: {}", temp_file_path);
+
+        let content: String = obj
+            .get(js_string!("content"), &mut ctx)
+            .unwrap()
+            .try_js_into(&mut ctx)
+            .unwrap();
+        assert_eq!(content, "Hello, World!");
+
+        let new_content: String = obj
+            .get(js_string!("newContent"), &mut ctx)
+            .unwrap()
+            .try_js_into(&mut ctx)
+            .unwrap();
+        assert_eq!(new_content, "New Content");
+
+        let exists: bool = obj
+            .get(js_string!("exists"), &mut ctx)
+            .unwrap()
+            .try_js_into(&mut ctx)
+            .unwrap();
+        assert!(exists);
+
+        let is_executable: bool = obj
+            .get(js_string!("isExecutable"), &mut ctx)
+            .unwrap()
+            .try_js_into(&mut ctx)
+            .unwrap();
+        assert!(!is_executable);
+
+        let is_directory: bool = obj
+            .get(js_string!("isDirectory"), &mut ctx)
+            .unwrap()
+            .try_js_into(&mut ctx)
+            .unwrap();
+        assert!(!is_directory);
+
+        let temp_dir: String = obj
+            .get(js_string!("tempDir"), &mut ctx)
+            .unwrap()
+            .try_js_into(&mut ctx)
+            .unwrap();
+        assert!(!temp_dir.is_empty());
+
+        let home_dir: String = obj
+            .get(js_string!("homeDir"), &mut ctx)
+            .unwrap()
+            .try_js_into(&mut ctx)
+            .unwrap();
+        assert!(!home_dir.is_empty());
+    }
 }
