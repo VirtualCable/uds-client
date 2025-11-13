@@ -7,9 +7,9 @@ This document describes the JavaScript modules and functions available in the ru
 | Module   | Description | Functions |
 |----------|-------------|-----------|
 | Utils    | Utility functions for environment variables, registry (Windows), encryption, and network testing | 7 |
-| File     | File operations, temporary files, and directory access | 7 |
+| File     | File operations, temporary files, and directory access | 8 |
 | Logger   | Logging functions at different levels | 5 |
-| Process  | Executable finding, process launching, and management | 6 |
+| Process  | Executable finding, process launching, and management | 7 |
 | Tasks    | Task management, cleanup files, and tunnel connections | 4 |
 
 ## Utils Module
@@ -133,6 +133,15 @@ Checks if the file at the given path is executable.
 
 **Returns:** boolean - True if the file is executable.
 
+### isDirectory
+
+Checks if the path is a directory.
+
+**Parameters:**
+- `path` (string): The path to check.
+
+**Returns:** boolean - True if the path is a directory.
+
 ### getTempDirectory
 
 Gets the system temporary directory path.
@@ -245,6 +254,17 @@ Waits for a process to finish with a timeout.
 
 **Returns:** boolean - True if the timeout was triggered, false if the process finished.
 
+### launchAndWait (async)
+
+Launches an application, waits for it to finish, and returns its output.
+
+**Parameters:**
+- `app_path` (string): The path to the executable.
+- `app_args` (array of strings): Command-line arguments for the application.
+- `timeout_ms` (number, optional): Timeout in milliseconds (default: 30000).
+
+**Returns:** object - An object containing stdout and stderr: `{stdout: string, stderr: string}`.
+
 ## Tasks Module
 
 The Tasks module provides functions for managing tasks, files to be cleaned up, and tunnel connections.
@@ -278,9 +298,9 @@ Starts a tunnel connection.
 - `addr` (string): The address to connect to.
 - `port` (number): The port number.
 - `ticket` (string): The connection ticket.
+- `listen_timeout_ms` (number, optional): Listen timeout in milliseconds (default: 0).
 - `local_port` (number, optional): The local port to bind to.
 - `check_certificate` (boolean, optional): Whether to check certificates (default: true).
-- `listen_timeout_ms` (number, optional): Listen timeout in milliseconds (default: 0).
 - `keep_listening_after_timeout` (boolean, optional): Whether to keep listening after timeout (default: false).
 - `enable_ipv6` (boolean, optional): Whether to enable IPv6 (default: false).
 
@@ -302,6 +322,7 @@ Starts a tunnel connection.
 | File    | write                    | path: string, content: string | Writes content to file |
 | File    | exists                   | path: string | Checks if path exists |
 | File    | isExecutable             | path: string | Checks if file is executable |
+| File    | isDirectory              | path: string | Checks if path is a directory |
 | File    | getTempDirectory         | - | Gets temp directory path |
 | File    | getHomeDirectory         | - | Gets home directory path |
 | Logger  | trace                    | msg: string | Logs trace message |
@@ -315,7 +336,8 @@ Starts a tunnel connection.
 | Process | kill                     | process_id: number | Terminates process |
 | Process | wait                     | process_id: number | Waits for process to finish |
 | Process | waitTimeout              | process_id: number, timeout_ms: number | Waits for process with timeout |
+| Process | launchAndWait (async)    | app_path: string, app_args: string[], timeout_ms?: number | Launches application and waits for completion |
 | Tasks   | addEarlyUnlinkableFile   | file_path: string | Adds file for early cleanup |
 | Tasks   | addLateUnlinkableFile    | file_path: string | Adds file for late cleanup |
 | Tasks   | addWaitableApp           | task_handle: number | Adds waitable application |
-| Tasks   | startTunnel (async)      | addr: string, port: number, ticket: string, local_port?: number, check_certificate?: boolean, listen_timeout_ms?: number, keep_listening_after_timeout?: boolean, enable_ipv6?: boolean | Starts tunnel connection |
+| Tasks   | startTunnel (async)      | addr: string, port: number, ticket: string, listen_timeout_ms?: number, local_port?: number, check_certificate?: boolean, keep_listening_after_timeout?: boolean, enable_ipv6?: boolean | Starts tunnel connection |

@@ -5,7 +5,10 @@ use anyhow::Result;
 use boa_engine::{
     Context, JsResult, JsString, JsValue,
     error::{JsError, JsNativeError},
-    object::builtins::JsArray,
+    js_string,
+    object::ObjectInitializer,
+    property::Attribute,
+    value::TryIntoJs,
 };
 use is_executable::IsExecutable; // Trait for is_executable method
 
@@ -96,21 +99,18 @@ async fn launch_and_wait_fn(
             JsNativeError::typ().with_message(format!("Failed to execute process: {}", e)),
         )
     })?;
-
-    let array = {
+    let result = {
         let mut ctx_borrow = ctx.borrow_mut();
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        let context = &mut *ctx_borrow;
-        JsArray::from_iter(
-            [
-                JsValue::from(JsString::from(stdout.as_str())),
-                JsValue::from(JsString::from(stderr.as_str())),
-            ],
-            context,
-        )
+        let stdout_js = stdout.try_into_js(*ctx_borrow)?;
+        let stderr_js = stderr.try_into_js(*ctx_borrow)?;
+        ObjectInitializer::new(*ctx_borrow)
+            .property(js_string!("stdout"), stdout_js, Attribute::READONLY)
+            .property(js_string!("stderr"), stderr_js, Attribute::READONLY)
+            .build()
     };
-    Ok(JsValue::from(array))
+    Ok(JsValue::from(result))
 }
 
 pub fn is_running_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
@@ -171,6 +171,8 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::super::{create_context, exec_script_with_result};
     use super::*;
 
@@ -299,14 +301,14 @@ mod tests {
             let result = Process.launchAndWait("echo", ["Hello, World!"]);
             result;
         "#;
-        let js_array = exec_script_with_result(&mut ctx, script)
+        let obj = exec_script_with_result(&mut ctx, script)
             .await
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
-        let output_array = Vec::<String>::try_from_js(&js_array, &mut ctx);
-        assert!(output_array.is_ok(), "Expected result to be an array");
-        let output_array = output_array.unwrap();
-        let stdout = output_array[0].clone();
-        let stderr = output_array[1].clone();
+        let output = HashMap::<String, String>::try_from_js(&obj, &mut ctx);
+        assert!(output.is_ok(), "Expected result to be an array");
+        let output = output.unwrap();
+        let stdout = output.get("stdout").cloned().unwrap_or_default();
+        let stderr = output.get("stderr").cloned().unwrap_or_default();
         log::info!("ExecAndWait stdout: {}", stdout);
         log::info!("ExecAndWait stderr: {}", stderr);
         assert!(

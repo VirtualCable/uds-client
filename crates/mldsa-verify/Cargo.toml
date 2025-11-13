@@ -5,6 +5,5 @@ edition = "2024"
 
 [dependencies]
 ml-dsa = "0.0.4"
-rand = "0.8"
 base64 = "0.22.1"
 anyhow = "1.0.100"

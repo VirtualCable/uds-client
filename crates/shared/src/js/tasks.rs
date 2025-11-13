@@ -52,9 +52,9 @@ async fn start_tunel_fn(
             addr,
             port,
             ticket,
+            listen_timeout_ms,
             local_port,
             check_certificate,
-            listen_timeout_ms,
             keep_listening_after_timeout,
             enable_ipv6,
         ) = extract_js_args!(
@@ -63,9 +63,9 @@ async fn start_tunel_fn(
             String,
             u16,
             String,
+            Option<u64>,
             Option<u16>,
             Option<bool>,
-            Option<u64>,
             Option<bool>,
             Option<bool>
         );
