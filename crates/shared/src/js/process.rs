@@ -5,6 +5,7 @@ use anyhow::Result;
 use boa_engine::{
     Context, JsResult, JsString, JsValue,
     error::{JsError, JsNativeError},
+    object::builtins::JsArray,
 };
 use is_executable::IsExecutable; // Trait for is_executable method
 
@@ -61,6 +62,57 @@ pub fn launch_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<J
         .map_err(|e| JsError::from_native(JsNativeError::typ().with_message(format!("{}", e))))
 }
 
+// Executes and app, waits for it to finish, returns the output (stdout, stderr) as an array
+async fn launch_and_wait_fn(
+    _: &JsValue,
+    args: &[JsValue],
+    ctx: &std::cell::RefCell<&mut Context>,
+) -> JsResult<JsValue> {
+    let (app_path, app_args, mut timeout_ms) = {
+        let mut ctx_borrow = ctx.borrow_mut();
+        extract_js_args!(args, &mut *ctx_borrow, String, Vec<String>, u32)
+    };
+    if timeout_ms == 0 {
+        timeout_ms = 30000; // Default to 30 seconds
+    }
+
+    log::debug!(
+        "Running application: {} with args: {:?}",
+        app_path,
+        app_args
+    );
+    let app_args_re: Vec<&str> = app_args.iter().map(|s| s.as_str()).collect();
+    // with timeout if set
+    let output = tokio::time::timeout(
+        std::time::Duration::from_millis(timeout_ms as u64),
+        tokio::process::Command::new(&app_path)
+            .args(&app_args_re)
+            .output(),
+    )
+    .await
+    .map_err(|e| JsError::from_native(JsNativeError::typ().with_message(format!("{}", e))))?
+    .map_err(|e| {
+        JsError::from_native(
+            JsNativeError::typ().with_message(format!("Failed to execute process: {}", e)),
+        )
+    })?;
+
+    let array = {
+        let mut ctx_borrow = ctx.borrow_mut();
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        let context = &mut *ctx_borrow;
+        JsArray::from_iter(
+            [
+                JsValue::from(JsString::from(stdout.as_str())),
+                JsValue::from(JsString::from(stderr.as_str())),
+            ],
+            context,
+        )
+    };
+    Ok(JsValue::from(array))
+}
+
 pub fn is_running_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let process_id = extract_js_args!(args, ctx, u32);
 
@@ -112,15 +164,17 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
             ("waitTimeout", wait_timeout_fn, 2),
         ],
         // Async functions, none here
-        [],
+        [("launchAndWait", launch_and_wait_fn, 3),],
     );
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::super::{exec_script_with_result, create_context};
+    use super::super::{create_context, exec_script_with_result};
     use super::*;
+
+    use boa_engine::value::TryFromJs;
 
     use crate::log;
     use anyhow::Result;
@@ -143,7 +197,8 @@ mod tests {
             let result = Process.findExecutable("bash");  // Second argument is optional
             result;
         "#;
-        let result = exec_script_with_result(&mut ctx, script).await
+        let result = exec_script_with_result(&mut ctx, script)
+            .await
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
 
         let result: String = result
@@ -178,7 +233,8 @@ mod tests {
             let handle = Process.launch("sleep", ["6"]);
             handle;
         "#;
-        let result = exec_script_with_result(&mut ctx, script_launch).await
+        let result = exec_script_with_result(&mut ctx, script_launch)
+            .await
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
 
         // Wait a second to ensure the process starts
@@ -194,7 +250,8 @@ mod tests {
             let isRunning = Process.isRunning(handle);
             isRunning;
         "#;
-        let result_is_running = exec_script_with_result(&mut ctx, script_is_running).await
+        let result_is_running = exec_script_with_result(&mut ctx, script_is_running)
+            .await
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
 
         let is_running: bool = result_is_running
@@ -209,7 +266,8 @@ mod tests {
             let finished = Process.waitTimeout(handle, 7000);
             finished;
         "#;
-        let result = exec_script_with_result(&mut ctx, script_kill).await
+        let result = exec_script_with_result(&mut ctx, script_kill)
+            .await
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
 
         let finished: bool = result
@@ -219,6 +277,87 @@ mod tests {
 
         assert!(finished, "Expected process to finish after kill");
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[ignore = "Depends on system environment"]
+    async fn test_launch_and_wait() -> Result<()> {
+        log::setup_logging("debug", log::LogType::Tests);
+        let mut ctx = create_context()?;
+        // Register the process module
+        register(&mut ctx)?;
+        // Test executing an application and waiting for output
+        #[cfg(target_os = "windows")]
+        let script = r#"
+            let app_path = Process.findExecutable("cmd.exe", []);
+            let result = Process.launchAndWait(app_path, ["/C", "echo Hello, World!"]);
+            result;
+        "#;
+        #[cfg(not(target_os = "windows"))]
+        let script = r#"
+            let result = Process.launchAndWait("echo", ["Hello, World!"]);
+            result;
+        "#;
+        let js_array = exec_script_with_result(&mut ctx, script)
+            .await
+            .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
+        let output_array = Vec::<String>::try_from_js(&js_array, &mut ctx);
+        assert!(output_array.is_ok(), "Expected result to be an array");
+        let output_array = output_array.unwrap();
+        let stdout = output_array[0].clone();
+        let stderr = output_array[1].clone();
+        log::info!("ExecAndWait stdout: {}", stdout);
+        log::info!("ExecAndWait stderr: {}", stderr);
+        assert!(
+            stdout.contains("Hello, World!"),
+            "Expected stdout to contain 'Hello, World!'"
+        );
+        assert!(stderr.is_empty(), "Expected stderr to be empty");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_launch_and_wait_non_existing_app() -> Result<()> {
+        log::setup_logging("debug", log::LogType::Tests);
+        let mut ctx = create_context()?;
+        // Register the process module
+        register(&mut ctx)?;
+        // Test executing a non-existing application
+        let script = r#"
+            let result = Process.launchAndWait("non_existing_app_12345", []);
+            result;
+        "#;
+        let result = exec_script_with_result(&mut ctx, script)
+            .await
+            .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e));
+        // Shoud return an error
+        assert!(
+            result.is_err(),
+            "Expected error when executing non-existing app"
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_wait_timeout_non_existing_process() -> Result<()> {
+        log::setup_logging("debug", log::LogType::Tests);
+        let mut ctx = create_context()?;
+        // Register the process module
+        register(&mut ctx)?;
+        // Test waiting on a non-existing process
+        let script = r#"
+            let result = Process.waitTimeout(9999, 1000); // Assuming this PID does not exist
+            result;
+        "#;
+        let result = exec_script_with_result(&mut ctx, script)
+            .await
+            .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e));
+        // Shoud return an error
+        assert!(
+            result.is_err(),
+            "Expected error when waiting on non-existing process"
+        );
         Ok(())
     }
 }
