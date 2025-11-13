@@ -36,8 +36,8 @@ pub mod types;
 
 #[async_trait]
 pub trait BrokerApi: Send + Sync {
-    async fn get_version_info(&self) -> Result<types::Version>;
-    async fn get_script(&self, ticket: &str, scrambler: &str) -> Result<types::Script>;
+    async fn get_version_info(&self) -> Result<types::Version, types::Error>;
+    async fn get_script(&self, ticket: &str, scrambler: &str) -> Result<types::Script, types::Error>;
     async fn send_log(&self, log_str: String) -> Result<()>;
 }
 
@@ -90,7 +90,7 @@ impl UdsBrokerApi {
 
 #[async_trait]
 impl BrokerApi for UdsBrokerApi {
-    async fn get_version_info(&self) -> Result<types::Version> {
+    async fn get_version_info(&self) -> Result<types::Version, types::Error> {
         log::debug!("Getting version info from broker at {}", self.broker_url);
         let response = self
             .client
@@ -105,7 +105,7 @@ impl BrokerApi for UdsBrokerApi {
             .into_result()
     }
 
-    async fn get_script(&self, ticket: &str, scrambler: &str) -> Result<types::Script> {
+    async fn get_script(&self, ticket: &str, scrambler: &str) -> Result<types::Script, types::Error> {
         log::debug!(
             "Getting script from broker at {} with ticket {} and scrambler {}",
             self.broker_url,

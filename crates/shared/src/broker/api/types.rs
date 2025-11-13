@@ -41,6 +41,21 @@ pub struct Error {
     pub is_retryable: String, // "0" or "1", as string
 }
 
+impl Error {
+    pub fn is_retryable(&self) -> bool {
+        self.is_retryable == "1"
+    }
+}
+
+impl From<reqwest::Error> for Error {
+    fn from(err: reqwest::Error) -> Self {
+        Error {
+            error: err.to_string(),
+            is_retryable: "0".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BrokerResponse<T> {
     pub result: T,
@@ -48,9 +63,9 @@ pub struct BrokerResponse<T> {
 }
 
 impl<T> BrokerResponse<T> {
-    pub fn into_result(self) -> Result<T> {
+    pub fn into_result(self) -> Result<T, Error> {
         if let Some(err) = self.error {
-            Err(anyhow::anyhow!("Broker error: {}", err.error))
+            Err(err)
         } else {
             Ok(self.result)
         }

@@ -26,9 +26,9 @@ Author: Adolfo Gómez, dkmaster at dkmon dot com
 */
 use super::*;
 
-use crate::{log};
+use crate::log;
 
-use mockito::{Server};
+use mockito::Server;
 
 // Helper to create a ServerRestApi pointing to mockito server
 // Helper to create a mockito server and a ServerRestApi pointing to it
@@ -75,16 +75,59 @@ async fn test_get_version() {
 async fn test_get_script() {
     log::setup_logging("debug", log::LogType::Tests);
     let (mut server, api) = setup_server_and_api().await;
-    let result = types::get_test_script();
+    let result: types::BrokerResponse<types::Script> = types::BrokerResponse::<types::Script> {
+        result: types::get_test_script(),
+        error: None,
+    };
     let _m = server
-        .mock("GET", "/ticket/scrabler")
+        .mock("GET",  mockito::Matcher::Regex(r"^/ticket/scrabler\?hostname=.*&version=.*$".to_string()))
         .match_header("content-type", "application/json")
         .with_body(serde_json::to_string(&result).unwrap())
         .with_status(200)
         .create_async()
         .await;
-    let response = api.get_script("dummy_ticket", "dummy_scrambler").await;
+    let response = api.get_script("ticket", "scrabler").await;
     assert!(response.is_ok(), "Get script failed: {:?}", response);
     let script = response.unwrap();
     assert_eq!(script.script_type, "javascript");
 }
+
+#[tokio::test]
+async fn test_get_script_fails() {
+    log::setup_logging("debug", log::LogType::Tests);
+    let (mut server, api) = setup_server_and_api().await;
+    let result: types::BrokerResponse<types::Script> = types::BrokerResponse::<types::Script> {
+        result: types::get_test_script(),
+        error: Some(types::Error {
+            error: "Test error".to_string(),
+            is_retryable: "0".to_string(),
+        }),
+    };
+    let _m = server
+        .mock("GET",  mockito::Matcher::Regex(r"^/ticket/scrabler\?hostname=.*&version=.*$".to_string()))
+        .match_header("content-type", "application/json")
+        .with_body(serde_json::to_string(&result).unwrap())
+        .with_status(200)
+        .create_async()
+        .await;
+    let response = api.get_script("ticket", "scrabler").await;
+    assert!(response.is_err(), "Get script succeeded unexpectedly: {:?}", response);
+    let err = response.err().unwrap();
+    assert_eq!(err.error, "Test error".to_string());
+    assert!(!err.is_retryable());
+}
+
+
+#[tokio::test]
+async fn test_send_logs() {
+    log::setup_logging("debug", log::LogType::Tests);
+    let (mut server, api) = setup_server_and_api().await;
+    let _m = server
+        .mock("POST", "/logs")
+        .match_header("content-type", "application/json")
+        .with_status(200)
+        .create_async()
+        .await;
+    let response = api.send_log("DEBUG This is a test log message".to_string()).await;
+    assert!(response.is_ok(), "Send logs failed: {:?}", response);
+}   
