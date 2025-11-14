@@ -1,7 +1,12 @@
 use anyhow::Result;
 
 use boa_engine::{
-    Context, JsError, JsResult, JsValue, Module, Script, Source, builtins::promise::PromiseState, context::{ContextBuilder, time::JsInstant}, job::{GenericJob, Job, JobExecutor, NativeAsyncJob, PromiseJob, TimeoutJob}, module::MapModuleLoader, object::builtins::JsPromise
+    Context, JsError, JsResult, JsValue, Module, Script, Source,
+    builtins::promise::PromiseState,
+    context::{ContextBuilder, time::JsInstant},
+    job::{GenericJob, Job, JobExecutor, NativeAsyncJob, PromiseJob, TimeoutJob},
+    module::MapModuleLoader,
+    object::builtins::JsPromise,
 };
 use futures::{StreamExt, stream::FuturesUnordered};
 use std::collections::BTreeMap;
@@ -43,7 +48,7 @@ impl JobQueue {
 
         for job in jobs_to_run.into_values() {
             if let Err(e) = job.call(context) {
-                eprintln!("Uncaught {e}");
+                log::error!("Uncaught {e}");
             }
         }
     }
@@ -56,13 +61,13 @@ impl JobQueue {
         if let Some(generic) = job
             && let Err(err) = generic.call(context)
         {
-            eprintln!("Uncaught {err}");
+            log::error!("Uncaught {err}");
         }
 
         let jobs = std::mem::take(&mut *self.promise_jobs.borrow_mut());
         for job in jobs {
             if let Err(e) = job.call(context) {
-                eprintln!("Uncaught {e}");
+                log::error!("Uncaught {e}");
             }
         }
         context.clear_kept_objects();
@@ -96,7 +101,7 @@ impl JobExecutor for JobQueue {
         let mut jobs = FuturesUnordered::new();
 
         loop {
-            // Insertamos todos los async jobs pendientes
+            // Insert all pending async jobs into the futures set
             for job in std::mem::take(&mut *self.async_jobs.borrow_mut()) {
                 jobs.push(job.call(context));
             }
@@ -128,7 +133,7 @@ impl JobExecutor for JobQueue {
 
 pub fn create_context(loader: Option<Rc<MapModuleLoader>>) -> Result<Context> {
     let queue = Rc::new(JobQueue::new());
-    
+
     let mut ctx = ContextBuilder::new().job_executor(queue.clone());
     if let Some(loader) = loader {
         ctx = ctx.module_loader(loader);
@@ -192,10 +197,28 @@ pub async fn exec_script(ctx: &mut Context, script: &str) -> Result<()> {
     // Get the result
     match promise.state() {
         PromiseState::Fulfilled(_value) => Ok(()), // On module, value is always undefined
-        PromiseState::Rejected(err) => Err(anyhow::anyhow!(
-            "Module evaluation failed: {}",
-            JsError::from_opaque(err)
-        )),
+        PromiseState::Rejected(err) => {
+            let mut error: String = err.display().to_string();
+            for frame in ctx.stack_trace() {
+                let fnc_name = frame.position().function_name.clone().to_std_string_lossy();
+                let line_info = match frame.position().position {
+                    Some(pos) => format!(
+                        "line: {}, column: {}",
+                        pos.line_number(),
+                        pos.column_number()
+                    ),
+                    None => "unknown line".to_string(),
+                };
+                log::error!("  at {} ({})", fnc_name, line_info);
+                error += &format!("\n  at {} ({})", fnc_name, line_info);
+            }
+
+            Err(anyhow::anyhow!(
+                // TODO: Add stack trace information?
+                "Module evaluation failed: {}",
+                error
+            ))
+        }
         PromiseState::Pending => Err(anyhow::anyhow!("Module didn't finish evaluating")),
     }
 }

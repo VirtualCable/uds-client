@@ -2,7 +2,7 @@ use anyhow::Result;
 use boa_engine::{Context, JsResult, JsString, JsValue, error::JsNativeError};
 use std::cell::RefCell;
 
-use super::helpers;
+use crate::js::helpers;
 
 #[cfg(target_os = "windows")]
 use crate::system::{
@@ -12,9 +12,9 @@ use crate::system::{
 // windows_only: write to HKCU the key/value pair (string, string, string)
 fn write_hkcu_fn(_: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
     #[cfg(not(target_os = "windows"))]
-    return Err(JsNativeError::error().with_message(
-        "write_hkcu is only available on Windows",
-    ).into());
+    return Err(JsNativeError::error()
+        .with_message("write_hkcu is only available on Windows")
+        .into());
 
     #[cfg(target_os = "windows")]
     {
@@ -29,9 +29,9 @@ fn write_hkcu_fn(_: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult
 
 fn write_hkcu_dword_fn(_: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
     #[cfg(not(target_os = "windows"))]
-    return Err(JsNativeError::error().with_message(
-        "write_hkcu_dword is only available on Windows",
-    ).into());
+    return Err(JsNativeError::error()
+        .with_message("write_hkcu_dword is only available on Windows")
+        .into());
 
     #[cfg(target_os = "windows")]
     {
@@ -47,9 +47,9 @@ fn write_hkcu_dword_fn(_: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> Js
 // windows_only: read from HKCU the key/value pair. return string / error
 fn read_hkcu_fn(_: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
     #[cfg(not(target_os = "windows"))]
-    return Err(JsNativeError::error().with_message(
-        "read_hkcu is only available on Windows",
-    ).into());
+    return Err(JsNativeError::error()
+        .with_message("read_hkcu is only available on Windows")
+        .into());
 
     #[cfg(target_os = "windows")]
     {
@@ -65,9 +65,9 @@ fn read_hkcu_fn(_: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<
 // windows only: read HKLM key/value pair. return string / error
 fn read_hklm_fn(_: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
     #[cfg(not(target_os = "windows"))]
-    return Err(JsNativeError::error().with_message(
-        "read_hklm is only available on Windows",
-    ).into());
+    return Err(JsNativeError::error()
+        .with_message("read_hklm is only available on Windows")
+        .into());
 
     #[cfg(target_os = "windows")]
     {
@@ -83,9 +83,9 @@ fn read_hklm_fn(_: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<
 // windows_only: crypt_protect_data(input: String), return encrypted string as base64 JsValue
 fn crypt_protect_data_fn(_: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
     #[cfg(not(target_os = "windows"))]
-    return Err(JsNativeError::error().with_message(
-        "crypt_protect_data is only available on Windows",
-    ).into());
+    return Err(JsNativeError::error()
+        .with_message("crypt_protect_data is only available on Windows")
+        .into());
 
     #[cfg(target_os = "windows")]
     {
@@ -142,10 +142,11 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::create_context;
     use super::*;
-    use crate::js::exec_script_with_result;
-    use crate::log;
+    use crate::{
+        js::{create_context, exec_script_with_result},
+        log,
+    };
 
     use anyhow::Result;
 

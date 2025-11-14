@@ -24,12 +24,12 @@ fn find_executable_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsRes
     }
 
     // Append extra paths provided as argument
-    search_paths.extend(extra_path.into_iter().map(PathBuf::from));
+    search_paths.extend(extra_path.clone().into_iter().map(PathBuf::from));
 
     log::debug!(
-        "Searching for executable '{}' in paths: {:?}",
+        "Searching for executable '{}' in PATH + {:?}",
         app_name,
-        search_paths
+        extra_path
     );
 
     // look for the executable in the search paths
@@ -173,7 +173,7 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
 mod tests {
     use std::collections::HashMap;
 
-    use super::super::{create_context, exec_script_with_result};
+    use crate::js::{create_context, exec_script_with_result};
     use super::*;
 
     use boa_engine::value::TryFromJs;

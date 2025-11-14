@@ -124,7 +124,7 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{exec_script, create_context};
+    use crate::js::{exec_script, create_context};
     use crate::log;
 
     use super::*;

@@ -13,21 +13,12 @@ mod macros;
 mod executor;
 mod helpers;
 
-// Js modules
-mod file;
-mod logger;
-mod process;
-mod tasks;
-mod utils;
+mod js_modules;
 
 pub use executor::{create_context, exec_script, exec_script_with_result};
 
 fn init_runtime(ctx: &mut Context) -> Result<()> {
-    utils::register(ctx)?;
-    logger::register(ctx)?;
-    process::register(ctx)?;
-    tasks::register(ctx)?;
-    file::register(ctx)?;
+    js_modules::register(ctx)?;
     Ok(())
 }
 
@@ -98,6 +89,13 @@ pub async fn run_js(script: &str, data: Option<serde_json::Value>) -> Result<()>
 
     let res = exec_script(&mut ctx, script).await;
     if res.is_err() {
+        for frame in ctx.stack_trace() {  
+            log::error!("  at {:?} (line: {})",   
+                frame.position().position,
+                frame.position().path,
+                // La información de línea está en el frame  
+            );  
+        }  
         let error = res.err().unwrap();
         log::error!("JavaScript execution error: {}", error);
         Err(anyhow::anyhow!("JavaScript execution error: {}", error))

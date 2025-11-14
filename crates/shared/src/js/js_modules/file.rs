@@ -6,7 +6,7 @@ use boa_engine::{
 
 use is_executable::IsExecutable; // Trait for is_executable method
 
-use super::helpers::create_temp_file;
+use crate::js::helpers::create_temp_file;
 
 // create temp file with a content, return path
 fn create_temp_file_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {

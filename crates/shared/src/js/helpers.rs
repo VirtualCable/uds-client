@@ -70,6 +70,8 @@ pub(super) fn create_temp_file(
     } else {
         std::env::temp_dir()
     };
+    // extension should not contain dot
+    let extension = extension.map(|ext| ext.trim_start_matches('.'));
     // Try 3 times to avoid collisions
     for _ in 0..3 {
         let tmp_filename = folder.join(format!(
