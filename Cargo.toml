@@ -4,6 +4,6 @@ members = [
     "crates/launcher",
     "crates/mac-launcher",
     "crates/shared",
-    "crates/mldsa-verify",
+    "crates/mldsa-verify", "crates/script-tester",
 ]
 resolver = "3"

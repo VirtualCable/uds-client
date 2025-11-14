@@ -127,6 +127,13 @@ impl Script {
 
         mldsa_verify::verify_signature(script.as_bytes(), &self.signature)
     }
+
+    pub async fn execute(&self) -> Result<()> {
+        let script = self.decoded_script()?;
+        let params = self.decoded_params()?;
+
+        crate::js::run_js(&script, Some(params)).await
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

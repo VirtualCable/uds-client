@@ -1,11 +1,7 @@
 use anyhow::Result;
 
 use boa_engine::{
-    Context, JsError, JsResult, JsValue, Module, Script, Source,
-    builtins::promise::PromiseState,
-    context::{ContextBuilder, time::JsInstant},
-    job::{GenericJob, Job, JobExecutor, NativeAsyncJob, PromiseJob, TimeoutJob},
-    object::builtins::JsPromise,
+    Context, JsError, JsResult, JsValue, Module, Script, Source, builtins::promise::PromiseState, context::{ContextBuilder, time::JsInstant}, job::{GenericJob, Job, JobExecutor, NativeAsyncJob, PromiseJob, TimeoutJob}, module::MapModuleLoader, object::builtins::JsPromise
 };
 use futures::{StreamExt, stream::FuturesUnordered};
 use std::collections::BTreeMap;
@@ -130,10 +126,15 @@ impl JobExecutor for JobQueue {
     }
 }
 
-pub fn create_context() -> Result<Context> {
+pub fn create_context(loader: Option<Rc<MapModuleLoader>>) -> Result<Context> {
     let queue = Rc::new(JobQueue::new());
-    let ctx = ContextBuilder::new()
-        .job_executor(queue.clone())
+    
+    let mut ctx = ContextBuilder::new().job_executor(queue.clone());
+    if let Some(loader) = loader {
+        ctx = ctx.module_loader(loader);
+    }
+
+    let ctx = ctx
         .build()
         .map_err(|e| anyhow::anyhow!("Failed to create JS context: {}", e))?;
 
@@ -152,7 +153,8 @@ pub async fn exec_script(ctx: &mut Context, script: &str) -> Result<()> {
         .downcast_job_executor::<JobQueue>()
         .ok_or_else(|| anyhow::anyhow!("No job executor found"))?;
 
-    queue.clone()
+    queue
+        .clone()
         .run_jobs_async(&RefCell::new(ctx))
         .await
         .map_err(|e| anyhow::anyhow!("Failed to run pending jobs after module load: {}", e))?;
@@ -189,7 +191,7 @@ pub async fn exec_script(ctx: &mut Context, script: &str) -> Result<()> {
 
     // Get the result
     match promise.state() {
-        PromiseState::Fulfilled(_value) => Ok(()),  // On module, value is always undefined
+        PromiseState::Fulfilled(_value) => Ok(()), // On module, value is always undefined
         PromiseState::Rejected(err) => Err(anyhow::anyhow!(
             "Module evaluation failed: {}",
             JsError::from_opaque(err)
@@ -198,8 +200,7 @@ pub async fn exec_script(ctx: &mut Context, script: &str) -> Result<()> {
     }
 }
 
-
-#[allow(dead_code)]  
+#[allow(dead_code)]
 // Currently not used, but may will be useful later (probably :))
 /// Note: On script mode, "await" is not allowed at top-level
 pub async fn exec_script_with_result(ctx: &mut Context, script: &str) -> Result<JsValue> {
@@ -259,7 +260,7 @@ mod tests {
     // Test tha we can execute and get result from a simple script
     #[tokio::test]
     async fn test_exec_script_with_result() -> Result<()> {
-        let mut ctx = create_context()?;
+        let mut ctx = create_context(None)?;
 
         let script = r#"
             function add(a, b) {
@@ -280,14 +281,13 @@ mod tests {
     // Test that we can execute and get result from a script that returns an exception
     #[tokio::test]
     async fn test_exec_script_with_exception() -> Result<()> {
-        let mut ctx = create_context()?;
+        let mut ctx = create_context(None)?;
 
         let script = r#"
             throw new Error("Test error");
         "#;
 
-        let result = exec_script_with_result(&mut ctx, script)
-            .await;
+        let result = exec_script_with_result(&mut ctx, script).await;
 
         assert!(result.is_err());
         // Get the error message

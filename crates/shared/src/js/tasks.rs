@@ -134,7 +134,7 @@ mod tests {
     #[tokio::test]
     async fn test_add_early_unlinkable_file() -> Result<()> {
         log::setup_logging("debug", log::LogType::Tests);
-        let mut ctx = create_context()?;
+        let mut ctx = create_context(None)?;
         register(&mut ctx)?;
 
         let script = r#"
@@ -147,7 +147,7 @@ mod tests {
     #[tokio::test]
     async fn test_add_late_unlinkable_file() -> Result<()> {
         log::setup_logging("debug", log::LogType::Tests);
-        let mut ctx = create_context()?;
+        let mut ctx = create_context(None)?;
         register(&mut ctx)?;
 
         let script = r#"
@@ -160,7 +160,7 @@ mod tests {
     #[tokio::test]
     async fn test_add_waitable_app() -> Result<()> {
         log::setup_logging("debug", log::LogType::Tests);
-        let mut ctx = create_context()?;
+        let mut ctx = create_context(None)?;
         register(&mut ctx)?;
         let script = r#"
             Tasks.addWaitableApp(12345);

@@ -1,6 +1,8 @@
+use std::rc::Rc;
+
 use anyhow::Result;
 
-use boa_engine::{Context, JsValue, js_string};
+use boa_engine::{Context, JsValue, Module, js_string, module::{SyntheticModuleInitializer, MapModuleLoader}};
 
 use crate::log;
 
@@ -18,7 +20,7 @@ mod process;
 mod tasks;
 mod utils;
 
-pub use executor::{create_context, exec_script_with_result, exec_script};
+pub use executor::{create_context, exec_script, exec_script_with_result};
 
 fn init_runtime(ctx: &mut Context) -> Result<()> {
     utils::register(ctx)?;
@@ -29,10 +31,51 @@ fn init_runtime(ctx: &mut Context) -> Result<()> {
     Ok(())
 }
 
+fn create_runtime_module(ctx: &mut Context) -> Module {
+    let global = ctx.global_object();
+    let process = global.get(js_string!("Process"), ctx).unwrap();
+    let logger = global.get(js_string!("Logger"), ctx).unwrap();
+    let file = global.get(js_string!("File"), ctx).unwrap();
+    let utils = global.get(js_string!("Utils"), ctx).unwrap();
+    let tasks = global.get(js_string!("Tasks"), ctx).unwrap();
+
+    Module::synthetic(
+        &[
+            js_string!("Process"),
+            js_string!("Logger"),
+            js_string!("File"),
+            js_string!("Utils"),
+            js_string!("Tasks"),
+        ],
+        SyntheticModuleInitializer::from_copy_closure_with_captures(
+            move |module: &boa_engine::module::SyntheticModule,
+                  (process, logger, file, utils, tasks),
+                  _ctx| {
+                module.set_export(&js_string!("Process"), process.clone())?;
+                module.set_export(&js_string!("Logger"), logger.clone())?;
+                module.set_export(&js_string!("File"), file.clone())?;
+                module.set_export(&js_string!("Utils"), utils.clone())?;
+                module.set_export(&js_string!("Tasks"), tasks.clone())?;
+                Ok(())
+            },
+            (process, logger, file, utils, tasks),
+        ),
+        None,
+        None,
+        ctx,
+    )
+}
+
 pub async fn run_js(script: &str, data: Option<serde_json::Value>) -> Result<()> {
     log::debug!("Running JS script:\n");
-    let mut ctx = create_context()?;
+
+    let loader = Rc::new(MapModuleLoader::new());
+
+    let mut ctx = create_context(Some(loader.clone()))?;
     init_runtime(&mut ctx)?;
+
+    let runtime_module = create_runtime_module(&mut ctx);
+    loader.insert("runtime", runtime_module);
 
     if let Some(data) = data {
         let js_value = JsValue::from_json(&data, &mut ctx)
@@ -55,10 +98,9 @@ pub async fn run_js(script: &str, data: Option<serde_json::Value>) -> Result<()>
 
     let res = exec_script(&mut ctx, script).await;
     if res.is_err() {
-        Err(anyhow::anyhow!(
-            "JavaScript execution error: {}",
-            res.err().unwrap()
-        ))
+        let error = res.err().unwrap();
+        log::error!("JavaScript execution error: {}", error);
+        Err(anyhow::anyhow!("JavaScript execution error: {}", error))
     } else {
         Ok(())
     }
@@ -73,7 +115,7 @@ mod tests {
     #[tokio::test]
     async fn test_init_ctx() -> Result<()> {
         log::setup_logging("debug", log::LogType::Tests);
-        let mut ctx = create_context()?;
+        let mut ctx = create_context(None)?;
         init_runtime(&mut ctx)?;
 
         // Run a simple script to verify that modules are registered
@@ -106,7 +148,7 @@ mod tests {
     #[tokio::test]
     async fn test_exec_script() -> Result<()> {
         log::setup_logging("debug", log::LogType::Tests);
-        let mut ctx = create_context()?;
+        let mut ctx = create_context(None)?;
         let script = r#"
             let a = 5;
             let b = 10;

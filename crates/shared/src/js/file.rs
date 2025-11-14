@@ -108,7 +108,7 @@ mod tests {
     #[tokio::test]
     async fn test_file_module() {
         log::setup_logging("debug", log::LogType::Tests);
-        let mut ctx = create_context().unwrap();
+        let mut ctx = create_context(None).unwrap();
         register(&mut ctx).unwrap();
 
         // Test createTempFile

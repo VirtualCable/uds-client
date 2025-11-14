@@ -11,10 +11,14 @@ use shared::{broker::api::types, log};
 async fn get_script_and_params() -> Result<types::Script> {
     let args: Vec<String> = std::env::args().collect();
     let args = if args.len() < 3 {
-        ["not_used","crates/script-tester/testdata/script.js", "crates/script-tester/testdata/data.json"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect()
+        [
+            "not_used",
+            "crates/script-tester/testdata/script.js",
+            "crates/script-tester/testdata/data.json",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
     } else {
         args
     };
@@ -49,21 +53,26 @@ async fn get_script_and_params() -> Result<types::Script> {
         log: types::Log {
             level: "info".to_string(),
             ticket: None,
-        }
+        },
     })
 }
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     log::setup_logging("debug", log::LogType::Tests);
-    println!("Current working directory: {}", std::env::current_dir()?.display());
+    println!(
+        "Current working directory: {}",
+        std::env::current_dir()?.display()
+    );
     let script = get_script_and_params().await?;
+ 
     // if let Err(e) = script.verify_signature() {
     //     println!("Script signature verification failed: {}", e);
     //     return Ok(());
     // }
+
     // Run the script
     script.execute().await?;
-    
+
     Ok(())
 }

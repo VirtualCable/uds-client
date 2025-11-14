@@ -69,7 +69,7 @@ mod tests {
     #[tokio::test]
     async fn test_log() -> Result<()> {
         log::setup_logging("trace", log::LogType::Tests);
-        let mut ctx = create_context()?;
+        let mut ctx = create_context(None)?;
 
         // Register the utils module
         register(&mut ctx)?;

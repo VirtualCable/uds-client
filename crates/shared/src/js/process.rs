@@ -185,7 +185,7 @@ mod tests {
     #[ignore = "Depends on system environment"]
     async fn test_find_executable() -> Result<()> {
         log::setup_logging("debug", log::LogType::Tests);
-        let mut ctx = create_context()?;
+        let mut ctx = create_context(None)?;
         // Register the process module
         register(&mut ctx)?;
         // Test finding an existing executable
@@ -218,7 +218,7 @@ mod tests {
     #[ignore = "Depends on system environment"]
     async fn test_launch_is_running_stop() -> Result<()> {
         log::setup_logging("debug", log::LogType::Tests);
-        let mut ctx = create_context()?;
+        let mut ctx = create_context(None)?;
 
         // Register the process module
         register(&mut ctx)?;
@@ -286,7 +286,7 @@ mod tests {
     #[ignore = "Depends on system environment"]
     async fn test_launch_and_wait() -> Result<()> {
         log::setup_logging("debug", log::LogType::Tests);
-        let mut ctx = create_context()?;
+        let mut ctx = create_context(None)?;
         // Register the process module
         register(&mut ctx)?;
         // Test executing an application and waiting for output
@@ -322,7 +322,7 @@ mod tests {
     #[tokio::test]
     async fn test_launch_and_wait_non_existing_app() -> Result<()> {
         log::setup_logging("debug", log::LogType::Tests);
-        let mut ctx = create_context()?;
+        let mut ctx = create_context(None)?;
         // Register the process module
         register(&mut ctx)?;
         // Test executing a non-existing application
@@ -344,7 +344,7 @@ mod tests {
     #[tokio::test]
     async fn test_wait_timeout_non_existing_process() -> Result<()> {
         log::setup_logging("debug", log::LogType::Tests);
-        let mut ctx = create_context()?;
+        let mut ctx = create_context(None)?;
         // Register the process module
         register(&mut ctx)?;
         // Test waiting on a non-existing process

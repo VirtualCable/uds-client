@@ -34,8 +34,14 @@ pub fn write_hkcu_dword(key: &str, value_name: &str, value_data: u32) -> Result<
     // Keep the widestrings alive
     let key_w = widestring::U16CString::from_str(key)?; // To avoid dropping
     let key = PCWSTR::from_raw(key_w.as_ptr());
-    let value_name_w = widestring::U16CString::from_str(value_name)?; // To avoid dropping
-    let value_name = PCWSTR::from_raw(value_name_w.as_ptr());
+
+    // If value name is empty, use default value
+    let value_name = if value_name.is_empty() {
+        PCWSTR::null()
+    } else {
+        let value_name_w = widestring::U16CString::from_str(value_name)?;
+        PCWSTR::from_raw(value_name_w.as_ptr())
+    };
 
     unsafe {
         RegOpenKeyExW(HKEY_CURRENT_USER, key, None, KEY_SET_VALUE, &mut hkey).ok()?;
