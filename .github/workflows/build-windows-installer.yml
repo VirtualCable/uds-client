@@ -1,4 +1,6 @@
 name: Build UDSClient exe installer
+permissions:
+  contents: read
 on:
   push:
     branches: [ master, v4.0 ]
