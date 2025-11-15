@@ -4,6 +4,7 @@ use shared::system::trigger::Trigger;
 
 mod gui;
 mod logo;
+mod runner;
 
 fn main() {
     let stop = Trigger::new();
@@ -21,16 +22,8 @@ fn main() {
             rt.block_on({
                 let stop = stop.clone();
                 async move {
-                    for i in 0..=100 {
-                        tx.send(gui::GuiMessage::Progress(i as f32 / 100.0))
-                            .ok();
-                        if stop.async_wait_timeout(std::time::Duration::from_millis(20)).await {
-                            break;  // Exit if triggered
-                        }
-                    }
-                    //tx.send(gui::GuiMessage::Close).ok();
-                    tx.send(gui::GuiMessage::Error("Simulated error\nlets see how it looks\nhttps://www.udsenterprise.com\nwith several lines\nand more".to_string()))
-                        .ok();
+                    runner::run(tx.clone(), stop.clone()).await;
+                    tx.send(gui::GuiMessage::Close).ok();
                     stop.set();
                 }
             });
