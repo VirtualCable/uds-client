@@ -148,5 +148,14 @@ impl BrokerApi for UdsBrokerApi {
     }
 }
 
+pub fn new_api(host: &str) -> std::rc::Rc<dyn BrokerApi> {
+    std::rc::Rc::new(UdsBrokerApi::new(
+        &consts::URL_TEMPLATE.replace("{host}", host),
+        None,
+        true,
+        false,
+    ))
+}
+
 #[cfg(test)]
 mod tests;

@@ -2,19 +2,20 @@ use eframe::egui;
 use shared::system::trigger::Trigger;
 use std::time::Instant;
 
-use shared::utils::split_lines;
+use shared::{log, utils::split_lines};
 
 pub enum GuiMessage {
-    Close,         // Close window
-    Error(String), // Error message, and then close
-    Progress(f32), // Update progress bar
+    Close,           // Close window
+    Error(String),   // Error message, and then close
+    Warning(String), // Warning message, but do not close
+    Progress(f32),   // Update progress bar
 }
 
 pub struct Progress {
     progress: f32,
     rx: std::sync::mpsc::Receiver<GuiMessage>,
     stop: Trigger,
-    error: Option<String>,
+    message: Option<GuiMessage>,
     texture: Option<egui::TextureHandle>,
     start: Instant,
 }
@@ -27,7 +28,7 @@ impl Progress {
                 progress: 0.0,
                 rx,
                 stop,
-                error: None,
+                message: None,
                 texture: None,
                 start: Instant::now(),
             },
@@ -52,7 +53,10 @@ impl eframe::App for Progress {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
                 GuiMessage::Error(text) => {
-                    self.error = Some(text);
+                    self.message = Some(GuiMessage::Error(text));
+                }
+                GuiMessage::Warning(text) => {
+                    self.message = Some(GuiMessage::Warning(text));
                 }
                 GuiMessage::Progress(p) => {
                     self.progress = p;
@@ -91,13 +95,25 @@ impl eframe::App for Progress {
             });
         });
 
-        if let Some(err) = &self.error {
-            messagebox(ctx, "Error", err);
+        if let Some(err) = &self.message {
+            let (text, exit_on_close) = match err {
+                GuiMessage::Error(text) => (text.as_str(), true),
+                GuiMessage::Warning(text) => (text.as_str(), false),
+                _ => ("", false),
+            };
+            if messagebox(ctx, "Error", text) {
+                if exit_on_close {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                } else {
+                    self.message = None;
+                }
+            }
         }
     }
 }
 
-fn messagebox(ctx: &egui::Context, title: &str, text: &str) {
+fn messagebox(ctx: &egui::Context, title: &str, text: &str) -> bool {
+    let mut close: bool = false;
     egui::Window::new(title)
         .collapsible(false)
         .resizable(false)
@@ -118,7 +134,7 @@ fn messagebox(ctx: &egui::Context, title: &str, text: &str) {
                                 .clicked()
                             {
                                 if let Err(e) = open::that(line) {
-                                    eprintln!("Failed to open link {}: {}", line, e);
+                                    log::error!("Failed to open link {}: {}", line, e);
                                 }
                             } else {
                                 // Because clippy wants to collapse this block
@@ -132,9 +148,10 @@ fn messagebox(ctx: &egui::Context, title: &str, text: &str) {
                     }
                     ui.add_space(14.0);
                     if ui.button("Close").clicked() {
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                        close = true;
                     }
                 });
             });
         });
+    close
 }

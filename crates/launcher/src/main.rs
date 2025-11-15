@@ -2,18 +2,45 @@
 use eframe::egui;
 use shared::system::trigger::Trigger;
 
+use shared::{consts, log};
+
 mod gui;
 mod logo;
 mod runner;
 
-fn main() {
-    // Should have only 1 argument, "udssv2://[ticket]/[scrambler]"
+fn collect_arguments() -> Option<(String, String, String)> {
     let args: Vec<String> = std::env::args().collect();
-    if args.len() != 2 {
-        // Show about window if no arguments
-        gui::about::show_about_window();
-        return;
+    // Should have only 1 argument, "udssv2://host/ticket/scrambler"
+    if args.len() != 2 || !args[1].starts_with("udssv2://") {
+        return None;
     }
+
+    let host_ticket_and_scrambler = &args[1]["udssv2://".len()..];
+    match host_ticket_and_scrambler.split_once('/') {
+        Some((host, rest)) => match rest.split_once('/') {
+            Some((ticket, scrambler)) if ticket.len() == consts::TICKET_LENGTH => {
+                Some((host.to_string(), ticket.to_string(), scrambler.to_string()))
+            }
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn main() {
+    log::setup_logging("info", log::LogType::Client);
+    let (host, ticket, scrambler) = collect_arguments().unwrap_or_else(|| {
+        // Show about window if no valid arguments
+        gui::about::show_about_window();
+        std::process::exit(0);
+    });
+
+    log::debug!(
+        "Host: {}, Ticket: {}, Scrambler: {}",
+        host,
+        ticket,
+        scrambler
+    );
 
     let stop = Trigger::new();
     let (progress, tx) = gui::progress::Progress::new(stop.clone());
@@ -30,7 +57,13 @@ fn main() {
             rt.block_on({
                 let stop = stop.clone();
                 async move {
-                    runner::run(tx.clone(), stop.clone()).await;
+                    if let Err(e) = runner::run(tx.clone(), stop.clone(), &host, &ticket, &scrambler).await {
+                        log::error!("Error: {}", e);
+                        tx.send(gui::progress::GuiMessage::Error(format!(
+                            "Error: {}",
+                            e
+                        ))).ok();
+                    }
                     tx.send(gui::progress::GuiMessage::Close).ok();
                     stop.set();
                 }
@@ -60,6 +93,7 @@ fn main() {
         }),
     ) {
         eprintln!("Error starting eframe: {}", e);
+        log::error!("Error starting eframe: {}", e);
     }
     // Gui closed, wait for app to finish also
     stop.wait();

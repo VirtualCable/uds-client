@@ -26,7 +26,7 @@
 /*!
 Author: Adolfo Gómez, dkmaster at dkmon dot com
 */
-use std::io::Read;
+use std::{io::Read, fmt, convert};
 
 use anyhow::Result;
 
@@ -39,6 +39,19 @@ use serde_json::Value;
 pub struct Error {
     pub error: String,
     pub is_retryable: String, // "0" or "1", as string
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} (Retrayable?: {})", self.error, self.is_retryable)
+    }
+}
+
+// for implicit conversion to anyhow::Error on ? operator
+impl convert::From<Error> for anyhow::Error {
+    fn from(err: Error) -> Self {
+        anyhow::anyhow!(err.to_string())
+    }
 }
 
 impl Error {
