@@ -10,7 +10,7 @@ pub enum GuiMessage {
     Progress(f32), // Update progress bar
 }
 
-pub struct Launcher {
+pub struct Progress {
     progress: f32,
     rx: std::sync::mpsc::Receiver<GuiMessage>,
     stop: Trigger,
@@ -19,11 +19,11 @@ pub struct Launcher {
     start: Instant,
 }
 
-impl Launcher {
+impl Progress {
     pub fn new(stop: Trigger) -> (Self, std::sync::mpsc::Sender<GuiMessage>) {
         let (tx, rx) = std::sync::mpsc::channel();
         (
-            Launcher {
+            Progress {
                 progress: 0.0,
                 rx,
                 stop,
@@ -36,9 +36,8 @@ impl Launcher {
     }
 }
 
-impl eframe::App for Launcher {
+impl eframe::App for Progress {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // cargar textura la primera vez
         if self.texture.is_none() {
             let img = crate::logo::load_logo();
             self.texture = Some(ctx.load_texture("logo", img, egui::TextureOptions::LINEAR));

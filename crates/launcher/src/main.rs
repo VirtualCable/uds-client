@@ -7,8 +7,16 @@ mod logo;
 mod runner;
 
 fn main() {
+    // Should have only 1 argument, "udssv2://[ticket]/[scrambler]"
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() != 2 {
+        // Show about window if no arguments
+        gui::about::show_about_window();
+        return;
+    }
+
     let stop = Trigger::new();
-    let (launcher, tx) = gui::Launcher::new(stop.clone());
+    let (progress, tx) = gui::progress::Progress::new(stop.clone());
 
     std::thread::spawn({
         let stop = stop.clone();
@@ -23,7 +31,7 @@ fn main() {
                 let stop = stop.clone();
                 async move {
                     runner::run(tx.clone(), stop.clone()).await;
-                    tx.send(gui::GuiMessage::Close).ok();
+                    tx.send(gui::progress::GuiMessage::Close).ok();
                     stop.set();
                 }
             });
@@ -48,7 +56,7 @@ fn main() {
         native_options,
         Box::new(|_cc| {
             // Return the app implementation.
-            Ok(Box::new(launcher))
+            Ok(Box::new(progress))
         }),
     );
     // Gui closed, wait for app to finish also
