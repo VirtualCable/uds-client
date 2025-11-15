@@ -66,7 +66,7 @@ impl eframe::App for About {
                     ui.separator();
                     ui.add_space(20.0);
 
-                    if ui.button("Close").clicked() {
+                    if ui.add_sized([80.0, 30.0], egui::Button::new("Close")).clicked() {
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
                 });
