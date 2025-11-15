@@ -121,6 +121,15 @@ fn expandvars_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<J
     Ok(JsValue::from(JsString::from(expanded)))
 }
 
+async fn sleep_fn(_: &JsValue, args: &[JsValue], ctx: &RefCell<&mut Context>) -> JsResult<JsValue> {
+    let milliseconds = {
+        let mut ctx = ctx.borrow_mut();
+        extract_js_args!(args, &mut ctx, u64)
+    };
+    tokio::time::sleep(std::time::Duration::from_millis(milliseconds)).await;
+    Ok(JsValue::undefined())
+}
+
 pub(super) fn register(ctx: &mut Context) -> Result<()> {
     register_js_module!(
         ctx,
@@ -135,7 +144,7 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
             ("readHklm", read_hklm_fn, 2),
         ],
         // Async functions, test server can have some delay
-        [("testServer", test_server_fn, 3)],
+        [("testServer", test_server_fn, 3), ("sleep", sleep_fn, 1),],
     );
     Ok(())
 }
@@ -277,6 +286,28 @@ mod tests {
         assert!(!result.is_empty());
         assert!(general_purpose::STANDARD.decode(result.as_str()).is_ok());
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_utils_sleep() -> Result<()> {
+        log::setup_logging("debug", log::LogType::Tests);
+        let mut ctx = create_context(None)?;
+        // Register the utils module
+        register(&mut ctx)?;
+        let start = std::time::Instant::now();
+        // Run a test script
+        let script = r#"
+            Utils.sleep(1000).then(() => {
+                // Sleep done
+            });
+        "#;
+        let _result = exec_script_with_result(&mut ctx, script)
+            .await
+            .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
+        let duration = start.elapsed();
+        // Verify that at least 1 second has passed
+        assert!(duration.as_millis() >= 1000);
         Ok(())
     }
 }

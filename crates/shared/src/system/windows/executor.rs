@@ -107,7 +107,7 @@ pub fn execute_app(
         let mut pi = PROCESS_INFORMATION::default();
         let folder_utf16 = widestring::U16CString::from_str_truncate(cwd.unwrap_or(""));
 
-        log::debug!("Creating process for application: {}", application,);
+        log::debug!("Creating process for application: {}", application);
 
         unsafe {
             CreateProcessW(
@@ -252,11 +252,11 @@ mod tests {
             .collect();
         let temp_file = temp_dir.join(format!("test_exec_wait_application_{}.txt", random_suffix));
         let temp_file_str = temp_file.to_string_lossy();
-        let cmd = format!("New-Item -Path '{}' -ItemType File -Force; Start-Sleep -Seconds 1", temp_file_str);
-        let parameters = [
-            "-Command",
-            &cmd,
-        ];
+        let cmd = format!(
+            "New-Item -Path '{}' -ItemType File -Force; Start-Sleep -Seconds 1",
+            temp_file_str
+        );
+        let parameters = ["-Command", &cmd];
         let application = r"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
         let result = execute_app(application, &parameters, None, Some(folder_name));
         (result, temp_file)

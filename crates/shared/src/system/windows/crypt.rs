@@ -1,8 +1,6 @@
 use anyhow::Result;
 use std::ptr;
 
-use base64::{Engine as _, engine::general_purpose};
-
 use windows::Win32::{
     Foundation::{HLOCAL, LocalFree},
     Security::Cryptography::{
@@ -61,6 +59,7 @@ pub fn crypt_protect_data(input: &str) -> Result<String> {
         LocalFree(Some(HLOCAL(out_blob.pbData as *mut _)));
     }
 
-    let encoded = general_purpose::STANDARD.encode(&encrypted);
+    // Convert to hex string
+    let encoded = encrypted.iter().map(|b| format!("{:02x}", b)).collect::<String>();
     Ok(encoded)
 }

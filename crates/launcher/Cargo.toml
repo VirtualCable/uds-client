@@ -5,6 +5,9 @@ edition = "2024"
 
 [dependencies]
 shared = { path = "../shared" }
+tokio = { version = "1.48.0", features = ["rt"] }
+
+eframe = { version = "0.33.2" }
 
 [build-dependencies]
 builder = { path = "../builder" }
