@@ -1,3 +1,4 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use eframe::egui;
 use shared::system::trigger::Trigger;
 
@@ -23,21 +24,27 @@ fn main() {
                     for i in 0..=100 {
                         tx.send(gui::GuiMessage::Progress(i as f32 / 100.0))
                             .ok();
-                        if stop.async_wait_timeout(std::time::Duration::from_millis(50)).await {
+                        if stop.async_wait_timeout(std::time::Duration::from_millis(20)).await {
                             break;  // Exit if triggered
                         }
                     }
-                    tx.send(gui::GuiMessage::Close).ok();
+                    //tx.send(gui::GuiMessage::Close).ok();
+                    tx.send(gui::GuiMessage::Error("Simulated error\nlets see how it looks\nwith several lines\nand more".to_string()))
+                        .ok();
+                    stop.set();
                 }
             });
         }
     });
+
+    let icon = logo::load_icon();
 
     // Window configuration
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_decorations(false)
             .with_inner_size([320.0, 240.0])
+            .with_icon(icon)
             .with_resizable(false),
         centered: true,
         ..Default::default()

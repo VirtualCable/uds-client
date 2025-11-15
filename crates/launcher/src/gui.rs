@@ -11,9 +11,8 @@ pub enum GuiMessage {
 pub struct Launcher {
     progress: f32,
     rx: std::sync::mpsc::Receiver<GuiMessage>,
-    error: Option<String>,
     stop: Trigger,
-
+    error: Option<String>,
     texture: Option<egui::TextureHandle>,
     start: Instant,
 }
@@ -25,8 +24,8 @@ impl Launcher {
             Launcher {
                 progress: 0.0,
                 rx,
-                error: None,
                 stop,
+                error: None,
                 texture: None,
                 start: Instant::now(),
             },
@@ -90,5 +89,33 @@ impl eframe::App for Launcher {
                 });
             });
         });
+
+        if let Some(err) = &self.error {
+            messagebox(ctx, "Error", err);
+        }
     }
+}
+
+fn messagebox(ctx: &egui::Context, title: &str, text: &str) {
+    egui::Window::new(title)
+        .collapsible(false)
+        .resizable(false)
+        .auto_sized()
+        .anchor(egui::Align2::CENTER_CENTER, [5.0, 5.0])
+        .show(ctx, |ui| {
+            ui.set_width(320.0);
+            ui.add_space(10.0);
+            ui.horizontal_centered(|ui: &mut egui::Ui| {
+                ui.vertical_centered(|ui| {
+                    // Split the text by newlines, and append each line separately
+                    for line in text.lines() {
+                        ui.label(line);
+                    }
+                    ui.add_space(14.0);
+                    if ui.button("Close").clicked() {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
+                });
+            });
+        });
 }
