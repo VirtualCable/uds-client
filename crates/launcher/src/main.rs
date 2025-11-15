@@ -51,14 +51,16 @@ fn main() {
         ..Default::default()
     };
 
-    let _ = eframe::run_native(
+    if let Err(e) = eframe::run_native(
         "UDS Launcher",
         native_options,
         Box::new(|_cc| {
             // Return the app implementation.
             Ok(Box::new(progress))
         }),
-    );
+    ) {
+        eprintln!("Error starting eframe: {}", e);
+    }
     // Gui closed, wait for app to finish also
     stop.wait();
 }
