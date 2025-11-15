@@ -29,7 +29,7 @@ fn main() {
                         }
                     }
                     //tx.send(gui::GuiMessage::Close).ok();
-                    tx.send(gui::GuiMessage::Error("Simulated error\nlets see how it looks\nwith several lines\nand more".to_string()))
+                    tx.send(gui::GuiMessage::Error("Simulated error\nlets see how it looks\nhttps://www.udsenterprise.com\nwith several lines\nand more".to_string()))
                         .ok();
                     stop.set();
                 }

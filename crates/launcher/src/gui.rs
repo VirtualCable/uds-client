@@ -2,6 +2,8 @@ use eframe::egui;
 use shared::system::trigger::Trigger;
 use std::time::Instant;
 
+use shared::utils::split_lines;
+
 pub enum GuiMessage {
     Close,         // Close window
     Error(String), // Error message, and then close
@@ -101,6 +103,7 @@ fn messagebox(ctx: &egui::Context, title: &str, text: &str) {
         .collapsible(false)
         .resizable(false)
         .auto_sized()
+        .fade_in(true)
         .anchor(egui::Align2::CENTER_CENTER, [5.0, 5.0])
         .show(ctx, |ui| {
             ui.set_width(320.0);
@@ -108,8 +111,25 @@ fn messagebox(ctx: &egui::Context, title: &str, text: &str) {
             ui.horizontal_centered(|ui: &mut egui::Ui| {
                 ui.vertical_centered(|ui| {
                     // Split the text by newlines, and append each line separately
-                    for line in text.lines() {
-                        ui.label(line);
+                    for line in split_lines(text, 40) {
+                        if line.starts_with("http") {
+                            if ui
+                                .hyperlink_to(line, line)
+                                .on_hover_text("Click to open in browser")
+                                .clicked()
+                            {
+                                if let Err(e) = open::that(line) {
+                                    eprintln!("Failed to open link {}: {}", line, e);
+                                }
+                            } else {
+                                // Because clippy wants to collapse this block
+                                // and then the meaning is lost
+                                // because we WANT to execute hyperling_to even if not clicked
+                                // and not show the label if not clicked.. stupid clippy :)
+                            }
+                        } else {
+                            ui.label(line);
+                        }
                     }
                     ui.add_space(14.0);
                     if ui.button("Close").clicked() {
