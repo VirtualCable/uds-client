@@ -5,6 +5,8 @@ use tokio::sync::oneshot;
 
 use shared::{log, utils::split_lines};
 
+use crate::tr;
+
 #[allow(dead_code)]
 pub enum GuiMessage {
     Close,                                        // Close window
@@ -103,17 +105,17 @@ impl eframe::App for Progress {
 
         match &mut self.message {
             Some(GuiMessage::YesNo(text, reply)) => {
-                if messagebox(ctx, "Confirm", text, reply) {
+                if messagebox(ctx, tr!("Confirm"), text, reply) {
                     self.message = None; // diálogo cerrado
                 }
             }
             Some(GuiMessage::Error(text)) => {
-                if messagebox(ctx, "Error", text, &mut None) {
+                if messagebox(ctx, tr!("Error"), text, &mut None) {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
             }
             Some(GuiMessage::Warning(text)) => {
-                if messagebox(ctx, "Warning", text, &mut None) {
+                if messagebox(ctx, tr!("Warning"), text, &mut None) {
                     self.message = None;
                 }
             }
@@ -151,7 +153,7 @@ fn messagebox(
                             };
                             if ui
                                 .hyperlink_to(label, link)
-                                .on_hover_text("Click to open in browser")
+                                .on_hover_text(tr!("Click to open in browser"))
                                 .clicked()
                             {
                                 if let Err(e) = open::that(line) {
@@ -174,7 +176,7 @@ fn messagebox(
                                 columns[0].with_layout(
                                     egui::Layout::right_to_left(egui::Align::Center),
                                     |ui| {
-                                        if ui.button("Yes").clicked() {
+                                        if ui.button(tr!("Yes")).clicked() {
                                             // extraemos el sender y lo consumimos
                                             if let Some(tx) = reply.take() {
                                                 let _ = tx.send(true);
@@ -186,7 +188,7 @@ fn messagebox(
                                 columns[1].with_layout(
                                     egui::Layout::left_to_right(egui::Align::Center),
                                     |ui| {
-                                        if ui.button("No").clicked() {
+                                        if ui.button(tr!("No")).clicked() {
                                             if let Some(tx) = reply.take() {
                                                 let _ = tx.send(false);
                                             }
@@ -196,7 +198,7 @@ fn messagebox(
                                 );
                             });
                         });
-                    } else if ui.button("Close").clicked() {
+                    } else if ui.button(tr!("Close")).clicked() {
                         close = true;
                     }
                 });

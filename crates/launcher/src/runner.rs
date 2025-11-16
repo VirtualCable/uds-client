@@ -1,6 +1,6 @@
 use std::sync::mpsc;
 
-use crate::{appdata, gui::progress::GuiMessage};
+use crate::{appdata, gui::progress::GuiMessage, tr};
 use anyhow::Result;
 
 use shared::{broker::api, consts, log};

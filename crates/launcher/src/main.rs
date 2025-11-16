@@ -7,6 +7,7 @@ use shared::{consts, log};
 mod appdata;
 mod asyncthread;
 mod gui;
+
 #[macro_use]
 mod intl;
 mod logo;
