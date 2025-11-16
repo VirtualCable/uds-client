@@ -96,7 +96,7 @@ impl eframe::App for Progress {
                     ui.separator();
                     ui.add_space(20.0);
 
-                    if ui.button("Cancel").clicked() {
+                    if ui.button(tr!("Cancel")).clicked() {
                         self.stop.set();
                     }
                 });
