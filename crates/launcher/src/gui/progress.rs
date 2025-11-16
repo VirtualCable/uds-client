@@ -13,11 +13,12 @@ pub enum GuiMessage {
     Error(String),                                // Error message, and then close
     Warning(String),                              // Warning message, but do not close
     YesNo(String, Option<oneshot::Sender<bool>>), // Yes/No dialog
-    Progress(f32),                                // Update progress bar
+    Progress(f32, String),                        // Update progress bar
 }
 
 pub struct Progress {
     progress: f32,
+    progress_message: String,
     rx: std::sync::mpsc::Receiver<GuiMessage>,
     stop: Trigger,
     message: Option<GuiMessage>,
@@ -31,6 +32,7 @@ impl Progress {
         (
             Progress {
                 progress: 0.0,
+                progress_message: String::new(),
                 rx,
                 stop,
                 message: None,
@@ -66,8 +68,9 @@ impl eframe::App for Progress {
                 GuiMessage::YesNo(text, sender) => {
                     self.message = Some(GuiMessage::YesNo(text, sender));
                 }
-                GuiMessage::Progress(p) => {
+                GuiMessage::Progress(p, msg) => {
                     self.progress = p;
+                    self.progress_message = msg;
                 }
             }
         }
@@ -91,6 +94,10 @@ impl eframe::App for Progress {
                             .animate(false)
                             .show_percentage(),
                     );
+
+                    ui.add_space(12.0);
+
+                    ui.label(&self.progress_message);
 
                     ui.add_space(20.0);
                     ui.separator();

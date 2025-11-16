@@ -61,7 +61,7 @@ impl UdsBrokerApi {
         log::debug!("Creating UDSBrokerApi for URL: {}", broker_url);
         let mut builder = ClientBuilder::new()
             .use_rustls_tls() // Use rustls for TLS
-            .timeout(timeout.unwrap_or(std::time::Duration::from_secs(2)))
+            .timeout(timeout.unwrap_or(std::time::Duration::from_secs(32))) // Long enough timeout
             .connection_verbose(cfg!(debug_assertions))
             .danger_accept_invalid_certs(!verify_ssl);
 

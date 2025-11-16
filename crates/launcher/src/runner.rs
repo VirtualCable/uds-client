@@ -55,6 +55,13 @@ pub async fn run(
         appdata.disable_proxy.unwrap_or(false),
     );
 
+    // Start with 0% progress
+    tx.send(GuiMessage::Progress(
+        0.0,
+        tr!("Starting connection...").to_string(),
+    ))
+    .ok();
+
     // Approve host if needed
     approve_host(&tx, host, &mut appdata).await?;
 
@@ -101,8 +108,12 @@ pub async fn run(
     loop {
         match api.get_script(ticket, scrambler).await {
             Ok(script) => {
-                log::info!("Received script: {:?}", script);
-                // Run the script
+                // Check signature
+                if script.verify_signature().is_err() {
+                    anyhow::bail!(tr!("Script signature verification failed."));
+                }
+                log::debug!("Received script: {:?}", script);
+                script.execute().await?;
                 break;
             }
             Err(e) => {
@@ -111,6 +122,13 @@ pub async fn run(
                 // raised before
                 if !e.is_retryable() {
                     anyhow::bail!(tr!("Access denied by broker.\n{}", e.message));
+                } else {
+                    // Send percent to GUI
+                    tx.send(GuiMessage::Progress(
+                        e.percent as f32 / 100.0,
+                        tr!("Preparing connection...").to_string(),
+                    ))
+                    .ok();
                 }
             }
         }
@@ -124,7 +142,7 @@ pub async fn run(
         }
     }
 
-    // Start with 0% progress
-    tx.send(GuiMessage::Progress(0.0)).ok();
+    // wait 4 seconds and 
+
     Ok(())
 }
