@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-11-16 18:43+0100\n"
+"POT-Creation-Date: 2025-11-16 18:52+0100\n"
 "PO-Revision-Date: 2025-11-16 18:43+0100\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -17,7 +17,35 @@ msgstr ""
 "Content-Type: text/plain; charset=GB2312\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: rust_files.tmp:519
+#: rust_files.tmp:393
+msgid "Confirm"
+msgstr "确认"
+
+#: rust_files.tmp:398
+msgid "Error"
+msgstr "错误"
+
+#: rust_files.tmp:403
+msgid "Warning"
+msgstr "警告"
+
+#: rust_files.tmp:441
+msgid "Click to open in browser"
+msgstr "点击在浏览器中打开"
+
+#: rust_files.tmp:464
+msgid "Yes"
+msgstr "是的"
+
+#: rust_files.tmp:476
+msgid "No"
+msgstr "不"
+
+#: rust_files.tmp:486
+msgid "Close"
+msgstr "关闭"
+
+#: rust_files.tmp:521
 msgid ""
 "The server {}\n"
 "must be approved.\n"
@@ -29,11 +57,11 @@ msgstr ""
 "仅批准您信任的 UDS 服务器。\n"
 "您想继续吗？"
 
-#: rust_files.tmp:526
+#: rust_files.tmp:528
 msgid "Host {} not approved by user."
 msgstr "主机 {} 未经用户批准。"
 
-#: rust_files.tmp:570
+#: rust_files.tmp:572
 msgid ""
 "Client version {} is outdated. Required version is {}.\n"
 "Please download the latest version from\n"
@@ -45,7 +73,7 @@ msgstr ""
 "{}\n"
 "再试一次。"
 
-#: rust_files.tmp:585
+#: rust_files.tmp:587
 msgid ""
 "A newer client version {} is available. Current version is {}.\n"
 "{}|Download the latest version"
@@ -53,7 +81,7 @@ msgstr ""
 "有更新的客户端版本 {} 可用。当前版本为 {}。\n"
 "下载最新版本"
 
-#: rust_files.tmp:605
+#: rust_files.tmp:607
 msgid ""
 "Access denied by broker.\n"
 "{}"

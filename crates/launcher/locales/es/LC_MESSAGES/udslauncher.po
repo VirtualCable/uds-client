@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-11-16 18:43+0100\n"
+"POT-Creation-Date: 2025-11-16 18:52+0100\n"
 "PO-Revision-Date: 2025-11-16 18:43+0100\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -17,7 +17,35 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: rust_files.tmp:519
+#: rust_files.tmp:393
+msgid "Confirm"
+msgstr "Confirmar"
+
+#: rust_files.tmp:398
+msgid "Error"
+msgstr "Error"
+
+#: rust_files.tmp:403
+msgid "Warning"
+msgstr "Advertencia"
+
+#: rust_files.tmp:441
+msgid "Click to open in browser"
+msgstr "Haz clic para abrir en el navegador"
+
+#: rust_files.tmp:464
+msgid "Yes"
+msgstr "Sí"
+
+#: rust_files.tmp:476
+msgid "No"
+msgstr "No"
+
+#: rust_files.tmp:486
+msgid "Close"
+msgstr "Cerca"
+
+#: rust_files.tmp:521
 msgid ""
 "The server {}\n"
 "must be approved.\n"
@@ -29,11 +57,11 @@ msgstr ""
 "Aprueba únicamente los servidores UDS en los que confíes.\n"
 "¿Deseas continuar?"
 
-#: rust_files.tmp:526
+#: rust_files.tmp:528
 msgid "Host {} not approved by user."
 msgstr "El host {} no ha sido aprobado por el usuario."
 
-#: rust_files.tmp:570
+#: rust_files.tmp:572
 msgid ""
 "Client version {} is outdated. Required version is {}.\n"
 "Please download the latest version from\n"
@@ -45,7 +73,7 @@ msgstr ""
 "{}\n"
 "Y vuelve a intentarlo."
 
-#: rust_files.tmp:585
+#: rust_files.tmp:587
 msgid ""
 "A newer client version {} is available. Current version is {}.\n"
 "{}|Download the latest version"
@@ -54,7 +82,7 @@ msgstr ""
 "{}.\n"
 "{}|Descarga la última versión"
 
-#: rust_files.tmp:605
+#: rust_files.tmp:607
 msgid ""
 "Access denied by broker.\n"
 "{}"

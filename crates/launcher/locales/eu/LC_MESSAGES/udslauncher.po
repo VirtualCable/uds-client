@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-11-16 18:43+0100\n"
+"POT-Creation-Date: 2025-11-16 18:52+0100\n"
 "PO-Revision-Date: 2025-11-16 18:43+0100\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -16,7 +16,35 @@ msgstr ""
 "Content-Type: text/plain; charset=ASCII\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: rust_files.tmp:519
+#: rust_files.tmp:393
+msgid "Confirm"
+msgstr "Berretsi"
+
+#: rust_files.tmp:398
+msgid "Error"
+msgstr "Errorea"
+
+#: rust_files.tmp:403
+msgid "Warning"
+msgstr "Abisua"
+
+#: rust_files.tmp:441
+msgid "Click to open in browser"
+msgstr "Egin klik arakatzailean irekitzeko"
+
+#: rust_files.tmp:464
+msgid "Yes"
+msgstr "Bai"
+
+#: rust_files.tmp:476
+msgid "No"
+msgstr "Ez"
+
+#: rust_files.tmp:486
+msgid "Close"
+msgstr "Itxi"
+
+#: rust_files.tmp:521
 msgid ""
 "The server {}\n"
 "must be approved.\n"
@@ -28,11 +56,11 @@ msgstr ""
 "Onartu fidagarriak diren UDS zerbitzariak bakarrik.\n"
 "Jarraitu nahi duzu?"
 
-#: rust_files.tmp:526
+#: rust_files.tmp:528
 msgid "Host {} not approved by user."
 msgstr "Erabiltzaileak ez du {} ostalaria onartu."
 
-#: rust_files.tmp:570
+#: rust_files.tmp:572
 msgid ""
 "Client version {} is outdated. Required version is {}.\n"
 "Please download the latest version from\n"
@@ -44,7 +72,7 @@ msgstr ""
 "{}\n"
 "eta saiatu berriro."
 
-#: rust_files.tmp:585
+#: rust_files.tmp:587
 msgid ""
 "A newer client version {} is available. Current version is {}.\n"
 "{}|Download the latest version"
@@ -52,7 +80,7 @@ msgstr ""
 "{} bezero bertsio berriago bat eskuragarri dago. Uneko bertsioa {} da.\n"
 "{}|Deskargatu azken bertsioa"
 
-#: rust_files.tmp:605
+#: rust_files.tmp:607
 msgid ""
 "Access denied by broker.\n"
 "{}"

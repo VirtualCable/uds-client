@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-11-16 18:43+0100\n"
+"POT-Creation-Date: 2025-11-16 18:52+0100\n"
 "PO-Revision-Date: 2025-11-16 18:43+0100\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -16,7 +16,35 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: rust_files.tmp:519
+#: rust_files.tmp:393
+msgid "Confirm"
+msgstr "يتأكد"
+
+#: rust_files.tmp:398
+msgid "Error"
+msgstr "خطأ"
+
+#: rust_files.tmp:403
+msgid "Warning"
+msgstr "تحذير"
+
+#: rust_files.tmp:441
+msgid "Click to open in browser"
+msgstr "انقر لفتح في المتصفح"
+
+#: rust_files.tmp:464
+msgid "Yes"
+msgstr "نعم"
+
+#: rust_files.tmp:476
+msgid "No"
+msgstr "لا"
+
+#: rust_files.tmp:486
+msgid "Close"
+msgstr "يغلق"
+
+#: rust_files.tmp:521
 msgid ""
 "The server {}\n"
 "must be approved.\n"
@@ -28,11 +56,11 @@ msgstr ""
 "قم بالموافقة على خوادم UDS التي تثق بها فقط.\n"
 "هل تريد الاستمرار؟"
 
-#: rust_files.tmp:526
+#: rust_files.tmp:528
 msgid "Host {} not approved by user."
 msgstr "لم تتم الموافقة على المضيف {} من قبل المستخدم."
 
-#: rust_files.tmp:570
+#: rust_files.tmp:572
 msgid ""
 "Client version {} is outdated. Required version is {}.\n"
 "Please download the latest version from\n"
@@ -44,7 +72,7 @@ msgstr ""
 "{}\n"
 "وحاول مرة أخرى."
 
-#: rust_files.tmp:585
+#: rust_files.tmp:587
 msgid ""
 "A newer client version {} is available. Current version is {}.\n"
 "{}|Download the latest version"
@@ -52,7 +80,7 @@ msgstr ""
 "يتوفر إصدار أحدث من برنامج العميل {}. الإصدار الحالي هو {}.\n"
 "{}|تحميل أحدث إصدار"
 
-#: rust_files.tmp:605
+#: rust_files.tmp:607
 msgid ""
 "Access denied by broker.\n"
 "{}"
