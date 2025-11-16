@@ -198,7 +198,7 @@ fn messagebox(
                                 );
                             });
                         });
-                    } else if ui.button(tr!("Close")).clicked() {
+                    } else if ui.button(tr!("Ok")).clicked() {
                         close = true;
                     }
                 });

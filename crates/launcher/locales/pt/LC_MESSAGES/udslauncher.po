@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-11-16 18:52+0100\n"
+"POT-Creation-Date: 2025-11-16 18:56+0100\n"
 "PO-Revision-Date: 2025-11-16 18:43+0100\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -42,8 +42,8 @@ msgid "No"
 msgstr "Não"
 
 #: rust_files.tmp:486
-msgid "Close"
-msgstr "Fechar"
+msgid "Ok"
+msgstr "OK"
 
 #: rust_files.tmp:521
 msgid ""
@@ -88,3 +88,6 @@ msgid ""
 msgstr ""
 "Acesso negado pela corretora.\n"
 "{}"
+
+#~ msgid "Close"
+#~ msgstr "Fechar"
