@@ -1,0 +1,61 @@
+# Arabic translations for PACKAGE package.
+# Copyright (C) 2025 THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# Automatically generated, 2025.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-11-16 18:43+0100\n"
+"PO-Revision-Date: 2025-11-16 18:43+0100\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: ar\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: rust_files.tmp:519
+msgid ""
+"The server {}\n"
+"must be approved.\n"
+"Only approve UDS servers you trust.\n"
+"Do you want to continue?"
+msgstr ""
+"الخادم {}\n"
+"يجب الموافقة عليها.\n"
+"قم بالموافقة على خوادم UDS التي تثق بها فقط.\n"
+"هل تريد الاستمرار؟"
+
+#: rust_files.tmp:526
+msgid "Host {} not approved by user."
+msgstr "لم تتم الموافقة على المضيف {} من قبل المستخدم."
+
+#: rust_files.tmp:570
+msgid ""
+"Client version {} is outdated. Required version is {}.\n"
+"Please download the latest version from\n"
+"{}\n"
+"and try again."
+msgstr ""
+"إصدار العميل {} قديم. الإصدار المطلوب هو {}.\n"
+"الرجاء تنزيل أحدث إصدار من\n"
+"{}\n"
+"وحاول مرة أخرى."
+
+#: rust_files.tmp:585
+msgid ""
+"A newer client version {} is available. Current version is {}.\n"
+"{}|Download the latest version"
+msgstr ""
+"يتوفر إصدار أحدث من برنامج العميل {}. الإصدار الحالي هو {}.\n"
+"{}|تحميل أحدث إصدار"
+
+#: rust_files.tmp:605
+msgid ""
+"Access denied by broker.\n"
+"{}"
+msgstr ""
+"تم رفض الوصول من قبل الوسيط.\n"
+"{}"
