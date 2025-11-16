@@ -37,7 +37,11 @@ pub mod types;
 #[async_trait]
 pub trait BrokerApi: Send + Sync {
     async fn get_version_info(&self) -> Result<types::Version, types::Error>;
-    async fn get_script(&self, ticket: &str, scrambler: &str) -> Result<types::Script, types::Error>;
+    async fn get_script(
+        &self,
+        ticket: &str,
+        scrambler: &str,
+    ) -> Result<types::Script, types::Error>;
     async fn send_log(&self, log_str: String) -> Result<()>;
 }
 
@@ -105,7 +109,11 @@ impl BrokerApi for UdsBrokerApi {
             .into_result()
     }
 
-    async fn get_script(&self, ticket: &str, scrambler: &str) -> Result<types::Script, types::Error> {
+    async fn get_script(
+        &self,
+        ticket: &str,
+        scrambler: &str,
+    ) -> Result<types::Script, types::Error> {
         log::debug!(
             "Getting script from broker at {} with ticket {} and scrambler {}",
             self.broker_url,
@@ -134,11 +142,8 @@ impl BrokerApi for UdsBrokerApi {
 
     async fn send_log(&self, log_str: String) -> Result<()> {
         log::debug!("Sending log to broker at {}", self.broker_url);
-        let log_data = types::LogUpload {
-            log: &log_str,
-        };
-        self
-            .client
+        let log_data = types::LogUpload { log: &log_str };
+        self.client
             .put(format!("{}/log", self.broker_url))
             .headers(self.headers())
             .json(&log_data)
@@ -148,12 +153,17 @@ impl BrokerApi for UdsBrokerApi {
     }
 }
 
-pub fn new_api(host: &str) -> std::rc::Rc<dyn BrokerApi> {
+pub fn new_api(
+    host: &str,
+    timeout: Option<std::time::Duration>,
+    verify_ssl: bool,
+    skip_proxy: bool,
+) -> std::rc::Rc<dyn BrokerApi> {
     std::rc::Rc::new(UdsBrokerApi::new(
         &consts::URL_TEMPLATE.replace("{host}", host),
-        None,
-        true,
-        false,
+        timeout,
+        verify_ssl,
+        skip_proxy,
     ))
 }
 

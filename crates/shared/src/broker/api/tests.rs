@@ -49,11 +49,11 @@ async fn test_get_version() {
     log::setup_logging("debug", log::LogType::Tests);
     let (mut server, api) = setup_server_and_api().await;
     let result = types::BrokerResponse::<types::Version> {
-        result: types::Version {
+        result: Some(types::Version {
             available_version: "5.0.0".to_string(),
             required_version: "4.0.0".to_string(),
             client_link: "https://example.com/client".to_string(),
-        },
+        }),
         error: None,
     };
     let _m = server
@@ -76,7 +76,7 @@ async fn test_get_script() {
     log::setup_logging("debug", log::LogType::Tests);
     let (mut server, api) = setup_server_and_api().await;
     let result: types::BrokerResponse<types::Script> = types::BrokerResponse::<types::Script> {
-        result: types::get_test_script(),
+        result: Some(types::get_test_script()),
         error: None,
     };
     let _m = server
@@ -99,20 +99,14 @@ async fn test_get_script() {
 async fn test_get_script_fails() {
     log::setup_logging("debug", log::LogType::Tests);
     let (mut server, api) = setup_server_and_api().await;
-    let result: types::BrokerResponse<types::Script> = types::BrokerResponse::<types::Script> {
-        result: types::get_test_script(),
-        error: Some(types::Error {
-            error: "Test error".to_string(),
-            is_retryable: "0".to_string(),
-        }),
-    };
+    let result = r#"{"error": {"message": "Test error", "is_retryable": false, "percent": 0}}"#;
     let _m = server
         .mock(
             "GET",
             mockito::Matcher::Regex(r"^/ticket/scrabler\?hostname=.*&version=.*$".to_string()),
         )
         .match_header("content-type", "application/json")
-        .with_body(serde_json::to_string(&result).unwrap())
+        .with_body(result)
         .with_status(200)
         .create_async()
         .await;
@@ -123,9 +117,10 @@ async fn test_get_script_fails() {
         response
     );
     let err = response.err().unwrap();
-    assert_eq!(err.error, "Test error".to_string());
+    assert_eq!(err.message, "Test error".to_string());
     assert!(!err.is_retryable());
 }
+
 
 #[tokio::test]
 async fn test_send_logs() {

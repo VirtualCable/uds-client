@@ -1,14 +1,17 @@
 use eframe::egui;
 use shared::system::trigger::Trigger;
 use std::time::Instant;
+use tokio::sync::oneshot;
 
 use shared::{log, utils::split_lines};
 
+#[allow(dead_code)]
 pub enum GuiMessage {
-    Close,           // Close window
-    Error(String),   // Error message, and then close
-    Warning(String), // Warning message, but do not close
-    Progress(f32),   // Update progress bar
+    Close,                                        // Close window
+    Error(String),                                // Error message, and then close
+    Warning(String),                              // Warning message, but do not close
+    YesNo(String, Option<oneshot::Sender<bool>>), // Yes/No dialog
+    Progress(f32),                                // Update progress bar
 }
 
 pub struct Progress {
@@ -58,6 +61,9 @@ impl eframe::App for Progress {
                 GuiMessage::Warning(text) => {
                     self.message = Some(GuiMessage::Warning(text));
                 }
+                GuiMessage::YesNo(text, sender) => {
+                    self.message = Some(GuiMessage::YesNo(text, sender));
+                }
                 GuiMessage::Progress(p) => {
                     self.progress = p;
                 }
@@ -95,41 +101,56 @@ impl eframe::App for Progress {
             });
         });
 
-        if let Some(err) = &self.message {
-            let (text, exit_on_close) = match err {
-                GuiMessage::Error(text) => (text.as_str(), true),
-                GuiMessage::Warning(text) => (text.as_str(), false),
-                _ => ("", false),
-            };
-            if messagebox(ctx, "Error", text) {
-                if exit_on_close {
+        match &mut self.message {
+            Some(GuiMessage::YesNo(text, reply)) => {
+                if messagebox(ctx, "Confirm", text, reply) {
+                    self.message = None; // diálogo cerrado
+                }
+            }
+            Some(GuiMessage::Error(text)) => {
+                if messagebox(ctx, "Error", text, &mut None) {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                } else {
+                }
+            }
+            Some(GuiMessage::Warning(text)) => {
+                if messagebox(ctx, "Warning", text, &mut None) {
                     self.message = None;
                 }
             }
+            _ => {}
         }
     }
 }
 
-fn messagebox(ctx: &egui::Context, title: &str, text: &str) -> bool {
+fn messagebox(
+    ctx: &egui::Context,
+    title: &str,
+    text: &str,
+    reply: &mut Option<oneshot::Sender<bool>>,
+) -> bool {
     let mut close: bool = false;
     egui::Window::new(title)
         .collapsible(false)
         .resizable(false)
         .auto_sized()
         .fade_in(true)
-        .anchor(egui::Align2::CENTER_CENTER, [5.0, 5.0])
+        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
         .show(ctx, |ui| {
-            ui.set_width(320.0);
+            ui.set_width(280.0);
             ui.add_space(10.0);
             ui.horizontal_centered(|ui: &mut egui::Ui| {
                 ui.vertical_centered(|ui| {
                     // Split the text by newlines, and append each line separately
                     for line in split_lines(text, 40) {
                         if line.starts_with("http") {
+                            // get label after |
+                            let (label, link) = if let Some(pos) = line.find('|') {
+                                (&line[pos + 1..], &line[..pos])
+                            } else {
+                                (line, line)
+                            };
                             if ui
-                                .hyperlink_to(line, line)
+                                .hyperlink_to(label, link)
                                 .on_hover_text("Click to open in browser")
                                 .clicked()
                             {
@@ -147,7 +168,35 @@ fn messagebox(ctx: &egui::Context, title: &str, text: &str) -> bool {
                         }
                     }
                     ui.add_space(14.0);
-                    if ui.button("Close").clicked() {
+                    if reply.is_some() {
+                        ui.horizontal(|ui| {
+                            ui.columns(2, |columns| {
+                                columns[0].with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        if ui.button("Yes").clicked() {
+                                            // extraemos el sender y lo consumimos
+                                            if let Some(tx) = reply.take() {
+                                                let _ = tx.send(true);
+                                            }
+                                            close = true;
+                                        }
+                                    },
+                                );
+                                columns[1].with_layout(
+                                    egui::Layout::left_to_right(egui::Align::Center),
+                                    |ui| {
+                                        if ui.button("No").clicked() {
+                                            if let Some(tx) = reply.take() {
+                                                let _ = tx.send(false);
+                                            }
+                                            close = true;
+                                        }
+                                    },
+                                );
+                            });
+                        });
+                    } else if ui.button("Close").clicked() {
                         close = true;
                     }
                 });

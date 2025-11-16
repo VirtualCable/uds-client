@@ -9,7 +9,11 @@ mod logo;
 mod runner;
 
 fn collect_arguments() -> Option<(String, String, String)> {
-    let args: Vec<String> = std::env::args().collect();
+    // let args: Vec<String> = std::env::args().collect();
+    let args = [
+        "program",
+        "udssv2://172.27.0.1:8443/a9X3bF7kLmQ2zR8tY5nV0pW4sH6uJ1cD7eM9gT2oK5rL8xZ3/scrambler",
+    ]; // For testing
     // Should have only 1 argument, "udssv2://host/ticket/scrambler"
     if args.len() != 2 || !args[1].starts_with("udssv2://") {
         return None;
@@ -57,14 +61,15 @@ fn main() {
             rt.block_on({
                 let stop = stop.clone();
                 async move {
-                    if let Err(e) = runner::run(tx.clone(), stop.clone(), &host, &ticket, &scrambler).await {
-                        log::error!("Error: {}", e);
-                        tx.send(gui::progress::GuiMessage::Error(format!(
-                            "Error: {}",
-                            e
-                        ))).ok();
+                    if let Err(e) =
+                        runner::run(tx.clone(), stop.clone(), &host, &ticket, &scrambler).await
+                    {
+                        log::error!("{}", e);
+                        tx.send(gui::progress::GuiMessage::Error(e.to_string()))
+                            .ok();
+                    } else {
+                        tx.send(gui::progress::GuiMessage::Close).ok();
                     }
-                    tx.send(gui::progress::GuiMessage::Close).ok();
                     stop.set();
                 }
             });
@@ -78,6 +83,7 @@ fn main() {
         viewport: egui::ViewportBuilder::default()
             .with_decorations(false)
             .with_inner_size([320.0, 240.0])
+            .with_app_id("UDSLauncher")
             .with_icon(icon)
             .with_resizable(false),
         centered: true,

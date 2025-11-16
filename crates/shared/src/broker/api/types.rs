@@ -26,7 +26,8 @@
 /*!
 Author: Adolfo Gómez, dkmaster at dkmon dot com
 */
-use std::{io::Read, fmt, convert};
+use std::error::Error as StdError;
+use std::{fmt, io::Read};
 
 use anyhow::Result;
 
@@ -35,52 +36,99 @@ use bzip2::read::BzDecoder;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::log;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Error {
-    pub error: String,
-    pub is_retryable: String, // "0" or "1", as string
+    pub message: String,
+    pub is_retryable: bool, // old implementation used "0" and "1" strings
+    pub percent: u8,        // 0...100
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} (Retrayable?: {})", self.error, self.is_retryable)
+        write!(f, "{} (Retrayable?: {})", self.message, self.is_retryable)
     }
 }
 
 // for implicit conversion to anyhow::Error on ? operator
-impl convert::From<Error> for anyhow::Error {
+impl From<Error> for anyhow::Error {
     fn from(err: Error) -> Self {
-        anyhow::anyhow!(err.to_string())
+        log::debug!("Converting Broker Error to anyhow::Error: {}", err);
+        anyhow::anyhow!(err.message)
     }
 }
 
-impl Error {
-    pub fn is_retryable(&self) -> bool {
-        self.is_retryable == "1"
+impl From<&Error> for anyhow::Error {
+    fn from(err: &Error) -> Self {
+        log::debug!("Converting Broker Error to anyhow::Error: {}", err);
+        anyhow::anyhow!(err.message.clone())
     }
 }
 
 impl From<reqwest::Error> for Error {
     fn from(err: reqwest::Error) -> Self {
-        Error {
-            error: err.to_string(),
-            is_retryable: "0".to_string(),
+        // Defaults to the reqwest error string
+        let mut error_text = "Error connecting to broker".to_string();
+
+        // Check if the error or any of its sources is a certificate error
+        let mut cur: &dyn StdError = &err;
+        loop {
+            let cur_str = cur.to_string();
+            log::debug!("Checking error source: {}", cur_str);
+            let msg = cur_str.to_lowercase();
+
+            if msg.contains("ssl")
+                || msg.contains("tls")
+                || msg.contains("certificate")
+                || msg.contains("verify")
+                || msg.contains("x509")
+                || msg.contains("handshake")
+            {
+                error_text = format!("TLS: {}", &cur_str);
+                break;
+            }
+
+            if let Some(next) = cur.source() {
+                cur = next;
+            } else {
+                break;
+            }
         }
+
+        Error {
+            message: error_text,
+            is_retryable: false,
+            percent: 0,
+        }
+    }
+}
+
+impl Error {
+    pub fn is_retryable(&self) -> bool {
+        self.is_retryable
     }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BrokerResponse<T> {
-    pub result: T,
+    pub result: Option<T>,
     pub error: Option<Error>,
 }
 
 impl<T> BrokerResponse<T> {
     pub fn into_result(self) -> Result<T, Error> {
         if let Some(err) = self.error {
+            log::error!("BrokerResponse error: {}", err);
             Err(err)
+        } else if let Some(res) = self.result {
+            Ok(res)
         } else {
-            Ok(self.result)
+            Err(Error {
+                message: "No result or error in BrokerResponse".to_string(),
+                is_retryable: false,
+                percent: 0,
+            })
         }
     }
 }
