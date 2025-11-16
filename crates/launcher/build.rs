@@ -30,8 +30,8 @@ fn main() {
     #[cfg(windows)]
     builder::build_windows(
         builder::BuildInfo {
-            product_name: "UDS Actor Client",
-            description: "UDS Actor Client",
+            product_name: "UDS Launcher",
+            description: "UDS Launcher Application",
             icon: None,
             bmp: None,
         }
