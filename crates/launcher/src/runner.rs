@@ -3,7 +3,7 @@ use std::sync::mpsc;
 use crate::{appdata, gui::progress::GuiMessage, tr};
 use anyhow::Result;
 
-use shared::{broker::api, consts, log};
+use shared::{broker::api, consts, log, tasks};
 
 async fn approve_host(
     tx: &mpsc::Sender<GuiMessage>,
@@ -142,7 +142,11 @@ pub async fn run(
         }
     }
 
-    // wait 4 seconds and 
+    // All done, send close message
+    tx.send(GuiMessage::Close).ok();
+
+    // Execute the tasks in background, and wait with cleanup
+    tasks::wait_all_and_cleanup(std::time::Duration::from_secs(4), stop).await;
 
     Ok(())
 }

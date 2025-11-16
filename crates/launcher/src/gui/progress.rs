@@ -57,6 +57,7 @@ impl eframe::App for Progress {
         while let Ok(msg) = self.rx.try_recv() {
             match msg {
                 GuiMessage::Close => {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
                 GuiMessage::Error(text) => {

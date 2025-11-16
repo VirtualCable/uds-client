@@ -131,20 +131,36 @@ pub fn kill_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsV
     Ok(stopped)
 }
 
-pub fn wait_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
-    let process_id = extract_js_args!(args, ctx, u32);
+pub async fn wait_fn(
+    _: &JsValue,
+    args: &[JsValue],
+    ctx: &std::cell::RefCell<&mut Context>,
+) -> JsResult<JsValue> {
+    let process_id = {
+        let mut ctx_borrow = ctx.borrow_mut();
+        extract_js_args!(args, &mut *ctx_borrow, u32)
+    };
 
     crate::system::launcher::wait(process_id)
+        .await
         .map(|_| JsValue::null())
         .map_err(|e| JsError::from_native(JsNativeError::typ().with_message(format!("{}", e))))
 }
 
-pub fn wait_timeout_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
-    let (process_id, timeout_ms) = extract_js_args!(args, ctx, u32, u32);
+pub async fn wait_timeout_fn(
+    _: &JsValue,
+    args: &[JsValue],
+    ctx: &std::cell::RefCell<&mut Context>,
+) -> JsResult<JsValue> {
+    let (process_id, timeout_ms) = {
+        let mut ctx_borrow = ctx.borrow_mut();
+        extract_js_args!(args, &mut *ctx_borrow, u32, u32)
+    };
 
     let timeout = std::time::Duration::from_millis(timeout_ms as u64);
 
     let triggered = crate::system::launcher::wait_timeout(process_id, timeout)
+        .await
         .map_err(|e| JsError::from_native(JsNativeError::typ().with_message(format!("{}", e))))?;
 
     Ok(JsValue::from(triggered))
@@ -160,11 +176,13 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
             ("launch", launch_fn, 2),
             ("isRunning", is_running_fn, 1),
             ("kill", kill_fn, 1),
-            ("wait", wait_fn, 1),
-            ("waitTimeout", wait_timeout_fn, 2),
         ],
         // Async functions, none here
-        [("launchAndWait", launch_and_wait_fn, 3),],
+        [
+            ("launchAndWait", launch_and_wait_fn, 3),
+            ("wait", wait_fn, 1),
+            ("waitTimeout", wait_timeout_fn, 2),
+        ]
     );
     Ok(())
 }
@@ -173,8 +191,8 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
 mod tests {
     use std::collections::HashMap;
 
-    use crate::js::{create_context, exec_script_with_result};
     use super::*;
+    use crate::js::{create_context, exec_script_with_result};
 
     use boa_engine::value::TryFromJs;
 
@@ -263,12 +281,12 @@ mod tests {
         log::info!("Process is running: {}", is_running);
 
         // Kill the process
-        let script_kill = r#"
+        let script_wait = r#"
             Process.kill(handle);
             let finished = Process.waitTimeout(handle, 7000);
             finished;
         "#;
-        let result = exec_script_with_result(&mut ctx, script_kill)
+        let result = exec_script_with_result(&mut ctx, script_wait)
             .await
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
 

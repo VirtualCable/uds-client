@@ -1,6 +1,6 @@
 use std::sync::{LazyLock, Mutex};
 
-use crate::{log, system::launcher};
+use crate::{log, system::{launcher::is_running, trigger::Trigger}};
 
 // Global waitable tasks
 static WAITABLE_APPS: LazyLock<Mutex<Vec<u32>>> = LazyLock::new(|| Mutex::new(Vec::<u32>::new()));
@@ -26,13 +26,18 @@ pub fn remove_waitable_app(task_handle: u32) {
 }
 
 // Wait for all registered apps to finish
-pub fn wait_all_apps() {
-    let apps = WAITABLE_APPS.lock().unwrap().clone();
-    for app in apps {
-        let res = launcher::wait(app);
-        // If error, log but continue
-        if res.is_err() {
-            log::info!("App {} already exited", app);
+pub async fn wait_all_apps(stop: Trigger) {
+    loop {
+        let all_done = {
+            let tasks = WAITABLE_APPS.lock().unwrap();
+            tasks.iter().all(|id| !is_running(*id))
+        };
+        if all_done
+            || stop
+                .async_wait_timeout(std::time::Duration::from_secs(2))
+                .await
+        {
+            break;
         }
     }
 }
@@ -71,9 +76,13 @@ pub fn unlink_late_files() {
 }
 
 // Wait the time indicated, remove early unlinkable files, wait all apps, then remove late unlinkable files
-pub fn wait_all_and_cleanup(timeout: std::time::Duration) {
-    std::thread::sleep(timeout);
+pub async fn wait_all_and_cleanup(timeout: std::time::Duration, stop: Trigger) {
+    stop.async_wait_timeout(timeout).await;
     unlink_early_files();
-    wait_all_apps();
+
+    // Wait all apps to finish, or until stop is set
+    // give stop as we do no need anymore it ownership
+    wait_all_apps(stop).await;
+
     unlink_late_files();
 }

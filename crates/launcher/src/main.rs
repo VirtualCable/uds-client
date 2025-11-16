@@ -15,11 +15,11 @@ mod runner;
 
 fn collect_arguments() -> Option<(String, String, String)> {
     // TODO: Use real args
-    // let args: Vec<String> = std::env::args().collect();
-    let args = [
-        "program",
-        "udssv2://172.27.0.1:8443/4l8oo8ptz8k2phbsbvbc3gjsgg4y27d2qimvpn6gvikx4eca/isxN53Woj2rK4B6WfDgCy5K6heF3hCe8",
-    ]; // For testing
+    let args: Vec<String> = std::env::args().collect();
+    // let args = [
+    //     "program",
+    //     "udssv2://172.27.0.1:8443/4l8oo8ptz8k2phbsbvbc3gjsgg4y27d2qimvpn6gvikx4eca/isxN53Woj2rK4B6WfDgCy5K6heF3hCe8",
+    // ]; // Some test args for reference
     log::debug!("Command line arguments: {:?}", args);
     // Should have only 1 argument, "udssv2://host/ticket/scrambler"
     if args.len() != 2 || !args[1].starts_with("udssv2://") {
@@ -84,6 +84,7 @@ fn main() {
         eprintln!("Error starting gui: {}", e);
         log::error!("Error starting gui: {}", e);
     }
+    
     // Gui closed, wait for app to finish also
     stop.wait();
 }

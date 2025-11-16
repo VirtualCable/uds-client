@@ -80,18 +80,26 @@ pub fn stop(process_id: u32) -> anyhow::Result<()> {
     }
 }
 
-pub fn wait(process_id: u32) -> anyhow::Result<()> {
-    if let Some(info) = PROCESS_INFOS.lock().unwrap().get(&process_id) {
-        info.stop.wait();
+pub async fn wait(process_id: u32) -> anyhow::Result<()> {
+    let info = {
+        let guard = PROCESS_INFOS.lock().unwrap();
+        guard.get(&process_id).cloned()
+    };
+    if let Some(info) = info {
+        info.stop.async_wait().await;
         Ok(())
     } else {
         Err(anyhow::anyhow!("Process ID {} not found", process_id))
     }
 }
 
-pub fn wait_timeout(process_id: u32, timeout: std::time::Duration) -> anyhow::Result<bool> {
-    if let Some(info) = PROCESS_INFOS.lock().unwrap().get(&process_id) {
-        let triggered = info.stop.wait_timeout(timeout);
+pub async fn wait_timeout(process_id: u32, timeout: std::time::Duration) -> anyhow::Result<bool> {
+    let info = {
+        let guard = PROCESS_INFOS.lock().unwrap();
+        guard.get(&process_id).cloned()
+    };
+    if let Some(info) = info {
+        let triggered = info.stop.async_wait_timeout(timeout).await;
         Ok(triggered)
     } else {
         Err(anyhow::anyhow!("Process ID {} not found", process_id))
