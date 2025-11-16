@@ -158,8 +158,8 @@ pub fn new_api(
     timeout: Option<std::time::Duration>,
     verify_ssl: bool,
     skip_proxy: bool,
-) -> std::rc::Rc<dyn BrokerApi> {
-    std::rc::Rc::new(UdsBrokerApi::new(
+) -> std::sync::Arc<dyn BrokerApi> {
+    std::sync::Arc::new(UdsBrokerApi::new(
         &consts::URL_TEMPLATE.replace("{host}", host),
         timeout,
         verify_ssl,

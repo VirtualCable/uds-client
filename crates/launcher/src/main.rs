@@ -4,11 +4,15 @@ use shared::system::trigger::Trigger;
 
 use shared::{consts, log};
 
+mod appdata;
+mod asyncthread;
 mod gui;
+mod intl;
 mod logo;
 mod runner;
 
 fn collect_arguments() -> Option<(String, String, String)> {
+    // TODO: Use real args
     // let args: Vec<String> = std::env::args().collect();
     let args = [
         "program",
@@ -49,32 +53,8 @@ fn main() {
     let stop = Trigger::new();
     let (progress, tx) = gui::progress::Progress::new(stop.clone());
 
-    std::thread::spawn({
-        let stop = stop.clone();
-        move || {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .unwrap();
-
-            // Blocking call to async code
-            rt.block_on({
-                let stop = stop.clone();
-                async move {
-                    if let Err(e) =
-                        runner::run(tx.clone(), stop.clone(), &host, &ticket, &scrambler).await
-                    {
-                        log::error!("{}", e);
-                        tx.send(gui::progress::GuiMessage::Error(e.to_string()))
-                            .ok();
-                    } else {
-                        tx.send(gui::progress::GuiMessage::Close).ok();
-                    }
-                    stop.set();
-                }
-            });
-        }
-    });
+    // Launch async thread with tokio runtime
+    asyncthread::run(tx, stop.clone(), host, ticket, scrambler);
 
     let icon = logo::load_icon();
 

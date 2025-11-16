@@ -1,10 +1,43 @@
-use std::rc::Rc;
 use std::sync::mpsc;
 
-use crate::gui::progress::GuiMessage;
+use crate::{appdata, gui::progress::GuiMessage};
 use anyhow::Result;
 
 use shared::{broker::api, consts, log};
+
+async fn approve_host(
+    tx: &mpsc::Sender<GuiMessage>,
+    host: &str,
+    appdata: &mut appdata::AppData,
+) -> Result<()> {
+    let host_lower = host.to_lowercase();
+    if appdata
+        .approved_hosts
+        .iter()
+        .any(|h| h.to_lowercase() == host_lower)
+    {
+        log::info!("Host {} is already approved.", host);
+        return Ok(());
+    }
+
+    log::debug!("Approving host {} with broker.", host);
+
+    let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+    tx.send(GuiMessage::YesNo(
+        format!("The server {}\nmust be approved.\nOnly approve UDS servers you trust.\nDo you want to continue?", host),
+        Some(reply_tx),
+    ))
+    .ok();
+    let answer = reply_rx.await.unwrap_or(false);
+    log::info!("User answer: {}", answer);
+    if !answer {
+        anyhow::bail!("Host {} not approved by user.", host);
+    }
+    appdata.approved_hosts.push(host.to_string());
+    appdata.save();
+
+    Ok(())
+}
 
 pub async fn run(
     tx: mpsc::Sender<GuiMessage>,
@@ -13,7 +46,17 @@ pub async fn run(
     ticket: &str,
     scrambler: &str,
 ) -> Result<()> {
-    let api: Rc<dyn api::BrokerApi> = api::new_api(host, None, false, false);
+    let mut appdata = appdata::AppData::load();
+
+    let api = api::new_api(
+        host,
+        None,
+        appdata.verify_ssl.unwrap_or(true),
+        appdata.disable_proxy.unwrap_or(false),
+    );
+
+    // Approve host if needed
+    approve_host(&tx, host, &mut appdata).await?;
 
     // Get version info
     let version = api.get_version_info().await?;
@@ -55,15 +98,6 @@ pub async fn run(
         .ok();
     }
 
-    // // Test send yes/no dialog
-    // let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
-    // tx.send(GuiMessage::YesNo(
-    //     format!("The server {}\nmust be approved.\nOnly approve UDS servers you trust.\nDo you want to continue?", host),
-    //     Some(reply_tx),
-    // ))
-    // .ok();
-    // let answer = reply_rx.await.unwrap_or(false);
-    // log::info!("User answer: {}", answer);
     loop {
         match api.get_script(ticket, scrambler).await {
             Ok(script) => {
