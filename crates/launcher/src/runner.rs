@@ -24,14 +24,14 @@ async fn approve_host(
 
     let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
     tx.send(GuiMessage::YesNo(
-        format!("The server {}\nmust be approved.\nOnly approve UDS servers you trust.\nDo you want to continue?", host),
+        tr!("The server {}\nmust be approved.\nOnly approve UDS servers you trust.\nDo you want to continue?", host),
         Some(reply_tx),
     ))
     .ok();
     let answer = reply_rx.await.unwrap_or(false);
-    log::info!("User answer: {}", answer);
     if !answer {
-        anyhow::bail!("Host {} not approved by user.", host);
+        log::info!("Host {} not approved by user.", host);
+        anyhow::bail!(tr!("Host {} not approved by user.", host));
     }
     appdata.approved_hosts.push(host.to_string());
     appdata.save();
@@ -74,12 +74,12 @@ pub async fn run(
             consts::UDS_CLIENT_VERSION,
             version.required_version
         );
-        anyhow::bail!(
+        anyhow::bail!(tr!(
             "Client version {} is outdated. Required version is {}.\nPlease download the latest version from\n{}\nand try again.",
             consts::UDS_CLIENT_VERSION,
             version.required_version,
             version.client_link
-        );
+        ));
     }
 
     // If thereis a newer version,
@@ -89,7 +89,7 @@ pub async fn run(
             version.available_version,
             consts::UDS_CLIENT_VERSION
         );
-        tx.send(GuiMessage::Warning(format!(
+        tx.send(GuiMessage::Warning(tr!(
             "A newer client version {} is available. Current version is {}.\n{}|Download the latest version",
             version.available_version,
             consts::UDS_CLIENT_VERSION,
@@ -110,7 +110,7 @@ pub async fn run(
                 // because tls errors and other network errors must have been
                 // raised before
                 if !e.is_retryable() {
-                    anyhow::bail!("{}\n{}", "Access denied by broker.", e.message);
+                    anyhow::bail!(tr!("Access denied by broker.\n{}", e.message));
                 }
             }
         }

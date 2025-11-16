@@ -1,3 +1,0 @@
-We recommend installing the `cargo-i18n` tool to help with internationalization tasks:
-
-cargo install cargo-i18n

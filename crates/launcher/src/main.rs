@@ -7,6 +7,7 @@ use shared::{consts, log};
 mod appdata;
 mod asyncthread;
 mod gui;
+#[macro_use]
 mod intl;
 mod logo;
 mod runner;
@@ -78,8 +79,8 @@ fn main() {
             Ok(Box::new(progress))
         }),
     ) {
-        eprintln!("Error starting eframe: {}", e);
-        log::error!("Error starting eframe: {}", e);
+        eprintln!("Error starting gui: {}", e);
+        log::error!("Error starting gui: {}", e);
     }
     // Gui closed, wait for app to finish also
     stop.wait();
