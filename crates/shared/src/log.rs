@@ -101,14 +101,14 @@ impl<'a> fmt::MakeWriter<'a> for RotatingWriter {
 
 #[derive(PartialEq)]
 pub enum LogType {
-    Client,
+    Launcher,
     Tests,
 }
 
 impl std::fmt::Display for LogType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LogType::Client => write!(f, "client"),
+            LogType::Launcher => write!(f, "launcher"),
             LogType::Tests => write!(f, "tests"),
         }
     }

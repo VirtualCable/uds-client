@@ -39,7 +39,7 @@ fn collect_arguments() -> Option<(String, String, String)> {
 }
 
 fn main() {
-    log::setup_logging("info", log::LogType::Client);
+    log::setup_logging("info", log::LogType::Launcher);
     let (host, ticket, scrambler) = collect_arguments().unwrap_or_else(|| {
         // Show about window if no valid arguments
         gui::about::show_about_window();
