@@ -205,6 +205,7 @@ pub async fn run_test_server(port: u16, trigger: Trigger) -> Result<()> {
 }
 
 pub async fn connect(
+    server: Option<&str>,
     port: u16,
 ) -> Result<(
     ReadHalf<client::TlsStream<TcpStream>>,
@@ -215,16 +216,22 @@ pub async fn connect(
     log::setup_logging("debug", log::LogType::Tests);
     crate::tls::init_tls(None);
     let trigger = Trigger::new();
-    let server_handle = tokio::spawn({
-        let trigger = trigger.clone();
-        async move {
-            run_test_server(port, trigger).await.unwrap();
-        }
-    });
+    let server_handle = if server.is_none() {
+        log::debug!("Starting test server on port {}", port);
+        tokio::spawn({
+            let trigger = trigger.clone();
+            async move {
+                run_test_server(port, trigger).await.unwrap();
+            }
+        })
+    } else {
+        tokio::spawn(async {})
+    };
     // Give the server a moment to start
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-    log::debug!("Starting client connection to test server");
-    let (reader, writer) = super::connection::connect_and_upgrade("localhost", port, false)
+    let server = server.unwrap_or("localhost");
+    log::debug!("Starting client connection to test server: {}:{}", server, port);
+    let (reader, writer) = super::connection::connect_and_upgrade(server, port, false)
         .await
         .expect("Failed to connect and upgrade to TLS");
 

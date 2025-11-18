@@ -13,8 +13,8 @@ async fn get_script_and_params() -> Result<types::Script> {
     let args = if args.len() < 3 {
         [
             "not_used",
-            "crates/script-tester/testdata/script.js",
-            "crates/script-tester/testdata/data.json",
+            "crates/script-tester/testdata/script_tunnel.js",
+            "crates/script-tester/testdata/data_tunnel.json",
         ]
         .iter()
         .map(|s| s.to_string())
@@ -60,6 +60,8 @@ async fn get_script_and_params() -> Result<types::Script> {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     log::setup_logging("debug", log::LogType::Tests);
+    shared::tls::init_tls(None);  // Initialize root certs and tls related stuff
+
     println!(
         "Current working directory: {}",
         std::env::current_dir()?.display()

@@ -6,10 +6,10 @@ This document describes the JavaScript modules and functions available in the ru
 
 | Module   | Description | Functions |
 |----------|-------------|-----------|
-| Utils    | Utility functions for environment variables, registry (Windows), encryption, and network testing | 7 |
+| Utils    | Utility functions for environment variables, registry (Windows), encryption, and network testing | 8 |
 | File     | File operations, temporary files, and directory access | 8 |
 | Logger   | Logging functions at different levels | 5 |
-| Process  | Executable finding, process launching, and management | 7 |
+| Process  | Executable finding, process launching, and management | 8 |
 | Tasks    | Task management, cleanup files, and tunnel connections | 4 |
 
 ## Utils Module
@@ -60,6 +60,8 @@ Reads a string value from the HKCU registry key. Note: Currently returns undefin
 - `key` (string): The registry key path.
 - `value_name` (string): The value name.
 
+**Returns:** undefined - Currently returns undefined; may be a bug.
+
 ### readHklm (Windows only)
 
 Reads a string value from the HKLM (HKEY_LOCAL_MACHINE) registry key.
@@ -80,6 +82,15 @@ Tests connectivity to a server by attempting to establish a TCP connection.
 - `timeout_ms` (number): Timeout in milliseconds (0 defaults to 500ms).
 
 **Returns:** boolean - True if connection successful, false otherwise.
+
+### sleep (async)
+
+Waits for a specified number of milliseconds.
+
+**Parameters:**
+- `milliseconds` (number): The number of milliseconds to wait.
+
+**Returns:** undefined
 
 ## File Module
 
@@ -265,6 +276,15 @@ Launches an application, waits for it to finish, and returns its output.
 
 **Returns:** object - An object containing stdout and stderr: `{stdout: string, stderr: string}`.
 
+### sleep (async)
+
+Waits for a specified number of milliseconds.
+
+**Parameters:**
+- `milliseconds` (number): The number of milliseconds to wait.
+
+**Returns:** undefined
+
 ## Tasks Module
 
 The Tasks module provides functions for managing tasks, files to be cleaned up, and tunnel connections.
@@ -314,9 +334,10 @@ Starts a tunnel connection.
 | Utils   | cryptProtectData         | input: string | Encrypts data using Windows CryptProtectData (Windows only) |
 | Utils   | writeHkcu                | key: string, value_name: string, value_data: string | Writes string to HKCU registry (Windows only) |
 | Utils   | writeHkcuDword           | key: string, value_name: string, value_data: number | Writes DWORD to HKCU registry (Windows only) |
-| Utils   | readHkcu                 | key: string, value_name: string | Reads string from HKCU registry (Windows only) |
+| Utils   | readHkcu                 | key: string, value_name: string | Attempts to read string from HKCU registry (Windows only) - currently returns undefined |
 | Utils   | readHklm                 | key: string, value_name: string | Reads string from HKLM registry (Windows only) |
 | Utils   | testServer (async)       | host: string, port: number, timeout_ms: number | Tests server connectivity |
+| Utils   | sleep (async)            | milliseconds: number | Waits for a specified number of milliseconds |
 | File    | createTempFile           | folder?: string, content?: string, extension?: string | Creates temporary file |
 | File    | read                     | path: string | Reads file content |
 | File    | write                    | path: string, content: string | Writes content to file |
@@ -337,6 +358,7 @@ Starts a tunnel connection.
 | Process | wait                     | process_id: number | Waits for process to finish |
 | Process | waitTimeout              | process_id: number, timeout_ms: number | Waits for process with timeout |
 | Process | launchAndWait (async)    | app_path: string, app_args: string[], timeout_ms?: number | Launches application and waits for completion |
+| Process | sleep (async)            | milliseconds: number | Waits for a specified number of milliseconds |
 | Tasks   | addEarlyUnlinkableFile   | file_path: string | Adds file for early cleanup |
 | Tasks   | addLateUnlinkableFile    | file_path: string | Adds file for late cleanup |
 | Tasks   | addWaitableApp           | task_handle: number | Adds waitable application |

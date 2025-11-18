@@ -32,6 +32,9 @@ pub async fn connect_and_upgrade(
         .await
         .with_context(|| format!("Failed to connect to {}", addr))?;
 
+    // Disable nagle's algorithm
+    tcp.set_nodelay(true).ok();
+
     // Send handshake pre-TLS
     tcp.write_all(consts::HANDSHAKE_V1)
         .await
@@ -82,6 +85,7 @@ async fn send_cmd(
     writer: &mut WriteHalf<TlsStream<TcpStream>>,
     cmd: &[u8],
 ) -> Result<()> {
+    log::debug!("Sending command: {:?}", cmd);
     // Send command
     writer
         .write_all(cmd)

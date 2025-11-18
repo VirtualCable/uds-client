@@ -166,6 +166,21 @@ pub async fn wait_timeout_fn(
     Ok(JsValue::from(triggered))
 }
 
+pub async fn sleep_fn(
+    _: &JsValue,
+    args: &[JsValue],
+    ctx: &std::cell::RefCell<&mut Context>,
+) -> JsResult<JsValue> {
+    let sleep_ms = {
+        let mut ctx_borrow = ctx.borrow_mut();
+        extract_js_args!(args, &mut *ctx_borrow, u32)
+    };
+
+    tokio::time::sleep(std::time::Duration::from_millis(sleep_ms as u64)).await;
+
+    Ok(JsValue::null())
+}
+
 pub(super) fn register(ctx: &mut Context) -> Result<()> {
     register_js_module!(
         ctx,
@@ -182,6 +197,7 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
             ("launchAndWait", launch_and_wait_fn, 3),
             ("wait", wait_fn, 1),
             ("waitTimeout", wait_timeout_fn, 2),
+            ("sleep", sleep_fn, 1),
         ]
     );
     Ok(())

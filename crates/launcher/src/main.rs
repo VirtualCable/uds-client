@@ -40,6 +40,8 @@ fn collect_arguments() -> Option<(String, String, String)> {
 
 fn main() {
     log::setup_logging("info", log::LogType::Launcher);
+    // Setup tls, with default secure ciphers
+    shared::tls::init_tls(None);
     let (host, ticket, scrambler) = collect_arguments().unwrap_or_else(|| {
         // Show about window if no valid arguments
         gui::about::show_about_window();

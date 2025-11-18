@@ -11,7 +11,7 @@ use crate::log;
 
 #[tokio::test]
 async fn test_connect_and_upgrade() {
-    let (reader, mut writer, server_handle, trigger) = connect(44913)
+    let (reader, mut writer, server_handle, trigger) = connect(None, 44913)
         .await
         .expect("Failed to connect to test server");
 
@@ -25,13 +25,27 @@ async fn test_connect_and_upgrade() {
 }
 
 #[tokio::test]
-async fn test_test_and_open_cmd() {
-    let (mut reader, mut writer, server_handle, trigger) = connect(44914)
+async fn test_test_cmd() {
+    let (mut reader, mut writer, server_handle, trigger) = connect(None, 44914)
         .await
         .expect("Failed to connect to test server");
 
     // Send CMD_TEST
     send_test_cmd(&mut reader, &mut writer).await.unwrap(); //will panic on error
+
+    log::debug!("Test command tests completed successfully");
+    writer.shutdown().await.ok();
+    drop(writer);
+    drop(reader);
+    trigger.set();
+    server_handle.await.unwrap();
+}
+
+#[tokio::test]
+async fn test_open_cmd() {
+    let (mut reader, mut writer, server_handle, trigger) = connect(None, 44914)
+        .await
+        .expect("Failed to connect to test server");
 
     // Send CMD_OPEN with a ticket
     //consts::TICKET_LENGTH

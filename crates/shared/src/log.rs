@@ -29,10 +29,12 @@ Author: Adolfo Gómez, dkmaster at dkmon dot com
 use std::{
     fs::{self, OpenOptions},
     io::{self, Write},
+    backtrace::Backtrace,
     panic,
     path::PathBuf,
     sync::OnceLock,
 };
+use tracing_log::log;
 use tracing_subscriber::{
     EnvFilter, Layer, Registry, fmt, layer::SubscriberExt, reload, util::SubscriberInitExt,
 };
@@ -109,7 +111,7 @@ impl std::fmt::Display for LogType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LogType::Launcher => write!(f, "launcher"),
-            LogType::Tests => write!(f, "tests"),
+            LogType::Tests => write!(f, "launcher-tests"),
         }
     }
 }
@@ -117,18 +119,43 @@ impl std::fmt::Display for LogType {
 // Our log system wil also hook panics to log them
 pub fn setup_panic_hook() {
     panic::set_hook(Box::new(|info| {
-        // Also, open a file on temp dir to log panic, in case logging system is broken
-        let temp_log = std::env::temp_dir().join("udsactor-panic.log");
+        let temp_log = std::env::temp_dir().join("udslauncher-panic.log");
+        log::error!("Panic occurred, writing details to {:?}", temp_log);
         let mut f = OpenOptions::new()
             .create(true)
             .append(true)
             .open(&temp_log)
             .unwrap();
-        let _ = writeln!(f, "Panic occurred: {:?}", info);
-        // Now log it using our logging system
-        error!("Guru Meditation (😕): {:?}", info);
+
+        // Try to get message info
+        let msg = if let Some(s) = info.payload().downcast_ref::<&str>() {
+            s.to_string()
+        } else if let Some(s) = info.payload().downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "Non-string panic payload".to_string()
+        };
+
+        // Location
+        let loc = if let Some(location) = info.location() {
+            format!("{}:{}", location.file(), location.line())
+        } else {
+            "unknown location".to_string()
+        };
+
+        // Backtrace
+        let bt = Backtrace::capture();
+
+        writeln!(f, "Panic occurred at {}: {}", loc, msg).ok();
+        writeln!(f, "Backtrace:\n{:?}", bt).ok();
+
+        error!("Guru Meditation (😕): {} at {}", msg, loc);
+        error!("Backtrace:\n{:?}", bt);
+        // Exit process
+        std::process::exit(1);
     }));
 }
+
 
 pub fn setup_logging(level: &str, log_type: LogType) {
     let (level_key, log_path, use_datetime, log_name) = (
@@ -141,7 +168,7 @@ pub fn setup_logging(level: &str, log_type: LogType) {
             "UDSCLIENT_{}_LOG_USE_DATETIME",
             log_type.to_string().to_uppercase()
         ),
-        format!("udsclient-{}", log_type.to_string().to_lowercase()),
+        format!("uds-{}", log_type.to_string().to_lowercase()),
     );
 
     // To keep compat with old behavior, if .uds-debug-on is on temp or user home, set level to debug

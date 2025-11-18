@@ -7,7 +7,7 @@ use boa_engine::{
     property::Attribute,
 };
 
-use crate::{tasks, tunnel};
+use crate::{tasks, tunnel, log};
 
 fn add_early_unlinkable_file_fn(
     _: &JsValue,
@@ -53,8 +53,8 @@ async fn start_tunel_fn(
             port,
             ticket,
             listen_timeout_ms,
-            local_port,
             check_certificate,
+            local_port,
             keep_listening_after_timeout,
             enable_ipv6,
         ) = extract_js_args!(
@@ -64,17 +64,28 @@ async fn start_tunel_fn(
             u16,
             String,
             Option<u64>,
+            Option<bool>,
             Option<u16>,
             Option<bool>,
-            Option<bool>,
             Option<bool>
+        );
+        log::debug!(
+            "Starting tunnel to {}:{} with ticket {}, check_certificate: {:?}, listen_timeout_ms: {:?}, local_port: {:?}, keep_listening_after_timeout: {:?}, enable_ipv6: {:?}",
+            addr,
+            port,
+            ticket,
+            check_certificate,
+            listen_timeout_ms,
+            local_port,
+            keep_listening_after_timeout,
+            enable_ipv6
         );
         tunnel::TunnelConnectInfo {
             addr,
             port,
             ticket,
-            local_port,
             check_certificate: check_certificate.unwrap_or(true),
+            local_port,
             listen_timeout_ms: listen_timeout_ms.unwrap_or(0),
             keep_listening_after_timeout: keep_listening_after_timeout.unwrap_or(false),
             enable_ipv6: enable_ipv6.unwrap_or(false),
@@ -124,7 +135,7 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::js::{exec_script, create_context};
+    use crate::js::{create_context, exec_script};
     use crate::log;
 
     use super::*;
