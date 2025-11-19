@@ -7,3 +7,4 @@ pub mod tasks;
 pub mod tls;
 pub mod tunnel;
 pub mod utils;
+pub mod appdata;

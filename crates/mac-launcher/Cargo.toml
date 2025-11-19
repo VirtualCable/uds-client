@@ -1,12 +1,13 @@
 [package]
 name = "mac-launcher"
-version = "0.1.0"
+version = "5.0.0"
 edition = "2024"
 
 authors = ["Adolfo Gómez <dkmaster@dkmon.com>"]
 license = "BSD-3-Clause"
 
 [dependencies]
+shared = { path = "../shared" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.3"
