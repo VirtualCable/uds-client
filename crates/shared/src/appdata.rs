@@ -15,6 +15,9 @@ pub struct AppData {
     // So we can override proxy and ssl settings if needed
     pub disable_proxy: Option<bool>,
     pub verify_ssl: Option<bool>,
+    // On mac, also allow override launcher path
+    #[cfg(target_os = "macos")]
+    pub launcher_path: Option<String>,
 }
 
 impl AppData {

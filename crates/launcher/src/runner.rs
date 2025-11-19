@@ -1,9 +1,9 @@
 use std::sync::mpsc;
 
-use crate::{appdata, gui::progress::GuiMessage, tr};
+use crate::{gui::progress::GuiMessage, tr};
 use anyhow::Result;
 
-use shared::{broker::api, consts, log, tasks};
+use shared::{appdata, broker::api, consts, log, tasks};
 
 async fn approve_host(
     tx: &mpsc::Sender<GuiMessage>,

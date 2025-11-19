@@ -3,49 +3,48 @@
  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <!-- Nombre visible de la app -->
+  <!-- App name -->
   <key>CFBundleName</key>
-  <string>UrlOpener</string>
+  <string>UDS Launcher</string>
 
-  <!-- Nombre del ejecutable (debe coincidir con el binario en Contents/MacOS) -->
+  <!-- App Executable -->
   <key>CFBundleExecutable</key>
-  <string>url_opener</string>
+  <string>mac-launcher</string>
 
-  <!-- Identificador único de la app -->
+  <!-- Unique identifier for app -->
   <key>CFBundleIdentifier</key>
-  <string>org.openuds.url_opener</string>
+  <string>org.openuds.launcher</string>
 
-  <!-- Versión corta y de build -->
+  <!-- Short version and build version -->
   <key>CFBundleShortVersionString</key>
-  <string>1.0</string>
+  <string>5.0</string>
   <key>CFBundleVersion</key>
-  <string>1</string>
+  <string>5</string>
 
-  <!-- Tipo de paquete: aplicación -->
+  <!-- Package type: application -->
   <key>CFBundlePackageType</key>
   <string>APPL</string>
 
-  <!-- Icono opcional -->
+  <!-- Optional icon -->
   <key>CFBundleIconFile</key>
   <string>AppIcon</string>
 
-  <!-- Esquemas de URL personalizados -->
+  <!-- Custom URL schemes -->
   <key>CFBundleURLTypes</key>
   <array>
     <dict>
       <key>CFBundleTypeRole</key>
       <string>Viewer</string>
       <key>CFBundleURLName</key>
-      <string>UDS Client</string>
+      <string>UDS Launcher</string>
       <key>CFBundleURLSchemes</key>
       <array>
-        <string>uds2</string>
-        <string>udss2</string>
+        <string>udssv2</string>
       </array>
     </dict>
   </array>
 
-  <!-- Configuración de la app en macOS moderno -->
+  <!-- Only macOS 10.13 and later -->
   <key>LSMinimumSystemVersion</key>
   <string>10.13</string>
   <key>NSHighResolutionCapable</key>

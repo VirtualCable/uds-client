@@ -4,7 +4,6 @@ use shared::system::trigger::Trigger;
 
 use shared::{consts, log};
 
-mod appdata;
 mod asyncthread;
 mod gui;
 
