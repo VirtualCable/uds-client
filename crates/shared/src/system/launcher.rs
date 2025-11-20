@@ -51,10 +51,12 @@ pub fn launch(application: &str, parameters: &[&str], cwd: Option<&str>) -> anyh
     std::thread::spawn(move || {
         // Get back the parameters as [&str]
         let params: Vec<&str> = parameters.iter().map(|s| s.as_str()).collect();
-        let res = execute_app(&application, &params, Some(stop_trigger), cwd.as_deref());
+        let res = execute_app(&application, &params, Some(stop_trigger.clone()), cwd.as_deref());
         if let Err(e) = res {
             log::error!("Failed to execute app {}: {}", application, e);
         }
+        // Ensure trigger is set before unregistering, because someone might be waiting on it
+        stop_trigger.set();
         unregister_process(process_id);
     });
 
