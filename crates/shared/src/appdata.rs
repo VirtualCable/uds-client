@@ -26,6 +26,7 @@ impl AppData {
         if let Some(proj_dirs) = ProjectDirs::from(APP_QUALIFIER, APP_ORGANIZATION, APP_APPLICATION) {
             let data_dir = proj_dirs.data_dir();
             let file_path = data_dir.join(APP_DATA_FILE);
+            log::debug!("Loading app data from {:?}", file_path);
             if let Ok(data) = std::fs::read_to_string(file_path)
                 && let Ok(app_data) = serde_json::from_str(&data)
             {
