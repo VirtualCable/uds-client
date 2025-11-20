@@ -52,7 +52,7 @@ async fn start_tunel_fn(
             addr,
             port,
             ticket,
-            listen_timeout_ms,
+            startup_time_ms,
             check_certificate,
             local_port,
             keep_listening_after_timeout,
@@ -75,7 +75,7 @@ async fn start_tunel_fn(
             port,
             ticket,
             check_certificate,
-            listen_timeout_ms,
+            startup_time_ms,
             local_port,
             keep_listening_after_timeout,
             enable_ipv6
@@ -86,7 +86,7 @@ async fn start_tunel_fn(
             ticket,
             check_certificate: check_certificate.unwrap_or(true),
             local_port,
-            listen_timeout_ms: listen_timeout_ms.unwrap_or(0),
+            startup_time_ms: startup_time_ms.unwrap_or(0),
             keep_listening_after_timeout: keep_listening_after_timeout.unwrap_or(false),
             enable_ipv6: enable_ipv6.unwrap_or(false),
         }

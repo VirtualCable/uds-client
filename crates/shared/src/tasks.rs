@@ -1,6 +1,10 @@
 use std::sync::{LazyLock, Mutex};
 
-use crate::{log, system::{launcher::is_running, trigger::Trigger}};
+use crate::{
+    log,
+    system::{launcher::is_running, trigger::Trigger},
+    tunnel::is_any_tunnel_active,
+};
 
 // Global waitable tasks
 static WAITABLE_APPS: LazyLock<Mutex<Vec<u32>>> = LazyLock::new(|| Mutex::new(Vec::<u32>::new()));
@@ -33,6 +37,19 @@ pub async fn wait_all_apps(stop: Trigger) {
             tasks.iter().all(|id| !is_running(*id))
         };
         if all_done
+            || stop
+                .async_wait_timeout(std::time::Duration::from_secs(2))
+                .await
+        {
+            break;
+        }
+    }
+}
+
+pub async fn wait_all_tunnels(stop: Trigger) {
+    
+    loop {
+        if !is_any_tunnel_active()
             || stop
                 .async_wait_timeout(std::time::Duration::from_secs(2))
                 .await
@@ -82,7 +99,11 @@ pub async fn wait_all_and_cleanup(timeout: std::time::Duration, stop: Trigger) {
 
     // Wait all apps to finish, or until stop is set
     // give stop as we do no need anymore it ownership
-    wait_all_apps(stop).await;
+    wait_all_apps(stop.clone()).await;
+
+    // Also for tunnels. On linux/macOS, the apps may run on background but tunnels may remain
+    // so we wait for tunnels separately
+    wait_all_tunnels(stop).await;
 
     unlink_late_files();
 }

@@ -12,3 +12,4 @@ pub const UDS_CLIENT_AGENT: &str = "UDS-Client/5.0.0 (MacOS)";
 pub const URL_TEMPLATE: &str = "https://{host}/uds/rest/client";
 
 pub const TICKET_LENGTH: usize = 48;
+pub const MAX_STARTUP_TIME_MS: u64 = 120_000; // 2 minutes

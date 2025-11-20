@@ -13,7 +13,7 @@ use tokio::{
 };
 use tokio_rustls::{TlsAcceptor, client, server};
 
-use super::{STOP_TRIGGER, TunnelConnectInfo, consts, tunnel_runner};
+use super::{TunnelConnectInfo, consts, tunnel_runner};
 use crate::system::trigger;
 use crate::{log, system::trigger::Trigger};
 
@@ -238,16 +238,17 @@ pub async fn connect(
     Ok((reader, writer, server_handle, trigger))
 }
 
-pub async fn create_runner(port: u16) -> Result<(JoinHandle<()>, JoinHandle<()>, u16)> {
+pub async fn create_runner(port: u16) -> Result<(JoinHandle<()>, JoinHandle<()>, u16, Trigger)> {
     log::setup_logging("debug", log::LogType::Tests);
     crate::tls::init_tls(None);
 
-    let trigger = STOP_TRIGGER.clone();
+    let trigger = Trigger::new();
 
     let server_handle = tokio::spawn({
         let trigger = trigger.clone();
         async move {
             run_test_server(port, trigger).await.unwrap();
+            log::debug!("Test server exited");
         }
     });
 
@@ -257,7 +258,7 @@ pub async fn create_runner(port: u16) -> Result<(JoinHandle<()>, JoinHandle<()>,
         ticket: create_ticket(),
         local_port: None,
         check_certificate: false,
-        listen_timeout_ms: 5000,
+        startup_time_ms: 10000,
         keep_listening_after_timeout: false,
         enable_ipv6: false,
     };
@@ -270,7 +271,7 @@ pub async fn create_runner(port: u16) -> Result<(JoinHandle<()>, JoinHandle<()>,
     });
     // Shuld be running now, wait a moment
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    Ok((server_handle, runner_handle, listen_port))
+    Ok((server_handle, runner_handle, listen_port, trigger))
 }
 
 pub fn create_ticket() -> String {

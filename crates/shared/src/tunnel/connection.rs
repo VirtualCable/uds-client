@@ -1,4 +1,3 @@
-#![allow(dead_code)] // TODO: remove soon :)
 use std::sync::Arc;
 
 use anyhow::{Context, Result};

@@ -1,7 +1,6 @@
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use super::{
-    STOP_TRIGGER,
     connection::{connect_and_upgrade, send_open_cmd, send_test_cmd},
     test_utils::{connect, create_runner, create_ticket},
 };
@@ -43,7 +42,7 @@ async fn test_test_cmd() {
 
 #[tokio::test]
 async fn test_open_cmd() {
-    let (mut reader, mut writer, server_handle, trigger) = connect(None, 44914)
+    let (mut reader, mut writer, server_handle, trigger) = connect(None, 44915)
         .await
         .expect("Failed to connect to test server");
 
@@ -67,17 +66,15 @@ async fn test_connect_and_upgrade_invalid_server() {
     log::setup_logging("debug", log::LogType::Tests);
     crate::tls::init_tls(None);
     log::debug!("Starting test_connect_and_upgrade_invalid_server");
-    let result = connect_and_upgrade("invalid.server.name", 44915, false).await;
+    let result = connect_and_upgrade("invalid.server.name", 44916, false).await;
     assert!(result.is_err(), "Connection to invalid server should fail");
     log::debug!("test_connect_and_upgrade_invalid_server completed successfully");
 }
 
 // Even we use diferrent ports, STOP_TRIGGER is shared, so tests must be serialized
 #[tokio::test]
-#[serial_test::serial(runner)]
 async fn test_tunnel_runner_starts_and_stop() {
-    let trigger = STOP_TRIGGER.clone();
-    let (server_handle, runner_handle, listen_port) = create_runner(44916)
+    let (server_handle, runner_handle, listen_port, trigger) = create_runner(44916)
         .await
         .expect("Failed to create test server and runner");
 
@@ -93,10 +90,8 @@ async fn test_tunnel_runner_starts_and_stop() {
 }
 
 #[tokio::test]
-#[serial_test::serial(runner)]
 async fn test_tunnel_runner_some_data() {
-    let trigger = STOP_TRIGGER.clone();
-    let (server_handle, runner_handle, listen_port) = create_runner(44917)
+    let (server_handle, runner_handle, listen_port, trigger) = create_runner(44917)
         .await
         .expect("Failed to create test server and runner");
 
@@ -106,6 +101,7 @@ async fn test_tunnel_runner_some_data() {
     let mut conn = tokio::net::TcpStream::connect(("localhost", listen_port))
         .await
         .expect("Failed to connect to tunnel");
+    log::debug!("Connected to tunnel on port {}", listen_port);
     // A buffer with 256 bytes, each byte set to its index value (0, 1, 2, ..., 255)
     let mut test_data = vec![0u8; 256];
     for (i, item) in test_data.iter_mut().enumerate() {
@@ -139,10 +135,11 @@ async fn test_tunnel_runner_some_data() {
         .expect("Failed to shutdown connection");
     log::debug!("Sent test and open commands successfully");
 
-    // Stop the server and runner
     trigger.set();
 
+    log::debug!("Stopping runner");
     runner_handle.await.unwrap();
+    log::debug!("Stopping server");
     server_handle.await.unwrap();
 
     log::debug!("test_tunnel_runner_some_data completed successfully");

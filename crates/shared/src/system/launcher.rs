@@ -37,6 +37,10 @@ fn register_process() -> (u32, trigger::Trigger) {
 }
 
 fn unregister_process(process_id: u32) {
+    // Ensure trigger is set before unregistering, because someone might be waiting on it
+    if let Some(info) = PROCESS_INFOS.lock().unwrap().get(&process_id) {
+        info.stop.set();
+    }
     PROCESS_INFOS.lock().unwrap().remove(&process_id);
 }
 
@@ -55,8 +59,6 @@ pub fn launch(application: &str, parameters: &[&str], cwd: Option<&str>) -> anyh
         if let Err(e) = res {
             log::error!("Failed to execute app {}: {}", application, e);
         }
-        // Ensure trigger is set before unregistering, because someone might be waiting on it
-        stop_trigger.set();
         unregister_process(process_id);
     });
 

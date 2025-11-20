@@ -1,11 +1,13 @@
 use anyhow::Result;
+use std::time::Duration;
 use tokio::net::TcpListener;
 
 mod connection;
 mod consts;
 mod proxy;
+mod registry;
 
-use crate::{log, system::trigger::Trigger};
+use crate::{consts::MAX_STARTUP_TIME_MS, log};
 
 pub struct TunnelConnectInfo {
     pub addr: String,
@@ -13,26 +15,28 @@ pub struct TunnelConnectInfo {
     pub ticket: String,
     pub local_port: Option<u16>, // It None, a random port will be used
     pub check_certificate: bool, // whether to check server certificate
-    pub listen_timeout_ms: u64,  // Timeout for listening
+    pub startup_time_ms: u64,    // Timeout for listening
     pub keep_listening_after_timeout: bool, // whether to keep listening after timeout
     pub enable_ipv6: bool,       // whether to enable ipv6 (local and remote)
 }
 
-pub static STOP_TRIGGER: std::sync::LazyLock<Trigger> = std::sync::LazyLock::new(Trigger::new);
-
+// On new releases, the min_listening_ms is the time the tunnel will stay alive waiting for initial connections
+// on 4.0 and before, was the time that keeps the tunnel allowing new connnections (to disallow new connections after timeout)
+// We hard limit this to max MAX_STARTUP_TIME_MS milliseconds to avoid very long living tunnels without connections, even in case of misconfiguration
 pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Result<()> {
-    let trigger = STOP_TRIGGER.clone();
+    let (_id, trigger, active_connections) = registry::register_tunnel(Some(
+        Duration::from_millis(info.startup_time_ms.min(MAX_STARTUP_TIME_MS)),
+    ));
 
     loop {
-        // Accept incoming connection until triggered
-        let accept_fut = listener.accept();
+        // Accept incoming connection until triggered to stop.
         tokio::select! {
-            res = accept_fut => {
+            res = listener.accept() => {
                 let (client_stream, client_addr) = res?;
                 // Disable nagle's algorithm also on client side
                 client_stream.set_nodelay(true).ok();
 
-                crate::log::info!("Accepted connection from {}", client_addr);
+                log::debug!("Accepted connection from {}", client_addr);
                 // Open connection, no new test is needed here since we already tested in start_tunnel
                 let (mut reader, mut writer) = connection::connect_and_upgrade(
                     &info.addr,
@@ -44,24 +48,31 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
                 // Start proxying in a new task
                 tokio::spawn({
                     let trigger = trigger.clone();
+                    let active_connections = active_connections.clone();
                     async move {
+                        active_connections.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         if let Err(e) = proxy::start_proxy(
                             reader,
                             writer,
                             client_stream,
                             trigger,
                         ).await {
-                            crate::log::error!("Proxy error: {e}");
+                            log::error!("Proxy error: {e}");
                         }
+                        active_connections.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
                     }
                 });
             }
             _ = trigger.async_wait() => {
-                crate::log::info!("Tunnel runner triggered to stop accepting new connections.");
+                log::info!("Tunnel runner triggered to stop accepting new connections.");
                 break;
             }
         }
     }
+
+    log::debug!("Tunnel runner exiting");
+    // Ensure our trigger is set
+    trigger.set();
 
     Ok(())
 }
@@ -105,6 +116,8 @@ pub async fn start_tunnel(info: TunnelConnectInfo) -> Result<u16> {
 
     Ok(actual_port)
 }
+
+pub use registry::{is_any_tunnel_active, log_running_tunnels};
 
 #[cfg(test)]
 mod test_utils;

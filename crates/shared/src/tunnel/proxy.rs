@@ -1,4 +1,3 @@
-#![allow(dead_code)] // TODO: remove soon :)
 use crate::system::trigger::Trigger;
 use crate::tunnel::consts;
 use anyhow::Result;
