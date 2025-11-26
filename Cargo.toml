@@ -4,6 +4,13 @@ members = [
     "crates/launcher",
     "crates/mac-launcher",
     "crates/shared",
-    "crates/mldsa-verify", "crates/script-tester",
+    "crates/mldsa-verify",
+    "crates/script-tester",
+    "crates/gui",
+    "crates/rdp/rdp",
+    "crates/rdp/freerdp-sys",
 ]
 resolver = "3"
+
+[workspace.metadata.clippy]
+skip = ["crates/rdp/rdp/freerdp-sys"]

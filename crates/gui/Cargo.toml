@@ -1,0 +1,19 @@
+[package]
+name = "gui"
+version = "5.0.0"
+edition = "2024"
+
+[dependencies]
+shared = { path = "../shared" }
+rdp = { path = "../rdp/rdp" }
+freerdp-sys = { path = "../rdp/freerdp-sys" }
+
+anyhow = "1.0"
+
+crossbeam = "0.8"
+
+eframe = { version = "0.33.2" }
+winit = "0.30.12"
+
+zeroize = { version = "1", features = ["derive"] }
+image = { version = "0.25.8", features = ["png"] }

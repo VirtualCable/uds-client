@@ -1,0 +1,1 @@
+pub const MOUSE_WHEEL_DELTA: f32 = 120.0;

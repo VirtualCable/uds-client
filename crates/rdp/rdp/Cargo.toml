@@ -1,0 +1,22 @@
+[package]
+name = "rdp"
+version = "5.0.0"
+edition = "2024"
+
+[dependencies]
+freerdp-sys = { path = "../freerdp-sys" }
+shared = { path = "../../shared" }
+
+anyhow = "1.0.100"
+
+crossbeam = "0.8"
+
+libc = "0.2.177"
+eframe = { version = "0.33.2" }
+winit = "0.30.12"
+
+zeroize = { version = "1", features = ["derive"] }
+
+# Windows dependencies
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Networking_WinSock"] }
