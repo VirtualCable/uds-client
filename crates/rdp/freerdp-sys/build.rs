@@ -15,7 +15,7 @@ fn main() {
     let freerdp_path = env::var(ENV_VAR).unwrap_or_else(|_| DEFAULT_PATH.to_string());
 
     let include_freerdp = format!("{}/include/freerdp3", freerdp_path);
-    let include_winpr   = format!("{}/include/winpr3", freerdp_path);
+    let include_winpr = format!("{}/include/winpr3", freerdp_path);
     let lib_path = format!("{}/lib", freerdp_path);
 
     // Build the C shim
@@ -25,16 +25,17 @@ fn main() {
         .include(include_winpr.clone())
         .compile("freerdp_shims");
 
-
-    // 📌 Link to the required libraries
+    // Link to the required libraries
     println!("cargo:rustc-link-search=native={}", lib_path);
     println!("cargo:rustc-link-lib=freerdp3");
     println!("cargo:rustc-link-lib=winpr3");
     println!("cargo:rustc-link-lib=freerdp-client3");
-    // Add more here if you use them (freerdp-client3, rdtk0, etc.)
+    // Add more here if we need them
 
-    // 📌 Generate bindings with bindgen
-    
+    // Generate bindings with bindgen
+    // If wrapper.h changes, rerun this build script
+    println!("cargo:rerun-if-changed=wrapper.h");
+
     let bindings = bindgen::Builder::default()
         .header("wrapper.h")
         .clang_arg(format!("-I{}", include_freerdp))
@@ -43,7 +44,7 @@ fn main() {
         .generate()
         .expect("Bindings could not be generated");
 
-    // 📌 Save to src/bindings/mod.rs (checked into version control)
+    // Save to src/bindings/mod.rs (checked into version control)
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap()).join("bindings.rs");
     bindings.write_to_file(&out_path).unwrap();
 }

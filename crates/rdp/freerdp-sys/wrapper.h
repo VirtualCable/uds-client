@@ -2,6 +2,7 @@
 #include <freerdp/client.h>
 #include <freerdp/gdi/gdi.h>
 #include <freerdp/codec/color.h>
+#include <freerdp/transport_io.h>
 #include <winpr/synch.h>
 #include <winpr/wtypes.h>
 #include <winpr/winpr.h>
