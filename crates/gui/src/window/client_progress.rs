@@ -1,37 +1,49 @@
 #![allow(dead_code)]
-use std::time::Instant;
+use std::{fmt, sync::Arc, time::Instant};
 
 use anyhow::Result;
 use eframe::egui;
 
-use super::{super::types::GuiMessage, AppState, AppWindow, State};
+use shared::log;
 
+use super::{AppWindow, types::AppState};
+
+#[derive(Clone)]
 pub struct ProgressState {
-    progress: f32,
+    progress: Arc<f32>,
     progress_message: String,
-    // stop: Trigger,  // Will be reintegrated wen on client app
-    message: Option<GuiMessage>,
-    texture: Option<egui::TextureHandle>,
     start: Instant,
 }
 
+impl fmt::Debug for ProgressState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ProgressState")
+            .field("progress", &self.progress)
+            .field("progress_message", &self.progress_message)
+            .field("start", &self.start)
+            .finish()
+    }
+}
+
 impl AppWindow {
-    pub fn switch_to_client_progress(&mut self, ctx: &eframe::egui::Context) -> Result<()> {
+    pub fn setup_client_progress(&mut self, ctx: &eframe::egui::Context) -> Result<()> {
+        log::debug!("Switching to client progress window...");
         self.resize_and_center(ctx, [320.0, 280.0]);
 
-        self.app_state = AppState::ClientProgress;
-        self.inner_state = State::Progress(ProgressState {
-            progress: 0.0,
+        self.set_app_state(AppState::ClientProgress(ProgressState {
+            progress: Arc::new(0.0),
             progress_message: String::new(),
-            // stop: Trigger::new(),
-            message: None,
-            texture: None,
             start: Instant::now(),
-        });
+        }));
         Ok(())
     }
 
-    pub fn update_progress(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    pub fn update_progress(
+        &mut self,
+        ctx: &egui::Context,
+        _frame: &mut eframe::Frame,
+        _state: &ProgressState,
+    ) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.label("Progress...");
         });

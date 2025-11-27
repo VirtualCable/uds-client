@@ -8,8 +8,9 @@ use anyhow::Result;
 use crossbeam::channel::Receiver;
 use eframe::egui;
 
-use super::{input, types::AppState, types::GuiMessage};
-use crate::log;
+use crate::input;
+
+use shared::{log, system::trigger::Trigger};
 
 mod client_progress;
 mod rdp_connected;
@@ -19,37 +20,42 @@ mod msgw_error;
 mod msgw_warning;
 mod msgw_yesno;
 
+pub mod types;
+
 const FRAMES_IN_FLIGHT: usize = 128;
 
-pub enum State {
-    Progress(client_progress::ProgressState),
-    Rdp(rdp_connected::RdpState),
-    None,
-}
-
 pub(super) struct AppWindow {
-    pub prev_app_state: AppState,
-    pub app_state: AppState,
-    pub inner_state: State,
+    pub app_state: types::AppState,
+    pub prev_app_state: types::AppState,
+    pub texture: egui::TextureHandle, // Logo texture, useful for various windows
     pub processing_events: Arc<AtomicBool>, // Set if we need to process events
     pub events: Receiver<input::RawKey>,
-    pub gui_messages_rx: Receiver<GuiMessage>,
+    pub gui_messages_rx: Receiver<types::GuiMessage>,
+    pub stop: Trigger, // For stopping any ongoing operations
 }
 
 impl AppWindow {
     pub fn new(
         processing_events: Arc<AtomicBool>,
         events: Receiver<input::RawKey>,
-        gui_messages_rx: Receiver<GuiMessage>,
+        gui_messages_rx: Receiver<types::GuiMessage>,
+        stop: Trigger,
+        cc: &eframe::CreationContext<'_>,
     ) -> Self {
         processing_events.store(false, Ordering::Relaxed); // Initially not processing events
+        let texture = cc.egui_ctx.load_texture(
+            "empty",
+            crate::logo::load_logo(),
+            egui::TextureOptions::LINEAR,
+        );
         Self {
-            app_state: AppState::RdpConnecting,
-            prev_app_state: AppState::RdpConnecting,
-            inner_state: State::None,
+            app_state: types::AppState::RdpConnecting,
+            prev_app_state: types::AppState::Invisible,
+            texture,
             events,
             gui_messages_rx,
             processing_events,
+            stop,
         }
     }
 
@@ -64,49 +70,56 @@ impl AppWindow {
         ));
     }
 
-    pub fn switch_to_invisible(&mut self, ctx: &eframe::egui::Context) -> Result<()> {
-        self.app_state = AppState::Invisible;
-        self.inner_state = State::None;
-
-        self.processing_events.store(false, Ordering::Relaxed); // Stop processing events
-        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
-        Ok(())
+    pub fn set_app_state(&mut self, new_state: types::AppState) {
+        self.processing_events.store(false, Ordering::Relaxed); // Stop processing rdp raw events on event loop
+        self.prev_app_state = self.app_state.clone();
+        self.app_state = new_state;
     }
 
-    pub fn switch_to(&mut self, ctx: &eframe::egui::Context, state: AppState) {
-        self.processing_events.store(false, Ordering::Relaxed); // Stop processing events
+    pub fn setup_invisible(&mut self, ctx: &eframe::egui::Context) -> Result<()> {
+        self.set_app_state(types::AppState::Invisible);
 
-        let res = match state {
-            AppState::RdpConnecting => self.switch_to_rdp_connecting(ctx),
-            AppState::RdpConnected => self.switch_to_rdp_connected(ctx),
-            AppState::ClientProgress => self.switch_to_client_progress(ctx),
-            AppState::Invisible => self.switch_to_invisible(ctx),
-            AppState::YesNo => self.switch_to_yesno(ctx),
-            AppState::Warning => self.switch_to_warning(ctx),
-            AppState::Error => self.switch_to_error(ctx),
-        };
-        if let Err(e) = res {
-            log::error!("Failed to switch GUI state: {}", e);
-            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-        } else {
-            log::info!("Switched GUI state to {:?}", state);
-            self.prev_app_state = self.app_state;
-            self.app_state = state;
-        }
+        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+        Ok(())
     }
 }
 
 impl eframe::App for AppWindow {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         ctx.request_repaint_after(std::time::Duration::from_millis(16)); // Approx 60 FPS
-        match &mut self.app_state {
-            AppState::RdpConnecting => self.update_connection(ctx, frame),
-            AppState::RdpConnected => self.update_rdp_client(ctx, frame),
-            AppState::ClientProgress => self.update_progress(ctx, frame),
-            AppState::Invisible => {} // Nothing to do
-            AppState::YesNo => self.update_yesno(ctx, frame),
-            AppState::Warning => self.update_warning(ctx, frame),
-            AppState::Error => self.update_error(ctx, frame),
+        // First, process any incoming GUI messages
+        while let Ok(msg) = self.gui_messages_rx.try_recv() {
+            match msg {
+                types::GuiMessage::Close => {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    return;
+                }
+                types::GuiMessage::ShowError(msg) => {
+                    self.setup_error(ctx, msg.clone()).ok();
+                }
+                types::GuiMessage::ShowWarning(msg) => {
+                    self.setup_warning(ctx, msg.clone()).ok();
+                }
+                types::GuiMessage::ShowYesNo(msg, resp_tx) => {
+                    self.setup_yesno(ctx, msg.clone(), resp_tx).ok();
+                }
+                _ => {
+                    log::warn!("Unhandled GUI message: {:?}", msg);
+                }
+            }
+        }
+
+        // States shoud be clonable to work correctly
+        // And changes should be reflected on all references
+        let mut app_state = self.app_state.clone();
+        match &mut app_state {
+            types::AppState::RdpConnecting => self.update_connection(ctx, frame),
+            types::AppState::RdpConnected(rdp_state) => self.update_rdp_client(ctx, frame, rdp_state),
+            types::AppState::ClientProgress(client_state) => self.update_progress(ctx, frame, client_state),
+            types::AppState::Invisible => {} // Nothing to do
+            types::AppState::YesNo(message, resp_tx) => self.update_yesno(ctx, frame, message, resp_tx),
+            types::AppState::Warning(message) => self.update_warning(ctx, frame, message),
+            types::AppState::Error(message) => self.update_error(ctx, frame, message),
         }
     }
 }

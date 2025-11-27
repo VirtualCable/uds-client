@@ -1,10 +1,14 @@
 #![allow(dead_code)]
-use std::{time::Instant};
+use std::time::Instant;
 
 use anyhow::Result;
+use crossbeam::channel::Sender;
 use eframe::egui;
 
-use super::{super::types::GuiMessage, AppWindow};
+use super::{
+    AppWindow,
+    types::{AppState, GuiMessage},
+};
 
 pub struct ProgressState {
     progress: f32,
@@ -16,14 +20,26 @@ pub struct ProgressState {
 }
 
 impl AppWindow {
-    pub fn switch_to_yesno(&mut self, ctx: &eframe::egui::Context) -> Result<()> {
+    pub fn setup_yesno(
+        &mut self,
+        ctx: &eframe::egui::Context,
+        message: String,
+        resp_tx: Option<Sender<bool>>,
+    ) -> Result<()> {
         self.resize_and_center(ctx, [320.0, 280.0]);
+        self.set_app_state(AppState::YesNo(message, resp_tx));
         Ok(())
     }
 
-    pub fn update_yesno(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    pub fn update_yesno(
+        &mut self,
+        ctx: &egui::Context,
+        _frame: &mut eframe::Frame,
+        message: &str,
+        _resp_tx: &mut Option<Sender<bool>>,
+    ) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.label("yesno...");
+            ui.label(message);
         });
     }
 }

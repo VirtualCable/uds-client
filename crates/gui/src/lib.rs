@@ -12,13 +12,12 @@ use winit::{
     keyboard::PhysicalKey,
 };
 
-use shared::log;
+use shared::{log, system::trigger::Trigger};
 
 pub mod consts;
-pub mod input;
-pub mod types;
-pub mod window;
 pub mod geom;
+pub mod input;
+pub mod window;
 
 pub mod about;
 
@@ -104,17 +103,18 @@ impl ApplicationHandler<UserEvent> for RdpAppProxy<'_> {
 
 pub fn run_gui() -> Result<()> {
     let (keys_tx, keys_rx): (Sender<input::RawKey>, Receiver<input::RawKey>) = bounded(1024);
-    let (_messages_tx, messages_rx): (Sender<types::GuiMessage>, Receiver<types::GuiMessage>) =
-        bounded(32);
-
+    let (_messages_tx, messages_rx): (
+        Sender<window::types::GuiMessage>,
+        Receiver<window::types::GuiMessage>,
+    ) = bounded(32);
     let processing_events = Arc::new(AtomicBool::new(false));
-
-    let window = window::AppWindow::new(processing_events.clone(), keys_rx, messages_rx); // ahora recibe el Receiver
+    let stop_event = Trigger::new();
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([400.0, 300.0])
             .with_app_id("UDSLauncher")
+            .with_icon(logo::load_icon())
             .with_resizable(false),
         centered: true,
         ..Default::default()
@@ -123,12 +123,24 @@ pub fn run_gui() -> Result<()> {
     let event_loop = EventLoop::<UserEvent>::with_user_event().build()?;
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    let winit_app = eframe::create_native(
-        "UDS Launcher",
-        native_options,
-        Box::new(|_cc| Ok(Box::new(window))),
-        &event_loop,
-    );
+    let winit_app = {
+        let processing_events = processing_events.clone();
+        let stop_event = stop_event.clone();
+        eframe::create_native(
+            "UDS Launcher",
+            native_options,
+            Box::new(|_cc| {
+                Ok(Box::new(window::AppWindow::new(
+                    processing_events,
+                    keys_rx,
+                    messages_rx,
+                    stop_event,
+                    _cc,
+                )))
+            }),
+            &event_loop,
+        )
+    };
     let mut eframe_app_proxy = RdpAppProxy {
         events: keys_tx,
         eframe_app: winit_app,

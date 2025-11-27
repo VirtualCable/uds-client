@@ -1,5 +1,8 @@
 #![allow(dead_code)]
-use std::sync::{Arc, RwLock, atomic::Ordering};
+use std::{
+    fmt,
+    sync::{Arc, RwLock, atomic::Ordering},
+};
 
 use anyhow::Result;
 use crossbeam::channel::{Receiver, Sender, bounded};
@@ -14,21 +17,30 @@ use rdp::{
 
 use crate::geom::RectExt; // For extracting rects from framebuffer
 
-use super::{AppState, AppWindow, State};
+use super::{AppWindow, types::AppState};
 
 const FRAMES_IN_FLIGHT: usize = 128;
 
+#[derive(Clone)]
 pub struct RdpState {
     update_rx: crossbeam::channel::Receiver<RdpMessage>,
     gdi: *mut freerdp_sys::rdpGdi,
     gdi_lock: Arc<RwLock<()>>,
-    stop_event: freerdp_sys::HANDLE,
     input: *mut freerdp_sys::rdpInput,
-    texture: Option<egui::TextureHandle>,
+    texture: egui::TextureHandle,
+}
+
+impl fmt::Debug for RdpState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RdpState")
+            .field("gdi", &self.gdi)
+            .field("input", &self.input)
+            .finish()
+    }
 }
 
 impl AppWindow {
-    pub fn switch_to_rdp_connected(&mut self, ctx: &eframe::egui::Context) -> Result<()> {
+    pub fn setup_rdp_connected(&mut self, ctx: &eframe::egui::Context) -> Result<()> {
         self.processing_events.store(true, Ordering::Relaxed); // Start processing events
         let (tx, rx): (Sender<RdpMessage>, Receiver<RdpMessage>) = bounded(FRAMES_IN_FLIGHT);
 
@@ -75,23 +87,26 @@ impl AppWindow {
             .ok_or_else(|| anyhow::anyhow!("Input not initialized"))?;
         // And the lock
         let gdi_lock = rdp.gdi_lock();
-        let stop_event = rdp
-            .get_stop_event()
-            .ok_or_else(|| anyhow::anyhow!("Stop event not available"))?;
 
         log::debug!("Obtained GDI pointer: {:?}", gdi);
         log::debug!("Gdi: {:?}", unsafe { *gdi });
 
-        // Create a base texture of the right size
-        self.app_state = AppState::RdpConnected;
-        self.inner_state = State::Rdp(RdpState {
+        // Stride in bytes
+        let pitch = unsafe { (*gdi).stride } as usize;
+        let height = unsafe { (*gdi).height } as usize;
+        let buffer = unsafe {
+            std::slice::from_raw_parts((*gdi).primary_buffer as *const u8, pitch * height)
+        };
+        let image = egui::ColorImage::from_rgba_unmultiplied([pitch / 4, height], buffer);
+        let texture = ctx.load_texture("rdp_framebuffer", image, egui::TextureOptions::NEAREST);
+
+        self.set_app_state(AppState::RdpConnected(RdpState {
             update_rx: rx,
             gdi,
             input,
             gdi_lock,
-            stop_event,
-            texture: None,
-        });
+            texture,
+        }));
 
         // TODO: maybe add a trigger to allow proper shutdown
         std::thread::spawn(move || {
@@ -103,40 +118,19 @@ impl AppWindow {
                 log::debug!("RDP thread ended.");
             }
         });
+        self.processing_events.store(true, Ordering::Relaxed); // Start processing events
+
         Ok(())
     }
     // We have 2 states, 1 for the connection progress, another for the window
 
-    pub(super) fn update_rdp_client(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    pub(super) fn update_rdp_client(
+        &mut self,
+        ctx: &egui::Context,
+        frame: &mut eframe::Frame,
+        rdp_state: &mut RdpState,
+    ) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            // Extract rdp state from inner state or switch back to connection state
-
-            let rdp_state = if let State::Rdp(rdp_state) = &mut self.inner_state {
-                rdp_state
-            } else {
-                self.switch_to(ctx, AppState::RdpConnecting);
-                return;
-            };
-            ctx.request_repaint_after(std::time::Duration::from_millis(16));
-
-            // If no texture yet, create one
-            if rdp_state.texture.is_none() {
-                // Stride in bytes
-                let pitch = unsafe { (*rdp_state.gdi).stride } as usize;
-                let height = unsafe { (*rdp_state.gdi).height } as usize;
-                let buffer = unsafe {
-                    std::slice::from_raw_parts(
-                        (*rdp_state.gdi).primary_buffer as *const u8,
-                        pitch * height,
-                    )
-                };
-                let image = egui::ColorImage::from_rgba_unmultiplied([pitch / 4, height], buffer);
-                let texture =
-                    ui.ctx()
-                        .load_texture("rdp_framebuffer", image, egui::TextureOptions::NEAREST);
-                rdp_state.texture = Some(texture);
-            }
-
             let mut switch_back_to_connection = false;
             while let Ok(message) = rdp_state.update_rx.try_recv() {
                 match message {
@@ -155,10 +149,8 @@ impl AppWindow {
                                 unsafe { (*rdp_state.gdi).width as usize },
                                 unsafe { (*rdp_state.gdi).height as usize },
                             );
-                            if let Some(image) = img
-                                && let Some(texture) = rdp_state.texture.as_mut()
-                            {
-                                texture.set_partial(
+                            if let Some(image) = img {
+                                rdp_state.texture.set_partial(
                                     [rect.x as usize, rect.y as usize],
                                     image,
                                     egui::TextureOptions::NEAREST,
@@ -187,13 +179,13 @@ impl AppWindow {
                 }
             }
             if switch_back_to_connection {
-                self.switch_to(ctx, AppState::RdpConnecting);
+                if let Err(e) = self.setup_rdp_connecting(ctx) {
+                    ui.label(format!("Failed to switch to connection: {}", e));
+                }
                 return;
             }
             // Show the texture on 0,0, full size
-            if let Some(texture) = &rdp_state.texture {
-                ui.image(texture);
-            }
+            ui.image(&rdp_state.texture);
 
             let input = rdp_state.input;
             self.handle_input(ctx, frame, input);
