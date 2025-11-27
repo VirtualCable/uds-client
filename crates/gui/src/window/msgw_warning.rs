@@ -12,12 +12,8 @@ impl AppWindow {
         let text_height = calculate_text_height(&message, 40, 18.0);
         self.resize_and_center(ctx, [320.0, text_height + 48.0]);
         self.set_app_state(AppState::Warning(message));
-        ctx.send_viewport_cmd(egui::ViewportCommand::Title("Warning".to_string()));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.gettext("Warning")));
         Ok(())
-    }
-
-    pub fn exit_warning(&mut self, _ctx: &eframe::egui::Context) {
-        // Any cleanup if necessary
     }
 
     pub fn update_warning(
@@ -35,6 +31,7 @@ impl AppWindow {
             });
             egui::TopBottomPanel::bottom("warning_button_panel")
                 .show_separator_line(false)
+                .min_height(48.0)
                 .show(ctx, |ui| {
                     ui.horizontal_centered(|ui: &mut egui::Ui| {
                         ui.vertical_centered(|ui: &mut egui::Ui| {
@@ -44,9 +41,8 @@ impl AppWindow {
                                 .clicked()
                             {
                                 // Restore previos state
-                                self.set_app_state(self.prev_app_state.clone());
+                                self.restore_previous_state(ctx);
                             }
-                            ui.add_space(12.0);
                         });
                     });
                 });

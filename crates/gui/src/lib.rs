@@ -102,14 +102,14 @@ impl ApplicationHandler<UserEvent> for RdpAppProxy<'_> {
 }
 
 /// Run the GUI application
-pub fn run_gui(catalog: gettext::Catalog, initial_state: Option<window::types::AppState>) -> Result<()> {
+pub fn run_gui(
+    catalog: gettext::Catalog,
+    initial_state: Option<window::types::AppState>,
+    messages_rx: Receiver<window::types::GuiMessage>,
+    stop: Trigger,
+) -> Result<()> {
     let (keys_tx, keys_rx): (Sender<input::RawKey>, Receiver<input::RawKey>) = bounded(1024);
-    let (_messages_tx, messages_rx): (
-        Sender<window::types::GuiMessage>,
-        Receiver<window::types::GuiMessage>,
-    ) = bounded(32);
     let processing_events = Arc::new(AtomicBool::new(false));
-    let stop_event = Trigger::new();
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -126,7 +126,6 @@ pub fn run_gui(catalog: gettext::Catalog, initial_state: Option<window::types::A
 
     let winit_app = {
         let processing_events = processing_events.clone();
-        let stop_event = stop_event.clone();
         eframe::create_native(
             "UDS Launcher",
             native_options,
@@ -135,7 +134,7 @@ pub fn run_gui(catalog: gettext::Catalog, initial_state: Option<window::types::A
                     processing_events,
                     keys_rx,
                     messages_rx,
-                    stop_event,
+                    stop,
                     catalog,
                     initial_state,
                     cc,

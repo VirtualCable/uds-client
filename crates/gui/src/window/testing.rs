@@ -2,31 +2,44 @@
 use anyhow::Result;
 use crossbeam::channel::bounded;
 use eframe::egui;
+use rdp::settings::{RdpSettings, ScreenSize};
 
-use super::{AppWindow, types::AppState};
+use super::{AppWindow, client_progress::ProgressState, types::AppState};
 
 impl AppWindow {
-    pub fn setup_testing(&mut self, ctx: &eframe::egui::Context) -> Result<()> {
-        ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize([400.0, 300.0].into()));
-        ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition([10.0, 10.0].into()));
-        self.set_app_state(AppState::RdpConnecting);
+    pub fn enter_testing(&mut self, ctx: &eframe::egui::Context) -> Result<()> {
+        self.resize_and_center(ctx, [400.0, 300.0]);
+        self.set_app_state(AppState::Test);
 
         Ok(())
     }
 
+    pub fn restore_testing(&mut self, ctx: &eframe::egui::Context) -> Result<()> {
+        self.enter_testing(ctx)
+    }
+
     pub fn update_testing(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Connect to RDP Server");
-            ui.label("Enter server details and connect.");
+            ui.heading("Test Screen");
+            ui.label("Select action.");
             // Here you can add input fields for server, user, password, etc.
             if ui.button("Connect").clicked() {
                 // For demonstration, we use a hardcoded host
-                if let Err(e) = self.enter_rdp_connected(ctx) {
+                if let Err(e) = self.enter_rdp_connected(
+                    ctx,
+                    RdpSettings {
+                        server: "172.27.247.161".to_string(),
+                        user: "user".to_string(),
+                        password: "temporal".to_string(),
+                        screen_size: ScreenSize::Fixed(1600, 900),
+                        ..RdpSettings::default()
+                    },
+                ) {
                     ui.label(format!("Failed to connect: {}", e));
                 }
             }
             if ui.button("Progress").clicked()
-                && let Err(e) = self.enter_client_progress(ctx)
+                && let Err(e) = self.enter_client_progress(ctx, ProgressState::default())
             {
                 ui.label(format!("Failed to show progress: {}", e));
             }

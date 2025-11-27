@@ -71,7 +71,7 @@ impl AppWindow {
     }
 
     pub fn resize_and_center(&mut self, ctx: &eframe::egui::Context, size: impl Into<egui::Vec2>) {
-        let size = size.into() + [0.0, 48.0].into();  // Add some extra space for title bar
+        let size = size.into() + [0.0, 48.0].into(); // Add some extra space for title bar
         let screen_size = (1920.0, 1080.0); // TODO: Get actual screen size
         let x_coord = (screen_size.0 - size.x) / 2.0;
         let y_coord = (screen_size.1 - size.y) / 2.0;
@@ -83,8 +83,31 @@ impl AppWindow {
 
     pub fn set_app_state(&mut self, new_state: types::AppState) {
         self.processing_events.store(false, Ordering::Relaxed); // Stop processing rdp raw events on event loop
-        self.prev_app_state = self.app_state.clone();
+        // Only testing and client_progress states can go back
+        self.prev_app_state = if matches!(
+            self.app_state,
+            types::AppState::Test | types::AppState::ClientProgress(_)
+        ) {
+            self.app_state.clone()
+        } else {
+            types::AppState::default()
+        };
         self.app_state = new_state;
+    }
+
+    pub fn restore_previous_state(&mut self, ctx: &eframe::egui::Context) {
+        self.processing_events.store(false, Ordering::Relaxed); // Stop processing rdp raw events on event loop
+        self.app_state = self.prev_app_state.clone();
+        self.prev_app_state = types::AppState::default();
+        // Call restore if necessary, that is, for testing and client_progress states
+        // Other states do not need restoration
+        match &self.app_state {
+            types::AppState::Test => self.restore_testing(ctx).ok(),
+            types::AppState::ClientProgress(state) => {
+                self.restore_client_progress(ctx, state.clone()).ok()
+            }
+            _ => None,
+        };
     }
 
     pub fn enter_invisible(&mut self, ctx: &eframe::egui::Context) -> Result<()> {
@@ -102,6 +125,11 @@ impl AppWindow {
 
 impl eframe::App for AppWindow {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        // If stop has been triggered, close the window
+        if self.stop.is_set() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            return;
+        }
         ctx.request_repaint_after(std::time::Duration::from_millis(16)); // Approx 60 FPS
         // First, process any incoming GUI messages
         while let Ok(msg) = self.gui_messages_rx.try_recv() {

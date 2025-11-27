@@ -40,21 +40,23 @@ impl fmt::Debug for ProgressState {
 }
 
 impl AppWindow {
-    pub fn enter_client_progress(&mut self, ctx: &eframe::egui::Context) -> Result<()> {
+    pub fn enter_client_progress(
+        &mut self,
+        ctx: &eframe::egui::Context,
+        state: ProgressState,
+    ) -> Result<()> {
         log::debug!("Switching to client progress window...");
         self.resize_and_center(ctx, [320.0, 280.0]);
-        ctx.send_viewport_cmd(egui::ViewportCommand::Title("UDS Launcher - Progress".to_string()));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Title(
+            "UDS Launcher - Progress".to_string(),
+        ));
 
-        self.set_app_state(AppState::ClientProgress(ProgressState {
-            progress: Arc::new(AtomicU16::new(0)),
-            progress_message: String::new(),
-            start: Instant::now(),
-        }));
+        self.set_app_state(AppState::ClientProgress(state));
         Ok(())
     }
 
-    pub fn exit_client_progress(&mut self) {
-        log::debug!("Exiting client progress window...");
+    pub fn restore_client_progress(&mut self, ctx: &eframe::egui::Context, state: ProgressState) -> Result<()> {
+        self.enter_client_progress(ctx, state)
     }
 
     pub fn update_progress(

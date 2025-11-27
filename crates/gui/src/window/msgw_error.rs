@@ -1,24 +1,46 @@
 use anyhow::Result;
 use eframe::egui;
 
-use super::{AppWindow, types::AppState, helper::{display_multiline_text, calculate_text_height}};
+use super::{
+    AppWindow,
+    helper::{calculate_text_height, display_multiline_text},
+    types::AppState,
+};
 
 impl AppWindow {
     pub fn enter_error(&mut self, ctx: &egui::Context, message: String) -> Result<()> {
-        // Calculate aprox vertical size
         let text_height = calculate_text_height(&message, 40, 18.0);
         self.resize_and_center(ctx, [320.0, text_height + 48.0]);
-        self.set_app_state(AppState::Error(message));
+        self.set_app_state(AppState::Warning(message));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.gettext("Error")));
         Ok(())
-    }
-
-    pub fn exit_error(&mut self, _ctx: &eframe::egui::Context) {
-        // Any cleanup if necessary
     }
 
     pub fn update_error(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame, message: &str) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            display_multiline_text(ui, message, self.gettext("Click to open link"));
+            ui.set_width(300.0);
+            ui.horizontal_centered(|ui: &mut egui::Ui| {
+                ui.vertical_centered(|ui: &mut egui::Ui| {
+                    display_multiline_text(ui, message, self.gettext("Click to open link"));
+                });
+            });
+            egui::TopBottomPanel::bottom("error_button_panel")
+                .show_separator_line(false)
+                .show(ctx, |ui| {
+                    ui.horizontal_centered(|ui: &mut egui::Ui| {
+                        ui.vertical_centered(|ui: &mut egui::Ui| {
+                            ui.add_space(12.0);
+                            if ui
+                                .add_sized([80.0, 30.0], egui::Button::new(self.gettext("Ok")))
+                                .clicked()
+                            {
+                                // Restore previos state
+                                self.restore_previous_state(ctx);
+                            }
+                            ui.add_space(12.0);
+                        });
+                    });
+                });
         });
     }
 }

@@ -3,6 +3,7 @@ use eframe::egui;
 use shared::{log, utils::split_lines};
 
 pub(super) fn display_multiline_text(ui: &mut egui::Ui, text: &str, hover_text: String) {
+    ui.add_space(18.0);
     for line in split_lines(text, 40) {
         if line.starts_with("http") {
             // get label after |

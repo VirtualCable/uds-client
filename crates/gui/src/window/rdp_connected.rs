@@ -12,7 +12,7 @@ use crate::log;
 
 use rdp::{
     connection::{Rdp, RdpMessage},
-    settings::{RdpSettings, ScreenSize},
+    settings::RdpSettings,
 };
 
 use crate::geom::RectExt; // For extracting rects from framebuffer
@@ -40,23 +40,24 @@ impl fmt::Debug for RdpState {
 }
 
 impl AppWindow {
-    pub fn enter_rdp_connected(&mut self, ctx: &eframe::egui::Context) -> Result<()> {
+    pub fn enter_rdp_connected(
+        &mut self,
+        ctx: &eframe::egui::Context,
+        rdp_settings: RdpSettings,
+    ) -> Result<()> {
         self.processing_events.store(true, Ordering::Relaxed); // Start processing events
         let (tx, rx): (Sender<RdpMessage>, Receiver<RdpMessage>) = bounded(FRAMES_IN_FLIGHT);
 
-        ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize([1600.0, 900.0].into()));
+        ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
+            [
+                rdp_settings.screen_size.width() as f32,
+                rdp_settings.screen_size.height() as f32,
+            ]
+            .into(),
+        ));
         ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition([10.0, 10.0].into()));
 
-        let mut rdp = Box::pin(Rdp::new(
-            RdpSettings {
-                server: "172.27.247.161".to_string(),
-                user: "user".to_string(),
-                password: "temporal".to_string(),
-                screen_size: ScreenSize::Fixed(1600, 900),
-                ..RdpSettings::default()
-            },
-            tx,
-        ));
+        let mut rdp = Box::pin(Rdp::new(rdp_settings, tx));
         // rdp.set_update_callbacks(vec![
         //     update_c::Callbacks::BeginPaint,
         //     update_c::Callbacks::EndPaint,
@@ -122,10 +123,6 @@ impl AppWindow {
 
         Ok(())
     }
-    
-    pub fn exit_rdp_connected(&mut self, _ctx: &eframe::egui::Context) {
-        // Any cleanup if necessary
-    }
 
     pub(super) fn update_rdp_client(
         &mut self,
@@ -136,7 +133,6 @@ impl AppWindow {
         egui::CentralPanel::default()
             .frame(egui::Frame::default().inner_margin(0.0))
             .show(ctx, |ui| {
-                let mut switch_back_to_connection = false;
                 while let Ok(message) = rdp_state.update_rx.try_recv() {
                     match message {
                         RdpMessage::UpdateRects(rects) => {
@@ -170,24 +166,18 @@ impl AppWindow {
                         RdpMessage::Disconnect => {
                             log::debug!("RDP Disconnected");
                             // TODO: Handle disconnection properly
-                            switch_back_to_connection = true;
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                             break;
                         }
                         RdpMessage::Error(err) => {
                             log::debug!("RDP Error: {}", err);
-                            switch_back_to_connection = true;
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                             break;
                         }
                         RdpMessage::FocusRequired => {
                             log::debug!("RDP Focus Required");
                         }
                     }
-                }
-                if switch_back_to_connection {
-                    if let Err(e) = self.enter_rdp_connecting(ctx) {
-                        ui.label(format!("Failed to switch to connection: {}", e));
-                    }
-                    return;
                 }
                 // Show the texture on 0,0, full size
                 ui.image(&rdp_state.texture);
