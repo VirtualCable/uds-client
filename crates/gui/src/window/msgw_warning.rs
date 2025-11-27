@@ -1,22 +1,10 @@
-#![allow(dead_code)]
-use std::time::Instant;
-
 use anyhow::Result;
 use eframe::egui;
 
 use super::{
     AppWindow,
-    types::{AppState, GuiMessage},
+    types::{AppState},
 };
-
-pub struct ProgressState {
-    progress: f32,
-    progress_message: String,
-    // stop: Trigger,  // Will be reintegrated wen on client app
-    message: Option<GuiMessage>,
-    texture: Option<egui::TextureHandle>,
-    start: Instant,
-}
 
 impl AppWindow {
     pub fn setup_warning(&mut self, ctx: &eframe::egui::Context, message: String) -> Result<()> {

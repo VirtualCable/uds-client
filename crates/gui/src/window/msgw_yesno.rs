@@ -1,28 +1,12 @@
-#![allow(dead_code)]
-use std::time::Instant;
-
 use anyhow::Result;
 use crossbeam::channel::Sender;
 use eframe::egui;
 
-use super::{
-    AppWindow,
-    types::{AppState, GuiMessage},
-};
-
-pub struct ProgressState {
-    progress: f32,
-    progress_message: String,
-    // stop: Trigger,  // Will be reintegrated wen on client app
-    message: Option<GuiMessage>,
-    texture: Option<egui::TextureHandle>,
-    start: Instant,
-}
-
+use super::{AppWindow, types::AppState};
 impl AppWindow {
     pub fn setup_yesno(
         &mut self,
-        ctx: &eframe::egui::Context,
+        ctx: &egui::Context,
         message: String,
         resp_tx: Option<Sender<bool>>,
     ) -> Result<()> {
