@@ -1,5 +1,9 @@
 #![allow(dead_code)]
-use std::{fmt, sync::Arc, time::Instant};
+use std::{
+    fmt,
+    sync::{Arc, atomic::AtomicU16},
+    time::Instant,
+};
 
 use anyhow::Result;
 use eframe::egui;
@@ -10,9 +14,19 @@ use super::{AppWindow, types::AppState};
 
 #[derive(Clone)]
 pub struct ProgressState {
-    progress: Arc<f32>,
+    progress: Arc<AtomicU16>, // Progress percentage (0-100)
     progress_message: String,
     start: Instant,
+}
+
+impl Default for ProgressState {
+    fn default() -> Self {
+        Self {
+            progress: Arc::new(AtomicU16::new(0)),
+            progress_message: String::new(),
+            start: Instant::now(),
+        }
+    }
 }
 
 impl fmt::Debug for ProgressState {
@@ -26,16 +40,21 @@ impl fmt::Debug for ProgressState {
 }
 
 impl AppWindow {
-    pub fn setup_client_progress(&mut self, ctx: &eframe::egui::Context) -> Result<()> {
+    pub fn enter_client_progress(&mut self, ctx: &eframe::egui::Context) -> Result<()> {
         log::debug!("Switching to client progress window...");
         self.resize_and_center(ctx, [320.0, 280.0]);
+        ctx.send_viewport_cmd(egui::ViewportCommand::Title("UDS Launcher - Progress".to_string()));
 
         self.set_app_state(AppState::ClientProgress(ProgressState {
-            progress: Arc::new(0.0),
+            progress: Arc::new(AtomicU16::new(0)),
             progress_message: String::new(),
             start: Instant::now(),
         }));
         Ok(())
+    }
+
+    pub fn exit_client_progress(&mut self) {
+        log::debug!("Exiting client progress window...");
     }
 
     pub fn update_progress(

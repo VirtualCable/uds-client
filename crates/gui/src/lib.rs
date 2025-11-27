@@ -14,8 +14,9 @@ use winit::{
 
 use shared::{log, system::trigger::Trigger};
 
+mod geom;
+
 pub mod consts;
-pub mod geom;
 pub mod input;
 pub mod window;
 
@@ -23,14 +24,15 @@ pub mod about;
 
 pub mod logo;
 
+/// Proxy over the eframe proxy to capture keyboard input events
+/// so we can get scancodes to send to RDP
 pub struct RdpAppProxy<'a> {
     eframe_app: EframeWinitApplication<'a>,
     events: Sender<input::RawKey>,
     processing_events: Arc<AtomicBool>,
 }
 
-// Proxy over the proxy to capture keyboard input events
-// we we can get scancodes to send to RDP
+// Implement ApplicationHandler to intercept events
 impl ApplicationHandler<UserEvent> for RdpAppProxy<'_> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         self.eframe_app.resumed(event_loop);
@@ -45,25 +47,23 @@ impl ApplicationHandler<UserEvent> for RdpAppProxy<'_> {
         // If a window event, try to push keyboard events to the channel
         if self.processing_events.load(Ordering::Relaxed)
             && let winit::event::WindowEvent::KeyboardInput { event, .. } = &event
+            && let PhysicalKey::Code(code) = event.physical_key
         {
-            if let PhysicalKey::Code(code) = event.physical_key {
-                log::debug!("Physical key code: {:?}", code);
-                let raw_key = input::RawKey {
-                    keycode: code,
-                    pressed: event.state.is_pressed(),
-                    repeat: event.repeat,
-                };
-                if let Err(e) = self.events.send(raw_key) {
-                    log::error!("Failed to send keyboard event: {}", e);
-                }
+            let raw_key = input::RawKey {
+                keycode: code,
+                pressed: event.state.is_pressed(),
+                repeat: event.repeat,
+            };
+            if let Err(e) = self.events.send(raw_key) {
+                log::error!("Failed to send keyboard event: {}", e);
             }
-            // We can process Unidentified::NativeKeyCode if needed
-            log::debug!(
-                "Keyboard event: {:?}, pressed: {}",
-                event.physical_key,
-                event.state == winit::event::ElementState::Pressed,
-            );
         }
+        // We can process Unidentified::NativeKeyCode if needed
+        // log::debug!(
+        //     "Keyboard event: {:?}, pressed: {}",
+        //     event.physical_key,
+        //     event.state == winit::event::ElementState::Pressed,
+        // );
         self.eframe_app.window_event(event_loop, window_id, event);
     }
 
@@ -101,7 +101,8 @@ impl ApplicationHandler<UserEvent> for RdpAppProxy<'_> {
     }
 }
 
-pub fn run_gui() -> Result<()> {
+/// Run the GUI application
+pub fn run_gui(catalog: gettext::Catalog, initial_state: Option<window::types::AppState>) -> Result<()> {
     let (keys_tx, keys_rx): (Sender<input::RawKey>, Receiver<input::RawKey>) = bounded(1024);
     let (_messages_tx, messages_rx): (
         Sender<window::types::GuiMessage>,
@@ -129,13 +130,15 @@ pub fn run_gui() -> Result<()> {
         eframe::create_native(
             "UDS Launcher",
             native_options,
-            Box::new(|_cc| {
+            Box::new(|cc| {
                 Ok(Box::new(window::AppWindow::new(
                     processing_events,
                     keys_rx,
                     messages_rx,
                     stop_event,
-                    _cc,
+                    catalog,
+                    initial_state,
+                    cc,
                 )))
             }),
             &event_loop,

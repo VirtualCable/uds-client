@@ -17,3 +17,8 @@ winit = "0.30.12"
 
 zeroize = { version = "1", features = ["derive"] }
 image = { version = "0.25.8", features = ["png"] }
+
+# For opening links
+open = "5.3.3"
+
+gettext = "0.4.0"

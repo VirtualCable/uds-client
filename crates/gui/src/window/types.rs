@@ -21,9 +21,11 @@ pub enum GuiMessage {
     Progress(ProgressMessage),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum AppState {
-    Invisible,
+    #[default]
+    Invisible, // Default state, window is hidden
+    Test,      // Testing window
     ClientProgress(client_progress::ProgressState),
     RdpConnecting,
     RdpConnected(rdp_connected::RdpState),

@@ -4,7 +4,7 @@ use eframe::egui;
 
 use super::{AppWindow, types::AppState};
 impl AppWindow {
-    pub fn setup_yesno(
+    pub fn enter_yesno(
         &mut self,
         ctx: &egui::Context,
         message: String,
@@ -13,6 +13,10 @@ impl AppWindow {
         self.resize_and_center(ctx, [320.0, 280.0]);
         self.set_app_state(AppState::YesNo(message, resp_tx));
         Ok(())
+    }
+
+    pub fn exit_yesno(&mut self, _ctx: &eframe::egui::Context) {
+        // Any cleanup if necessary
     }
 
     pub fn update_yesno(

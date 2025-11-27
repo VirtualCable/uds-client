@@ -40,7 +40,7 @@ impl fmt::Debug for RdpState {
 }
 
 impl AppWindow {
-    pub fn setup_rdp_connected(&mut self, ctx: &eframe::egui::Context) -> Result<()> {
+    pub fn enter_rdp_connected(&mut self, ctx: &eframe::egui::Context) -> Result<()> {
         self.processing_events.store(true, Ordering::Relaxed); // Start processing events
         let (tx, rx): (Sender<RdpMessage>, Receiver<RdpMessage>) = bounded(FRAMES_IN_FLIGHT);
 
@@ -122,7 +122,10 @@ impl AppWindow {
 
         Ok(())
     }
-    // We have 2 states, 1 for the connection progress, another for the window
+    
+    pub fn exit_rdp_connected(&mut self, _ctx: &eframe::egui::Context) {
+        // Any cleanup if necessary
+    }
 
     pub(super) fn update_rdp_client(
         &mut self,
@@ -181,7 +184,7 @@ impl AppWindow {
                     }
                 }
                 if switch_back_to_connection {
-                    if let Err(e) = self.setup_rdp_connecting(ctx) {
+                    if let Err(e) = self.enter_rdp_connecting(ctx) {
                         ui.label(format!("Failed to switch to connection: {}", e));
                     }
                     return;

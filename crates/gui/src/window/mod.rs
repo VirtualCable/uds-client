@@ -19,8 +19,11 @@ mod rdp_connecting;
 mod msgw_error;
 mod msgw_warning;
 mod msgw_yesno;
+mod testing;
 
 pub mod types;
+
+mod helper;
 
 const FRAMES_IN_FLIGHT: usize = 128;
 
@@ -31,7 +34,8 @@ pub(super) struct AppWindow {
     pub processing_events: Arc<AtomicBool>, // Set if we need to process events
     pub events: Receiver<input::RawKey>,
     pub gui_messages_rx: Receiver<types::GuiMessage>,
-    pub stop: Trigger, // For stopping any ongoing operations
+    pub stop: Trigger,             // For stopping any ongoing operations
+    pub catalog: gettext::Catalog, // For translations
 }
 
 impl AppWindow {
@@ -40,6 +44,8 @@ impl AppWindow {
         events: Receiver<input::RawKey>,
         gui_messages_rx: Receiver<types::GuiMessage>,
         stop: Trigger,
+        catalog: gettext::Catalog,
+        initial_state: Option<types::AppState>,
         cc: &eframe::CreationContext<'_>,
     ) -> Self {
         processing_events.store(false, Ordering::Relaxed); // Initially not processing events
@@ -49,21 +55,26 @@ impl AppWindow {
             egui::TextureOptions::LINEAR,
         );
         Self {
-            app_state: types::AppState::RdpConnecting,
-            prev_app_state: types::AppState::Invisible,
+            app_state: initial_state.unwrap_or_default(),
+            prev_app_state: types::AppState::default(),
             texture,
             events,
             gui_messages_rx,
             processing_events,
             stop,
+            catalog,
         }
     }
 
+    pub fn gettext(&self, msgid: &str) -> String {
+        self.catalog.gettext(msgid).to_string()
+    }
+
     pub fn resize_and_center(&mut self, ctx: &eframe::egui::Context, size: impl Into<egui::Vec2>) {
-        let size = size.into();
-        let screen_size = ctx.content_rect().size();
-        let x_coord = (screen_size.x - size.x) / 2.0;
-        let y_coord = (screen_size.y - size.y) / 2.0;
+        let size = size.into() + [0.0, 48.0].into();  // Add some extra space for title bar
+        let screen_size = (1920.0, 1080.0); // TODO: Get actual screen size
+        let x_coord = (screen_size.0 - size.x) / 2.0;
+        let y_coord = (screen_size.1 - size.y) / 2.0;
         ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(size));
         ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
             [x_coord, y_coord].into(),
@@ -76,10 +87,15 @@ impl AppWindow {
         self.app_state = new_state;
     }
 
-    pub fn setup_invisible(&mut self, ctx: &eframe::egui::Context) -> Result<()> {
+    pub fn enter_invisible(&mut self, ctx: &eframe::egui::Context) -> Result<()> {
         self.set_app_state(types::AppState::Invisible);
 
         ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+        Ok(())
+    }
+
+    pub fn exit_invisible(&mut self, ctx: &eframe::egui::Context) -> Result<()> {
+        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
         Ok(())
     }
 }
@@ -95,13 +111,13 @@ impl eframe::App for AppWindow {
                     return;
                 }
                 types::GuiMessage::ShowError(msg) => {
-                    self.setup_error(ctx, msg.clone()).ok();
+                    self.enter_error(ctx, msg.clone()).ok();
                 }
                 types::GuiMessage::ShowWarning(msg) => {
-                    self.setup_warning(ctx, msg.clone()).ok();
+                    self.enter_warning(ctx, msg.clone()).ok();
                 }
                 types::GuiMessage::ShowYesNo(msg, resp_tx) => {
-                    self.setup_yesno(ctx, msg.clone(), resp_tx).ok();
+                    self.enter_yesno(ctx, msg.clone(), resp_tx).ok();
                 }
                 _ => {
                     log::warn!("Unhandled GUI message: {:?}", msg);
@@ -114,12 +130,19 @@ impl eframe::App for AppWindow {
         let mut app_state = self.app_state.clone();
         match &mut app_state {
             types::AppState::RdpConnecting => self.update_connection(ctx, frame),
-            types::AppState::RdpConnected(rdp_state) => self.update_rdp_client(ctx, frame, rdp_state),
-            types::AppState::ClientProgress(client_state) => self.update_progress(ctx, frame, client_state),
+            types::AppState::RdpConnected(rdp_state) => {
+                self.update_rdp_client(ctx, frame, rdp_state)
+            }
+            types::AppState::ClientProgress(client_state) => {
+                self.update_progress(ctx, frame, client_state)
+            }
             types::AppState::Invisible => {} // Nothing to do
-            types::AppState::YesNo(message, resp_tx) => self.update_yesno(ctx, frame, message, resp_tx),
+            types::AppState::YesNo(message, resp_tx) => {
+                self.update_yesno(ctx, frame, message, resp_tx)
+            }
             types::AppState::Warning(message) => self.update_warning(ctx, frame, message),
             types::AppState::Error(message) => self.update_error(ctx, frame, message),
+            types::AppState::Test => self.update_testing(ctx, frame),
         }
     }
 }
