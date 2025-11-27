@@ -130,65 +130,67 @@ impl AppWindow {
         frame: &mut eframe::Frame,
         rdp_state: &mut RdpState,
     ) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            let mut switch_back_to_connection = false;
-            while let Ok(message) = rdp_state.update_rx.try_recv() {
-                match message {
-                    RdpMessage::UpdateRects(rects) => {
-                        let _guard = rdp_state.gdi_lock.write().unwrap();
-                        for rect in rects {
-                            let img = rect.extract(
-                                unsafe {
-                                    std::slice::from_raw_parts(
-                                        (*rdp_state.gdi).primary_buffer as *const u8,
-                                        ((*rdp_state.gdi).stride as usize)
-                                            * (rdp_state.gdi.as_ref().unwrap().height as usize),
-                                    )
-                                },
-                                unsafe { (*rdp_state.gdi).stride as usize },
-                                unsafe { (*rdp_state.gdi).width as usize },
-                                unsafe { (*rdp_state.gdi).height as usize },
-                            );
-                            if let Some(image) = img {
-                                rdp_state.texture.set_partial(
-                                    [rect.x as usize, rect.y as usize],
-                                    image,
-                                    egui::TextureOptions::NEAREST,
+        egui::CentralPanel::default()
+            .frame(egui::Frame::default().inner_margin(0.0))
+            .show(ctx, |ui| {
+                let mut switch_back_to_connection = false;
+                while let Ok(message) = rdp_state.update_rx.try_recv() {
+                    match message {
+                        RdpMessage::UpdateRects(rects) => {
+                            let _guard = rdp_state.gdi_lock.write().unwrap();
+                            for rect in rects {
+                                let img = rect.extract(
+                                    unsafe {
+                                        std::slice::from_raw_parts(
+                                            (*rdp_state.gdi).primary_buffer as *const u8,
+                                            ((*rdp_state.gdi).stride as usize)
+                                                * (rdp_state.gdi.as_ref().unwrap().height as usize),
+                                        )
+                                    },
+                                    unsafe { (*rdp_state.gdi).stride as usize },
+                                    unsafe { (*rdp_state.gdi).width as usize },
+                                    unsafe { (*rdp_state.gdi).height as usize },
                                 );
+                                if let Some(image) = img {
+                                    rdp_state.texture.set_partial(
+                                        [rect.x as usize, rect.y as usize],
+                                        image,
+                                        egui::TextureOptions::NEAREST,
+                                    );
+                                }
                             }
                         }
-                    }
-                    RdpMessage::Resize(width, height) => {
-                        // TODO: Handle resize
-                        log::debug!("Received resize to {}x{}", width, height);
-                    }
-                    RdpMessage::Disconnect => {
-                        log::debug!("RDP Disconnected");
-                        // TODO: Handle disconnection properly
-                        switch_back_to_connection = true;
-                        break;
-                    }
-                    RdpMessage::Error(err) => {
-                        log::debug!("RDP Error: {}", err);
-                        switch_back_to_connection = true;
-                        break;
-                    }
-                    RdpMessage::FocusRequired => {
-                        log::debug!("RDP Focus Required");
+                        RdpMessage::Resize(width, height) => {
+                            // TODO: Handle resize
+                            log::debug!("Received resize to {}x{}", width, height);
+                        }
+                        RdpMessage::Disconnect => {
+                            log::debug!("RDP Disconnected");
+                            // TODO: Handle disconnection properly
+                            switch_back_to_connection = true;
+                            break;
+                        }
+                        RdpMessage::Error(err) => {
+                            log::debug!("RDP Error: {}", err);
+                            switch_back_to_connection = true;
+                            break;
+                        }
+                        RdpMessage::FocusRequired => {
+                            log::debug!("RDP Focus Required");
+                        }
                     }
                 }
-            }
-            if switch_back_to_connection {
-                if let Err(e) = self.setup_rdp_connecting(ctx) {
-                    ui.label(format!("Failed to switch to connection: {}", e));
+                if switch_back_to_connection {
+                    if let Err(e) = self.setup_rdp_connecting(ctx) {
+                        ui.label(format!("Failed to switch to connection: {}", e));
+                    }
+                    return;
                 }
-                return;
-            }
-            // Show the texture on 0,0, full size
-            ui.image(&rdp_state.texture);
+                // Show the texture on 0,0, full size
+                ui.image(&rdp_state.texture);
 
-            let input = rdp_state.input;
-            self.handle_input(ctx, frame, input);
-        });
+                let input = rdp_state.input;
+                self.handle_input(ctx, frame, input);
+            });
     }
 }
