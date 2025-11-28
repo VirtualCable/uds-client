@@ -34,3 +34,7 @@ pub static CATALOG: LazyLock<Catalog> = LazyLock::new(|| {
         Catalog::parse(file.data.as_ref()).expect("failed to parse fallback catalog")
     }
 });
+
+pub fn get_catalog() -> &'static Catalog {
+    &CATALOG
+}

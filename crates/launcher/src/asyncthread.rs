@@ -1,16 +1,12 @@
+use crossbeam::channel::Sender;
 use shared::system::trigger::Trigger;
-use std::sync::mpsc::Sender;
 
-use crate::{gui, runner};
+use gui::window::types::GuiMessage;
 use shared::log;
 
-pub fn run(
-    tx: Sender<gui::progress::GuiMessage>,
-    stop: Trigger,
-    host: String,
-    ticket: String,
-    scrambler: String,
-) {
+use crate::runner;
+
+pub fn run(tx: Sender<GuiMessage>, stop: Trigger, host: String, ticket: String, scrambler: String) {
     std::thread::spawn({
         let stop = stop.clone();
         move || {
@@ -27,10 +23,9 @@ pub fn run(
                         runner::run(tx.clone(), stop.clone(), &host, &ticket, &scrambler).await
                     {
                         log::error!("{}", e);
-                        tx.send(gui::progress::GuiMessage::Error(e.to_string()))
-                            .ok();
+                        tx.send(GuiMessage::ShowError(e.to_string())).ok();
                     } else {
-                        tx.send(gui::progress::GuiMessage::Close).ok();
+                        tx.send(GuiMessage::Close).ok();
                     }
                     stop.set();
                 }

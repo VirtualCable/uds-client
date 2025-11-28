@@ -1,6 +1,9 @@
+use std::sync::{Arc, RwLock};
+
 use anyhow::Result;
-use crossbeam::channel::Sender;
 use eframe::egui;
+
+use tokio::sync::oneshot;
 
 use shared::log;
 
@@ -15,7 +18,7 @@ impl AppWindow {
         &mut self,
         ctx: &egui::Context,
         message: String,
-        resp_tx: Option<Sender<bool>>,
+        resp_tx: Arc<RwLock<Option<oneshot::Sender<bool>>>>,
     ) -> Result<()> {
         let text_height = calculate_text_height(&message, 40);
         self.resize_and_center(ctx, [320.0, text_height + 48.0], true);
@@ -29,7 +32,7 @@ impl AppWindow {
         ctx: &egui::Context,
         _frame: &mut eframe::Frame,
         message: &str,
-        resp_tx: &mut Option<Sender<bool>>,
+        resp_tx: &mut Arc<RwLock<Option<oneshot::Sender<bool>>>>,
     ) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.set_width(300.0);
@@ -54,7 +57,7 @@ impl AppWindow {
                                         .clicked()
                                     {
                                         log::debug!("User clicked Yes");
-                                        if let Some(tx) = resp_tx.take() {
+                                        if let Some(tx) = resp_tx.write().unwrap().take() {
                                             let _ = tx.send(true);
                                         }
                                         self.restore_previous_state(ctx);
@@ -72,7 +75,7 @@ impl AppWindow {
                                         .clicked()
                                     {
                                         log::debug!("User clicked No");
-                                        if let Some(tx) = resp_tx.take() {
+                                        if let Some(tx) = resp_tx.write().unwrap().take() {
                                             let _ = tx.send(false);
                                         }
                                         self.restore_previous_state(ctx);

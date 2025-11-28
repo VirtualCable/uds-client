@@ -2226,6 +2226,7 @@ dependencies = [
  "open",
  "rdp",
  "shared",
+ "tokio",
  "winit",
  "zeroize",
 ]
@@ -2827,10 +2828,13 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "builder",
+ "crossbeam",
  "eframe",
  "gettext",
+ "gui",
  "image",
  "open",
+ "rdp",
  "rust-embed",
  "serde",
  "serde_json",

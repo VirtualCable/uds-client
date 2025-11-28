@@ -1,6 +1,7 @@
-#![allow(dead_code)]
+use std::sync::{Arc, RwLock};
+
 use anyhow::Result;
-use crossbeam::channel::bounded;
+use tokio::sync::oneshot;
 use eframe::egui;
 use rdp::settings::{RdpSettings, ScreenSize};
 
@@ -63,10 +64,12 @@ impl AppWindow {
             }
 
             if ui.button("Yes/No").clicked() {
-                let (resp_tx, _resp_rx) = bounded::<bool>(1);
-                if let Err(e) =
-                    self.enter_yesno(ctx, "Do you want to continue?".to_string(), Some(resp_tx))
-                {
+                let (resp_tx, _resp_rx) = oneshot::channel::<bool>();
+                if let Err(e) = self.enter_yesno(
+                    ctx,
+                    "Do you want to continue?".to_string(),
+                    Arc::new(RwLock::new(Some(resp_tx))),
+                ) {
                     ui.label(format!("Failed to show yes/no dialog: {}", e));
                 }
             }

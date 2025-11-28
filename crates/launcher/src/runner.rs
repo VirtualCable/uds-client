@@ -1,12 +1,16 @@
-use std::sync::mpsc;
+use std::sync::{Arc, RwLock};
 
-use crate::{gui::progress::GuiMessage, tr};
 use anyhow::Result;
+use crossbeam::channel::Sender;
+use tokio::sync::oneshot;
 
+use crate::tr;
+
+use gui::window::types::GuiMessage;
 use shared::{appdata, broker::api, consts, log, tasks};
 
 async fn approve_host(
-    tx: &mpsc::Sender<GuiMessage>,
+    tx: &Sender<GuiMessage>,
     host: &str,
     appdata: &mut appdata::AppData,
 ) -> Result<()> {
@@ -22,10 +26,10 @@ async fn approve_host(
 
     log::debug!("Approving host {} with broker.", host);
 
-    let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
-    tx.send(GuiMessage::YesNo(
+    let (reply_tx, reply_rx) = oneshot::channel();
+    tx.send(GuiMessage::ShowYesNo(
         tr!("The server {}\nmust be approved.\nOnly approve UDS servers you trust.\nDo you want to continue?", host),
-        Some(reply_tx),
+        Arc::new(RwLock::new(Some(reply_tx))),
     ))
     .ok();
     let answer = reply_rx.await.unwrap_or(false);
@@ -40,7 +44,7 @@ async fn approve_host(
 }
 
 pub async fn run(
-    tx: mpsc::Sender<GuiMessage>,
+    tx: Sender<GuiMessage>,
     stop: shared::system::trigger::Trigger,
     host: &str,
     ticket: &str,
@@ -96,7 +100,7 @@ pub async fn run(
             version.available_version,
             consts::UDS_CLIENT_VERSION
         );
-        tx.send(GuiMessage::Warning(tr!(
+        tx.send(GuiMessage::ShowWarning(tr!(
             "A newer client version {} is available. Current version is {}.\n{}|Download the latest version",
             version.available_version,
             consts::UDS_CLIENT_VERSION,
