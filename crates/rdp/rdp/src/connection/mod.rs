@@ -383,7 +383,7 @@ impl Rdp {
 
 impl Drop for Rdp {
     fn drop(&mut self) {
-        log::debug!(" 🧪 **** Dropping RDP");
+        log::debug!(" **** Dropping RDP");
 
         log::debug!("* Dropping Rdp instance, cleaning up resources...");
         unsafe {

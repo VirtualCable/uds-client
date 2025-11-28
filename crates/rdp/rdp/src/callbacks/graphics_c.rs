@@ -11,7 +11,7 @@ pub unsafe fn set_callbacks(context: *mut rdpContext) {
         let graphics = (*context).graphics;
         let pointer_proto = (*graphics).Pointer_Prototype;
         if graphics.is_null() || pointer_proto.is_null() {
-            log::debug!(" 🧪 **** Pointer not initialized, cannot override callbacks.");
+            log::debug!(" **** Pointer not initialized, cannot override callbacks.");
             return;
         }
         // Clear pointer_proto to avoid dangling pointers

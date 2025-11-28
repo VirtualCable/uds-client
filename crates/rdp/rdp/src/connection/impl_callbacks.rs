@@ -14,7 +14,7 @@ use super::{Rdp, RdpMessage};
 
 impl instance::InstanceCallbacks for Rdp {
     fn on_post_connect(&mut self) -> bool {
-        log::debug!(" 🧪 **** Connected successfully!");
+        log::debug!(" **** Connected successfully!");
         true
     }
 }
@@ -59,7 +59,7 @@ impl update::UpdateCallbacks for Rdp {
     }
 
     fn on_desktop_resize(&mut self) -> bool {
-        log::debug!(" 🧪 **** Desktop resized");
+        log::debug!(" **** Desktop resized");
         let width = unsafe {
             freerdp_settings_get_uint32(
                 self.context().unwrap().context().settings,

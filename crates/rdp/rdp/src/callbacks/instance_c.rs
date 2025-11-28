@@ -77,7 +77,40 @@ pub unsafe fn set_instance_callbacks(instance: *mut freerdp) {
 /// Invoked by FreeRDP before connecting.
 pub unsafe extern "C" fn pre_connect(instance: *mut freerdp) -> BOOL {
     // Register the channel events
-    log::debug!(" 🧪 **** Registering channel events on pre_connect...");
+    log::debug!("**** Registering channel events on pre_connect...");
+    // Here we can override the transport_io callbacks. Look rdpTransportIo
+    // Transport and security layers:
+    //
+    // [RDP Application]
+    //        |
+    //        v
+    //   RDP Protocol (PDUs)
+    //        |
+    //        v
+    //   TLS (if the server requires it)
+    //        |
+    //        v
+    //   rdp_transport_io (transport function table)
+    //        |
+    //        v
+    //   UDS Tunnel local encapsulation  (if used the tunnel)
+    //        |
+    //        v
+    //   Internet / Physical network
+    //        |
+    //        v
+    //   UDS Tunnnel remote decapsulation (if used the tunnel)
+    //        |
+    //        v
+    //   Remote RDP Server
+    //
+    // Notes:
+    // - The UDS tunnel adds an additional transport layer, which may include
+    //   custom encryption or multiplexing.
+    // - The RDP server still requires its standard TLS layer, which is negotiated
+    //   inside the tunnel.
+    // - The tunnel must remain transparent to TLS: it encapsulates the data,
+    //   but does not remove or alter the TLS negotiation required by RDP.
 
     let pubsub = unsafe { (*instance).context.as_ref().unwrap().pubSub };
     unsafe {
@@ -96,7 +129,7 @@ pub unsafe extern "C" fn pre_connect(instance: *mut freerdp) -> BOOL {
 /// Initialize GDI here after the connection is established
 /// Callback invoked by FreeRDP after connecting.
 pub unsafe extern "C" fn post_connect(instance: *mut freerdp) -> BOOL {
-    log::debug!(" 🧪 **** Post connect called... {instance:?}");
+    log::debug!(" **** Post connect called... {instance:?}");
     // Initialize GDI, must be after the settings are set
     // const PIXEL_FORMAT_BGRA32: u32 = 0x20048888;
     // const PIXEL_FORMAT_RGBA32: u32 = 0x20038888;
@@ -132,7 +165,7 @@ pub unsafe extern "C" fn context_new(
     instance: *mut freerdp,
     context: *mut freerdp_sys::rdpContext,
 ) -> BOOL {
-    log::debug!(" 🧪 **** Context new called... {instance:?} -- {context:?}");
+    log::debug!(" **** Context new called... {instance:?} -- {context:?}");
     if let Some(owner) = instance.owner() {
         owner.on_context_new().into()
     } else {
@@ -147,7 +180,7 @@ pub unsafe extern "C" fn context_free(
     instance: *mut freerdp,
     context: *mut freerdp_sys::rdpContext,
 ) {
-    log::debug!(" 🧪 **** Context free called... {instance:?} -- {context:?}");
+    log::debug!(" **** Context free called... {instance:?} -- {context:?}");
     if let Some(owner) = instance.owner() {
         owner.on_context_free();
     }
@@ -157,7 +190,7 @@ pub unsafe extern "C" fn context_free(
 /// Interoperability with C code.
 /// Invoked by FreeRDP when the connection is disconnected.
 pub unsafe extern "C" fn post_disconnect(instance: *mut freerdp) {
-    log::debug!(" 🧪 **** Post disconnect called...");
+    log::debug!(" **** Post disconnect called...");
 
     unsafe {
         gdi_free(instance);
@@ -172,7 +205,7 @@ pub unsafe extern "C" fn post_disconnect(instance: *mut freerdp) {
 /// Interoperability with C code.
 /// Invoked by FreeRDP when the final disconnect is done.
 pub unsafe extern "C" fn post_final_disconnect(instance: *mut freerdp) {
-    log::debug!(" 🧪 **** Post final disconnect called...");
+    log::debug!(" **** Post final disconnect called...");
 
     let pubsub = unsafe { (*instance).context.as_ref().unwrap().pubSub };
     unsafe {
@@ -194,7 +227,7 @@ pub unsafe extern "C" fn authenticate(
     password: *mut *mut ::std::os::raw::c_char,
     domain: *mut *mut ::std::os::raw::c_char,
 ) -> BOOL {
-    log::debug!(" 🧪 **** Authenticate called... {instance:?}");
+    log::debug!(" **** Authenticate called... {instance:?}");
     if let Some(owner) = instance.owner() {
         owner.on_authenticate(username, password, domain).into()
     } else {
@@ -212,7 +245,7 @@ pub unsafe extern "C" fn authenticate_ex(
     domain: *mut *mut ::std::os::raw::c_char,
     reason: rdp_auth_reason,
 ) -> BOOL {
-    log::debug!(" 🧪 **** Authenticate (extended) called...");
+    log::debug!(" **** Authenticate (extended) called...");
     if let Some(owner) = instance.owner() {
         owner
             .on_authenticate_ex(username, password, domain, reason as ReasonType)
@@ -233,7 +266,7 @@ pub unsafe extern "C" fn verify_x509_certificate(
     port: UINT16,
     flags: DWORD,
 ) -> ::std::os::raw::c_int {
-    log::debug!(" 🧪 **** Verify X.509 certificate called...");
+    log::debug!(" **** Verify X.509 certificate called...");
     if let Some(owner) = instance.owner() {
         // Convert hostname to Rust string
         let hostname = hostname.to_string_lossy();
@@ -258,7 +291,7 @@ pub unsafe extern "C" fn verify_certificate(
     fingerprint: *const ::std::os::raw::c_char,
     flags: DWORD,
 ) -> DWORD {
-    log::debug!(" 🧪 **** Verify certificate called...");
+    log::debug!(" **** Verify certificate called...");
     if let Some(owner) = instance.owner() {
         // Convert host, commmon name, subject, issuer, fingerprint from *const c_char String
         let host = host.to_string_lossy();
@@ -289,7 +322,7 @@ pub unsafe extern "C" fn logon_error_info(
     data: UINT32,
     type_: UINT32,
 ) -> ::std::os::raw::c_int {
-    log::debug!(" 🧪 **** Logon error info called...");
+    log::debug!(" **** Logon error info called...");
     let str_data = unsafe { freerdp_get_logon_error_info_data(data) };
     let str_type = unsafe { freerdp_get_logon_error_info_type(type_) };
 
@@ -312,7 +345,7 @@ pub unsafe extern "C" fn gateway_authenticate(
     password: *mut *mut ::std::os::raw::c_char,
     domain: *mut *mut ::std::os::raw::c_char,
 ) -> BOOL {
-    log::debug!(" 🧪 **** Gateway authenticate called...");
+    log::debug!(" **** Gateway authenticate called...");
     if let Some(owner) = instance.owner() {
         owner
             .on_gateway_authenticate(username, password, domain)
@@ -333,7 +366,7 @@ pub unsafe extern "C" fn present_gateway_message(
     length: usize,
     message: *const WCHAR,
 ) -> BOOL {
-    log::debug!(" 🧪 **** Present gateway message called...");
+    log::debug!(" **** Present gateway message called...");
     if let Some(owner) = instance.owner() {
         // Convert message to Rust string if needed, messages is in UTF-16 format
         let message = if !message.is_null() && length > 0 {
@@ -361,7 +394,7 @@ pub unsafe extern "C" fn present_gateway_message(
 /// Interoperability with C code.
 /// Invoked by FreeRDP to handle redirection.
 pub unsafe extern "C" fn redirect(instance: *mut freerdp) -> BOOL {
-    log::debug!(" 🧪 **** Redirect called...");
+    log::debug!(" **** Redirect called...");
     if let Some(owner) = instance.owner() {
         owner.on_redirect().into()
     } else {
@@ -373,7 +406,7 @@ pub unsafe extern "C" fn redirect(instance: *mut freerdp) -> BOOL {
 /// Interoperability with C code.
 /// Invoked by FreeRDP to load channels.
 pub unsafe extern "C" fn load_channels(instance: *mut freerdp) -> BOOL {
-    log::debug!(" 🧪 **** Load channels called...");
+    log::debug!(" **** Load channels called...");
 
     // Invoke original, ours is only a wrapper
     unsafe {
@@ -394,7 +427,7 @@ pub unsafe extern "C" fn load_channels(instance: *mut freerdp) -> BOOL {
 //     data: *const BYTE,
 //     size: usize,
 // ) -> BOOL {
-//     log::debug!(" 🧪 **** Send channel data called...");
+//     log::debug!(" **** Send channel data called...");
 
 //     // Convert BYTE to u8, just the pointer only
 //     if let Some(owner) = instance.owner() {
@@ -413,7 +446,7 @@ pub unsafe extern "C" fn load_channels(instance: *mut freerdp) -> BOOL {
 //     flags: UINT32,
 //     total_size: usize,
 // ) -> BOOL {
-//     log::debug!(" 🧪 **** Receive channel data called...");
+//     log::debug!(" **** Receive channel data called...");
 //     if let Some(owner) = instance.owner() {
 //         owner
 //             .on_receive_channel_data(channel_id, data, size, flags, total_size)
@@ -432,7 +465,7 @@ pub unsafe extern "C" fn load_channels(instance: *mut freerdp) -> BOOL {
 //     data: *const BYTE,
 //     chunk_size: usize,
 // ) -> BOOL {
-//     log::debug!(" 🧪 **** Send channel packet called...");
+//     log::debug!(" **** Send channel packet called...");
 //     if let Some(owner) = instance.owner() {
 //         owner
 //             .on_send_channel_packet(channel_id, total_size, flags, data, chunk_size)
@@ -452,7 +485,7 @@ pub unsafe extern "C" fn choose_smartcard(
     choice: *mut DWORD,
     gateway: BOOL,
 ) -> BOOL {
-    log::debug!(" 🧪 **** Choose smartcard called...");
+    log::debug!(" **** Choose smartcard called...");
     if let Some(owner) = instance.owner() {
         owner
             .on_choose_smartcard(cert_list, count, choice, gateway != 0)
@@ -473,7 +506,7 @@ pub extern "C" fn get_access_token_no_varargs(
     count: usize,
     data: *const *const ::std::os::raw::c_char,
 ) -> BOOL {
-    log::debug!(" 🧪 **** Get Access Token called...");
+    log::debug!(" **** Get Access Token called...");
     if let Some(owner) = instance.owner() {
         owner
             .on_get_access_token(token_type, token, count, data)
@@ -492,7 +525,7 @@ pub unsafe extern "C" fn retry_dialog(
     current: usize,
     userarg: *mut ::std::os::raw::c_void,
 ) -> SSIZE_T {
-    log::debug!(" 🧪 **** Retry dialog called...");
+    log::debug!(" **** Retry dialog called...");
     if let Some(owner) = instance.owner() {
         // Convert what to Rust string
         let what = what.to_string_lossy();

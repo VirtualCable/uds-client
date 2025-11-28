@@ -41,7 +41,7 @@ pub unsafe fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
         let update = (*context).update;
         let pointer = (*update).pointer;
         if update.is_null() || pointer.is_null() {
-            log::debug!(" 🧪 **** Pointer not initialized, cannot override callbacks.");
+            log::debug!(" **** Pointer not initialized, cannot override callbacks.");
             return;
         }
         for override_cb in overrides {

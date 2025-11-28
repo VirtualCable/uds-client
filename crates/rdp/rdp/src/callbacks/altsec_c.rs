@@ -60,7 +60,7 @@ pub unsafe fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
         let update = (*context).update;
         let altsec = (*update).altsec;
         if update.is_null() || altsec.is_null() {
-            log::debug!(" 🧪 **** AltSec not initialized, cannot override callbacks.");
+            log::debug!(" **** AltSec not initialized, cannot override callbacks.");
             return;
         }
         for override_cb in overrides {
