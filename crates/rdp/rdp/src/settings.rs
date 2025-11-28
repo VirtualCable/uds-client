@@ -22,6 +22,10 @@ impl ScreenSize {
             ScreenSize::Fixed(_, h) => *h,
         }
     }
+
+    pub fn is_fullscreen(&self) -> bool {
+        matches!(self, ScreenSize::Full)
+    }
 }
 
 #[derive(Zeroize, Debug)]
@@ -38,7 +42,7 @@ pub struct RdpSettings {
     // % -> Home
     // * --> All drives
     // DynamicDrives --> Later connected drives
-    pub drives_to_redirect: Vec<String>,  
+    pub drives_to_redirect: Vec<String>,
 }
 
 impl Default for RdpSettings {

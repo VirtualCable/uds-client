@@ -56,7 +56,7 @@ pub fn normalize_invalids(rects_raw: &[GDI_RGN], width: u32, height: u32) -> Opt
 }
 
 #[repr(transparent)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy)]
 pub struct SafePtr<T> {
     ptr: std::ptr::NonNull<std::os::raw::c_void>,
     _marker: std::marker::PhantomData<T>,
@@ -90,6 +90,15 @@ impl<T> Deref for SafePtr<T> {
     }
 }
 
+impl<T> Clone for SafePtr<T> {
+    fn clone(&self) -> Self {
+        SafePtr {
+            ptr: self.ptr,
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
 pub type SafeHandle = SafePtr<std::os::raw::c_void>;
 
 impl SafeHandle {
@@ -97,3 +106,4 @@ impl SafeHandle {
         self.ptr.as_ptr() as HANDLE
     }
 }
+

@@ -11,11 +11,15 @@ fn main() {
         Receiver<gui::window::types::GuiMessage>,
     ) = bounded(32);
 
+    let stop_trigger = Trigger::new();
+
     gui::run_gui(
         fake_catalog,
         Some(gui::window::types::AppState::Test),
         messages_rx,
-        Trigger::new(),
+        stop_trigger.clone(),
     )
     .unwrap();
+
+    stop_trigger.set();
 }

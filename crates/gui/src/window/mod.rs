@@ -70,11 +70,12 @@ impl AppWindow {
         self.catalog.gettext(msgid).to_string()
     }
 
-    pub fn resize_and_center(&mut self, ctx: &eframe::egui::Context, size: impl Into<egui::Vec2>) {
+    pub fn resize_and_center(&mut self, ctx: &eframe::egui::Context, size: impl Into<egui::Vec2>, decorations: bool) {
         let size = size.into() + [0.0, 48.0].into(); // Add some extra space for title bar
         let screen_size = (1920.0, 1080.0); // TODO: Get actual screen size
         let x_coord = (screen_size.0 - size.x) / 2.0;
         let y_coord = (screen_size.1 - size.y) / 2.0;
+        ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(decorations));
         ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(size));
         ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
             [x_coord, y_coord].into(),

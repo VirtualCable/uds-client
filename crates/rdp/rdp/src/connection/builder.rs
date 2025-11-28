@@ -1,10 +1,6 @@
-use std::{
-    ffi::CString,
-    sync::{Arc, RwLock},
-};
+use std::ffi::CString;
 
 use anyhow::Result;
-use crossbeam::channel::Sender;
 
 use freerdp_sys::*;
 use shared::log;
@@ -13,39 +9,13 @@ use crate::{
     callbacks::{
         altsec_c, input_c, instance_c, pointer_update_c, primary_c, secondary_c, update_c, window_c,
     },
-    utils::{SafeHandle, SafePtr},
+    utils::SafePtr,
 };
 
-use super::{
-    super::settings::RdpSettings, Callbacks, Config, Rdp, RdpMessage, context::RdpContext,
-};
+use super::{Callbacks, Rdp, context::RdpContext};
 
 #[allow(dead_code)]
 impl Rdp {
-    pub fn new(settings: RdpSettings, update_tx: Sender<RdpMessage>) -> Self {
-        Rdp {
-            config: Config {
-                settings,
-                ..Config::default()
-            },
-            instance: None,
-            update_tx: Some(update_tx),
-            gdi_lock: Arc::new(RwLock::new(())),
-            stop_event: None,
-            _pin: std::marker::PhantomPinned,
-        }
-    }
-
-    pub fn context(&self) -> Option<&RdpContext> {
-        unsafe {
-            if let Some(instance) = self.instance {
-                let ctx = instance.context as *mut RdpContext;
-                if ctx.is_null() { None } else { Some(&*ctx) }
-            } else {
-                None
-            }
-        }
-    }
     #[allow(dead_code)]
     pub fn set_update_callbacks(&mut self, callbacks: Vec<update_c::Callbacks>) {
         self.config.callbacks.update = callbacks;
@@ -87,11 +57,7 @@ impl Rdp {
 
     pub fn build(self: std::pin::Pin<&mut Self>) -> Result<()> {
         log::debug!("Building RDP connection... {:p}", self);
-        let stop_event: HANDLE =
-            unsafe { CreateEventW(std::ptr::null_mut(), 1, 0, std::ptr::null()) };
-
         let mut_self = unsafe { self.get_unchecked_mut() };
-        mut_self.stop_event = Some(SafeHandle::new(stop_event).unwrap());
 
         unsafe {
             let ctx = RdpContext::create(mut_self)?;

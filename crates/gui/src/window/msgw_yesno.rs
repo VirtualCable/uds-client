@@ -17,8 +17,8 @@ impl AppWindow {
         message: String,
         resp_tx: Option<Sender<bool>>,
     ) -> Result<()> {
-        let text_height = calculate_text_height(&message, 40, 18.0);
-        self.resize_and_center(ctx, [320.0, text_height + 48.0]);
+        let text_height = calculate_text_height(&message, 40);
+        self.resize_and_center(ctx, [320.0, text_height + 48.0], true);
         self.set_app_state(AppState::YesNo(message, resp_tx));
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.gettext("Question")));
         Ok(())
@@ -81,6 +81,7 @@ impl AppWindow {
                             );
                         });
                     });
+                    ui.add_space(12.0);
                 });
         });
     }

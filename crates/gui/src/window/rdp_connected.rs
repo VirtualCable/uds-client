@@ -57,7 +57,7 @@ impl AppWindow {
         ));
         ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition([10.0, 10.0].into()));
 
-        let mut rdp = Box::pin(Rdp::new(rdp_settings, tx));
+        let mut rdp = Box::pin(Rdp::new(rdp_settings, tx, self.stop.clone()));
         // rdp.set_update_callbacks(vec![
         //     update_c::Callbacks::BeginPaint,
         //     update_c::Callbacks::EndPaint,

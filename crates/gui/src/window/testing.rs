@@ -8,7 +8,7 @@ use super::{AppWindow, client_progress::ProgressState, types::AppState};
 
 impl AppWindow {
     pub fn enter_testing(&mut self, ctx: &eframe::egui::Context) -> Result<()> {
-        self.resize_and_center(ctx, [400.0, 300.0]);
+        self.resize_and_center(ctx, [400.0, 300.0], true);
         self.set_app_state(AppState::Test);
 
         Ok(())

@@ -3,12 +3,12 @@ use std::sync::{Arc, RwLock};
 use anyhow::Result;
 
 use freerdp_sys::*;
-use shared::log;
+use shared::{log, system::trigger::Trigger};
 
 use crossbeam::channel::Sender;
 
 use crate::{
-    callbacks::{altsec_c, input_c, pointer_update_c, primary_c, secondary_c, update_c, window_c},
+    callbacks::Callbacks,
     connection::context::RdpContext,
     geom::Rect,
     settings::RdpSettings,
@@ -29,35 +29,6 @@ pub enum RdpMessage {
     Resize(u32, u32),
 }
 
-#[derive(Debug, Clone)]
-pub struct Callbacks {
-    pub update: Vec<update_c::Callbacks>,
-    pub window: Vec<window_c::Callbacks>,
-    pub secondary: Vec<secondary_c::Callbacks>,
-    pub primary: Vec<primary_c::Callbacks>,
-    pub pointer: Vec<pointer_update_c::Callbacks>,
-    pub input: Vec<input_c::Callbacks>,
-    pub altsec: Vec<altsec_c::Callbacks>,
-}
-
-impl Default for Callbacks {
-    fn default() -> Self {
-        Callbacks {
-            update: vec![
-                update_c::Callbacks::BeginPaint,
-                update_c::Callbacks::EndPaint,
-                update_c::Callbacks::DesktopResize,
-            ],
-            window: vec![],
-            secondary: vec![],
-            primary: vec![],
-            pointer: vec![],
-            input: vec![],
-            altsec: vec![],
-        }
-    }
-}
-
 #[derive(Debug, Default)]
 pub struct Config {
     settings: RdpSettings,
@@ -70,7 +41,7 @@ pub struct Rdp {
     instance: Option<SafePtr<freerdp>>,
     update_tx: Option<Sender<RdpMessage>>,
     // Flags the stop request
-    stop_event: Option<SafeHandle>,
+    stop: Trigger,
     // GDI lock for thread safety
     gdi_lock: Arc<RwLock<()>>,
     _pin: std::marker::PhantomPinned, // Do not allow moving
@@ -78,6 +49,31 @@ pub struct Rdp {
 
 #[allow(dead_code)]
 impl Rdp {
+    pub fn new(settings: RdpSettings, update_tx: Sender<RdpMessage>, stop: Trigger) -> Self {
+        Rdp {
+            config: Config {
+                settings,
+                ..Config::default()
+            },
+            instance: None,
+            update_tx: Some(update_tx),
+            gdi_lock: Arc::new(RwLock::new(())),
+            stop,
+            _pin: std::marker::PhantomPinned,
+        }
+    }
+
+    pub fn context(&self) -> Option<&RdpContext> {
+        unsafe {
+            if let Some(instance) = self.instance {
+                let ctx = instance.context as *mut RdpContext;
+                if ctx.is_null() { None } else { Some(&*ctx) }
+            } else {
+                None
+            }
+        }
+    }
+
     #[cfg(debug_assertions)]
     pub fn debug_assert_instance(&self) {
         assert!(self.instance.is_some(), "RDP instance is not initialized");
@@ -249,14 +245,15 @@ impl Rdp {
         }
     }
 
-    pub fn get_stop_event(&self) -> Option<HANDLE> {
-        self.stop_event.as_ref().map(|h| h.as_handle())
-    }
-
     // Executes the RDP connection until end or stop is requested
     pub fn run(&self) -> Result<()> {
         #[cfg(debug_assertions)]
         self.debug_assert_instance();
+
+        // Stop event for freerdp
+        let stop_event: SafeHandle =
+            SafeHandle::new(unsafe { CreateEventW(std::ptr::null_mut(), 1, 0, std::ptr::null()) })
+                .unwrap(); // We must be abe to create the stop event, if don't, panic
 
         let instance = self
             .instance
@@ -299,12 +296,19 @@ impl Rdp {
                 ))?;
                 break;
             }
-            // Add our stop event handle
-            handles[handle_count] = self
-                .stop_event
-                .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("Stop event handle not initialized"))?
-                .as_handle();
+
+            // Create a thread that, when stop is triggered, signals the event
+            std::thread::spawn({
+                let stop = self.stop.clone();
+                let stop_event = stop_event.clone();
+                move || {
+                    stop.wait();
+                    unsafe {
+                        SetEvent(stop_event.as_handle());
+                    }
+                }
+            });
+            handles[handle_count] = stop_event.as_handle();
 
             let wait_result = unsafe {
                 WaitForMultipleObjects(
@@ -344,15 +348,7 @@ impl Rdp {
 
         // Ensure we wait a bit for the disconnect to process
         // Will know with the stop_event, that will be set on main before joining
-        unsafe {
-            WaitForSingleObject(
-                self.stop_event
-                    .as_ref()
-                    .ok_or_else(|| anyhow::anyhow!("Stop event handle not initialized"))?
-                    .as_handle(),
-                2000,
-            )
-        };
+        unsafe { WaitForSingleObject(stop_event.as_handle(), 2000) };
 
         Ok(())
     }
@@ -396,10 +392,6 @@ impl Drop for Rdp {
                 freerdp_context_free(conn.as_mut_ptr());
                 freerdp_free(conn.as_mut_ptr());
                 self.instance = None;
-            }
-            if let Some(stop_event) = &self.stop_event {
-                CloseHandle(stop_event.as_handle());
-                self.stop_event = None;
             }
         }
     }

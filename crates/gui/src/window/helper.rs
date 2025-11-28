@@ -2,6 +2,8 @@ use eframe::egui;
 
 use shared::{log, utils::split_lines};
 
+const LINE_HEIGHT: f32 = 18.0;
+
 pub(super) fn display_multiline_text(ui: &mut egui::Ui, text: &str, hover_text: String) {
     ui.add_space(18.0);
     for line in split_lines(text, 40) {
@@ -32,7 +34,7 @@ pub(super) fn display_multiline_text(ui: &mut egui::Ui, text: &str, hover_text: 
     }
 }
 
-pub(super) fn calculate_text_height(text: &str, max_width: usize, line_height: f32) -> f32 {
+pub(super) fn calculate_text_height(text: &str, max_width: usize) -> f32 {
     let lines = split_lines(text, max_width);
-    lines.len() as f32 * line_height
+    lines.len() as f32 * LINE_HEIGHT
 }
