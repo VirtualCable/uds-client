@@ -3,8 +3,8 @@ use crossbeam::channel::{Receiver, Sender, bounded};
 
 use shared::{consts, log, system::trigger::Trigger};
 
-mod asyncthread;
 mod about;
+mod asyncthread;
 
 #[macro_use]
 mod intl;
@@ -32,6 +32,9 @@ fn collect_arguments() -> Option<(String, String, String)> {
 }
 
 fn main() {
+    #[cfg(debug_assertions)]
+    log::setup_logging("debug", log::LogType::Launcher);
+    #[cfg(not(debug_assertions))]
     log::setup_logging("info", log::LogType::Launcher);
     // Setup tls, with default secure ciphers
     shared::tls::init_tls(None);
@@ -57,14 +60,7 @@ fn main() {
     // Launch async thread with tokio runtime
     asyncthread::run(messages_tx, stop.clone(), host, ticket, scrambler);
 
-
-    gui::run_gui(
-        intl::get_catalog().clone(),
-        None,
-        messages_rx,
-        stop.clone(),
-    )
-    .unwrap();
+    gui::run_gui(intl::get_catalog().clone(), None, messages_rx, stop.clone()).unwrap();
 
     // let icon = logo::load_icon();
 
@@ -91,7 +87,7 @@ fn main() {
     //     eprintln!("Error starting gui: {}", e);
     //     log::error!("Error starting gui: {}", e);
     // }
-    
+
     // Gui closed, wait for app to finish also
     stop.wait();
 }

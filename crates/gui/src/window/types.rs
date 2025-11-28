@@ -6,6 +6,7 @@ use super::{client_progress, rdp_connected};
 #[derive(Debug)]
 pub enum GuiMessage {
     Close,                                                         // Close gui
+    Hide,                                                          // Hide window, but keep app running
     ShowError(String),                                             // Error message, and then close
     ShowWarning(String),                                           // Warning message
     ShowYesNo(String, Arc<RwLock<Option<oneshot::Sender<bool>>>>), // Yes/No dialog

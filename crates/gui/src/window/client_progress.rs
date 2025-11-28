@@ -14,9 +14,9 @@ use super::{AppWindow, types::AppState};
 
 #[derive(Clone)]
 pub struct ProgressState {
-    progress: Arc<AtomicU16>, // Progress percentage (0-100)
-    progress_message: String,
-    start: Instant,
+    pub progress: Arc<AtomicU16>, // Progress percentage (0-100)
+    pub progress_message: String,
+    pub start: Instant,
 }
 
 impl Default for ProgressState {

@@ -70,7 +70,12 @@ impl AppWindow {
         self.catalog.gettext(msgid).to_string()
     }
 
-    pub fn resize_and_center(&mut self, ctx: &eframe::egui::Context, size: impl Into<egui::Vec2>, decorations: bool) {
+    pub fn resize_and_center(
+        &mut self,
+        ctx: &eframe::egui::Context,
+        size: impl Into<egui::Vec2>,
+        decorations: bool,
+    ) {
         let size = size.into() + [0.0, 48.0].into(); // Add some extra space for title bar
         let screen_size = (1920.0, 1080.0); // TODO: Get actual screen size
         let x_coord = (screen_size.0 - size.x) / 2.0;
@@ -136,20 +141,40 @@ impl eframe::App for AppWindow {
         while let Ok(msg) = self.gui_messages_rx.try_recv() {
             match msg {
                 types::GuiMessage::Close => {
+                    log::trace!("Received close message, closing window.");
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     return;
                 }
+                types::GuiMessage::Hide => {
+                    log::trace!("Received hide message, hiding window.");
+                    self.enter_invisible(ctx).ok();
+                }
                 types::GuiMessage::ShowError(msg) => {
+                    log::trace!("Received show error message: {}", msg);
                     self.enter_error(ctx, msg.clone()).ok();
                 }
                 types::GuiMessage::ShowWarning(msg) => {
+                    log::trace!("Received show warning message: {}", msg);
                     self.enter_warning(ctx, msg.clone()).ok();
                 }
                 types::GuiMessage::ShowYesNo(msg, resp_tx) => {
+                    log::trace!("Received show yes/no message: {}", msg);
                     self.enter_yesno(ctx, msg.clone(), resp_tx).ok();
                 }
-                _ => {
-                    log::warn!("Unhandled GUI message: {:?}", msg);
+                types::GuiMessage::SwitchToClientProgress => {
+                    log::trace!("Switching to client progress window...");
+                    self.enter_client_progress(ctx, client_progress::ProgressState::default())
+                        .ok();
+                }
+                types::GuiMessage::Progress(percentage, message) => {
+                    log::trace!("Received progress update: {}% - {}", percentage, message);
+                    if let types::AppState::ClientProgress(state) = &mut self.app_state {
+                        state.progress.store(
+                            (percentage.clamp(0.0, 1.0) * 100.0) as u16,
+                            Ordering::Relaxed,
+                        );
+                        state.progress_message = message;
+                    }
                 }
             }
         }
