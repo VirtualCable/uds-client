@@ -6,5 +6,6 @@ target/
 /bin
 /udsclient*
 .vscode
+.vs
 *~
 /local_dlls
