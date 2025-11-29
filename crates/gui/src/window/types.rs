@@ -2,7 +2,9 @@ use std::sync::{Arc, RwLock};
 
 use tokio::sync::oneshot;
 
-use super::{client_progress, rdp_connected};
+use super::{client_progress, rdp_connected, rdp_connecting};
+
+
 #[derive(Debug)]
 pub enum GuiMessage {
     Close,                                                         // Close gui
@@ -21,8 +23,10 @@ pub enum AppState {
     Invisible, // Default state, window is hidden
     Test, // Testing window
     ClientProgress(client_progress::ProgressState),
-    RdpConnecting,
-    RdpConnected(rdp_connected::RdpState),
+    // use this to set fullscreen prior to connection if needed
+    // and anything else
+    RdpConnecting(rdp_connecting::RdpConnectingState),  
+    RdpConnected(rdp_connected::RdpConnectionState),
     // This will be consumed once response is sent and only once
     YesNo(String, Arc<RwLock<Option<oneshot::Sender<bool>>>>),
     Error(String),

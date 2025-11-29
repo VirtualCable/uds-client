@@ -25,7 +25,22 @@ impl AppWindow {
             ui.heading("Test Screen");
             ui.label("Select action.");
             // Here you can add input fields for server, user, password, etc.
-            if ui.button("Connect").clicked() {
+            if ui.button("RDP Connecting").clicked() {
+                // For demonstration, we use a hardcoded host
+                if let Err(e) = self.enter_rdp_connecting(
+                    ctx,
+                    RdpSettings {
+                        server: "172.27.247.161".to_string(),
+                        user: "user".to_string(),
+                        password: "temporal".to_string(),
+                        screen_size: ScreenSize::Full, // ScreenSize::Fixed(1600, 900),
+                        ..RdpSettings::default()
+                    },
+                ) {
+                    ui.label(format!("Failed to start connecting: {}", e));
+                }
+            }
+            if ui.button("RDP Connect").clicked() {
                 // For demonstration, we use a hardcoded host
                 if let Err(e) = self.enter_rdp_connected(
                     ctx,

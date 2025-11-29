@@ -2,7 +2,7 @@ use zeroize::Zeroize;
 
 use super::geom::ScreenSize;
 
-#[derive(Zeroize, Debug)]
+#[derive(Zeroize, Debug, Clone)]
 pub struct RdpSettings {
     #[zeroize(skip)]
     pub server: String,

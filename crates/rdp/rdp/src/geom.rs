@@ -25,19 +25,26 @@ pub enum ScreenSize {
 impl ScreenSize {
     pub fn width(&self) -> u32 {
         match self {
-            ScreenSize::Full => 1920,
+            ScreenSize::Full => 1024,
             ScreenSize::Fixed(w, _) => *w,
         }
     }
 
     pub fn height(&self) -> u32 {
         match self {
-            ScreenSize::Full => 1080,
+            ScreenSize::Full => 768,
             ScreenSize::Fixed(_, h) => *h,
         }
     }
 
     pub fn is_fullscreen(&self) -> bool {
         matches!(self, ScreenSize::Full)
+    }
+
+    pub fn get_fixed_size(&self) -> Option<(u32, u32)> {
+        match self {
+            ScreenSize::Fixed(w, h) => Some((*w, *h)),
+            ScreenSize::Full => None,
+        }
     }
 }

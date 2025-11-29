@@ -29,7 +29,7 @@ use super::{
 const FRAMES_IN_FLIGHT: usize = 128;
 
 #[derive(Clone)]
-pub struct RdpState {
+pub struct RdpConnectionState {
     update_rx: crossbeam::channel::Receiver<RdpMessage>,
     gdi: *mut rdpGdi,
     gdi_lock: Arc<RwLock<()>>,
@@ -38,7 +38,7 @@ pub struct RdpState {
     full_screen: Arc<AtomicBool>,
 }
 
-impl fmt::Debug for RdpState {
+impl fmt::Debug for RdpConnectionState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RdpState")
             .field("gdi", &self.gdi)
@@ -56,20 +56,17 @@ impl AppWindow {
         self.processing_events.store(true, Ordering::Relaxed); // Start processing events
         let (tx, rx): (Sender<RdpMessage>, Receiver<RdpMessage>) = bounded(FRAMES_IN_FLIGHT);
 
-        // TODO: We will need a reasonable for returning back from fullscreen later
-        // Note that with this this should work correctly, as rdp will receibe a 1920x1080 framebuffer
-        // and if different, on update, we will resize gdi, texture, etc. accordingly
-        let screen_size = rdp_settings.screen_size;
-        ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
-            [screen_size.width() as f32, screen_size.height() as f32].into(),
-        ));
-        ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition([10.0, 10.0].into()));
 
-        if screen_size.is_fullscreen() {
-            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
+        let mut rdp_settings = rdp_settings;
+        // TODO: Handle screen size changes during session with RDP display channel
+        let is_full_screen = if rdp_settings.screen_size.is_fullscreen() {
+            let real_size = ctx.content_rect().size();
+            rdp_settings.screen_size =
+                rdp::geom::ScreenSize::Fixed(real_size.x as u32, real_size.y as u32);
+            true
         } else {
-            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
-        }
+            false
+        };
 
         // Rdp shouls be pinned, as build() inserts self reference inside freedrp structs
         let mut rdp = Box::pin(Rdp::new(rdp_settings, tx));
@@ -117,13 +114,13 @@ impl AppWindow {
         let image = egui::ColorImage::from_rgba_unmultiplied([pitch / 4, height], buffer);
         let texture = ctx.load_texture("rdp_framebuffer", image, egui::TextureOptions::NEAREST);
 
-        self.set_app_state(AppState::RdpConnected(RdpState {
+        self.set_app_state(AppState::RdpConnected(RdpConnectionState {
             update_rx: rx,
             gdi,
             input,
             gdi_lock,
             texture,
-            full_screen: Arc::new(AtomicBool::new(screen_size.is_fullscreen())),
+            full_screen: Arc::new(AtomicBool::new(is_full_screen)),
         }));
 
         std::thread::spawn(move || {
@@ -144,7 +141,7 @@ impl AppWindow {
         &mut self,
         ctx: &egui::Context,
         frame: &mut eframe::Frame,
-        rdp_state: &mut RdpState,
+        rdp_state: &mut RdpConnectionState,
     ) {
         if self.handle_hotkeys(ctx, frame, rdp_state) {
             // Hotkey handled, skip input processing this frame
@@ -153,22 +150,23 @@ impl AppWindow {
         let input = rdp_state.input;
         self.handle_input(ctx, frame, input);
 
-        let egui::Vec2 {
-            x: actual_width,
-            y: actual_height,
-        } = ctx.content_rect().size();
-        let (actual_width, actual_height) = (actual_width as i32, actual_height as i32);
-        let (gdi_width, gdi_height) = unsafe { ((*rdp_state.gdi).width, (*rdp_state.gdi).height) };
+        // TODO: Allow this, but need to implement Display channel at least to send resize
+        // let egui::Vec2 {
+        //     x: actual_width,
+        //     y: actual_height,
+        // } = ctx.content_rect().size();
+        // let (actual_width, actual_height) = (actual_width as i32, actual_height as i32);
+        // let (gdi_width, gdi_height) = unsafe { ((*rdp_state.gdi).width, (*rdp_state.gdi).height) };
 
-        if actual_width != gdi_width || actual_height != gdi_height {
-            log::debug!(
-                "Viewport size changed: actual=({}, {}), gdi=({}, {}), resizing gdi and texture",
-                actual_width,
-                actual_height,
-                gdi_width,
-                gdi_height
-            );
-        }
+        // if actual_width != gdi_width || actual_height != gdi_height {
+        //     log::debug!(
+        //         "Viewport size changed: actual=({}, {}), gdi=({}, {}), resizing gdi and texture",
+        //         actual_width,
+        //         actual_height,
+        //         gdi_width,
+        //         gdi_height
+        //     );
+        // }
 
         egui::CentralPanel::default()
             .frame(egui::Frame::default().inner_margin(0.0))
@@ -220,7 +218,10 @@ impl AppWindow {
                 }
                 log::trace!("RDP update processing took {:?}", start.elapsed());
                 // Show the texture on 0,0, full size
-                ui.image(&rdp_state.texture);
+                ui.add_sized(
+                    ui.available_size(),
+                    egui::Image::new(&rdp_state.texture),
+                );
                 log::trace!("RDP frame rendered took {:?}", start.elapsed());
             });
     }
@@ -229,7 +230,7 @@ impl AppWindow {
         &mut self,
         ctx: &egui::Context,
         _frame: &eframe::Frame,
-        rdp_state: &mut RdpState,
+        rdp_state: &mut RdpConnectionState,
     ) -> bool {
         match HotKey::from_input(ctx) {
             HotKey::ToggleFullScreen => {
@@ -244,7 +245,7 @@ impl AppWindow {
         &mut self,
         ctx: &egui::Context,
         _frame: &eframe::Frame,
-        rdp_state: &mut RdpState,
+        rdp_state: &mut RdpConnectionState,
     ) {
         log::debug!("ALT+ENTER pressed, toggling fullscreen");
         if rdp_state.full_screen.load(Ordering::Relaxed) {

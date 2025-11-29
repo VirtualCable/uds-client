@@ -31,7 +31,7 @@ pub(super) struct AppWindow {
     pub app_state: types::AppState,
     pub prev_app_state: types::AppState,
     pub texture: egui::TextureHandle, // Logo texture, useful for various windows
-    pub processing_events: Arc<AtomicBool>, // Set if we need to process events
+    pub processing_events: Arc<AtomicBool>, // Set if we need to process wininit events (keyboard events right now)
     pub events: Receiver<input::RawKey>,
     pub gui_messages_rx: Receiver<types::GuiMessage>,
     pub stop: Trigger,             // For stopping any ongoing operations
@@ -183,7 +183,7 @@ impl eframe::App for AppWindow {
         // And changes should be reflected on all references
         let mut app_state = self.app_state.clone();
         match &mut app_state {
-            types::AppState::RdpConnecting => self.update_connection(ctx, frame),
+            types::AppState::RdpConnecting(rdp_state) => self.update_connection(ctx, frame, rdp_state),
             types::AppState::RdpConnected(rdp_state) => {
                 self.update_rdp_client(ctx, frame, rdp_state)
             }
