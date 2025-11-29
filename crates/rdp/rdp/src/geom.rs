@@ -1,4 +1,4 @@
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct Rect {
     pub x: u32,
     pub y: u32,

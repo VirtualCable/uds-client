@@ -1,10 +1,8 @@
 use std::{
     ffi::CString,
-    sync::{Arc, RwLock},
 };
 
 use anyhow::Result;
-use crossbeam::channel::Sender;
 use freerdp_sys::*;
 
 use crate::{
@@ -16,35 +14,11 @@ use crate::{
 use shared::log::debug;
 
 use super::{
-    super::settings::RdpSettings, Callbacks, Config, Rdp, RdpMessage, context::RdpContext,
+    Callbacks, Rdp, context::RdpContext,
 };
 
 #[allow(dead_code)]
 impl Rdp {
-    pub fn new(settings: RdpSettings, update_tx: Sender<RdpMessage>) -> Self {
-        Rdp {
-            config: Config {
-                settings,
-                ..Config::default()
-            },
-            instance: None,
-            update_tx: Some(update_tx),
-            gdi_lock: Arc::new(RwLock::new(())),
-            stop_event: None,
-            _pin: std::marker::PhantomPinned,
-        }
-    }
-
-    pub fn context(&self) -> Option<&RdpContext> {
-        unsafe {
-            if let Some(instance) = self.instance {
-                let ctx = instance.context as *mut RdpContext;
-                if ctx.is_null() { None } else { Some(&*ctx) }
-            } else {
-                None
-            }
-        }
-    }
     #[allow(dead_code)]
     pub fn set_update_callbacks(&mut self, callbacks: Vec<update_c::Callbacks>) {
         self.config.callbacks.update = callbacks;

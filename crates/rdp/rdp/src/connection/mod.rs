@@ -7,7 +7,7 @@ use freerdp_sys::*;
 use crossbeam::channel::Sender;
 
 use crate::{
-    callbacks::{altsec_c, input_c, pointer_update_c, primary_c, secondary_c, update_c, window_c},
+    callbacks::Callbacks,
     connection::context::RdpContext,
     geom::Rect,
     settings::RdpSettings,
@@ -26,35 +26,6 @@ pub enum RdpMessage {
     Disconnect,
     FocusRequired,
     Error(String),
-}
-
-#[derive(Debug, Clone)]
-pub struct Callbacks {
-    pub update: Vec<update_c::Callbacks>,
-    pub window: Vec<window_c::Callbacks>,
-    pub secondary: Vec<secondary_c::Callbacks>,
-    pub primary: Vec<primary_c::Callbacks>,
-    pub pointer: Vec<pointer_update_c::Callbacks>,
-    pub input: Vec<input_c::Callbacks>,
-    pub altsec: Vec<altsec_c::Callbacks>,
-}
-
-impl Default for Callbacks {
-    fn default() -> Self {
-        Callbacks {
-            update: vec![
-                update_c::Callbacks::BeginPaint,
-                update_c::Callbacks::EndPaint,
-                update_c::Callbacks::DesktopResize,
-            ],
-            window: vec![],
-            secondary: vec![],
-            primary: vec![],
-            pointer: vec![],
-            input: vec![],
-            altsec: vec![],
-        }
-    }
 }
 
 #[derive(Debug, Default)]
@@ -77,6 +48,31 @@ pub struct Rdp {
 
 #[allow(dead_code)]
 impl Rdp {
+    pub fn new(settings: RdpSettings, update_tx: Sender<RdpMessage>) -> Self {
+        Rdp {
+            config: Config {
+                settings,
+                ..Config::default()
+            },
+            instance: None,
+            update_tx: Some(update_tx),
+            gdi_lock: Arc::new(RwLock::new(())),
+            stop_event: None,
+            _pin: std::marker::PhantomPinned,
+        }
+    }
+
+    pub fn context(&self) -> Option<&RdpContext> {
+        unsafe {
+            if let Some(instance) = self.instance {
+                let ctx = instance.context as *mut RdpContext;
+                if ctx.is_null() { None } else { Some(&*ctx) }
+            } else {
+                None
+            }
+        }
+    }
+
     #[cfg(debug_assertions)]
     pub fn debug_assert_instance(&self) {
         assert!(self.instance.is_some(), "RDP instance is not initialized");
