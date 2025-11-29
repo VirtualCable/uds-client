@@ -33,7 +33,7 @@ impl AppWindow {
                         server: "172.27.247.161".to_string(),
                         user: "user".to_string(),
                         password: "temporal".to_string(),
-                        screen_size: ScreenSize::Fixed(1600, 900),
+                        screen_size: ScreenSize::Full, // ScreenSize::Fixed(1600, 900),
                         ..RdpSettings::default()
                     },
                 ) {

@@ -58,16 +58,17 @@ impl AppWindow {
         // TODO: We will need a reasonable for returning back from fullscreen later
         // Note that with this this should work correctly, as rdp will receibe a 1920x1080 framebuffer
         // and if different, on update, we will resize gdi, texture, etc. accordingly
+        let screen_size = rdp_settings.screen_size;
         ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
-            [rdp_settings.screen_size.width() as f32, rdp_settings.screen_size.height() as f32].into(),
+            [screen_size.width() as f32, screen_size.height() as f32].into(),
         ));
         ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition([10.0, 10.0].into()));
 
-        // if screen_size.is_fullscreen() {
-        //     ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
-        // } else {
-        //     ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
-        // }
+        if screen_size.is_fullscreen() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
+        } else {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
+        }
 
         // Rdp shouls be pinned, as build() inserts self reference inside freedrp structs
         let mut rdp = Box::pin(Rdp::new(rdp_settings, tx));
@@ -82,7 +83,6 @@ impl AppWindow {
         log::debug!("** Rdp address: {:p}", &rdp);
 
         rdp.optimize();
-        // TODO: We need to switch to fullscreeen before opening the connection if needed
         rdp.connect()?;
 
         #[cfg(debug_assertions)]
@@ -122,7 +122,7 @@ impl AppWindow {
             input,
             gdi_lock,
             texture,
-            full_screen: Arc::new(AtomicBool::new(false)),
+            full_screen: Arc::new(AtomicBool::new(screen_size.is_fullscreen())),
         }));
 
         std::thread::spawn(move || {
@@ -148,6 +148,13 @@ impl AppWindow {
         egui::CentralPanel::default()
             .frame(egui::Frame::default().inner_margin(0.0))
             .show(ctx, |ui| {
+                if self.handle_hotkeys(ctx, frame, rdp_state) {
+                    // Hotkey handled, skip input processing this frame
+                    return;
+                }
+                let input = rdp_state.input;
+                self.handle_input(ctx, frame, input);
+
                 while let Ok(message) = rdp_state.update_rx.try_recv() {
                     match message {
                         RdpMessage::UpdateRects(rects) => {
@@ -192,13 +199,6 @@ impl AppWindow {
                 }
                 // Show the texture on 0,0, full size
                 ui.image(&rdp_state.texture);
-
-                if self.handle_hotkeys(ctx, frame, rdp_state) {
-                    // Hotkey handled, skip input processing this frame
-                    return;
-                }
-                let input = rdp_state.input;
-                self.handle_input(ctx, frame, input);
             });
     }
 
