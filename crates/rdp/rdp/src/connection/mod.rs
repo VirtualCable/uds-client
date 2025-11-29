@@ -99,6 +99,10 @@ impl Rdp {
         }
     }
 
+    /// Optimize the RDP settings for better performance
+    /// This function modifies the FreeRDP settings to enable various performance
+    /// optimizations such as enabling bitmap caching, graphics pipeline support,
+    /// and disabling unnecessary features.
     pub fn optimize(&self) {
         #[cfg(debug_assertions)]
         self.debug_assert_instance();
@@ -183,6 +187,8 @@ impl Rdp {
     // * The hostname after "|" is ignored
     // * The fd must be already connected
     // * Freerdp will close the fd on disconnect (it takes ownership)
+
+    /// Connects to the RDP server using the current settings
     pub fn connect(&self) -> Result<()> {
         #[cfg(debug_assertions)]
         self.debug_assert_instance();

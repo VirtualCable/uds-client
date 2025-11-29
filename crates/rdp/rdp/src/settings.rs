@@ -1,7 +1,7 @@
 use zeroize::Zeroize;
 
 #[allow(dead_code)]
-#[derive(Zeroize, Debug)]
+#[derive(Zeroize, Debug, Clone)]
 pub enum ScreenSize {
     Full,
     Fixed(u32, u32),

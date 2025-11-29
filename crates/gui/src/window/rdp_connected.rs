@@ -1,7 +1,10 @@
 #![allow(dead_code)]
 use std::{
     fmt,
-    sync::{Arc, RwLock, atomic::Ordering},
+    sync::{
+        Arc, RwLock,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use anyhow::Result;
@@ -17,7 +20,11 @@ use rdp::{
 
 use crate::geom::RectExt; // For extracting rects from framebuffer
 
-use super::{AppWindow, types::AppState};
+use super::{
+    AppWindow,
+    types::{AppState, HotKey},
+};
+use rdp::settings::ScreenSize;
 
 const FRAMES_IN_FLIGHT: usize = 128;
 
@@ -28,6 +35,7 @@ pub struct RdpState {
     gdi_lock: Arc<RwLock<()>>,
     input: *mut freerdp_sys::rdpInput,
     texture: egui::TextureHandle,
+    full_screen: Arc<AtomicBool>,
 }
 
 impl fmt::Debug for RdpState {
@@ -48,16 +56,15 @@ impl AppWindow {
         self.processing_events.store(true, Ordering::Relaxed); // Start processing events
         let (tx, rx): (Sender<RdpMessage>, Receiver<RdpMessage>) = bounded(FRAMES_IN_FLIGHT);
 
+        let screen_size = rdp_settings.screen_size.clone();
         ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
-            [
-                rdp_settings.screen_size.width() as f32,
-                rdp_settings.screen_size.height() as f32,
-            ]
-            .into(),
+            [screen_size.width() as f32, screen_size.height() as f32].into(),
         ));
         ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition([10.0, 10.0].into()));
 
+        // Rdp shouls be pinned, as build() inserts self reference inside freedrp structs
         let mut rdp = Box::pin(Rdp::new(rdp_settings, tx, self.stop.clone()));
+        // For reference: Currently, default callbacks are these also, so if no more are needed, this can be skipped
         // rdp.set_update_callbacks(vec![
         //     update_c::Callbacks::BeginPaint,
         //     update_c::Callbacks::EndPaint,
@@ -107,6 +114,7 @@ impl AppWindow {
             input,
             gdi_lock,
             texture,
+            full_screen: Arc::new(AtomicBool::new(screen_size.is_fullscreen())),
         }));
 
         // TODO: maybe add a trigger to allow proper shutdown
@@ -182,8 +190,51 @@ impl AppWindow {
                 // Show the texture on 0,0, full size
                 ui.image(&rdp_state.texture);
 
+                if self.handle_hotkeys(ctx, frame, rdp_state) {
+                    // Hotkey handled, skip input processing this frame
+                    return;
+                }
                 let input = rdp_state.input;
                 self.handle_input(ctx, frame, input);
             });
+    }
+
+    fn handle_hotkeys(
+        &mut self,
+        ctx: &egui::Context,
+        _frame: &eframe::Frame,
+        rdp_state: &mut RdpState,
+    ) -> bool {
+        match HotKey::from_input(ctx) {
+            HotKey::ToggleFullScreen => {
+                self.toggle_fullscreen(ctx, _frame, rdp_state);
+                true
+            }
+            HotKey::None => false,
+        }
+    }
+
+    fn toggle_fullscreen(
+        &mut self,
+        ctx: &egui::Context,
+        _frame: &eframe::Frame,
+        rdp_state: &mut RdpState,
+    ) {
+        log::debug!("ALT+ENTER pressed, toggling fullscreen");
+        if rdp_state.full_screen.load(Ordering::Relaxed) {
+            // Switch to fixed size
+            let new_size = ScreenSize::Fixed(1600, 900); // TODO: Store original size somewhere
+            ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(true));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                [new_size.width() as f32, new_size.height() as f32].into(),
+            ));
+            rdp_state.full_screen.store(false, Ordering::Relaxed);
+        } else {
+            // Switch to fullscreen
+            ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(false));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
+            rdp_state.full_screen.store(true, Ordering::Relaxed);
+        }
     }
 }
