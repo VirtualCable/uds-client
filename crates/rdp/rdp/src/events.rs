@@ -7,6 +7,7 @@ macro_rules! define_event {
         impl $name {
             #[allow(dead_code)]
             #[allow(clippy::manual_c_str_literals)]
+            #[allow(clippy::not_unsafe_ptr_arg_deref)]
             pub fn fire_event(
                 pubsub: *mut freerdp_sys::wPubSub,
                 context: *mut std::ffi::c_void,
@@ -24,6 +25,7 @@ macro_rules! define_event {
 
             #[allow(dead_code)]
             #[allow(clippy::manual_c_str_literals)]
+            #[allow(clippy::not_unsafe_ptr_arg_deref)]
             pub fn subscribe(pubsub: *mut freerdp_sys::wPubSub, handler: $handler_ty) -> i32 {
                 unsafe {
                     freerdp_sys::PubSub_Subscribe(
@@ -36,6 +38,7 @@ macro_rules! define_event {
 
             #[allow(dead_code)]
             #[allow(clippy::manual_c_str_literals)]
+            #[allow(clippy::not_unsafe_ptr_arg_deref)]
             pub fn unsubscribe(pubsub: *mut freerdp_sys::wPubSub, handler: $handler_ty) -> i32 {
                 unsafe {
                     freerdp_sys::PubSub_Unsubscribe(

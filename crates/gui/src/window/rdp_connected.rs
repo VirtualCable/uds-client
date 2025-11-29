@@ -18,7 +18,7 @@ use rdp::{
     settings::RdpSettings,
 };
 
-// use crate::geom::RectExt; // For extracting rects from framebuffer
+use crate::geom::RectExt; // For extracting rects from framebuffer
 
 use super::{
     AppWindow,

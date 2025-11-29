@@ -32,7 +32,9 @@ type ReasonType = i32; // DWORD
 #[cfg(unix)]
 type ReasonType = i32; // int32_t
 
-pub fn set_instance_callbacks(instance: *mut freerdp) {
+/// # Safety
+/// This function is unsafe because it dereferences raw pointers to set callback functions.
+pub unsafe fn set_instance_callbacks(instance: *mut freerdp) {
     unsafe {
         // Callback assignments
         // All commented methods are provided by freerdp3
@@ -67,7 +69,7 @@ pub fn set_instance_callbacks(instance: *mut freerdp) {
     }
 }
 
-pub extern "C" fn pre_connect(instance: *mut freerdp) -> BOOL {
+extern "C" fn pre_connect(instance: *mut freerdp) -> BOOL {
     // Register the channel events
     debug!(" 🧪 **** Registering channel events on pre_connect...");
 
@@ -83,7 +85,7 @@ pub extern "C" fn pre_connect(instance: *mut freerdp) -> BOOL {
 }
 
 // Initialize GDI here after the connection is established
-pub extern "C" fn post_connect(instance: *mut freerdp) -> BOOL {
+extern "C" fn post_connect(instance: *mut freerdp) -> BOOL {
     debug!(" 🧪 **** Post connect called... {instance:?}");
     // Initialize GDI, must be after the settings are set
     // const PIXEL_FORMAT_BGRA32: u32 = 0x20048888;
@@ -96,14 +98,16 @@ pub extern "C" fn post_connect(instance: *mut freerdp) -> BOOL {
         debug!(" Owner: {:?}", &owner);
         let context = unsafe { (*instance).context };
         // Setup our callbacks
-        update_c::set_callbacks(context, &owner.get_callbacks().update);
-        window_c::set_callbacks(context, &owner.get_callbacks().window);
-        altsec_c::set_callbacks(context, &owner.get_callbacks().altsec);
-        primary_c::set_callbacks(context, &owner.get_callbacks().primary);
-        secondary_c::set_callbacks(context, &owner.get_callbacks().secondary);
-        pointer_update_c::set_callbacks(context, &owner.get_callbacks().pointer);
-        input_c::set_callbacks(context, &owner.get_callbacks().input);
-        graphics_c::set_callbacks(context);
+        unsafe {
+            update_c::set_callbacks(context, &owner.get_callbacks().update);
+            window_c::set_callbacks(context, &owner.get_callbacks().window);
+            altsec_c::set_callbacks(context, &owner.get_callbacks().altsec);
+            primary_c::set_callbacks(context, &owner.get_callbacks().primary);
+            secondary_c::set_callbacks(context, &owner.get_callbacks().secondary);
+            pointer_update_c::set_callbacks(context, &owner.get_callbacks().pointer);
+            input_c::set_callbacks(context, &owner.get_callbacks().input);
+            graphics_c::set_callbacks(context);
+        }
 
         owner.on_post_connect().into()
     } else {
@@ -111,10 +115,7 @@ pub extern "C" fn post_connect(instance: *mut freerdp) -> BOOL {
     }
 }
 
-pub extern "C" fn context_new(
-    instance: *mut freerdp,
-    context: *mut freerdp_sys::rdpContext,
-) -> BOOL {
+extern "C" fn context_new(instance: *mut freerdp, context: *mut freerdp_sys::rdpContext) -> BOOL {
     debug!(" 🧪 **** Context new called... {instance:?} -- {context:?}");
     if let Some(owner) = instance.owner() {
         owner.on_context_new().into()
@@ -123,14 +124,14 @@ pub extern "C" fn context_new(
     }
 }
 
-pub extern "C" fn context_free(instance: *mut freerdp, context: *mut freerdp_sys::rdpContext) {
+extern "C" fn context_free(instance: *mut freerdp, context: *mut freerdp_sys::rdpContext) {
     debug!(" 🧪 **** Context free called... {instance:?} -- {context:?}");
     if let Some(owner) = instance.owner() {
         owner.on_context_free();
     }
 }
 
-pub extern "C" fn post_disconnect(instance: *mut freerdp) {
+extern "C" fn post_disconnect(instance: *mut freerdp) {
     debug!(" 🧪 **** Post disconnect called...");
 
     unsafe {
@@ -142,7 +143,7 @@ pub extern "C" fn post_disconnect(instance: *mut freerdp) {
     }
 }
 
-pub extern "C" fn post_final_disconnect(instance: *mut freerdp) {
+extern "C" fn post_final_disconnect(instance: *mut freerdp) {
     debug!(" 🧪 **** Post final disconnect called...");
 
     let pubsub = unsafe { (*instance).context.as_ref().unwrap().pubSub };
@@ -154,7 +155,7 @@ pub extern "C" fn post_final_disconnect(instance: *mut freerdp) {
     }
 }
 
-pub extern "C" fn authenticate(
+extern "C" fn authenticate(
     instance: *mut freerdp,
     username: *mut *mut ::std::os::raw::c_char,
     password: *mut *mut ::std::os::raw::c_char,
@@ -168,7 +169,7 @@ pub extern "C" fn authenticate(
     }
 }
 
-pub extern "C" fn authenticate_ex(
+extern "C" fn authenticate_ex(
     instance: *mut freerdp,
     username: *mut *mut ::std::os::raw::c_char,
     password: *mut *mut ::std::os::raw::c_char,
@@ -185,7 +186,7 @@ pub extern "C" fn authenticate_ex(
     }
 }
 
-pub extern "C" fn verify_x509_certificate(
+extern "C" fn verify_x509_certificate(
     instance: *mut freerdp,
     data: *const BYTE,
     length: usize,
@@ -205,7 +206,7 @@ pub extern "C" fn verify_x509_certificate(
     }
 }
 
-pub extern "C" fn verify_certificate(
+extern "C" fn verify_certificate(
     instance: *mut freerdp,
     host: *const ::std::os::raw::c_char,
     port: UINT16,
@@ -237,7 +238,7 @@ pub extern "C" fn verify_certificate(
         0
     }
 }
-pub extern "C" fn logon_error_info(
+extern "C" fn logon_error_info(
     instance: *mut freerdp,
     data: UINT32,
     type_: UINT32,
@@ -256,7 +257,7 @@ pub extern "C" fn logon_error_info(
     }
 }
 
-pub extern "C" fn gateway_authenticate(
+extern "C" fn gateway_authenticate(
     instance: *mut freerdp,
     username: *mut *mut ::std::os::raw::c_char,
     password: *mut *mut ::std::os::raw::c_char,
@@ -272,7 +273,7 @@ pub extern "C" fn gateway_authenticate(
     }
 }
 
-pub extern "C" fn present_gateway_message(
+extern "C" fn present_gateway_message(
     instance: *mut freerdp,
     msg_type: UINT32,
     is_display_mandatory: BOOL,
@@ -304,7 +305,7 @@ pub extern "C" fn present_gateway_message(
     }
 }
 
-pub extern "C" fn redirect(instance: *mut freerdp) -> BOOL {
+extern "C" fn redirect(instance: *mut freerdp) -> BOOL {
     debug!(" 🧪 **** Redirect called...");
     if let Some(owner) = instance.owner() {
         owner.on_redirect().into()
@@ -314,7 +315,7 @@ pub extern "C" fn redirect(instance: *mut freerdp) -> BOOL {
 }
 
 #[allow(dead_code)]
-pub extern "C" fn load_channels(instance: *mut freerdp) -> BOOL {
+extern "C" fn load_channels(instance: *mut freerdp) -> BOOL {
     debug!(" 🧪 **** Load channels called...");
 
     // Invoke original, ours is only a wrapper
@@ -330,7 +331,7 @@ pub extern "C" fn load_channels(instance: *mut freerdp) -> BOOL {
 }
 
 // #[allow(dead_code)]
-// pub extern "C" fn send_channel_data(
+// extern "C" fn send_channel_data(
 //     instance: *mut freerdp,
 //     channel_id: UINT16,
 //     data: *const BYTE,
@@ -347,7 +348,7 @@ pub extern "C" fn load_channels(instance: *mut freerdp) -> BOOL {
 // }
 
 // #[allow(dead_code)]
-// pub extern "C" fn receive_channel_data(
+// extern "C" fn receive_channel_data(
 //     instance: *mut freerdp,
 //     channel_id: UINT16,
 //     data: *const BYTE,
@@ -366,7 +367,7 @@ pub extern "C" fn load_channels(instance: *mut freerdp) -> BOOL {
 // }
 
 // #[allow(dead_code)]
-// pub extern "C" fn send_channel_packet(
+// extern "C" fn send_channel_packet(
 //     instance: *mut freerdp,
 //     channel_id: UINT16,
 //     total_size: usize,
@@ -384,7 +385,7 @@ pub extern "C" fn load_channels(instance: *mut freerdp) -> BOOL {
 //     }
 // }
 
-pub extern "C" fn choose_smartcard(
+extern "C" fn choose_smartcard(
     instance: *mut freerdp,
     cert_list: *mut *mut SmartcardCertInfo,
     count: DWORD,
@@ -422,7 +423,7 @@ pub extern "C" fn get_access_token_no_varargs(
     }
 }
 
-pub extern "C" fn retry_dialog(
+extern "C" fn retry_dialog(
     instance: *mut freerdp,
     what: *const ::std::os::raw::c_char,
     current: usize,

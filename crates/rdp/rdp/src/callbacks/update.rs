@@ -11,7 +11,9 @@ pub trait UpdateCallbacks {
         true
     }
 
-    fn on_set_bounds(&mut self, bounds: *const rdpBounds) -> bool {
+    /// # Safety
+    /// This callback function interoperates with C pointers.
+    unsafe fn on_set_bounds(&mut self, bounds: *const rdpBounds) -> bool {
         let bounds = unsafe { *bounds };
         debug!(
             "Set bounds: left={}, top={}, right={}, bottom={}",

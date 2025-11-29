@@ -6,7 +6,9 @@ use freerdp_sys::{
 use shared::{log::debug};
 use crate::utils::ToStringLossy;
 
-pub extern "C" fn on_channel_connected(
+/// # Safety
+/// This function is called from the FreeRDP C library when a channel is connected.
+pub unsafe extern "C" fn on_channel_connected(
     context: *mut ::std::os::raw::c_void,
     e: *const ChannelConnectedEventArgs,
 ) {
@@ -26,7 +28,9 @@ pub extern "C" fn on_channel_connected(
     }
 }
 
-pub extern "C" fn on_channel_disconnected(
+/// # Safety
+/// This function is called from the FreeRDP C library when a channel is disconnected.
+pub unsafe extern "C" fn on_channel_disconnected(
     context: *mut ::std::os::raw::c_void,
     e: *const freerdp_sys::ChannelDisconnectedEventArgs,
 ) {

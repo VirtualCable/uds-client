@@ -32,7 +32,9 @@ extern "C" fn my_message_cb(msg: *const wLogMessage) -> BOOL {
 
 // Dumps settings uwing freerdp_settings_dump
 #[allow(dead_code)]
-pub fn dump_freerdp_settings(settings: *mut rdpSettings) {
+/// # Safety
+/// This function is unsafe because it dereferences raw pointers.
+pub unsafe fn dump_freerdp_settings(settings: *mut rdpSettings) {
     unsafe {
         let log = WLog_GetRoot();
         if !settings.is_null() {

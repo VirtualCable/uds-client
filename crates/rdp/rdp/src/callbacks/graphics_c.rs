@@ -4,8 +4,9 @@ use shared::log::debug;
 
 use super::{super::connection::context::OwnerFromCtx, graphics::GraphicsCallbacks};
 
-#[allow(dead_code)]
-pub fn set_callbacks(context: *mut rdpContext) {
+/// # Safety
+/// This function is unsafe because it dereferences raw pointers to set callback functions.
+pub unsafe fn set_callbacks(context: *mut rdpContext) {
     unsafe {
         let graphics = (*context).graphics;
         let pointer_proto = (*graphics).Pointer_Prototype;

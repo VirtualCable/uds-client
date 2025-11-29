@@ -51,8 +51,10 @@ impl Callbacks {
     }
 }
 
-#[allow(dead_code)]
-pub fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
+/// # Safety
+/// This function modifies raw pointers from the FreeRDP C library. Ensure that the provided context is valid and that the overrides
+/// correspond to properly implemented callbacks in the
+pub unsafe fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
     unsafe {
         let update = (*context).update;
         let altsec = (*update).altsec;
@@ -106,7 +108,7 @@ pub fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
     }
 }
 
-pub extern "C" fn create_offscreen_bitmap(
+extern "C" fn create_offscreen_bitmap(
     context: *mut rdpContext,
     create_offscreen_bitmap: *const CREATE_OFFSCREEN_BITMAP_ORDER,
 ) -> BOOL {
@@ -119,7 +121,7 @@ pub extern "C" fn create_offscreen_bitmap(
     }
 }
 
-pub extern "C" fn switch_surface(
+extern "C" fn switch_surface(
     context: *mut rdpContext,
     switch_surface: *const SWITCH_SURFACE_ORDER,
 ) -> BOOL {
@@ -130,7 +132,7 @@ pub extern "C" fn switch_surface(
     }
 }
 
-pub extern "C" fn create_nine_grid_bitmap(
+extern "C" fn create_nine_grid_bitmap(
     context: *mut rdpContext,
     create_nine_grid_bitmap: *const CREATE_NINE_GRID_BITMAP_ORDER,
 ) -> BOOL {
@@ -143,7 +145,7 @@ pub extern "C" fn create_nine_grid_bitmap(
     }
 }
 
-pub extern "C" fn frame_marker(
+extern "C" fn frame_marker(
     context: *mut rdpContext,
     frame_marker: *const FRAME_MARKER_ORDER,
 ) -> BOOL {
@@ -154,7 +156,7 @@ pub extern "C" fn frame_marker(
     }
 }
 
-pub extern "C" fn stream_bitmap_first(
+extern "C" fn stream_bitmap_first(
     context: *mut rdpContext,
     bitmap_data: *const STREAM_BITMAP_FIRST_ORDER,
 ) -> BOOL {
@@ -165,7 +167,7 @@ pub extern "C" fn stream_bitmap_first(
     }
 }
 
-pub extern "C" fn stream_bitmap_next(
+extern "C" fn stream_bitmap_next(
     context: *mut rdpContext,
     bitmap_data: *const STREAM_BITMAP_NEXT_ORDER,
 ) -> BOOL {
@@ -176,7 +178,7 @@ pub extern "C" fn stream_bitmap_next(
     }
 }
 
-pub extern "C" fn draw_gdi_plus_first(
+extern "C" fn draw_gdi_plus_first(
     context: *mut rdpContext,
     bitmap_data: *const DRAW_GDIPLUS_FIRST_ORDER,
 ) -> BOOL {
@@ -187,7 +189,7 @@ pub extern "C" fn draw_gdi_plus_first(
     }
 }
 
-pub extern "C" fn draw_gdi_plus_next(
+extern "C" fn draw_gdi_plus_next(
     context: *mut rdpContext,
     bitmap_data: *const DRAW_GDIPLUS_NEXT_ORDER,
 ) -> BOOL {
@@ -198,7 +200,7 @@ pub extern "C" fn draw_gdi_plus_next(
     }
 }
 
-pub extern "C" fn draw_gdi_plus_end(
+extern "C" fn draw_gdi_plus_end(
     context: *mut rdpContext,
     bitmap_data: *const DRAW_GDIPLUS_END_ORDER,
 ) -> BOOL {
@@ -209,7 +211,7 @@ pub extern "C" fn draw_gdi_plus_end(
     }
 }
 
-pub extern "C" fn draw_gdi_plus_cache_first(
+extern "C" fn draw_gdi_plus_cache_first(
     context: *mut rdpContext,
     bitmap_data: *const DRAW_GDIPLUS_CACHE_FIRST_ORDER,
 ) -> BOOL {
@@ -220,7 +222,7 @@ pub extern "C" fn draw_gdi_plus_cache_first(
     }
 }
 
-pub extern "C" fn draw_gdi_plus_cache_next(
+extern "C" fn draw_gdi_plus_cache_next(
     context: *mut rdpContext,
     bitmap_data: *const DRAW_GDIPLUS_CACHE_NEXT_ORDER,
 ) -> BOOL {
@@ -231,7 +233,7 @@ pub extern "C" fn draw_gdi_plus_cache_next(
     }
 }
 
-pub extern "C" fn draw_gdi_plus_cache_end(
+extern "C" fn draw_gdi_plus_cache_end(
     context: *mut rdpContext,
     bitmap_data: *const DRAW_GDIPLUS_CACHE_END_ORDER,
 ) -> BOOL {
@@ -242,7 +244,7 @@ pub extern "C" fn draw_gdi_plus_cache_end(
     }
 }
 
-pub extern "C" fn draw_order_info(
+extern "C" fn draw_order_info(
     context: *mut rdpContext,
     order_type: UINT8,
     order_name: *const ::std::os::raw::c_char,
