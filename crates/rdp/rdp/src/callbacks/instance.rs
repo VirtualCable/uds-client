@@ -4,22 +4,22 @@ use shared::log::debug;
 
 pub trait InstanceCallbacks {
     fn on_pre_connect(&mut self) -> bool {
-        debug!(" 🧪 **** Preparing connection...");
+        debug!(" **** Preparing connection...");
         true
     }
 
     fn on_post_connect(&mut self) -> bool {
-        debug!(" 🧪 **** Connected successfully!");
+        debug!(" **** Connected successfully!");
         true
     }
 
     fn on_context_new(&mut self) -> bool {
-        debug!(" 🧪 **** Context new...");
+        debug!(" **** Context new...");
         true
     }
 
     fn on_context_free(&mut self) {
-        debug!(" 🧪 **** Context free...");
+        debug!(" **** Context free...");
     }
 
     #[allow(unused_variables)]
@@ -29,7 +29,7 @@ pub trait InstanceCallbacks {
         password: *mut *mut ::std::os::raw::c_char,
         domain: *mut *mut ::std::os::raw::c_char,
     ) -> bool {
-        debug!(" 🧪 **** Authenticating...");
+        debug!(" **** Authenticating...");
         true
     }
 
@@ -41,7 +41,7 @@ pub trait InstanceCallbacks {
         _domain: *mut *mut ::std::os::raw::c_char,
         _reason: i32,
     ) -> bool {
-        debug!(" 🧪 **** Authenticating (extended)...");
+        debug!(" **** Authenticating (extended)...");
         true
     }
 
@@ -52,7 +52,7 @@ pub trait InstanceCallbacks {
         password: *mut *mut ::std::os::raw::c_char,
         domain: *mut *mut ::std::os::raw::c_char,
     ) -> bool {
-        debug!(" 🧪 **** Authenticating...");
+        debug!(" **** Authenticating...");
         true
     }
 
@@ -64,7 +64,7 @@ pub trait InstanceCallbacks {
         choice: *mut u32,
         gateway: bool,
     ) -> bool {
-        debug!(" 🧪 **** Choosing smartcard certificate...");
+        debug!(" **** Choosing smartcard certificate...");
         true
     }
 
@@ -76,7 +76,7 @@ pub trait InstanceCallbacks {
         count: usize,
         data: *const *const ::std::os::raw::c_char,
     ) -> bool {
-        debug!(" 🧪 **** Getting access token...");
+        debug!(" **** Getting access token...");
         true
     }
 
@@ -89,7 +89,7 @@ pub trait InstanceCallbacks {
         flags: u32,
     ) -> bool {
         debug!(
-            " 🧪 **** Verifying certificate: Hostname: {}, Port: {}, Flags: {}, Data: {:?} Data Length: {}",
+            " **** Verifying certificate: Hostname: {}, Port: {}, Flags: {}, Data: {:?} Data Length: {}",
             hostname, port, flags, data, length
         );
         // For now, we accept all certificates. Implement proper verification as needed.
@@ -108,7 +108,7 @@ pub trait InstanceCallbacks {
         flags: u32,
     ) -> u32 {
         debug!(
-            " 🧪 **** Verifying certificate: Host: {:?}, Port: {}, Common Name: {:?}, Subject: {:?}, Issuer: {:?}, Fingerprint: {:?}, Flags: {}",
+            " **** Verifying certificate: Host: {:?}, Port: {}, Common Name: {:?}, Subject: {:?}, Issuer: {:?}, Fingerprint: {:?}, Flags: {}",
             host, port, common_name, subject, issuer, fingerprint, flags
         );
         // For now, we accept all certificates. Implement proper verification as needed.
@@ -117,14 +117,14 @@ pub trait InstanceCallbacks {
 
     fn on_logon_error_info(&mut self, data_str: &str, type_str: &str) -> bool {
         debug!(
-            " 🧪 **** Logon error info received... Data: {}, Type: {}",
+            " **** Logon error info received... Data: {}, Type: {}",
             data_str, type_str
         );
         true
     }
 
     fn on_post_disconnect(&mut self) {
-        debug!(" 🧪 **** Disconnected.");
+        debug!(" **** Disconnected.");
     }
 
     fn on_present_gateway_message(
@@ -136,25 +136,25 @@ pub trait InstanceCallbacks {
         message: String,
     ) -> bool {
         debug!(
-            " 🧪 **** Gateway message received. Type: {}, Display Mandatory: {}, Consent Mandatory: {}, Length: {}, Message: {}",
+            " **** Gateway message received. Type: {}, Display Mandatory: {}, Consent Mandatory: {}, Length: {}, Message: {}",
             msg_type, is_display_mandatory, is_consent_mandatory, length, message
         );
         true
     }
 
     fn on_redirect(&mut self) -> bool {
-        debug!(" 🧪 **** Redirecting...");
+        debug!(" **** Redirecting...");
         true
     }
 
     fn on_load_channels(&mut self) -> bool {
-        debug!(" 🧪 **** Loading channels...");
+        debug!(" **** Loading channels...");
         true
     }
 
     // fn on_send_channel_data(&mut self, channel_id: u16, data: *const u8, size: usize) -> bool {
     //     debug!(
-    //         " 🧪 **** Sending channel data... Channel ID: {}, Data: {:?}, Size: {}",
+    //         " **** Sending channel data... Channel ID: {}, Data: {:?}, Size: {}",
     //         channel_id, data, size
     //     );
     //     true
@@ -169,7 +169,7 @@ pub trait InstanceCallbacks {
     //     total_size: usize,
     // ) -> bool {
     //     debug!(
-    //         " 🧪 **** Receiving channel data... Channel ID: {}, Data: {:?}, Size: {}, Flags: {}, Total Size: {}",
+    //         " **** Receiving channel data... Channel ID: {}, Data: {:?}, Size: {}, Flags: {}, Total Size: {}",
     //         channel_id, data, size, flags, total_size
     //     );
     //     true
@@ -184,14 +184,14 @@ pub trait InstanceCallbacks {
     //     chunk_size: usize,
     // ) -> bool {
     //     debug!(
-    //         " 🧪 **** Sending channel packet... Channel ID: {}, Total Size: {}, Flags: {}, Data: {:?}, Chunk Size: {}",
+    //         " **** Sending channel packet... Channel ID: {}, Total Size: {}, Flags: {}, Data: {:?}, Chunk Size: {}",
     //         channel_id, total_size, flags, data, chunk_size
     //     );
     //     true
     // }
 
     fn on_post_final_disconnect(&mut self) {
-        debug!(" 🧪 **** Disconnected.");
+        debug!(" **** Disconnected.");
     }
 
     fn on_retry_dialog(
@@ -201,7 +201,7 @@ pub trait InstanceCallbacks {
         userarg: *mut ::std::os::raw::c_void,
     ) -> i64 {
         debug!(
-            " 🧪 **** Retry dialog invoked. What: {}, Current: {}, UserArg: {:?}",
+            " **** Retry dialog invoked. What: {}, Current: {}, UserArg: {:?}",
             what, current, userarg
         );
         -1 // Indicate no retry by default

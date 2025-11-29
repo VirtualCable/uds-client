@@ -47,7 +47,7 @@ pub unsafe fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
         let update = (*context).update;
         let secondary = (*update).secondary;
         if update.is_null() || secondary.is_null() {
-            debug!(" 🧪 **** Secondary not initialized, cannot override callbacks.");
+            debug!(" **** Secondary not initialized, cannot override callbacks.");
             return;
         }
         for override_cb in overrides {

@@ -14,7 +14,7 @@ use super::{Rdp, RdpMessage};
 
 impl instance::InstanceCallbacks for Rdp {
     fn on_post_connect(&mut self) -> bool {
-        debug!(" 🧪 **** Connected successfully!");
+        debug!(" **** Connected successfully!");
         true
     }
 }
@@ -45,7 +45,7 @@ impl update::UpdateCallbacks for Rdp {
                 let ninvalid = unsafe { (*hwnd).ninvalid };
                 let cinvalid = unsafe { (*hwnd).invalid };
                 if ninvalid <= 0 {
-                    debug!(" 🖥️ **** END PAINT no invalid regions, skipping");
+                    debug!(" **** END PAINT no invalid regions, skipping");
                     return true;
                 }
                 let rects_raw = unsafe { std::slice::from_raw_parts(cinvalid, ninvalid as usize) };
@@ -59,7 +59,7 @@ impl update::UpdateCallbacks for Rdp {
     }
 
     fn on_desktop_resize(&mut self) -> bool {
-        debug!(" 🧪 **** Desktop resized");
+        debug!(" **** Desktop resized");
         let width = unsafe {
             freerdp_settings_get_uint32(
                 self.context().unwrap().context().settings,
