@@ -1,9 +1,10 @@
 use std::sync::{Arc, RwLock};
 
 use anyhow::Result;
-use tokio::sync::oneshot;
 use eframe::egui;
-use rdp::settings::{RdpSettings, ScreenSize};
+use tokio::sync::oneshot;
+
+use rdp::{geom::ScreenSize, settings::RdpSettings};
 
 use super::{AppWindow, client_progress::ProgressState, types::AppState};
 

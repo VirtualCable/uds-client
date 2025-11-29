@@ -11,3 +11,30 @@ impl Rect {
         Self { x, y, w, h }
     }
 }
+
+#[derive(Debug, Copy, Clone)]
+pub enum ScreenSize {
+    Full,
+    Fixed(u32, u32),
+}
+
+// TODO; fix fullscreen handling
+impl ScreenSize {
+    pub fn width(&self) -> u32 {
+        match self {
+            ScreenSize::Full => 1920,
+            ScreenSize::Fixed(w, _) => *w,
+        }
+    }
+
+    pub fn height(&self) -> u32 {
+        match self {
+            ScreenSize::Full => 1080,
+            ScreenSize::Fixed(_, h) => *h,
+        }
+    }
+
+    pub fn is_fullscreen(&self) -> bool {
+        matches!(self, ScreenSize::Full)
+    }
+}
