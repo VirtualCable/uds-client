@@ -8,7 +8,6 @@ use crossbeam::channel::Sender;
 
 use crate::{
     callbacks::Callbacks,
-    connection::context::RdpContext,
     geom::Rect,
     settings::RdpSettings,
     utils::{SafeHandle, SafePtr, ToStringLossy},
@@ -59,10 +58,10 @@ impl Rdp {
         }
     }
 
-    pub fn context(&self) -> Option<&RdpContext> {
+    pub fn context(&self) -> Option<&context::RdpContext> {
         unsafe {
             if let Some(instance) = self.instance {
-                let ctx = instance.context as *mut RdpContext;
+                let ctx = instance.context as *mut context::RdpContext;
                 if ctx.is_null() { None } else { Some(&*ctx) }
             } else {
                 None
@@ -81,7 +80,7 @@ impl Rdp {
                 "RDP context is not initialized"
             );
             // owner should point to self
-            let ctx = instance.context as *mut RdpContext;
+            let ctx = instance.context as *mut context::RdpContext;
             assert!(
                 !(*ctx).owner.is_null(),
                 "RDP context owner is not initialized"
@@ -95,6 +94,26 @@ impl Rdp {
         }
     }
 
+    fn settings(&self) -> Option<*mut rdpSettings> {
+        unsafe {
+            if let Some(conn) = self.instance.as_deref() {
+                let ctx = conn.context;
+                if ctx.is_null() {
+                    None
+                } else {
+                    let settings = (*ctx).settings;
+                    if settings.is_null() {
+                        None
+                    } else {
+                        Some(settings)
+                    }
+                }
+            } else {
+                None
+            }
+        }
+    }
+
     /// Optimize the RDP settings for better performance
     /// This function modifies the FreeRDP settings to enable various performance
     /// optimizations such as enabling bitmap caching, graphics pipeline support,
@@ -103,19 +122,8 @@ impl Rdp {
         #[cfg(debug_assertions)]
         self.debug_assert_instance();
 
-        if let Some(conn) = self.instance.as_deref() {
+        if let Some(settings) = self.settings() {
             unsafe {
-                let ctx = conn.context;
-                if ctx.is_null() {
-                    log::debug!("RDP context is null, cannot optimize settings.");
-                    return;
-                }
-                let settings = (*ctx).settings;
-                if settings.is_null() {
-                    log::debug!("RDP settings is null, cannot optimize settings.");
-                    return;
-                }
-
                 // Set Falses first
                 for i in [
                     FreeRDP_Settings_Keys_Bool_FreeRDP_FastPathInput,
@@ -212,8 +220,47 @@ impl Rdp {
 
     pub fn send_resize(self, width: u32, height: u32) {
         // TODO:: implement this
+        // We need the disp channel to send the resize request, not alredy implemented in our code
+        // Note: avoid too fast resizing, as it may cause issues
+        // with the server or client. (simply, implement a delay or debounce mechanism os 200ms or so)
         log::debug!("send_resize not implemented yet: {}x{}", width, height);
-        
+        if let Some(settings) = self.settings() {
+            let _dcml = unsafe {
+                DISPLAY_CONTROL_MONITOR_LAYOUT {
+                    Flags: DISPLAY_CONTROL_MONITOR_PRIMARY,
+                    Left: 0,
+                    Top: 0,
+                    Width: width,
+                    Height: height,
+                    Orientation: freerdp_settings_get_uint16(
+                        settings,
+                        FreeRDP_Settings_Keys_UInt16_FreeRDP_DesktopOrientation,
+                    ) as UINT32,
+                    DesktopScaleFactor: freerdp_settings_get_uint32(
+                        settings,
+                        FreeRDP_Settings_Keys_UInt32_FreeRDP_DesktopScaleFactor,
+                    ),
+                    DeviceScaleFactor: freerdp_settings_get_uint32(
+                        settings,
+                        FreeRDP_Settings_Keys_UInt32_FreeRDP_DeviceScaleFactor,
+                    ),
+                    PhysicalWidth: width,
+                    PhysicalHeight: height,
+                }
+            };
+            unsafe {
+                freerdp_settings_set_uint32(
+                    settings,
+                    FreeRDP_Settings_Keys_UInt32_FreeRDP_SmartSizingWidth,
+                    width,
+                );
+                freerdp_settings_set_uint32(
+                    settings,
+                    FreeRDP_Settings_Keys_UInt32_FreeRDP_SmartSizingHeight,
+                    height,
+                );
+            }
+        };
     }
 
     pub fn input(&self) -> Option<*mut rdpInput> {
@@ -263,7 +310,7 @@ impl Rdp {
             .instance
             .ok_or_else(|| anyhow::anyhow!("Connection not built"))?;
 
-        let context = instance.context as *mut RdpContext;
+        let context = instance.context as *mut context::RdpContext;
 
         let tx = if let Some(tx) = &self.update_tx {
             tx
