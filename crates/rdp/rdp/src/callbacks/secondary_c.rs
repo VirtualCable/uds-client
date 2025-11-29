@@ -5,11 +5,11 @@ use freerdp_sys::{
 };
 
 use super::{
-    super::connection::context::OwnerFromCtx, super::utils::ToStringLossy,
+    super::utils::{ToStringLossy},
+    super::connection::context::OwnerFromCtx,
     secondary::SecondaryCallbacks,
 };
-
-use shared::log;
+use shared::log::debug;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -40,15 +40,13 @@ impl Callbacks {
     }
 }
 
-/// # Safety
-/// Interoperability with C code.
-/// Ensure that the context pointer is valid.
-pub unsafe fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
+#[allow(dead_code)]
+pub fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
     unsafe {
         let update = (*context).update;
         let secondary = (*update).secondary;
         if update.is_null() || secondary.is_null() {
-            log::debug!(" **** Secondary not initialized, cannot override callbacks.");
+            debug!(" 🧪 **** Secondary not initialized, cannot override callbacks.");
             return;
         }
         for override_cb in overrides {

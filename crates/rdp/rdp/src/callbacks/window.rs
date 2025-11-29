@@ -3,7 +3,7 @@ use freerdp_sys::{
     WINDOW_ORDER_INFO, WINDOW_STATE_ORDER,
 };
 
-use shared::log;
+use shared::log::debug;
 
 pub trait WindowCallbacks {
     fn on_window_create(
@@ -11,7 +11,7 @@ pub trait WindowCallbacks {
         order_info: *const WINDOW_ORDER_INFO,
         window_state: *const WINDOW_STATE_ORDER,
     ) -> bool {
-        log::debug!(
+        debug!(
             "WindowCallbacks::on_window_create: order_info={:?}, window_state={:?}",
             order_info, window_state
         );
@@ -23,7 +23,7 @@ pub trait WindowCallbacks {
         order_info: *const WINDOW_ORDER_INFO,
         window_state: *const WINDOW_STATE_ORDER,
     ) -> bool {
-        log::debug!(
+        debug!(
             "WindowCallbacks::on_window_update: order_info={:?}, window_state={:?}",
             order_info, window_state
         );
@@ -35,7 +35,7 @@ pub trait WindowCallbacks {
         order_info: *const WINDOW_ORDER_INFO,
         window_icon: *const WINDOW_ICON_ORDER,
     ) -> bool {
-        log::debug!(
+        debug!(
             "WindowCallbacks::on_window_icon: order_info={:?}, window_icon={:?}",
             order_info, window_icon
         );
@@ -47,7 +47,7 @@ pub trait WindowCallbacks {
         order_info: *const WINDOW_ORDER_INFO,
         window_cached_icon: *const WINDOW_CACHED_ICON_ORDER,
     ) -> bool {
-        log::debug!(
+        debug!(
             "WindowCallbacks::on_window_cached_icon: order_info={:?}, window_cached_icon={:?}",
             order_info, window_cached_icon
         );
@@ -55,7 +55,7 @@ pub trait WindowCallbacks {
     }
 
     fn on_window_delete(&self, order_info: *const WINDOW_ORDER_INFO) -> bool {
-        log::debug!(
+        debug!(
             "WindowCallbacks::on_window_delete: order_info={:?}",
             order_info
         );
@@ -67,7 +67,7 @@ pub trait WindowCallbacks {
         order_info: *const WINDOW_ORDER_INFO,
         notify_icon_state: *const NOTIFY_ICON_STATE_ORDER,
     ) -> bool {
-        log::debug!(
+        debug!(
             "WindowCallbacks::on_notify_icon_create: order_info={:?}, notify_icon_state={:?}",
             order_info, notify_icon_state
         );
@@ -79,7 +79,7 @@ pub trait WindowCallbacks {
         order_info: *const WINDOW_ORDER_INFO,
         notify_icon_state: *const NOTIFY_ICON_STATE_ORDER,
     ) -> bool {
-        log::debug!(
+        debug!(
             "WindowCallbacks::on_notify_icon_update: order_info={:?}, notify_icon_state={:?}",
             order_info, notify_icon_state
         );
@@ -87,7 +87,7 @@ pub trait WindowCallbacks {
     }
 
     fn on_notify_icon_delete(&self, order_info: *const WINDOW_ORDER_INFO) -> bool {
-        log::debug!(
+        debug!(
             "WindowCallbacks::on_notify_icon_delete: order_info={:?}",
             order_info
         );
@@ -99,7 +99,7 @@ pub trait WindowCallbacks {
         order_info: *const WINDOW_ORDER_INFO,
         monitored_desktop: *const MONITORED_DESKTOP_ORDER,
     ) -> bool {
-        log::debug!(
+        debug!(
             "WindowCallbacks::on_monitored_desktop: order_info={:?}, monitored_desktop={:?}",
             order_info, monitored_desktop
         );
@@ -107,7 +107,7 @@ pub trait WindowCallbacks {
     }
 
     fn on_non_monitored_desktop(&self, order_info: *const WINDOW_ORDER_INFO) -> bool {
-        log::debug!(
+        debug!(
             "WindowCallbacks::on_non_monitored_desktop: order_info={:?}",
             order_info
         );

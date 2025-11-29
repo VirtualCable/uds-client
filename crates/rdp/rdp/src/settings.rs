@@ -1,7 +1,7 @@
 use zeroize::Zeroize;
 
 #[allow(dead_code)]
-#[derive(Zeroize, Debug, Clone)]
+#[derive(Zeroize, Debug)]
 pub enum ScreenSize {
     Full,
     Fixed(u32, u32),
@@ -11,14 +11,14 @@ pub enum ScreenSize {
 impl ScreenSize {
     pub fn width(&self) -> u32 {
         match self {
-            ScreenSize::Full => 1920,
+            ScreenSize::Full => 0,
             ScreenSize::Fixed(w, _) => *w,
         }
     }
 
     pub fn height(&self) -> u32 {
         match self {
-            ScreenSize::Full => 1080,
+            ScreenSize::Full => 0,
             ScreenSize::Fixed(_, h) => *h,
         }
     }
@@ -42,7 +42,7 @@ pub struct RdpSettings {
     // % -> Home
     // * --> All drives
     // DynamicDrives --> Later connected drives
-    pub drives_to_redirect: Vec<String>,
+    pub drives_to_redirect: Vec<String>,  
 }
 
 impl Default for RdpSettings {

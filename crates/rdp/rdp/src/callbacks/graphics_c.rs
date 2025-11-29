@@ -1,17 +1,16 @@
 use freerdp_sys::{BOOL, rdpContext, rdpPointer};
 
-use super::{super::connection::context::OwnerFromCtx, graphics::GraphicsCallbacks};
-use shared::log;
+use shared::log::debug;
 
-/// # Safety
-/// Interoperability with C code.
-/// Ensure that the context pointer is valid.
-pub unsafe fn set_callbacks(context: *mut rdpContext) {
+use super::{super::connection::context::OwnerFromCtx, graphics::GraphicsCallbacks};
+
+#[allow(dead_code)]
+pub fn set_callbacks(context: *mut rdpContext) {
     unsafe {
         let graphics = (*context).graphics;
         let pointer_proto = (*graphics).Pointer_Prototype;
         if graphics.is_null() || pointer_proto.is_null() {
-            log::debug!(" **** Pointer not initialized, cannot override callbacks.");
+            debug!(" 🧪 **** Pointer not initialized, cannot override callbacks.");
             return;
         }
         // Clear pointer_proto to avoid dangling pointers
@@ -26,7 +25,7 @@ pub unsafe fn set_callbacks(context: *mut rdpContext) {
 }
 
 pub extern "C" fn pointer_new(context: *mut rdpContext, pointer_new: *mut rdpPointer) -> BOOL {
-    log::debug!(" 🌚 **** PointerNew called.");
+    debug!(" 🌚 **** PointerNew called.");
     if let Some(rdp) = context.owner() {
         rdp.on_pointer_new(pointer_new).into()
     } else {
@@ -35,14 +34,14 @@ pub extern "C" fn pointer_new(context: *mut rdpContext, pointer_new: *mut rdpPoi
 }
 
 pub extern "C" fn pointer_free(context: *mut rdpContext, pointer: *mut rdpPointer) {
-    log::debug!(" 🌚 **** PointerFree called.");
+    debug!(" 🌚 **** PointerFree called.");
     if let Some(rdp) = context.owner() {
         rdp.on_pointer_free(pointer);
     }
 }
 
 pub extern "C" fn pointer_set(context: *mut rdpContext, pointer_set: *mut rdpPointer) -> BOOL {
-    log::debug!(" 🌚 **** PointerSet called.");
+    debug!(" 🌚 **** PointerSet called.");
     if let Some(rdp) = context.owner() {
         rdp.on_pointer_set(pointer_set).into()
     } else {
@@ -50,7 +49,7 @@ pub extern "C" fn pointer_set(context: *mut rdpContext, pointer_set: *mut rdpPoi
     }
 }
 pub extern "C" fn pointer_set_null(context: *mut rdpContext) -> BOOL {
-    log::debug!(" 🌚 **** PointerSetNull called.");
+    debug!(" 🌚 **** PointerSetNull called.");
     if let Some(rdp) = context.owner() {
         rdp.on_pointer_set_null().into()
     } else {
@@ -59,7 +58,7 @@ pub extern "C" fn pointer_set_null(context: *mut rdpContext) -> BOOL {
 }
 
 pub extern "C" fn pointer_set_default(context: *mut rdpContext) -> BOOL {
-    log::debug!(" 🌚 **** PointerSetDefault called.");
+    debug!(" 🌚 **** PointerSetDefault called.");
     if let Some(rdp) = context.owner() {
         rdp.on_pointer_set_default().into()
     } else {
@@ -68,7 +67,7 @@ pub extern "C" fn pointer_set_default(context: *mut rdpContext) -> BOOL {
 }
 
 pub extern "C" fn pointer_position(context: *mut rdpContext, x: u32, y: u32) -> BOOL {
-    log::debug!(" 🌚 **** PointerPosition called.");
+    debug!(" 🌚 **** PointerPosition called.");
     if let Some(rdp) = context.owner() {
         rdp.on_pointer_position(x, y).into()
     } else {

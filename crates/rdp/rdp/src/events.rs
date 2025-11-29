@@ -7,10 +7,7 @@ macro_rules! define_event {
         impl $name {
             #[allow(dead_code)]
             #[allow(clippy::manual_c_str_literals)]
-            /// # Safety
-            /// Interoperability with C code.
-            /// Ensure that the pointers are valid.
-            pub unsafe fn fire_event(
+            pub fn fire_event(
                 pubsub: *mut freerdp_sys::wPubSub,
                 context: *mut std::ffi::c_void,
                 e: *const $args_ty,
@@ -27,13 +24,7 @@ macro_rules! define_event {
 
             #[allow(dead_code)]
             #[allow(clippy::manual_c_str_literals)]
-            /// # Safety
-            /// Interoperability with C code.
-            /// Ensure that the pointers are valid.
-            pub unsafe fn subscribe(
-                pubsub: *mut freerdp_sys::wPubSub,
-                handler: $handler_ty,
-            ) -> i32 {
+            pub fn subscribe(pubsub: *mut freerdp_sys::wPubSub, handler: $handler_ty) -> i32 {
                 unsafe {
                     freerdp_sys::PubSub_Subscribe(
                         pubsub,
@@ -45,13 +36,7 @@ macro_rules! define_event {
 
             #[allow(dead_code)]
             #[allow(clippy::manual_c_str_literals)]
-            /// # Safety
-            /// Interoperability with C code.
-            /// Ensure that the pointers are valid.
-            pub unsafe fn unsubscribe(
-                pubsub: *mut freerdp_sys::wPubSub,
-                handler: $handler_ty,
-            ) -> i32 {
+            pub fn unsubscribe(pubsub: *mut freerdp_sys::wPubSub, handler: $handler_ty) -> i32 {
                 unsafe {
                     freerdp_sys::PubSub_Unsubscribe(
                         pubsub,

@@ -1,25 +1,25 @@
 use freerdp_sys::{AccessTokenType, SmartcardCertInfo};
 
-use shared::log;
+use shared::log::debug;
 
 pub trait InstanceCallbacks {
     fn on_pre_connect(&mut self) -> bool {
-        log::debug!(" **** Preparing connection...");
+        debug!(" 🧪 **** Preparing connection...");
         true
     }
 
     fn on_post_connect(&mut self) -> bool {
-        log::debug!(" **** Connected successfully!");
+        debug!(" 🧪 **** Connected successfully!");
         true
     }
 
     fn on_context_new(&mut self) -> bool {
-        log::debug!(" **** Context new...");
+        debug!(" 🧪 **** Context new...");
         true
     }
 
     fn on_context_free(&mut self) {
-        log::debug!(" **** Context free...");
+        debug!(" 🧪 **** Context free...");
     }
 
     #[allow(unused_variables)]
@@ -29,7 +29,7 @@ pub trait InstanceCallbacks {
         password: *mut *mut ::std::os::raw::c_char,
         domain: *mut *mut ::std::os::raw::c_char,
     ) -> bool {
-        log::debug!(" **** Authenticating...");
+        debug!(" 🧪 **** Authenticating...");
         true
     }
 
@@ -41,7 +41,7 @@ pub trait InstanceCallbacks {
         _domain: *mut *mut ::std::os::raw::c_char,
         _reason: i32,
     ) -> bool {
-        log::debug!(" **** Authenticating (extended)...");
+        debug!(" 🧪 **** Authenticating (extended)...");
         true
     }
 
@@ -52,7 +52,7 @@ pub trait InstanceCallbacks {
         password: *mut *mut ::std::os::raw::c_char,
         domain: *mut *mut ::std::os::raw::c_char,
     ) -> bool {
-        log::debug!(" **** Authenticating...");
+        debug!(" 🧪 **** Authenticating...");
         true
     }
 
@@ -64,7 +64,7 @@ pub trait InstanceCallbacks {
         choice: *mut u32,
         gateway: bool,
     ) -> bool {
-        log::debug!(" **** Choosing smartcard certificate...");
+        debug!(" 🧪 **** Choosing smartcard certificate...");
         true
     }
 
@@ -76,7 +76,7 @@ pub trait InstanceCallbacks {
         count: usize,
         data: *const *const ::std::os::raw::c_char,
     ) -> bool {
-        log::debug!(" **** Getting access token...");
+        debug!(" 🧪 **** Getting access token...");
         true
     }
 
@@ -88,8 +88,8 @@ pub trait InstanceCallbacks {
         port: u16,
         flags: u32,
     ) -> bool {
-        log::debug!(
-            " **** Verifying certificate: Hostname: {}, Port: {}, Flags: {}, Data: {:?} Data Length: {}",
+        debug!(
+            " 🧪 **** Verifying certificate: Hostname: {}, Port: {}, Flags: {}, Data: {:?} Data Length: {}",
             hostname, port, flags, data, length
         );
         // For now, we accept all certificates. Implement proper verification as needed.
@@ -107,8 +107,8 @@ pub trait InstanceCallbacks {
         fingerprint: &str,
         flags: u32,
     ) -> u32 {
-        log::debug!(
-            " **** Verifying certificate: Host: {:?}, Port: {}, Common Name: {:?}, Subject: {:?}, Issuer: {:?}, Fingerprint: {:?}, Flags: {}",
+        debug!(
+            " 🧪 **** Verifying certificate: Host: {:?}, Port: {}, Common Name: {:?}, Subject: {:?}, Issuer: {:?}, Fingerprint: {:?}, Flags: {}",
             host, port, common_name, subject, issuer, fingerprint, flags
         );
         // For now, we accept all certificates. Implement proper verification as needed.
@@ -116,15 +116,15 @@ pub trait InstanceCallbacks {
     }
 
     fn on_logon_error_info(&mut self, data_str: &str, type_str: &str) -> bool {
-        log::debug!(
-            " **** Logon error info received... Data: {}, Type: {}",
+        debug!(
+            " 🧪 **** Logon error info received... Data: {}, Type: {}",
             data_str, type_str
         );
         true
     }
 
     fn on_post_disconnect(&mut self) {
-        log::debug!(" **** Disconnected.");
+        debug!(" 🧪 **** Disconnected.");
     }
 
     fn on_present_gateway_message(
@@ -135,26 +135,26 @@ pub trait InstanceCallbacks {
         length: usize,
         message: String,
     ) -> bool {
-        log::debug!(
-            " **** Gateway message received. Type: {}, Display Mandatory: {}, Consent Mandatory: {}, Length: {}, Message: {}",
+        debug!(
+            " 🧪 **** Gateway message received. Type: {}, Display Mandatory: {}, Consent Mandatory: {}, Length: {}, Message: {}",
             msg_type, is_display_mandatory, is_consent_mandatory, length, message
         );
         true
     }
 
     fn on_redirect(&mut self) -> bool {
-        log::debug!(" **** Redirecting...");
+        debug!(" 🧪 **** Redirecting...");
         true
     }
 
     fn on_load_channels(&mut self) -> bool {
-        log::debug!(" **** Loading channels...");
+        debug!(" 🧪 **** Loading channels...");
         true
     }
 
     // fn on_send_channel_data(&mut self, channel_id: u16, data: *const u8, size: usize) -> bool {
-    //     log::debug!(
-    //         " **** Sending channel data... Channel ID: {}, Data: {:?}, Size: {}",
+    //     debug!(
+    //         " 🧪 **** Sending channel data... Channel ID: {}, Data: {:?}, Size: {}",
     //         channel_id, data, size
     //     );
     //     true
@@ -168,8 +168,8 @@ pub trait InstanceCallbacks {
     //     flags: u32,
     //     total_size: usize,
     // ) -> bool {
-    //     log::debug!(
-    //         " **** Receiving channel data... Channel ID: {}, Data: {:?}, Size: {}, Flags: {}, Total Size: {}",
+    //     debug!(
+    //         " 🧪 **** Receiving channel data... Channel ID: {}, Data: {:?}, Size: {}, Flags: {}, Total Size: {}",
     //         channel_id, data, size, flags, total_size
     //     );
     //     true
@@ -183,15 +183,15 @@ pub trait InstanceCallbacks {
     //     data: *const u8,
     //     chunk_size: usize,
     // ) -> bool {
-    //     log::debug!(
-    //         " **** Sending channel packet... Channel ID: {}, Total Size: {}, Flags: {}, Data: {:?}, Chunk Size: {}",
+    //     debug!(
+    //         " 🧪 **** Sending channel packet... Channel ID: {}, Total Size: {}, Flags: {}, Data: {:?}, Chunk Size: {}",
     //         channel_id, total_size, flags, data, chunk_size
     //     );
     //     true
     // }
 
     fn on_post_final_disconnect(&mut self) {
-        log::debug!(" **** Disconnected.");
+        debug!(" 🧪 **** Disconnected.");
     }
 
     fn on_retry_dialog(
@@ -200,8 +200,8 @@ pub trait InstanceCallbacks {
         current: usize,
         userarg: *mut ::std::os::raw::c_void,
     ) -> i64 {
-        log::debug!(
-            " **** Retry dialog invoked. What: {}, Current: {}, UserArg: {:?}",
+        debug!(
+            " 🧪 **** Retry dialog invoked. What: {}, Current: {}, UserArg: {:?}",
             what, current, userarg
         );
         -1 // Indicate no retry by default

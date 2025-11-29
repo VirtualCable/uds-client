@@ -1,12 +1,10 @@
 use freerdp_sys::{
-    BITMAP_UPDATE, BOOL, BYTE, FreeRDP_Settings_Keys_UInt32_FreeRDP_DesktopHeight,
-    FreeRDP_Settings_Keys_UInt32_FreeRDP_DesktopWidth, MONITOR_DEF, PALETTE_UPDATE,
-    PLAY_SOUND_UPDATE, RECTANGLE_16, SURFACE_BITS_COMMAND, UINT16, UINT32,
-    freerdp_settings_get_uint32, gdi_resize, rdpBounds, rdpContext, wStream,
+    BITMAP_UPDATE, BOOL, BYTE, MONITOR_DEF, PALETTE_UPDATE, PLAY_SOUND_UPDATE, RECTANGLE_16,
+    SURFACE_BITS_COMMAND, UINT16, UINT32, rdpBounds, rdpContext, wStream,
 };
 
 use super::{super::connection::context::OwnerFromCtx, update::UpdateCallbacks};
-use shared::log;
+use shared::log::debug;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -61,14 +59,12 @@ impl Callbacks {
     }
 }
 
-/// # Safety
-/// Interoperability with C code.
-/// Ensure that the context pointer is valid.
-pub unsafe fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
+#[allow(dead_code)]
+pub fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
     unsafe {
         let update = (*context).update;
         if update.is_null() {
-            log::debug!(" ⁉️ **** Update not initialized, cannot override callbacks.");
+            debug!(" ⁉️ **** Update not initialized, cannot override callbacks.");
             return;
         }
         for override_cb in overrides {
@@ -154,20 +150,18 @@ pub extern "C" fn end_paint(context: *mut rdpContext) -> BOOL {
     }
 }
 
-/// # Safety
-/// Interoperability with C code.
-/// Ensure that the context pointer is valid.
-pub unsafe extern "C" fn set_bounds(context: *mut rdpContext, bounds: *const rdpBounds) -> BOOL {
-    log::debug!(" **** SET BOUNDS called...");
+#[allow(dead_code)]
+pub extern "C" fn set_bounds(context: *mut rdpContext, bounds: *const rdpBounds) -> BOOL {
+    debug!(" 🖥️ **** SET BOUNDS called...");
     if let Some(owner) = context.owner() {
-        unsafe { owner.on_set_bounds(bounds).into() }
+        owner.on_set_bounds(bounds).into()
     } else {
         true.into()
     }
 }
 
 pub extern "C" fn synchronize(context: *mut rdpContext) -> BOOL {
-    log::debug!(" **** SYNCHRONIZE called...");
+    debug!(" 🖥️ **** SYNCHRONIZE called...");
     if let Some(owner) = context.owner() {
         owner.on_synchronize().into()
     } else {
@@ -175,26 +169,8 @@ pub extern "C" fn synchronize(context: *mut rdpContext) -> BOOL {
     }
 }
 
-/// # Safety
-/// Interoperability with C code.
-/// Used on callback from freerdp when desktop is resized.
-pub unsafe extern "C" fn desktop_resize(context: *mut rdpContext) -> BOOL {
-    // Note, on this fucntion we must resize the gdi right now
-    // because we currently are using gdi primary buffer for drawing
-    log::debug!(" **** DESKTOP RESIZE called... {:?}", context);
-    unsafe {
-        gdi_resize(
-            (*context).gdi,
-            freerdp_settings_get_uint32(
-                (*context).settings,
-                FreeRDP_Settings_Keys_UInt32_FreeRDP_DesktopWidth,
-            ),
-            freerdp_settings_get_uint32(
-                (*context).settings,
-                FreeRDP_Settings_Keys_UInt32_FreeRDP_DesktopHeight,
-            ),
-        );
-    }
+pub extern "C" fn desktop_resize(context: *mut rdpContext) -> BOOL {
+    debug!(" 🖥️ **** DESKTOP RESIZE called... {:?}", context);
     if let Some(owner) = context.owner() {
         owner.on_desktop_resize().into()
     } else {
@@ -204,7 +180,7 @@ pub unsafe extern "C" fn desktop_resize(context: *mut rdpContext) -> BOOL {
 
 #[allow(dead_code)]
 pub extern "C" fn bitmap_update(context: *mut rdpContext, bitmap: *const BITMAP_UPDATE) -> BOOL {
-    log::debug!(" **** BITMAP UPDATE called...");
+    debug!(" 🖥️ **** BITMAP UPDATE called...");
     if let Some(owner) = context.owner() {
         owner.on_bitmap_update(bitmap).into()
     } else {
@@ -214,7 +190,7 @@ pub extern "C" fn bitmap_update(context: *mut rdpContext, bitmap: *const BITMAP_
 
 #[allow(dead_code)]
 pub extern "C" fn palette(context: *mut rdpContext, palette: *const PALETTE_UPDATE) -> BOOL {
-    log::debug!(" **** PALETTE UPDATE called...");
+    debug!(" 🖥️ **** PALETTE UPDATE called...");
     if let Some(owner) = context.owner() {
         owner.on_palette(palette).into()
     } else {
@@ -227,7 +203,7 @@ pub extern "C" fn play_sound(
     context: *mut rdpContext,
     play_sound: *const PLAY_SOUND_UPDATE,
 ) -> BOOL {
-    log::debug!(" **** PLAY SOUND called...");
+    debug!(" 🖥️ **** PLAY SOUND called...");
     if let Some(owner) = context.owner() {
         owner.on_play_sound(play_sound).into()
     } else {
@@ -237,7 +213,7 @@ pub extern "C" fn play_sound(
 
 // (*update).SetKeyboardIndicators = Some(update_c_callbacks::set_keyboard_indicators);
 pub extern "C" fn set_keyboard_indicators(context: *mut rdpContext, led_flags: UINT16) -> BOOL {
-    log::debug!(" **** SET KEYBOARD INDICATORS called...");
+    debug!(" 🖥️ **** SET KEYBOARD INDICATORS called...");
     if let Some(owner) = context.owner() {
         owner.on_set_keyboard_indicators(led_flags).into()
     } else {
@@ -252,7 +228,7 @@ pub extern "C" fn set_keyboard_ime_status(
     ime_state: UINT32,
     ime_conv_mode: UINT32,
 ) -> BOOL {
-    log::debug!(" **** SET KEYBOARD IME STATUS called...");
+    debug!(" 🖥️ **** SET KEYBOARD IME STATUS called...");
     if let Some(owner) = context.owner() {
         owner
             .on_set_keyboard_ime_status(ime_id, ime_state, ime_conv_mode)
@@ -268,7 +244,7 @@ pub extern "C" fn refresh_rect(
     count: BYTE,
     areas: *const RECTANGLE_16,
 ) -> BOOL {
-    log::debug!(" **** REFRESH RECT called...");
+    debug!(" 🖥️ **** REFRESH RECT called...");
     if let Some(owner) = context.owner() {
         owner.on_refresh_rect(count, areas).into()
     } else {
@@ -282,7 +258,7 @@ pub extern "C" fn suppress_output(
     allow: BYTE,
     area: *const RECTANGLE_16,
 ) -> BOOL {
-    log::debug!(" **** SUPPRESS OUTPUT called...");
+    debug!(" 🖥️ **** SUPPRESS OUTPUT called...");
     if let Some(owner) = context.owner() {
         owner.on_suppress_output(allow, area).into()
     } else {
@@ -295,7 +271,7 @@ pub extern "C" fn remote_monitors(
     count: UINT32,
     monitors: *const MONITOR_DEF,
 ) -> BOOL {
-    log::debug!(" **** REMOTE MONITORS called...");
+    debug!(" 🖥️ **** REMOTE MONITORS called...");
     if let Some(owner) = context.owner() {
         owner.on_remote_monitors(count, monitors).into()
     } else {
@@ -305,7 +281,7 @@ pub extern "C" fn remote_monitors(
 
 // (*update).SurfaceCommand = Some(update_c_callbacks::surface_command);
 pub extern "C" fn surface_command(context: *mut rdpContext, s: *mut wStream) -> BOOL {
-    log::debug!(" **** SURFACE COMMAND called...");
+    debug!(" 🖥️ **** SURFACE COMMAND called...");
     if let Some(owner) = context.owner() {
         owner.on_surface_command(s).into()
     } else {
@@ -318,7 +294,7 @@ pub extern "C" fn surface_bits(
     context: *mut rdpContext,
     surface_bits: *const freerdp_sys::SURFACE_BITS_COMMAND,
 ) -> BOOL {
-    log::debug!(" **** SURFACE BITS called...");
+    debug!(" 🖥️ **** SURFACE BITS called...");
     if let Some(owner) = context.owner() {
         owner.on_surface_bits(surface_bits).into()
     } else {
@@ -331,7 +307,7 @@ pub extern "C" fn surface_frame_marker(
     context: *mut rdpContext,
     surface_frame_marker: *const freerdp_sys::SURFACE_FRAME_MARKER,
 ) -> BOOL {
-    log::debug!(" **** SURFACE FRAME MARKER called...");
+    debug!(" 🖥️ **** SURFACE FRAME MARKER called...");
     if let Some(owner) = context.owner() {
         owner.on_surface_frame_marker(surface_frame_marker).into()
     } else {
@@ -346,7 +322,7 @@ pub extern "C" fn surface_frame_bits(
     last: BOOL,
     frame_id: UINT32,
 ) -> BOOL {
-    log::debug!(" **** SURFACE FRAME BITS called...");
+    debug!(" 🖥️ **** SURFACE FRAME BITS called...");
     if let Some(owner) = context.owner() {
         owner
             .on_surface_frame_bits(cmd, first != 0, last != 0, frame_id)
@@ -358,7 +334,7 @@ pub extern "C" fn surface_frame_bits(
 
 #[allow(dead_code)]
 pub extern "C" fn surface_frame_acknowledge(context: *mut rdpContext, frame_id: UINT32) -> BOOL {
-    log::debug!(" **** SURFACE FRAME ACKNOWLEDGE called...");
+    debug!(" 🖥️ **** SURFACE FRAME ACKNOWLEDGE called...");
     if let Some(owner) = context.owner() {
         owner.on_surface_frame_acknowledge(frame_id).into()
     } else {
@@ -372,7 +348,7 @@ pub extern "C" fn save_session_info(
     type_: UINT32,
     data: *mut ::std::os::raw::c_void,
 ) -> BOOL {
-    log::debug!(" **** SAVE SESSION INFO called...");
+    debug!(" 🖥️ **** SAVE SESSION INFO called...");
     if let Some(owner) = context.owner() {
         owner.on_save_session_info(type_, data).into()
     } else {
@@ -381,7 +357,7 @@ pub extern "C" fn save_session_info(
 }
 
 pub extern "C" fn server_status_info(context: *mut rdpContext, status: UINT32) -> BOOL {
-    log::debug!(" **** SERVER STATUS INFO called...");
+    debug!(" 🖥️ **** SERVER STATUS INFO called...");
     if let Some(owner) = context.owner() {
         owner.on_server_status_info(status).into()
     } else {

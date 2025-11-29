@@ -3,7 +3,7 @@ use freerdp_sys::{
     POINTER_POSITION_UPDATE, POINTER_SYSTEM_UPDATE, rdpContext,
 };
 
-use shared::log;
+use shared::log::debug;
 
 use super::super::connection::context::OwnerFromCtx;
 use super::pointer_update::PointerCallbacks;
@@ -33,15 +33,13 @@ impl Callbacks {
     }
 }
 
-/// # Safety
-/// Interoperability with C code.
-/// Ensure that the context pointer is valid.
-pub unsafe fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
+#[allow(dead_code)]
+pub fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
     unsafe {
         let update = (*context).update;
         let pointer = (*update).pointer;
         if update.is_null() || pointer.is_null() {
-            log::debug!(" **** Pointer not initialized, cannot override callbacks.");
+            debug!(" 🧪 **** Pointer not initialized, cannot override callbacks.");
             return;
         }
         for override_cb in overrides {

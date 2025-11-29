@@ -1,6 +1,6 @@
 use freerdp_sys::{BOOL, INT16, UINT8, UINT16, UINT32, rdpContext, rdpInput};
 
-use shared::log;
+use shared::log::debug;
 
 use super::{super::connection::context::OwnerFromCtx, input::InputCallbacks};
 
@@ -35,14 +35,12 @@ impl Callbacks {
     }
 }
 
-/// # Safety
-/// Interoperability with C code.
-/// Ensure that the context pointer is valid.
-pub unsafe fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
+#[allow(dead_code)]
+pub fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
     unsafe {
         let input = (*context).input;
         if input.is_null() {
-            log::debug!(" ⁉️ **** Input not initialized, cannot override callbacks.");
+            debug!(" ⁉️ **** Input not initialized, cannot override callbacks.");
             return;
         }
         for override_cb in overrides {

@@ -3,7 +3,7 @@ use anyhow::Result;
 use freerdp_sys::*;
 
 use crate::callbacks::entrypoint_c;
-use shared::log;
+use shared::log::debug;
 
 use super::Rdp;
 
@@ -64,14 +64,14 @@ impl RdpContext {
 
 impl Default for RdpContext {
     fn default() -> Self {
-        log::debug!(" *#*#*#+  Default RdpContext called");
+        debug!(" *#*#*#+  Default RdpContext called");
         Self::new()
     }
 }
 
 impl Drop for RdpContext {
     fn drop(&mut self) {
-        log::debug!("****** Dropping RdpContext, cleaning up resources... !!!!!!");
+        debug!("****** Dropping RdpContext, cleaning up resources... !!!!!!");
     }
 }
 

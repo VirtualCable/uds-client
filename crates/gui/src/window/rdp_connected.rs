@@ -18,7 +18,7 @@ use rdp::{
     settings::RdpSettings,
 };
 
-use crate::geom::RectExt; // For extracting rects from framebuffer
+// use crate::geom::RectExt; // For extracting rects from framebuffer
 
 use super::{
     AppWindow,
@@ -55,12 +55,11 @@ impl AppWindow {
         self.processing_events.store(true, Ordering::Relaxed); // Start processing events
         let (tx, rx): (Sender<RdpMessage>, Receiver<RdpMessage>) = bounded(FRAMES_IN_FLIGHT);
 
-        let screen_size = rdp_settings.screen_size.clone();
         // TODO: We will need a reasonable for returning back from fullscreen later
         // Note that with this this should work correctly, as rdp will receibe a 1920x1080 framebuffer
         // and if different, on update, we will resize gdi, texture, etc. accordingly
         ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
-            [screen_size.width() as f32, screen_size.height() as f32].into(),
+            [rdp_settings.screen_size.width() as f32, rdp_settings.screen_size.height() as f32].into(),
         ));
         ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition([10.0, 10.0].into()));
 
@@ -71,7 +70,7 @@ impl AppWindow {
         // }
 
         // Rdp shouls be pinned, as build() inserts self reference inside freedrp structs
-        let mut rdp = Box::pin(Rdp::new(rdp_settings, tx, self.stop.clone()));
+        let mut rdp = Box::pin(Rdp::new(rdp_settings, tx));
         // For reference: Currently, default callbacks are these also, so if no more are needed, this can be skipped
         // rdp.set_update_callbacks(vec![
         //     update_c::Callbacks::BeginPaint,
@@ -123,7 +122,7 @@ impl AppWindow {
             input,
             gdi_lock,
             texture,
-            full_screen: Arc::new(AtomicBool::new(screen_size.is_fullscreen())),
+            full_screen: Arc::new(AtomicBool::new(false)),
         }));
 
         std::thread::spawn(move || {

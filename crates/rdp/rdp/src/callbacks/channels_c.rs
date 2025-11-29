@@ -3,14 +3,10 @@ use freerdp_sys::{
     freerdp_client_OnChannelDisconnectedEventHandler, rdpClientContext,
 };
 
-use crate::{utils::ToStringLossy};
-use shared::log;
+use shared::{log::debug};
+use crate::utils::ToStringLossy;
 
-/// # Safety
-///
-/// Interoperability with C code.
-/// Invoked by FreeRDP when a channel is connected.
-pub(super) unsafe extern "C" fn on_channel_connected(
+pub extern "C" fn on_channel_connected(
     context: *mut ::std::os::raw::c_void,
     e: *const ChannelConnectedEventArgs,
 ) {
@@ -20,7 +16,7 @@ pub(super) unsafe extern "C" fn on_channel_connected(
     let name = unsafe { (*e).name }.to_string_lossy();
     let p_interface = unsafe { (*e).pInterface };
 
-    log::debug!(
+    debug!(
         " ☁️ **** ChannelConnected Event: size={}, sender={}, name={}, pInterface={:?} (context={:?})",
         size, sender, name, p_interface, context
     );
@@ -30,11 +26,7 @@ pub(super) unsafe extern "C" fn on_channel_connected(
     }
 }
 
-/// # Safety
-///
-/// Interoperability with C code.
-/// Invoked by FreeRDP when a channel is disconnected.
-pub(super) unsafe extern "C" fn on_channel_disconnected(
+pub extern "C" fn on_channel_disconnected(
     context: *mut ::std::os::raw::c_void,
     e: *const freerdp_sys::ChannelDisconnectedEventArgs,
 ) {
@@ -44,7 +36,7 @@ pub(super) unsafe extern "C" fn on_channel_disconnected(
     let name = unsafe { (*e).name }.to_string_lossy();
     let p_interface = unsafe { (*e).pInterface };
 
-    log::debug!(
+    debug!(
         " ☁️ **** ChannelDisconnected Event: size={}, sender={}, name={}, pInterface={:?} (context={:?})",
         size, sender, name, p_interface, context
     );

@@ -4,25 +4,25 @@ use super::{super::connection::context::OwnerFromCtx, entrypoint::EntrypointCall
 use crate::connection::context::RdpContext;
 use shared::log;
 
-pub(crate) extern "C" fn client_global_init() -> BOOL {
+pub extern "C" fn client_global_init() -> BOOL {
     // We could do the WSA initialization here if needed
-    log::debug!(" **** RDP client global init called");
+    log::debug!(" 🧪 **** RDP client global init called");
     super::super::init::initialize();
     true.into()
 }
 
-pub(crate) extern "C" fn client_global_uninit() {
+pub extern "C" fn client_global_uninit() {
     // Currently, we do not need any special handling here.
-    log::debug!(" **** RDP client global uninit called");
+    log::debug!(" 🧪 **** RDP client global uninit called");
     super::super::init::uninitialize();
 }
 
-pub(crate) extern "C" fn client_new(instance: *mut freerdp, context: *mut rdpContext) -> BOOL {
+pub extern "C" fn client_new(instance: *mut freerdp, context: *mut rdpContext) -> BOOL {
     // Currently, we do not need any special handling here.
     // Note, here we do not have the owner initialized, just for future reference.
     let ctx = context as *mut RdpContext;
     log::debug!(
-        " **** RDP client new instance created: {:?} -- {:?} ({:?})",
+        " 🧪 **** RDP client new instance created: {:?} -- {:?} ({:?})",
         instance,
         ctx,
         unsafe { (*ctx).owner }
@@ -30,13 +30,13 @@ pub(crate) extern "C" fn client_new(instance: *mut freerdp, context: *mut rdpCon
     true.into()
 }
 
-pub(crate) extern "C" fn client_free(_instance: *mut freerdp, _context: *mut rdpContext) {
+pub extern "C" fn client_free(_instance: *mut freerdp, _context: *mut rdpContext) {
     // Currently, we do not need any special handling here.
 }
 
-pub(crate) extern "C" fn client_start(context: *mut rdpContext) -> ::std::os::raw::c_int {
+pub extern "C" fn client_start(context: *mut rdpContext) -> ::std::os::raw::c_int {
     log::debug!(
-        " **** RDP client start called with context: {:?}",
+        " 🧪 **** RDP client start called with context: {:?}",
         context
     );
     if let Some(owner) = context.owner() {
@@ -46,7 +46,7 @@ pub(crate) extern "C" fn client_start(context: *mut rdpContext) -> ::std::os::ra
     }
 }
 
-pub(crate) extern "C" fn client_stop(context: *mut rdpContext) -> ::std::os::raw::c_int {
+pub extern "C" fn client_stop(context: *mut rdpContext) -> ::std::os::raw::c_int {
     if let Some(owner) = context.owner() {
         owner.client_stop().into()
     } else {

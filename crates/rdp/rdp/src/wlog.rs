@@ -1,9 +1,7 @@
 use freerdp_sys::*;
 use std::ffi::CStr;
 use std::os::raw::c_char;
-
 use shared::log;
-
 
 extern "C" fn my_message_cb(msg: *const wLogMessage) -> BOOL {
     if msg.is_null() {
@@ -34,10 +32,7 @@ extern "C" fn my_message_cb(msg: *const wLogMessage) -> BOOL {
 
 // Dumps settings uwing freerdp_settings_dump
 #[allow(dead_code)]
-/// # Safety
-/// Interoperability with C code.
-/// Dumps FreeRDP settings to the logger.
-pub unsafe fn dump_freerdp_settings(settings: *mut rdpSettings) {
+pub fn dump_freerdp_settings(settings: *mut rdpSettings) {
     unsafe {
         let log = WLog_GetRoot();
         if !settings.is_null() {

@@ -1,4 +1,4 @@
-use shared::log;
+use shared::log::debug;
 
 pub trait EntrypointCallbacks {
     fn client_start(&mut self) -> bool {
@@ -7,7 +7,7 @@ pub trait EntrypointCallbacks {
     }
 
     fn client_stop(&mut self) -> bool {
-        log::debug!(" 🏁 **** Client stopped");
+        debug!(" 🏁 **** Client stopped");
         true
     }
 }
