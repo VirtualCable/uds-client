@@ -45,7 +45,7 @@ impl update::UpdateCallbacks for Rdp {
                 let ninvalid = unsafe { (*hwnd).ninvalid };
                 let cinvalid = unsafe { (*hwnd).invalid };
                 if ninvalid <= 0 {
-                    log::debug!(" 🖥️ **** END PAINT no invalid regions, skipping");
+                    log::debug!(" **** END PAINT no invalid regions, skipping");
                     return true;
                 }
                 let rects_raw = unsafe { std::slice::from_raw_parts(cinvalid, ninvalid as usize) };

@@ -24,7 +24,6 @@ use super::{
     AppWindow,
     types::{AppState, HotKey},
 };
-use rdp::settings::ScreenSize;
 
 const FRAMES_IN_FLIGHT: usize = 128;
 
@@ -57,10 +56,19 @@ impl AppWindow {
         let (tx, rx): (Sender<RdpMessage>, Receiver<RdpMessage>) = bounded(FRAMES_IN_FLIGHT);
 
         let screen_size = rdp_settings.screen_size.clone();
+        // TODO: We will need a reasonable for returning back from fullscreen later
+        // Note that with this this should work correctly, as rdp will receibe a 1920x1080 framebuffer
+        // and if different, on update, we will resize gdi, texture, etc. accordingly
         ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
             [screen_size.width() as f32, screen_size.height() as f32].into(),
         ));
         ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition([10.0, 10.0].into()));
+
+        if screen_size.is_fullscreen() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
+        } else {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
+        }
 
         // Rdp shouls be pinned, as build() inserts self reference inside freedrp structs
         let mut rdp = Box::pin(Rdp::new(rdp_settings, tx, self.stop.clone()));
@@ -75,6 +83,7 @@ impl AppWindow {
         log::debug!("** Rdp address: {:p}", &rdp);
 
         rdp.optimize();
+        // TODO: We need to switch to fullscreeen before opening the connection if needed
         rdp.connect()?;
 
         #[cfg(debug_assertions)]
@@ -117,7 +126,6 @@ impl AppWindow {
             full_screen: Arc::new(AtomicBool::new(screen_size.is_fullscreen())),
         }));
 
-        // TODO: maybe add a trigger to allow proper shutdown
         std::thread::spawn(move || {
             let res = rdp.run();
             log::debug!("RDP thread exiting...");
@@ -222,17 +230,11 @@ impl AppWindow {
     ) {
         log::debug!("ALT+ENTER pressed, toggling fullscreen");
         if rdp_state.full_screen.load(Ordering::Relaxed) {
-            // Switch to fixed size
-            let new_size = ScreenSize::Fixed(1600, 900); // TODO: Store original size somewhere
-            ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(true));
+            // Switch to fixed size, restores original size
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
-            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
-                [new_size.width() as f32, new_size.height() as f32].into(),
-            ));
             rdp_state.full_screen.store(false, Ordering::Relaxed);
         } else {
             // Switch to fullscreen
-            ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(false));
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
             rdp_state.full_screen.store(true, Ordering::Relaxed);
         }

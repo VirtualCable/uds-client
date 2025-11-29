@@ -11,14 +11,14 @@ pub enum ScreenSize {
 impl ScreenSize {
     pub fn width(&self) -> u32 {
         match self {
-            ScreenSize::Full => 0,
+            ScreenSize::Full => 1920,
             ScreenSize::Fixed(w, _) => *w,
         }
     }
 
     pub fn height(&self) -> u32 {
         match self {
-            ScreenSize::Full => 0,
+            ScreenSize::Full => 1080,
             ScreenSize::Fixed(_, h) => *h,
         }
     }
