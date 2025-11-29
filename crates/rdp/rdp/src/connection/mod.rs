@@ -26,7 +26,6 @@ pub enum RdpMessage {
     Disconnect,
     FocusRequired,
     Error(String),
-    Resize(u32, u32),
 }
 
 #[derive(Debug, Clone)]

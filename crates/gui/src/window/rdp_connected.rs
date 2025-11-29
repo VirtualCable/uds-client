@@ -174,10 +174,6 @@ impl AppWindow {
                                 }
                             }
                         }
-                        RdpMessage::Resize(width, height) => {
-                            // TODO: Handle resize
-                            log::debug!("Received resize to {}x{}", width, height);
-                        }
                         RdpMessage::Disconnect => {
                             log::debug!("RDP Disconnected");
                             // TODO: Handle disconnection properly

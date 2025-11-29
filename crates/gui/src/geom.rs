@@ -32,9 +32,7 @@ impl RectExt for Rect {
             let src_offset = (self.y as usize + row) * stride_bytes + self.x as usize * 4;
             let row_slice = &framebuffer[src_offset..src_offset + self.w as usize * 4];
             for px in row_slice.chunks_exact(4) {
-                pixels.push(egui::Color32::from_rgba_unmultiplied(
-                    px[2], px[1], px[0], px[3],
-                )); // RGBA
+                pixels.push(egui::Color32::from_rgb(px[2], px[1], px[0])); // RGB, alpha ignored
             }
         }
         Some(egui::ColorImage {

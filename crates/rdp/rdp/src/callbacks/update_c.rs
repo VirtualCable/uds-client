@@ -1,6 +1,5 @@
 use freerdp_sys::{
-    BITMAP_UPDATE, BOOL, BYTE, MONITOR_DEF, PALETTE_UPDATE, PLAY_SOUND_UPDATE, RECTANGLE_16,
-    SURFACE_BITS_COMMAND, UINT16, UINT32, rdpBounds, rdpContext, wStream,
+    BITMAP_UPDATE, BOOL, BYTE, FreeRDP_Settings_Keys_UInt32_FreeRDP_DesktopHeight, FreeRDP_Settings_Keys_UInt32_FreeRDP_DesktopWidth, MONITOR_DEF, PALETTE_UPDATE, PLAY_SOUND_UPDATE, RECTANGLE_16, SURFACE_BITS_COMMAND, UINT16, UINT32, freerdp_settings_get_uint32, gdi_resize, rdpBounds, rdpContext, wStream
 };
 
 use super::{super::connection::context::OwnerFromCtx, update::UpdateCallbacks};
@@ -171,6 +170,20 @@ extern "C" fn synchronize(context: *mut rdpContext) -> BOOL {
 
 extern "C" fn desktop_resize(context: *mut rdpContext) -> BOOL {
     debug!(" **** DESKTOP RESIZE called... {:?}", context);
+    unsafe {
+        gdi_resize(
+            (*context).gdi,
+            freerdp_settings_get_uint32(
+                (*context).settings,
+                FreeRDP_Settings_Keys_UInt32_FreeRDP_DesktopWidth,
+            ),
+            freerdp_settings_get_uint32(
+                (*context).settings,
+                FreeRDP_Settings_Keys_UInt32_FreeRDP_DesktopHeight,
+            ),
+        );
+    }
+
     if let Some(owner) = context.owner() {
         owner.on_desktop_resize().into()
     } else {
@@ -199,10 +212,7 @@ extern "C" fn palette(context: *mut rdpContext, palette: *const PALETTE_UPDATE) 
 }
 
 // (*update).PlaySound = Some(update_c_callbacks::play_sound);
-extern "C" fn play_sound(
-    context: *mut rdpContext,
-    play_sound: *const PLAY_SOUND_UPDATE,
-) -> BOOL {
+extern "C" fn play_sound(context: *mut rdpContext, play_sound: *const PLAY_SOUND_UPDATE) -> BOOL {
     debug!(" **** PLAY SOUND called...");
     if let Some(owner) = context.owner() {
         owner.on_play_sound(play_sound).into()
