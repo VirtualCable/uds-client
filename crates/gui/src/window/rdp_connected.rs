@@ -145,17 +145,37 @@ impl AppWindow {
         frame: &mut eframe::Frame,
         rdp_state: &mut RdpState,
     ) {
+        if self.handle_hotkeys(ctx, frame, rdp_state) {
+            // Hotkey handled, skip input processing this frame
+            return;
+        }
+        let input = rdp_state.input;
+        self.handle_input(ctx, frame, input);
+
+        let egui::Vec2 {
+            x: actual_width,
+            y: actual_height,
+        } = ctx.content_rect().size();
+        let (actual_width, actual_height) = (actual_width as i32, actual_height as i32);
+        let (gdi_width, gdi_height) = unsafe { ((*rdp_state.gdi).width, (*rdp_state.gdi).height) };
+
+        if actual_width != gdi_width || actual_height != gdi_height {
+            log::debug!(
+                "Viewport size changed: actual=({}, {}), gdi=({}, {}), resizing gdi and texture",
+                actual_width,
+                actual_height,
+                gdi_width,
+                gdi_height
+            );
+        }
+
         egui::CentralPanel::default()
             .frame(egui::Frame::default().inner_margin(0.0))
             .show(ctx, |ui| {
-                if self.handle_hotkeys(ctx, frame, rdp_state) {
-                    // Hotkey handled, skip input processing this frame
-                    return;
-                }
-                let input = rdp_state.input;
-                self.handle_input(ctx, frame, input);
-
+                // If the size of gdi is not equal to size of content, resize gdi and recreate texture
+                let start = std::time::Instant::now();
                 while let Ok(message) = rdp_state.update_rx.try_recv() {
+                    log::trace!("Got message {:?}", message);
                     match message {
                         RdpMessage::UpdateRects(rects) => {
                             let _guard = rdp_state.gdi_lock.write().unwrap();
@@ -197,8 +217,10 @@ impl AppWindow {
                         }
                     }
                 }
+                log::trace!("RDP update processing took {:?}", start.elapsed());
                 // Show the texture on 0,0, full size
                 ui.image(&rdp_state.texture);
+                log::trace!("RDP frame rendered took {:?}", start.elapsed());
             });
     }
 

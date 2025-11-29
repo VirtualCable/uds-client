@@ -39,8 +39,6 @@ pub struct Rdp {
     config: Config,
     instance: Option<SafePtr<freerdp>>,
     update_tx: Option<Sender<RdpMessage>>,
-    // Flags the stop request
-    stop_event: Option<SafeHandle>,
     // GDI lock for thread safety
     gdi_lock: Arc<RwLock<()>>,
     _pin: std::marker::PhantomPinned, // Do not allow moving
@@ -57,7 +55,6 @@ impl Rdp {
             instance: None,
             update_tx: Some(update_tx),
             gdi_lock: Arc::new(RwLock::new(())),
-            stop_event: None,
             _pin: std::marker::PhantomPinned,
         }
     }
@@ -250,10 +247,6 @@ impl Rdp {
         }
     }
 
-    pub fn get_stop_event(&self) -> Option<HANDLE> {
-        self.stop_event.as_ref().map(|h| h.as_handle())
-    }
-
     // Executes the RDP connection until end or stop is requested
     pub fn run(&self) -> Result<()> {
         #[cfg(debug_assertions)]
@@ -270,6 +263,11 @@ impl Rdp {
         } else {
             return Err(anyhow::anyhow!("No update sender provided"));
         };
+
+        let stop_event: HANDLE =
+            unsafe { CreateEventW(std::ptr::null_mut(), 1, 0, std::ptr::null()) };
+
+        let stop_event = SafeHandle::new(stop_event).unwrap();
 
         if context.is_null() {
             return Err(anyhow::anyhow!("RDP context is null"));
@@ -301,11 +299,7 @@ impl Rdp {
                 break;
             }
             // Add our stop event handle
-            handles[handle_count] = self
-                .stop_event
-                .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("Stop event handle not initialized"))?
-                .as_handle();
+            handles[handle_count] = stop_event.as_handle();
 
             let wait_result = unsafe {
                 WaitForMultipleObjects(
@@ -345,15 +339,12 @@ impl Rdp {
 
         // Ensure we wait a bit for the disconnect to process
         // Will know with the stop_event, that will be set on main before joining
+        unsafe { WaitForSingleObject(stop_event.as_handle(), 2000) };
+
+        // Destroy the stop event
         unsafe {
-            WaitForSingleObject(
-                self.stop_event
-                    .as_ref()
-                    .ok_or_else(|| anyhow::anyhow!("Stop event handle not initialized"))?
-                    .as_handle(),
-                2000,
-            )
-        };
+            CloseHandle(stop_event.as_handle());
+        }
 
         Ok(())
     }
@@ -397,10 +388,6 @@ impl Drop for Rdp {
                 freerdp_context_free(conn.as_mut_ptr());
                 freerdp_free(conn.as_mut_ptr());
                 self.instance = None;
-            }
-            if let Some(stop_event) = &self.stop_event {
-                CloseHandle(stop_event.as_handle());
-                self.stop_event = None;
             }
         }
     }

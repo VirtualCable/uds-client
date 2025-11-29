@@ -1,6 +1,6 @@
-# 📜 Guía de compilación de FreeRDP en Windows con vcpkg
+# 📜 Very simple guide to building FreeRDP on Windows with vcpkg
 
-## 1️⃣ Clonar el repositorio de FreeRDP
+## Clone the FreeRDP repository
 
 ```powershell
 git clone https://github.com/FreeRDP/FreeRDP.git
@@ -18,7 +18,13 @@ vcpkg install `
 cmake -B build `
   -DCMAKE_TOOLCHAIN_FILE="Z:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake" `
   -DVCPKG_TARGET_TRIPLET=x64-windows `
+  -DCMAKE_BUILD_TYPE=Release `
+  -DWITH_DEBUG_ALL=OFF `
   -DCMAKE_MODULE_PATH="Z:/dev/vcpkg/installed/x64-windows/share/ffmpeg" `
+  -DWITH_CLIENT_COMMON=ON `
+  -DWITH_INTERNAL_MD4=ON `
+  -DWITH_INTERNAL_MD5=ON `
+  -DWITH_INTERNAL_RC4=ON `
   -DWITH_SDL=OFF `
   -DWITH_SERVER=OFF `
   -DWITH_SHADOW=OFF `
@@ -39,21 +45,67 @@ cmake -B build `
   -DWITH_LAME=ON `
   -DLIBUSB_1_INCLUDE_DIR="Z:/dev/vcpkg/installed/x64-windows/include/libusb-1.0" `
   -DLIBUSB_1_LIBRARY="Z:/dev/vcpkg/installed/x64-windows/lib/libusb-1.0.lib" `
-  -DSDL2_TTF_INCLUDE_DIR="Z:/dev/vcpkg/installed/x64-windows/include/SDL2" `
-  -DSDL2_TTF_LIBRARY="Z:/dev/vcpkg/installed/x64-windows/lib/SDL2_ttf.lib"
   -DWITH_RDPGFX=ON `
-  -DWITH_DYNVC=ON
+  -DWITH_DYNVC=ON `
+  -DWITH_DEBUG_ALL=OFF `
+  -DWITH_DEBUG_CAPABILITIES=OFF `
+  -DWITH_DEBUG_CERTIFICATE=OFF `
+  -DWITH_DEBUG_CHANNELS=OFF `
+  -DWITH_DEBUG_CLIPRDR=OFF `
+  -DWITH_DEBUG_CODECS=OFF `
+  -DWITH_DEBUG_DVC=OFF `
+  -DWITH_DEBUG_KBD=OFF `
+  -DWITH_DEBUG_LICENSE=OFF `
+  -DWITH_DEBUG_MUTEX=OFF `
+  -DWITH_DEBUG_NEGO=OFF `
+  -DWITH_DEBUG_NLA=OFF `
+  -DWITH_DEBUG_NTLM=OFF `
+  -DWITH_DEBUG_RAIL=OFF `
+  -DWITH_DEBUG_RDP=OFF `
+  -DWITH_DEBUG_RDPDR=OFF `
+  -DWITH_DEBUG_RDPEI=OFF `
+  -DWITH_DEBUG_RDPGFX=OFF `
+  -DWITH_DEBUG_REDIR=OFF `
+  -DWITH_DEBUG_RFX=OFF `
+  -DWITH_DEBUG_RINGBUFFER=OFF `
+  -DWITH_DEBUG_SCARD=OFF `
+  -DWITH_DEBUG_SDL_EVENTS=OFF `
+  -DWITH_DEBUG_SDL_KBD_EVENTS=OFF `
+  -DWITH_DEBUG_SND=OFF `
+  -DWITH_DEBUG_SVC=OFF `
+  -DWITH_DEBUG_THREADS=OFF `
+  -DWITH_DEBUG_TIMEZONE=OFF `
+  -DWITH_DEBUG_TRANSPORT=OFF `
+  -DWITH_DEBUG_TSG=OFF `
+  -DWITH_DEBUG_URBDRC=OFF `
+  -DWITH_DEBUG_WND=OFF `
+  -DWITH_DEBUG_X11=OFF `
+  -DWITH_DEBUG_X11_LOCAL_MOVESIZE=OFF `
+  -DWITH_DEBUG_XV=OFF
+
+
+cmake --build build --config Release --parallel 16
+cmake --install .\build\ --config Release --prefix z:/dev/freerdp  
 ```
 
-## Para debug:
+# SDL note:
+#   -DSDL2_TTF_INCLUDE_DIR="Z:/dev/vcpkg/installed/x64-windows/include/SDL2" `
+#   -DSDL2_TTF_LIBRARY="Z:/dev/vcpkg/installed/x64-windows/lib/SDL2_ttf.lib"
+
+
+## For debug:
 ```powershell
 cmake -B build `
   -DCMAKE_TOOLCHAIN_FILE="Z:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake" `
   -DVCPKG_TARGET_TRIPLET=x64-windows `
   -DCMAKE_MODULE_PATH="Z:/dev/vcpkg/installed/x64-windows/share/ffmpeg" `
-  -DWITH_CLIENT=ON `
+  -DWITH_CLIENT_COMMON=ON ` # common client code (libfreerdp-client)
+  -DWITH_INTERNAL_MD4=ON `  #  NTLM and old related auth
+  -DWITH_INTERNAL_MD5=ON `  #  needed for some auth methods
+  -DWITH_INTERNAL_RC4=ON `  #  needed for some auth methods
+  -DWITH_CLIENT=ON `        #  main client (freerdp)
   -DWITH_FFMPEG=ON `
-  -DWITH_SDL=ON `
+  -DWITH_SDL=OFF `
   -DWITH_SERVER=OFF `
   -DWITH_SHADOW=OFF `
   -DBUILD_TESTING=OFF `
@@ -62,7 +114,7 @@ cmake -B build `
   -DWITH_RDPSND=ON `
   -DWITH_WINMM=ON `
   -DWITH_AUDIN=ON `
-  -DWITH_CLIENT_SDL=ON `
+  -DWITH_CLIENT_SDL=OFF `
   -DWITH_RDPGFX=ON `
   -DWITH_DYNVC=ON `
   -DWITH_LIBUSB=ON `
@@ -92,7 +144,7 @@ cmake --install .\build\ --config Debug --prefix z:/dev/freerdp
 ```
 
 
-## 2️⃣ Compilar FreeRDP
+## Build FreeRDP
 
 ```powershell
 cmake --build build --config Release
@@ -100,11 +152,11 @@ cmake --build build --config Release
 cmake --install .\build\ --config Release --prefix z:/dev/freerdp
 ```
 
---- WORKING ---
+--- WORKING (for sdl! for uds client remove all SDL related) ---
 
-# 📜 Guía de compilación de FreeRDP en Windows con vcpkg
+# Very simple guide
 
-## 1️⃣ Clonar el repositorio de FreeRDP
+## Clone the FreeRDP repository
 
 ```powershell
 git clone https://github.com/FreeRDP/FreeRDP.git
@@ -137,7 +189,7 @@ cmake -B build `
   -DSDL2_TTF_LIBRARY="Z:/dev/vcpkg/installed/x64-windows/lib/SDL2_ttf.lib"
 ```
 
-## 2️⃣ Compilar FreeRDP
+## Build FreeRDP
 
 ```powershell
 cmake --build build --config Release

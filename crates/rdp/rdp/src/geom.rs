@@ -18,7 +18,10 @@ pub enum ScreenSize {
     Fixed(u32, u32),
 }
 
-// TODO; fix fullscreen handling
+/// Methods for ScreenSize
+/// values returned for Full are default valid sizes for windowed mode
+/// after exiting fullscreen, as we don't have access to the actual
+/// screen size here for fullscreen
 impl ScreenSize {
     pub fn width(&self) -> u32 {
         match self {

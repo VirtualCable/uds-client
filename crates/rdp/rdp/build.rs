@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 use std::{env, fs, io, path::PathBuf};
 
+const USE_DEBUG_DLLS: bool = false;
+
 fn copy_if_different(src: &PathBuf, dst: &PathBuf) -> io::Result<()> {
     if !dst.exists() || fs::metadata(src)?.len() != fs::metadata(dst)?.len() {
         // Si no existe o el tamaño es distinto, copiamos
@@ -69,7 +71,7 @@ fn copy_windows_dlls() {
     ];
 
     // Debug libraries fron vcpkg
-    let vcpkg_debug_dlls = ["zlibd1.dll"];
+    let vcpkg_debug_dlls: &[&str] = if USE_DEBUG_DLLS { &["zlibd1.dll"] } else { &[] };
 
     for dll in freerdp_dlls {
         copy_if_different(&freerdp_bin.join(dll), &out_dir.join(dll)).unwrap();

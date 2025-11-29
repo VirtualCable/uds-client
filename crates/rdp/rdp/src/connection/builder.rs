@@ -1,6 +1,4 @@
-use std::{
-    ffi::CString,
-};
+use std::ffi::CString;
 
 use anyhow::Result;
 use freerdp_sys::*;
@@ -9,13 +7,11 @@ use crate::{
     callbacks::{
         altsec_c, input_c, instance_c, pointer_update_c, primary_c, secondary_c, update_c, window_c,
     },
-    utils::{SafeHandle, SafePtr},
+    utils::SafePtr,
 };
 use shared::log::debug;
 
-use super::{
-    Callbacks, Rdp, context::RdpContext,
-};
+use super::{Callbacks, Rdp, context::RdpContext};
 
 #[allow(dead_code)]
 impl Rdp {
@@ -60,11 +56,7 @@ impl Rdp {
 
     pub fn build(self: std::pin::Pin<&mut Self>) -> Result<()> {
         debug!("Building RDP connection... {:p}", self);
-        let stop_event: HANDLE =
-            unsafe { CreateEventW(std::ptr::null_mut(), 1, 0, std::ptr::null()) };
-
         let mut_self = unsafe { self.get_unchecked_mut() };
-        mut_self.stop_event = Some(SafeHandle::new(stop_event).unwrap());
 
         unsafe {
             let ctx = RdpContext::create(mut_self)?;

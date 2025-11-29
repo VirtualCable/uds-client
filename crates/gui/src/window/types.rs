@@ -39,7 +39,7 @@ pub enum HotKey {
 impl HotKey {
     pub fn from_input(ctx: &eframe::egui::Context) -> Self {
         ctx.input(|input| {
-            if input.key_pressed(eframe::egui::Key::Enter) && input.modifiers.alt || input.modifiers.command
+            if input.key_pressed(eframe::egui::Key::Enter) && input.modifiers.alt
             {
                 Self::ToggleFullScreen
             } else {
