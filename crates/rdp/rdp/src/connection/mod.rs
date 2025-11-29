@@ -138,6 +138,7 @@ impl Rdp {
                     FreeRDP_Settings_Keys_Bool_FreeRDP_AllowDesktopComposition,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_AllowCacheWaitingList,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_DesktopResize,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_DynamicResolutionUpdate,
                     // FreeRDP_Settings_Keys_Bool_FreeRDP_AsyncUpdate,
                     // FreeRDP_Settings_Keys_Bool_FreeRDP_AsyncChannels,
                 ]
@@ -207,6 +208,12 @@ impl Rdp {
             }
         }
         Ok(())
+    }
+
+    pub fn send_resize(self, width: u32, height: u32) {
+        // TODO:: implement this
+        log::debug!("send_resize not implemented yet: {}x{}", width, height);
+        
     }
 
     pub fn input(&self) -> Option<*mut rdpInput> {

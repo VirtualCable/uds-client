@@ -10,3 +10,6 @@ pub mod events;
 pub mod geom;
 pub mod keymap;
 pub mod settings;
+
+// Re-export sys module
+pub mod sys;

@@ -6,7 +6,6 @@ edition = "2024"
 [dependencies]
 shared = { path = "../shared" }
 rdp = { path = "../rdp/rdp" }
-freerdp-sys = { path = "../rdp/freerdp-sys" }
 
 anyhow = "1.0"
 

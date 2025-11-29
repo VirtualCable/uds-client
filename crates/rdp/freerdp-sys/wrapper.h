@@ -3,8 +3,9 @@
 #include <freerdp/gdi/gdi.h>
 #include <freerdp/codec/color.h>
 #include <freerdp/transport_io.h>
+#include <freerdp/client/disp.h>
+#include <freerdp/channels/disp.h>
 #include <winpr/synch.h>
 #include <winpr/wtypes.h>
 #include <winpr/winpr.h>
 #include <winpr/wlog.h>
-

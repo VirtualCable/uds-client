@@ -16,6 +16,7 @@ use crate::log;
 use rdp::{
     connection::{Rdp, RdpMessage},
     settings::RdpSettings,
+    sys::{rdpGdi, rdpInput},
 };
 
 use crate::geom::RectExt; // For extracting rects from framebuffer
@@ -30,9 +31,9 @@ const FRAMES_IN_FLIGHT: usize = 128;
 #[derive(Clone)]
 pub struct RdpState {
     update_rx: crossbeam::channel::Receiver<RdpMessage>,
-    gdi: *mut freerdp_sys::rdpGdi,
+    gdi: *mut rdpGdi,
     gdi_lock: Arc<RwLock<()>>,
-    input: *mut freerdp_sys::rdpInput,
+    input: *mut rdpInput,
     texture: egui::TextureHandle,
     full_screen: Arc<AtomicBool>,
 }

@@ -5,7 +5,7 @@ use shared::log;
 use rdp::keymap;
 
 use super::window::AppWindow;
-use freerdp_sys::{
+use rdp::sys::{
     PTR_FLAGS_BUTTON1,
     PTR_FLAGS_BUTTON2,
     PTR_FLAGS_BUTTON3,
@@ -20,6 +20,7 @@ use freerdp_sys::{
     // SetEvent,
     freerdp_input_send_keyboard_event_ex,
     freerdp_input_send_mouse_event,
+    rdpInput,
 };
 
 #[derive(Debug)]
@@ -34,7 +35,7 @@ impl AppWindow {
         &mut self,
         _ctx: &egui::Context,
         _frame: &mut eframe::Frame,
-        rdp_input: *mut freerdp_sys::rdpInput,
+        rdp_input: *mut rdpInput,
         input_state: &egui::InputState,
     ) {
         for ev in &input_state.events {
@@ -122,7 +123,7 @@ impl AppWindow {
         &mut self,
         _ctx: &egui::Context,
         _frame: &mut eframe::Frame,
-        rdp_input: *mut freerdp_sys::rdpInput,
+        rdp_input: *mut rdpInput,
         _input_state: &egui::InputState,
     ) {
         while let Ok(raw_key) = self.events.try_recv() {
@@ -155,7 +156,7 @@ impl AppWindow {
         &mut self,
         ctx: &egui::Context,
         frame: &mut eframe::Frame,
-        rdp_input: *mut freerdp_sys::rdpInput,
+        rdp_input: *mut rdpInput,
     ) {
         ctx.input(|input_state| {
             // // Log events for debugging
