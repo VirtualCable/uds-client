@@ -141,33 +141,33 @@ impl eframe::App for AppWindow {
         while let Ok(msg) = self.gui_messages_rx.try_recv() {
             match msg {
                 types::GuiMessage::Close => {
-                    log::trace!("Received close message, closing window.");
+                    log::debug!("Received close message, closing window.");
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     return;
                 }
                 types::GuiMessage::Hide => {
-                    log::trace!("Received hide message, hiding window.");
+                    log::debug!("Received hide message, hiding window.");
                     self.enter_invisible(ctx).ok();
                 }
                 types::GuiMessage::ShowError(msg) => {
-                    log::trace!("Received show error message: {}", msg);
+                    log::debug!("Received show error message: {}", msg);
                     self.enter_error(ctx, msg.clone()).ok();
                 }
                 types::GuiMessage::ShowWarning(msg) => {
-                    log::trace!("Received show warning message: {}", msg);
+                    log::debug!("Received show warning message: {}", msg);
                     self.enter_warning(ctx, msg.clone()).ok();
                 }
                 types::GuiMessage::ShowYesNo(msg, resp_tx) => {
-                    log::trace!("Received show yes/no message: {}", msg);
+                    log::debug!("Received show yes/no message: {}", msg);
                     self.enter_yesno(ctx, msg.clone(), resp_tx).ok();
                 }
                 types::GuiMessage::SwitchToClientProgress => {
-                    log::trace!("Switching to client progress window...");
+                    log::debug!("Switching to client progress window...");
                     self.enter_client_progress(ctx, client_progress::ProgressState::default())
                         .ok();
                 }
                 types::GuiMessage::Progress(percentage, message) => {
-                    log::trace!("Received progress update: {}% - {}", percentage, message);
+                    log::debug!("Received progress update: {}% - {}", percentage, message);
                     if let types::AppState::ClientProgress(state) = &mut self.app_state {
                         state.progress.store(
                             (percentage.clamp(0.0, 1.0) * 100.0) as u16,

@@ -64,11 +64,11 @@ impl AppWindow {
         ));
         ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition([10.0, 10.0].into()));
 
-        if screen_size.is_fullscreen() {
-            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
-        } else {
-            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
-        }
+        // if screen_size.is_fullscreen() {
+        //     ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
+        // } else {
+        //     ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
+        // }
 
         // Rdp shouls be pinned, as build() inserts self reference inside freedrp structs
         let mut rdp = Box::pin(Rdp::new(rdp_settings, tx, self.stop.clone()));
