@@ -22,17 +22,18 @@ pub enum ScreenSize {
 /// values returned for Full are default valid sizes for windowed mode
 /// after exiting fullscreen, as we don't have access to the actual
 /// screen size here for fullscreen
+/// Currently, we use a proportional size of 16:9 for fullscreen default
 impl ScreenSize {
     pub fn width(&self) -> u32 {
         match self {
-            ScreenSize::Full => 1024,
+            ScreenSize::Full => 1200,
             ScreenSize::Fixed(w, _) => *w,
         }
     }
 
     pub fn height(&self) -> u32 {
         match self {
-            ScreenSize::Full => 768,
+            ScreenSize::Full => 675,
             ScreenSize::Fixed(_, h) => *h,
         }
     }

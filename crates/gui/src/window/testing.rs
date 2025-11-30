@@ -27,7 +27,7 @@ impl AppWindow {
             // Here you can add input fields for server, user, password, etc.
             if ui.button("RDP Connecting").clicked() {
                 // For demonstration, we use a hardcoded host
-                if let Err(e) = self.enter_rdp_connecting(
+                if let Err(e) = self.enter_rdp_preconnection(
                     ctx,
                     RdpSettings {
                         server: "172.27.247.161".to_string(),
@@ -42,7 +42,7 @@ impl AppWindow {
             }
             if ui.button("RDP Connect").clicked() {
                 // For demonstration, we use a hardcoded host
-                if let Err(e) = self.enter_rdp_connected(
+                if let Err(e) = self.enter_rdp_connection(
                     ctx,
                     RdpSettings {
                         server: "172.27.247.161".to_string(),

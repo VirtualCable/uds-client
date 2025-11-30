@@ -48,14 +48,13 @@ impl fmt::Debug for RdpConnectionState {
 }
 
 impl AppWindow {
-    pub fn enter_rdp_connected(
+    pub fn enter_rdp_connection(
         &mut self,
         ctx: &eframe::egui::Context,
         rdp_settings: RdpSettings,
     ) -> Result<()> {
         self.processing_events.store(true, Ordering::Relaxed); // Start processing events
         let (tx, rx): (Sender<RdpMessage>, Receiver<RdpMessage>) = bounded(FRAMES_IN_FLIGHT);
-
 
         let mut rdp_settings = rdp_settings;
         // TODO: Handle screen size changes during session with RDP display channel
@@ -112,7 +111,7 @@ impl AppWindow {
             std::slice::from_raw_parts((*gdi).primary_buffer as *const u8, pitch * height)
         };
         let image = egui::ColorImage::from_rgba_unmultiplied([pitch / 4, height], buffer);
-        let texture = ctx.load_texture("rdp_framebuffer", image, egui::TextureOptions::NEAREST);
+        let texture = ctx.load_texture("rdp_framebuffer", image, egui::TextureOptions::LINEAR);
 
         self.set_app_state(AppState::RdpConnected(RdpConnectionState {
             update_rx: rx,
@@ -137,18 +136,26 @@ impl AppWindow {
         Ok(())
     }
 
-    pub(super) fn update_rdp_client(
+    pub(super) fn update_rdp_connection(
         &mut self,
         ctx: &egui::Context,
         frame: &mut eframe::Frame,
         rdp_state: &mut RdpConnectionState,
     ) {
+        // Calculate relation between gdi size and egui content size
+        let scale = {
+            let egui_size = ctx.content_rect().size();
+            let gdi_width = unsafe { (*rdp_state.gdi).width as f32 };
+            let gdi_height = unsafe { (*rdp_state.gdi).height as f32 };
+            egui::Vec2::new(gdi_width / egui_size.x, gdi_height / egui_size.y)
+        };
+
         if self.handle_hotkeys(ctx, frame, rdp_state) {
             // Hotkey handled, skip input processing this frame
             return;
         }
         let input = rdp_state.input;
-        self.handle_input(ctx, frame, input);
+        self.handle_input(ctx, frame, input, scale);
 
         // TODO: Allow this, but need to implement Display channel at least to send resize
         // let egui::Vec2 {
@@ -195,7 +202,7 @@ impl AppWindow {
                                     rdp_state.texture.set_partial(
                                         [rect.x as usize, rect.y as usize],
                                         image,
-                                        egui::TextureOptions::NEAREST,
+                                        egui::TextureOptions::LINEAR,
                                     );
                                 }
                             }
@@ -218,9 +225,12 @@ impl AppWindow {
                 }
                 log::trace!("RDP update processing took {:?}", start.elapsed());
                 // Show the texture on 0,0, full size
+                let size = ui.available_size();
                 ui.add_sized(
-                    ui.available_size(),
-                    egui::Image::new(&rdp_state.texture),
+                    size,
+                    egui::Image::new(&rdp_state.texture)
+                        .maintain_aspect_ratio(false)
+                        .fit_to_exact_size(size),
                 );
                 log::trace!("RDP frame rendered took {:?}", start.elapsed());
             });

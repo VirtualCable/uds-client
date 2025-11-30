@@ -21,7 +21,7 @@ pub struct RdpConnectingState {
 }
 
 impl AppWindow {
-    pub fn enter_rdp_connecting(
+    pub fn enter_rdp_preconnection(
         &mut self,
         ctx: &eframe::egui::Context,
         settings: RdpSettings,
@@ -44,7 +44,7 @@ impl AppWindow {
         Ok(())
     }
 
-    pub fn update_connection(
+    pub fn update_rdp_preconnection(
         &mut self,
         ctx: &egui::Context,
         _frame: &mut eframe::Frame,
@@ -53,7 +53,7 @@ impl AppWindow {
         egui::CentralPanel::default().show(ctx, |ui| {
             if state.start.elapsed().as_millis() > 100 {
                 // Switch to RdpConnected after 1 second, this is only for setting fullscreen etc.
-                self.enter_rdp_connected(ctx, state.settings.clone()).ok();
+                self.enter_rdp_connection(ctx, state.settings.clone()).ok();
             }
             if state.switch_to_fullscreen.load(Ordering::Relaxed) {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));

@@ -13,8 +13,8 @@ use crate::input;
 use shared::{log, system::trigger::Trigger};
 
 mod client_progress;
-mod rdp_connected;
-mod rdp_connecting;
+mod rdp_connection;
+mod rdp_preconnection;
 
 mod msgw_error;
 mod msgw_warning;
@@ -183,9 +183,9 @@ impl eframe::App for AppWindow {
         // And changes should be reflected on all references
         let mut app_state = self.app_state.clone();
         match &mut app_state {
-            types::AppState::RdpConnecting(rdp_state) => self.update_connection(ctx, frame, rdp_state),
+            types::AppState::RdpConnecting(rdp_state) => self.update_rdp_preconnection(ctx, frame, rdp_state),
             types::AppState::RdpConnected(rdp_state) => {
-                self.update_rdp_client(ctx, frame, rdp_state)
+                self.update_rdp_connection(ctx, frame, rdp_state)
             }
             types::AppState::ClientProgress(client_state) => {
                 self.update_progress(ctx, frame, client_state)

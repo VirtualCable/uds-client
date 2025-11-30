@@ -1,8 +1,8 @@
 use eframe::egui;
 
 use super::consts;
-use shared::log;
 use rdp::keymap;
+use shared::log;
 
 use super::window::AppWindow;
 use rdp::sys::{
@@ -37,13 +37,14 @@ impl AppWindow {
         _frame: &mut eframe::Frame,
         rdp_input: *mut rdpInput,
         input_state: &egui::InputState,
+        scale: egui::Vec2,
     ) {
         for ev in &input_state.events {
             match ev {
                 egui::Event::PointerMoved(pos) => {
                     // Mouse moved
-                    let x = pos.x as u16;
-                    let y = pos.y as u16;
+                    let x = (pos.x * scale.x) as u16;
+                    let y = (pos.y * scale.y) as u16;
                     unsafe {
                         freerdp_input_send_mouse_event(rdp_input, PTR_FLAGS_MOVE as u16, x, y)
                     };
@@ -63,13 +64,14 @@ impl AppWindow {
                         egui::PointerButton::Extra1 => (0, PTR_XFLAGS_BUTTON1, pressed.to_owned()),
                         egui::PointerButton::Extra2 => (0, PTR_XFLAGS_BUTTON2, pressed.to_owned()),
                     };
+                    let (x, y) = ((pos.x * scale.x) as u16, (pos.y * scale.y) as u16);
                     if flags != 0 {
                         unsafe {
                             freerdp_input_send_mouse_event(
                                 rdp_input,
                                 flags as u16 | if is_down { PTR_FLAGS_DOWN as u16 } else { 0 },
-                                pos.x as u16,
-                                pos.y as u16,
+                                x,
+                                y,
                             );
                         }
                     } else if xflags != 0 {
@@ -77,8 +79,8 @@ impl AppWindow {
                             freerdp_input_send_extended_mouse_event(
                                 rdp_input,
                                 xflags as u16 | if is_down { PTR_FLAGS_DOWN as u16 } else { 0 },
-                                pos.x as u16,
-                                pos.y as u16,
+                                x,
+                                y,
                             );
                         }
                     }
@@ -157,6 +159,7 @@ impl AppWindow {
         ctx: &egui::Context,
         frame: &mut eframe::Frame,
         rdp_input: *mut rdpInput,
+        scale: egui::Vec2,
     ) {
         ctx.input(|input_state| {
             // // Log events for debugging
@@ -164,7 +167,7 @@ impl AppWindow {
             //     log::debug!("Input event: {:?}", ev);
             // }
             // Handle mouse input
-            self.handle_mouse(ctx, frame, rdp_input, input_state);
+            self.handle_mouse(ctx, frame, rdp_input, input_state, scale);
             // Handle keyboard input
             self.handle_keyboard(ctx, frame, rdp_input, input_state);
         });
