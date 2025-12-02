@@ -161,7 +161,7 @@ impl eframe::App for AppWindow {
                     log::debug!("Received show yes/no message: {}", msg);
                     self.enter_yesno(ctx, msg.clone(), resp_tx).ok();
                 }
-                types::GuiMessage::SwitchToClientProgress => {
+                types::GuiMessage::ShowProgress => {
                     log::debug!("Switching to client progress window...");
                     self.enter_client_progress(ctx, client_progress::ProgressState::default())
                         .ok();
@@ -175,6 +175,10 @@ impl eframe::App for AppWindow {
                         );
                         state.progress_message = message;
                     }
+                }
+                types::GuiMessage::ConnectRdp(settings) => {
+                    log::debug!("Received RDP connect message: {:?}", settings);
+                    self.enter_rdp_connection(ctx, settings).ok();
                 }
             }
         }

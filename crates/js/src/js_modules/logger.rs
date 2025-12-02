@@ -1,7 +1,7 @@
 use anyhow::Result;
 use boa_engine::{Context, JsResult, JsValue};
 
-use crate::log;
+use shared::log;
 
 // log(level: String, msg: String)
 fn trace_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
@@ -59,7 +59,7 @@ pub fn register(ctx: &mut Context) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::js::{create_context, exec_script};
+    use crate::{create_context, exec_script};
 
     use super::*;
 

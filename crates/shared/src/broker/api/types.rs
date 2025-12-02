@@ -146,11 +146,37 @@ pub struct Log {
     pub ticket: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub enum ScriptType {
+    #[serde(rename = "javascript")]
+    #[default]
+    Javascript,
+}
+
+impl fmt::Display for ScriptType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ScriptType::Javascript => write!(f, "javascript"),
+        }
+    }
+}
+
+// Any invalid valuw will return default (Javascript)
+impl From<&str> for ScriptType {
+    fn from(s: &str) -> Self {
+        match s {
+            "javascript" => ScriptType::Javascript,
+            _ => ScriptType::Javascript,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Script {
     pub script: String,
     #[serde(rename = "type")]
-    pub script_type: String,
+    #[serde(default)]
+    pub script_type: ScriptType,
     pub signature: String,           // base64-encoded signature
     pub signature_algorithm: String, // Optional signature algorithm
     pub params: String, // from codecs.encode(codecs.encode(json.dumps(self.parameters).encode(), 'bz2'), 'base64').decode()
@@ -188,13 +214,6 @@ impl Script {
 
         mldsa_verify::verify_signature(script.as_bytes(), &self.signature)
     }
-
-    pub async fn execute(&self) -> Result<()> {
-        let script = self.decoded_script()?;
-        let params = self.decoded_params()?;
-
-        crate::js::run_js(&script, Some(params)).await
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -214,7 +233,7 @@ pub fn get_test_script() -> Script {
             "v1NPj/F3JFOFCQA+VcNw"
         )
         .to_string(),
-        script_type: "javascript".to_string(),
+        script_type: ScriptType::Javascript,
         signature: concat!(
             "+6BbJUiIIWUyfFGP9RJ+kWMTqIbfQl6fxhG3+pMxy1h7lAQ6UYW13Qfyi7jgZPzn",
             "/woEwLSGWZvxcvA16qIRWWwI3+biRtKhDG5B0ePDbRs6u4PRZsrJzaf/cdHb6xA3",

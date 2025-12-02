@@ -46,7 +46,7 @@ async fn get_script_and_params() -> Result<types::Script> {
 
     Ok(types::Script {
         script,
-        script_type: "javascript".to_string(),
+        script_type: types::ScriptType::Javascript,
         signature,
         signature_algorithm: "MLDSA65".to_string(),
         params,
@@ -74,7 +74,7 @@ async fn main() -> Result<()> {
     // }
 
     // Run the script
-    script.execute().await?;
+    js::run_script(&script).await?;
     shared::tasks::wait_all_and_cleanup(
         std::time::Duration::from_secs(4),
         shared::system::trigger::Trigger::new(),

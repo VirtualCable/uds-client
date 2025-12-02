@@ -4,7 +4,6 @@ use tokio::sync::oneshot;
 
 use super::{client_progress, rdp_connection, rdp_preconnection};
 
-
 #[derive(Debug)]
 pub enum GuiMessage {
     Close,                                                         // Close gui
@@ -13,8 +12,9 @@ pub enum GuiMessage {
     ShowWarning(String), // Warning message
     ShowYesNo(String, Arc<RwLock<Option<oneshot::Sender<bool>>>>), // Yes/No dialog
     // Progress
-    SwitchToClientProgress,
+    ShowProgress,
     Progress(f32, String), // progress percentage (0.0-100.0), message
+    ConnectRdp(rdp::settings::RdpSettings), // Connect RDP with given settings
 }
 
 #[derive(Debug, Clone, Default)]
@@ -25,7 +25,7 @@ pub enum AppState {
     ClientProgress(client_progress::ProgressState),
     // use this to set fullscreen prior to connection if needed
     // and anything else
-    RdpConnecting(rdp_preconnection::RdpConnectingState),  
+    RdpConnecting(rdp_preconnection::RdpConnectingState),
     RdpConnected(rdp_connection::RdpConnectionState),
     // This will be consumed once response is sent and only once
     YesNo(String, Arc<RwLock<Option<oneshot::Sender<bool>>>>),
@@ -43,8 +43,7 @@ pub enum HotKey {
 impl HotKey {
     pub fn from_input(ctx: &eframe::egui::Context) -> Self {
         ctx.input(|input| {
-            if input.key_pressed(eframe::egui::Key::Enter) && input.modifiers.alt
-            {
+            if input.key_pressed(eframe::egui::Key::Enter) && input.modifiers.alt {
                 Self::ToggleFullScreen
             } else {
                 Self::None

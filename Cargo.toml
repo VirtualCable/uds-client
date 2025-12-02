@@ -9,6 +9,6 @@ members = [
     "crates/gui",
     "crates/rdp/rdp",
     "crates/rdp/freerdp-sys",
-    "crates/gui-tester",
+    "crates/gui-tester", "crates/js",
 ]
 resolver = "3"

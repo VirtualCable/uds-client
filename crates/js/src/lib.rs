@@ -2,9 +2,12 @@ use std::rc::Rc;
 
 use anyhow::Result;
 
-use boa_engine::{Context, JsValue, Module, js_string, module::{SyntheticModuleInitializer, MapModuleLoader}};
+use boa_engine::{
+    Context, JsValue, Module, js_string,
+    module::{MapModuleLoader, SyntheticModuleInitializer},
+};
 
-use crate::log;
+use shared::{broker::api::types::{Script, ScriptType}, log};
 
 // Helpers functions for javascript rust bindings
 #[macro_use]
@@ -89,19 +92,33 @@ pub async fn run_js(script: &str, data: Option<serde_json::Value>) -> Result<()>
 
     let res = exec_script(&mut ctx, script).await;
     if res.is_err() {
-        for frame in ctx.stack_trace() {  
-            log::error!("  at {:?} (line: {})",   
+        for frame in ctx.stack_trace() {
+            log::error!(
+                "  at {:?} (line: {})",
                 frame.position().position,
                 frame.position().path,
-                // La información de línea está en el frame  
-            );  
-        }  
+                // La información de línea está en el frame
+            );
+        }
         let error = res.err().unwrap();
         log::error!("JavaScript execution error: {}", error);
         Err(anyhow::anyhow!("JavaScript execution error: {}", error))
     } else {
         Ok(())
     }
+}
+
+pub async fn run_script(script: &Script) -> Result<()> {
+    // If not javascript type, return error
+    if script.script_type != ScriptType::Javascript {
+        return Err(anyhow::anyhow!(
+            "Unsupported script type: {}", script.script_type
+        ));
+    }
+    let script_content = script.decoded_script()?;
+    let params = script.decoded_params()?;
+
+    run_js(&script_content, Some(params)).await
 }
 
 #[cfg(test)]

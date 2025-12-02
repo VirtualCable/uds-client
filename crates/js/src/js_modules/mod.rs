@@ -7,6 +7,7 @@ mod logger;
 mod process;
 mod tasks;
 mod utils;
+mod rdp;
 
 pub(super) fn register(ctx: &mut Context) -> Result<()> {
     utils::register(ctx)?;

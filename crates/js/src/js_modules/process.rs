@@ -60,7 +60,7 @@ pub fn launch_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<J
         app_args
     );
     let app_args_re: Vec<&str> = app_args.iter().map(|s| s.as_str()).collect();
-    crate::system::launcher::launch(&app_path, app_args_re.as_slice(), None)
+    shared::system::launcher::launch(&app_path, app_args_re.as_slice(), None)
         .map(JsValue::from)
         .map_err(|e| JsError::from_native(JsNativeError::typ().with_message(format!("{}", e))))
 }
@@ -116,7 +116,7 @@ async fn launch_and_wait_fn(
 pub fn is_running_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let process_id = extract_js_args!(args, ctx, u32);
 
-    let running = crate::system::launcher::is_running(process_id);
+    let running = shared::system::launcher::is_running(process_id);
 
     Ok(JsValue::from(running))
 }
@@ -124,7 +124,7 @@ pub fn is_running_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResu
 pub fn kill_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let process_id = extract_js_args!(args, ctx, u32);
 
-    let stopped = crate::system::launcher::stop(process_id)
+    let stopped = shared::system::launcher::stop(process_id)
         .map(|_| JsValue::null())
         .map_err(|e| JsError::from_native(JsNativeError::typ().with_message(format!("{}", e))))?;
 
@@ -141,7 +141,7 @@ pub async fn wait_fn(
         extract_js_args!(args, &mut *ctx_borrow, u32)
     };
 
-    crate::system::launcher::wait(process_id)
+    shared::system::launcher::wait(process_id)
         .await
         .map(|_| JsValue::null())
         .map_err(|e| JsError::from_native(JsNativeError::typ().with_message(format!("{}", e))))
@@ -159,7 +159,7 @@ pub async fn wait_timeout_fn(
 
     let timeout = std::time::Duration::from_millis(timeout_ms as u64);
 
-    let triggered = crate::system::launcher::wait_timeout(process_id, timeout)
+    let triggered = shared::system::launcher::wait_timeout(process_id, timeout)
         .await
         .map_err(|e| JsError::from_native(JsNativeError::typ().with_message(format!("{}", e))))?;
 
@@ -208,7 +208,7 @@ mod tests {
     use std::collections::HashMap;
 
     use super::*;
-    use crate::js::{create_context, exec_script_with_result};
+    use crate::{create_context, exec_script_with_result};
 
     use boa_engine::value::TryFromJs;
 

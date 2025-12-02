@@ -19,7 +19,7 @@ pub fn run(tx: Sender<GuiMessage>, stop: Trigger, host: String, ticket: String, 
             rt.block_on({
                 let stop = stop.clone();
                 async move {
-                    tx.send(GuiMessage::SwitchToClientProgress).ok();
+                    tx.send(GuiMessage::ShowProgress).ok();
                     if let Err(e) =
                         runner::run(tx.clone(), stop.clone(), &host, &ticket, &scrambler).await
                     {

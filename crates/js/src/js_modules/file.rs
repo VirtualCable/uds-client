@@ -6,7 +6,7 @@ use boa_engine::{
 
 use is_executable::IsExecutable; // Trait for is_executable method
 
-use crate::js::helpers::create_temp_file;
+use crate::helpers::create_temp_file;
 
 // create temp file with a content, return path
 fn create_temp_file_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
@@ -102,8 +102,8 @@ mod tests {
     use boa_engine::js_string;
 
     use super::*;
-    use crate::log;
-    use crate::js::{create_context, exec_script_with_result};
+    use shared::log;
+    use crate::{create_context, exec_script_with_result};
 
     #[tokio::test]
     async fn test_file_module() {

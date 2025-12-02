@@ -2806,6 +2806,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "js"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64",
+ "boa_engine",
+ "futures",
+ "is_executable",
+ "rand",
+ "regex",
+ "serde",
+ "serde_json",
+ "shared",
+ "tokio",
+]
+
+[[package]]
 name = "js-sys"
 version = "0.3.83"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2852,6 +2870,7 @@ dependencies = [
  "gettext",
  "gui",
  "image",
+ "js",
  "open",
  "rdp",
  "rust-embed",
@@ -3126,20 +3145,21 @@ dependencies = [
 
 [[package]]
 name = "mockito"
-version = "1.7.0"
+version = "1.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7760e0e418d9b7e5777c0374009ca4c93861b9066f18cb334a20ce50ab63aa48"
+checksum = "7e0603425789b4a70fcc4ac4f5a46a566c116ee3e2a6b768dc623f7719c611de"
 dependencies = [
  "assert-json-diff",
  "bytes",
  "colored",
- "futures-util",
+ "futures-core",
  "http",
  "http-body",
  "http-body-util",
  "hyper",
  "hyper-util",
  "log",
+ "pin-project-lite",
  "rand",
  "regex",
  "serde_json",
@@ -4709,6 +4729,8 @@ dependencies = [
  "anyhow",
  "base64",
  "bzip2",
+ "js",
+ "rdp",
  "serde",
  "serde_json",
  "shared",
@@ -4913,18 +4935,15 @@ dependencies = [
  "anyhow",
  "async-trait",
  "base64",
- "boa_engine",
  "bzip2",
  "chrono",
  "directories-next",
  "futures",
  "hostname",
- "is_executable",
  "mldsa-verify",
  "mockito",
  "rand",
  "rcgen",
- "regex",
  "reqwest",
  "rustls",
  "rustls-native-certs",

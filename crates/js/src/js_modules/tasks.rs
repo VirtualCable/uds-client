@@ -7,7 +7,7 @@ use boa_engine::{
     property::Attribute,
 };
 
-use crate::{tasks, tunnel, log};
+use shared::{tasks, tunnel, log};
 
 fn add_early_unlinkable_file_fn(
     _: &JsValue,
@@ -135,7 +135,7 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::js::{create_context, exec_script};
+    use crate::{create_context, exec_script};
     use crate::log;
 
     use super::*;

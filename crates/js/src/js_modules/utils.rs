@@ -2,10 +2,10 @@ use anyhow::Result;
 use boa_engine::{Context, JsResult, JsString, JsValue, error::JsNativeError};
 use std::cell::RefCell;
 
-use crate::js::helpers;
+use crate::helpers;
 
 #[cfg(target_os = "windows")]
-use crate::system::{
+use shared::system::{
     crypt_protect_data, read_hkcu_str, read_hklm_str, write_hkcu_dword, write_hkcu_str,
 };
 
@@ -152,10 +152,9 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        js::{create_context, exec_script_with_result},
-        log,
-    };
+    use shared::log;
+
+    use crate::{create_context, exec_script_with_result};
 
     use anyhow::Result;
 
@@ -195,7 +194,6 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(test)]
     #[tokio::test]
     #[ignore = "Requires a server to access internet"]
     async fn test_utils_test_server_works() -> Result<()> {
@@ -227,7 +225,6 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(test)]
     #[tokio::test]
     async fn test_utils_test_server_fails() -> Result<()> {
         log::setup_logging("debug", log::LogType::Tests);
@@ -256,7 +253,6 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(test)]
     #[tokio::test]
     #[cfg(target_os = "windows")]
     async fn test_utils_crypt_protect_data() -> Result<()> {

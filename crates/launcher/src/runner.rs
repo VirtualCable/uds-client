@@ -118,7 +118,7 @@ pub async fn run(
                 }
                 log::debug!("Received script: {:?}", script);
                 tx.send(GuiMessage::Hide).ok();
-                script.execute().await?;
+                js::run_script(&script).await?;
                 break;
             }
             Err(e) => {

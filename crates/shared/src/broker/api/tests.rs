@@ -92,7 +92,7 @@ async fn test_get_script() {
     let response = api.get_script("ticket", "scrabler").await;
     assert!(response.is_ok(), "Get script failed: {:?}", response);
     let script = response.unwrap();
-    assert_eq!(script.script_type, "javascript");
+    assert_eq!(script.script_type, types::ScriptType::Javascript);
 }
 
 #[tokio::test]
