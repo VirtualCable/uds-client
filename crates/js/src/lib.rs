@@ -1,13 +1,17 @@
 use std::rc::Rc;
 
 use anyhow::Result;
-
 use boa_engine::{
     Context, JsValue, Module, js_string,
     module::{MapModuleLoader, SyntheticModuleInitializer},
 };
 
-use shared::{broker::api::types::{Script, ScriptType}, log};
+use shared::{
+    broker::api::types::{Script, ScriptType},
+    log,
+};
+
+pub mod gui;
 
 // Helpers functions for javascript rust bindings
 #[macro_use]
@@ -112,7 +116,8 @@ pub async fn run_script(script: &Script) -> Result<()> {
     // If not javascript type, return error
     if script.script_type != ScriptType::Javascript {
         return Err(anyhow::anyhow!(
-            "Unsupported script type: {}", script.script_type
+            "Unsupported script type: {}",
+            script.script_type
         ));
     }
     let script_content = script.decoded_script()?;

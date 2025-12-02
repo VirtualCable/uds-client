@@ -4,7 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+rdp = { path = "../rdp/rdp" }
 shared = { path = "../shared" }
+gui = { path = "../gui" }
 
 # JavaScript engine
 boa_engine = { version = "0.21.0" }
@@ -23,6 +25,9 @@ rand = "0.9.2"
 
 # For checking if a file is executable
 is_executable = "1.0.5"
+
+# For connecting to egui
+crossbeam = "0.8.4"
 
 [dev-dependencies]
 base64 = "0.22.1"
