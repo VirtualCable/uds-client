@@ -11,6 +11,7 @@ This document describes the JavaScript modules and functions available in the ru
 | Logger   | Logging functions at different levels | 5 |
 | Process  | Executable finding, process launching, and management | 8 |
 | Tasks    | Task management, cleanup files, and tunnel connections | 4 |
+| RDP      | RDP connection management | 1 |
 
 ## Utils Module
 
@@ -92,6 +93,22 @@ Waits for a specified number of milliseconds.
 
 **Returns:** undefined
 
+### Examples
+
+```javascript
+// Wait for 1 second
+await Utils.sleep(1000);
+
+// Test server connectivity
+const isOpen = await Utils.testServer("google.com", 80, 1000);
+
+// Expand environment variables
+const expanded = Utils.expandVars("%USERPROFILE%/file.txt");
+
+// Read registry (Windows only)
+const value = Utils.readHklm("SOFTWARE\\Microsoft\\Windows\\CurrentVersion", "ProgramFilesDir");
+```
+
 ## File Module
 
 The File module provides functions for file operations, temporary file creation, and directory access.
@@ -169,6 +186,25 @@ Gets the user's home directory path.
 
 **Returns:** string - The home directory path.
 
+### Examples
+
+```javascript
+// Create a temporary file
+const tempPath = File.createTempFile(null, "Hello World", "txt");
+
+// Read file content
+const content = File.read(tempPath);
+
+// Write new content
+File.write(tempPath, "New content");
+
+// Check if file exists
+const exists = File.exists(tempPath);
+
+// Get temp directory
+const tempDir = File.getTempDirectory();
+```
+
 ## Logger Module
 
 The Logger module provides logging functions at different levels.
@@ -207,6 +243,16 @@ Logs a message at error level.
 
 **Parameters:**
 - `msg` (string): The message to log.
+
+### Examples
+
+```javascript
+Logger.trace("This is a trace message");
+Logger.debug("This is a debug message");
+Logger.info("This is an info message");
+Logger.warn("This is a warning message");
+Logger.error("This is an error message");
+```
 
 ## Process Module
 
@@ -285,6 +331,29 @@ Waits for a specified number of milliseconds.
 
 **Returns:** undefined
 
+### Examples
+
+```javascript
+// Find an executable
+const path = Process.findExecutable("notepad.exe");
+
+// Launch an application
+const pid = Process.launch("notepad.exe", []);
+
+// Check if running
+const isRunning = Process.isRunning(pid);
+
+// Wait for process
+await Process.wait(pid);
+
+// Launch and wait for output
+const result = await Process.launchAndWait("echo", ["Hello"], 5000);
+console.log(result.stdout); // "Hello"
+
+// Sleep for 1 second
+await Process.sleep(1000);
+```
+
 ## Tasks Module
 
 The Tasks module provides functions for managing tasks, files to be cleaned up, and tunnel connections.
@@ -318,13 +387,69 @@ Starts a tunnel connection.
 - `addr` (string): The address to connect to.
 - `port` (number): The port number.
 - `ticket` (string): The connection ticket.
-- `listen_timeout_ms` (number, optional): Listen timeout in milliseconds (default: 0).
-- `local_port` (number, optional): The local port to bind to.
+- `startup_time_ms` (number, optional): Startup timeout in milliseconds (default: 0).
 - `check_certificate` (boolean, optional): Whether to check certificates (default: true).
+- `local_port` (number, optional): The local port to bind to.
 - `keep_listening_after_timeout` (boolean, optional): Whether to keep listening after timeout (default: false).
 - `enable_ipv6` (boolean, optional): Whether to enable IPv6 (default: false).
 
 **Returns:** object - An object containing the assigned port: `{port: number}`.
+
+### Examples
+
+```javascript
+// Add files for cleanup
+Tasks.addEarlyUnlinkableFile("temp1.txt");
+Tasks.addLateUnlinkableFile("temp2.txt");
+
+// Add waitable app
+Tasks.addWaitableApp(12345);
+
+// Start tunnel
+const tunnel = await Tasks.startTunnel("example.com", 443, "ticket123", 5000, true);
+console.log("Tunnel port:", tunnel.port);
+```
+
+## RDP Module
+
+The RDP module provides functions for managing RDP connections.
+
+### start (async)
+
+Starts an RDP connection with the specified settings.
+
+**Parameters:**
+- `settings` (object): An object containing RDP connection settings with the following optional properties:
+  - `server` (string): The RDP server address (required).
+  - `port` (number, optional): The RDP server port (default: 3389).
+  - `user` (string, optional): The username for authentication.
+  - `password` (string, optional): The password for authentication.
+  - `domain` (string, optional): The domain for authentication.
+  - `verify_cert` (boolean, optional): Whether to verify the server certificate (default: true).
+  - `use_nla` (boolean, optional): Whether to use Network Level Authentication (default: true).
+  - `screen_width` (number, optional): The screen width (0 for full screen).
+  - `screen_height` (number, optional): The screen height (0 for full screen).
+  - `drives_to_redirect` (array of strings, optional): List of drive letters to redirect.
+
+**Returns:** undefined
+
+### Examples
+
+```javascript
+// Start RDP connection with basic settings
+await RDP.start({
+    server: "192.168.1.100",
+    port: 3389,
+    user: "username",
+    password: "password",
+    domain: "DOMAIN",
+    verify_cert: true,
+    use_nla: true,
+    screen_width: 1920,
+    screen_height: 1080,
+    drives_to_redirect: ["C", "D"]
+});
+```
 
 ## Complete Function Reference
 
@@ -362,4 +487,5 @@ Starts a tunnel connection.
 | Tasks   | addEarlyUnlinkableFile   | file_path: string | Adds file for early cleanup |
 | Tasks   | addLateUnlinkableFile    | file_path: string | Adds file for late cleanup |
 | Tasks   | addWaitableApp           | task_handle: number | Adds waitable application |
-| Tasks   | startTunnel (async)      | addr: string, port: number, ticket: string, listen_timeout_ms?: number, local_port?: number, check_certificate?: boolean, keep_listening_after_timeout?: boolean, enable_ipv6?: boolean | Starts tunnel connection |
+| Tasks   | startTunnel (async)      | addr: string, port: number, ticket: string, startup_time_ms?: number, check_certificate?: boolean, local_port?: number, keep_listening_after_timeout?: boolean, enable_ipv6?: boolean | Starts tunnel connection |
+| RDP     | start (async)            | settings: object | Starts RDP connection |

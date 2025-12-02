@@ -99,7 +99,75 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
         // Sync functions
         [],
         // Async functions, none here
-        [("startRDP", start_rdp_fn, 1)],
+        [("start", start_rdp_fn, 1)],
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{create_context, exec_script};
+    use anyhow::Result;
+    use shared::log;
+    use crossbeam::channel::{Receiver, Sender, bounded};
+
+    #[tokio::test]
+    async fn test_init_ctx() -> Result<()> {
+        log::setup_logging("debug", log::LogType::Tests);
+        let (messages_tx, messages_rx): (
+            Sender<gui::window::types::GuiMessage>,
+            Receiver<gui::window::types::GuiMessage>,
+        ) = bounded(32);
+
+        crate::gui::set_sender(messages_tx);
+
+        let mut ctx = create_context(None)?;
+        register(&mut ctx)?;
+        let script = r#"
+            let rdpSettings = {
+                server: "localhost",
+                port: 3389,
+                user: "testuser",
+                password: "password",
+                domain: "DOMAIN",
+                verify_cert: true,
+                use_nla: true,
+                screen_width: 1024,
+                screen_height: 768,
+                drives_to_redirect: ["C", "D"]
+            };
+            RDP.start(rdpSettings);
+        "#;
+        _ = exec_script(&mut ctx, script).await;
+        // Verify that a GuiMessage::ConnectRdp was sent
+        match messages_rx.try_recv() {
+            Ok(gui_msg) => {
+                match gui_msg {
+                    GuiMessage::ConnectRdp(settings) => {
+                        assert_eq!(settings.server, "localhost");
+                        assert_eq!(settings.port, 3389);
+                        assert_eq!(settings.user, "testuser");
+                        assert_eq!(settings.password, "password");
+                        assert_eq!(settings.domain, "DOMAIN");
+                        assert!(settings.verify_cert);
+                        assert!(settings.use_nla);
+                        match settings.screen_size {
+                            ScreenSize::Fixed(w, h) => {
+                                assert_eq!(w, 1024);
+                                assert_eq!(h, 768);
+                            }
+                            _ => panic!("Expected fixed screen size"),
+                        }
+                        assert_eq!(settings.drives_to_redirect, vec!["C", "D"]);
+                    }
+                    _ => panic!("Expected GuiMessage::ConnectRdp"),
+                }
+            }
+            Err(e) => {
+                panic!("Expected a GuiMessage but none was sent: {}", e);
+            }
+        }
+        Ok(())
+    }
 }
