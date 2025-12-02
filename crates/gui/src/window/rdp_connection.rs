@@ -123,7 +123,9 @@ impl AppWindow {
         }));
 
         std::thread::spawn(move || {
+            shared::tasks::mark_internal_rdp_as_launched();
             let res = rdp.run();
+            shared::tasks::mark_internal_rdp_as_not_running();
             log::debug!("RDP thread exiting...");
             if let Err(e) = res {
                 log::debug!("RDP thread ended with error: {}", e);

@@ -15,6 +15,8 @@ static EARLY_UNLINKABLE_FILES: LazyLock<Mutex<Vec<String>>> =
 static LATE_UNLINKABLE_FILES: LazyLock<Mutex<Vec<String>>> =
     LazyLock::new(|| Mutex::new(Vec::<String>::new()));
 
+static INTERNAL_RDP_RUNNING: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(false));
+
 // add task to wait loop, initally, we will only watch this task, not the child processes
 pub fn add_waitable_app(task_handle: u32) {
     let mut tasks = WAITABLE_APPS.lock().unwrap();
@@ -47,9 +49,34 @@ pub async fn wait_all_apps(stop: Trigger) {
 }
 
 pub async fn wait_all_tunnels(stop: Trigger) {
-    
     loop {
         if !is_any_tunnel_active()
+            || stop
+                .async_wait_timeout(std::time::Duration::from_secs(2))
+                .await
+        {
+            break;
+        }
+    }
+}
+
+pub fn mark_internal_rdp_as_launched() {
+    let mut launched = INTERNAL_RDP_RUNNING.lock().unwrap();
+    *launched = true;
+}
+
+pub fn mark_internal_rdp_as_not_running() {
+    let mut launched = INTERNAL_RDP_RUNNING.lock().unwrap();
+    *launched = false;
+}
+
+async fn wait_internal_rdp(stop: Trigger) {
+    loop {
+        let running = {
+            let running = INTERNAL_RDP_RUNNING.lock().unwrap();
+            *running
+        };
+        if running
             || stop
                 .async_wait_timeout(std::time::Duration::from_secs(2))
                 .await
@@ -100,6 +127,9 @@ pub async fn wait_all_and_cleanup(timeout: std::time::Duration, stop: Trigger) {
     // Wait all apps to finish, or until stop is set
     // give stop as we do no need anymore it ownership
     wait_all_apps(stop.clone()).await;
+
+    // Wait internal RDP client to finish if any
+    wait_internal_rdp(stop.clone()).await;
 
     // Also for tunnels. On linux/macOS, the apps may run on background but tunnels may remain
     // so we wait for tunnels separately

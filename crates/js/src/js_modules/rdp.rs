@@ -104,8 +104,8 @@ mod tests {
     use super::*;
     use crate::{create_context, exec_script};
     use anyhow::Result;
-    use shared::log;
     use crossbeam::channel::{Receiver, Sender, bounded};
+    use shared::log;
 
     #[tokio::test]
     async fn test_init_ctx() -> Result<()> {
@@ -137,28 +137,26 @@ mod tests {
         _ = exec_script(&mut ctx, script).await;
         // Verify that a GuiMessage::ConnectRdp was sent
         match messages_rx.try_recv() {
-            Ok(gui_msg) => {
-                match gui_msg {
-                    GuiMessage::ConnectRdp(settings) => {
-                        assert_eq!(settings.server, "localhost");
-                        assert_eq!(settings.port, 3389);
-                        assert_eq!(settings.user, "testuser");
-                        assert_eq!(settings.password, "password");
-                        assert_eq!(settings.domain, "DOMAIN");
-                        assert!(settings.verify_cert);
-                        assert!(settings.use_nla);
-                        match settings.screen_size {
-                            ScreenSize::Fixed(w, h) => {
-                                assert_eq!(w, 1024);
-                                assert_eq!(h, 768);
-                            }
-                            _ => panic!("Expected fixed screen size"),
+            Ok(gui_msg) => match gui_msg {
+                GuiMessage::ConnectRdp(settings) => {
+                    assert_eq!(settings.server, "localhost");
+                    assert_eq!(settings.port, 3389);
+                    assert_eq!(settings.user, "testuser");
+                    assert_eq!(settings.password, "password");
+                    assert_eq!(settings.domain, "DOMAIN");
+                    assert!(settings.verify_cert);
+                    assert!(settings.use_nla);
+                    match settings.screen_size {
+                        ScreenSize::Fixed(w, h) => {
+                            assert_eq!(w, 1024);
+                            assert_eq!(h, 768);
                         }
-                        assert_eq!(settings.drives_to_redirect, vec!["C", "D"]);
+                        _ => panic!("Expected fixed screen size"),
                     }
-                    _ => panic!("Expected GuiMessage::ConnectRdp"),
+                    assert_eq!(settings.drives_to_redirect, vec!["C", "D"]);
                 }
-            }
+                _ => panic!("Expected GuiMessage::ConnectRdp"),
+            },
             Err(e) => {
                 panic!("Expected a GuiMessage but none was sent: {}", e);
             }

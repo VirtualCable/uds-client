@@ -147,8 +147,8 @@ pub async fn run(
         }
     }
 
-    // All done, send close message
-    tx.send(GuiMessage::Close).ok();
+    // All done, send hide message
+    tx.send(GuiMessage::Hide).ok();
 
     // Execute the tasks in background, and wait with cleanup
     tasks::wait_all_and_cleanup(std::time::Duration::from_secs(4), stop).await;

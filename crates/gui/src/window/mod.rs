@@ -80,6 +80,9 @@ impl AppWindow {
         let screen_size = (1920.0, 1080.0); // TODO: Get actual screen size
         let x_coord = (screen_size.0 - size.x) / 2.0;
         let y_coord = (screen_size.1 - size.y) / 2.0;
+
+        // Set window size and position
+        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
         ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(decorations));
         ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(size));
         ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(

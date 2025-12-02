@@ -15,5 +15,6 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
     process::register(ctx)?;
     tasks::register(ctx)?;
     file::register(ctx)?;
+    rdp::register(ctx)?;
     Ok(())
 }

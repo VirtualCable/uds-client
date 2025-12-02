@@ -3,8 +3,9 @@ use std::io::Write;
 use anyhow::Result;
 use base64::engine::{Engine as _, general_purpose::STANDARD};
 use bzip2::write::BzEncoder;
+use crossbeam::channel::{Receiver, Sender, bounded};
 
-use shared::{broker::api::types, log};
+use shared::{broker::api::types, log, system::trigger::Trigger};
 
 // Get script and json with params from args
 // The signature file is the script file + mldsa65.sig
@@ -57,8 +58,29 @@ async fn get_script_and_params() -> Result<types::Script> {
     })
 }
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> Result<()> {
+fn run_script() {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.block_on(async {
+        let script = match get_script_and_params().await {
+            Ok(s) => s,
+            Err(e) => {
+                log::error!("Error getting script and params: {}", e);
+                return;
+            }
+        };
+
+        match js::run_script(&script).await {
+            Ok(_) => log::info!("Script executed successfully."),
+            Err(e) => log::error!("Error executing script: {}", e),
+        }
+    });
+}
+
+fn main() -> Result<()> {
     log::setup_logging("debug", log::LogType::Tests);
     shared::tls::init_tls(None); // Initialize root certs and tls related stuff
 
@@ -66,20 +88,32 @@ async fn main() -> Result<()> {
         "Current working directory: {}",
         std::env::current_dir()?.display()
     );
-    let script = get_script_and_params().await?;
 
     // if let Err(e) = script.verify_signature() {
     //     println!("Script signature verification failed: {}", e);
     //     return Ok(());
     // }
 
-    // Run the script
-    js::run_script(&script).await?;
-    shared::tasks::wait_all_and_cleanup(
-        std::time::Duration::from_secs(4),
-        shared::system::trigger::Trigger::new(),
+    let fake_catalog = gettext::Catalog::empty(); // Empty catalog for now
+    log::setup_logging("trace", log::LogType::Tests);
+    let (_messages_tx, messages_rx): (
+        Sender<gui::window::types::GuiMessage>,
+        Receiver<gui::window::types::GuiMessage>,
+    ) = bounded(32);
+
+    let stop_trigger = Trigger::new();
+    js::gui::set_sender(_messages_tx.clone());
+
+    // Run the script on a thread
+    std::thread::spawn(run_script);
+
+    gui::run_gui(
+        fake_catalog,
+        Some(gui::window::types::AppState::Test),
+        messages_rx,
+        stop_trigger.clone(),
     )
-    .await;
+    .unwrap();
 
     Ok(())
 }
