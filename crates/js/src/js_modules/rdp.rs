@@ -48,13 +48,8 @@ impl RdpSettings {
     }
 }
 
-async fn start_rdp_fn(
-    _: &JsValue,
-    args: &[JsValue],
-    ctx: &std::cell::RefCell<&mut Context>,
-) -> JsResult<JsValue> {
-    let mut ctx_borrow = ctx.borrow_mut();
-    let rdp_settings = extract_js_args!(args, &mut ctx_borrow, RdpSettings);
+fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let rdp_settings = extract_js_args!(args, ctx, RdpSettings);
     if !rdp_settings.is_valid() {
         return Err(JsError::from_native(
             JsNativeError::error().with_message("Invalid RDP settings: 'server' is required"),
@@ -97,9 +92,9 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
         ctx,
         "RDP",
         // Sync functions
-        [],
-        // Async functions, none here
         [("start", start_rdp_fn, 1)],
+        // Async functions, none here
+        [],
     );
     Ok(())
 }

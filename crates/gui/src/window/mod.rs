@@ -133,6 +133,7 @@ impl eframe::App for AppWindow {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         // If stop has been triggered, close the window
         if self.stop.is_set() {
+            log::debug!("Stop triggered, closing window.");
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             return;
         }

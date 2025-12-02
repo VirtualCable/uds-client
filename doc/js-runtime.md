@@ -414,7 +414,7 @@ console.log("Tunnel port:", tunnel.port);
 
 The RDP module provides functions for managing RDP connections.
 
-### start (async)
+### start
 
 Starts an RDP connection with the specified settings.
 
@@ -437,7 +437,7 @@ Starts an RDP connection with the specified settings.
 
 ```javascript
 // Start RDP connection with basic settings
-await RDP.start({
+RDP.start({
     server: "192.168.1.100",
     port: 3389,
     user: "username",
@@ -488,4 +488,4 @@ await RDP.start({
 | Tasks   | addLateUnlinkableFile    | file_path: string | Adds file for late cleanup |
 | Tasks   | addWaitableApp           | task_handle: number | Adds waitable application |
 | Tasks   | startTunnel (async)      | addr: string, port: number, ticket: string, startup_time_ms?: number, check_certificate?: boolean, local_port?: number, keep_listening_after_timeout?: boolean, enable_ipv6?: boolean | Starts tunnel connection |
-| RDP     | start (async)            | settings: object | Starts RDP connection |
+| RDP     | start            | settings: object | Starts RDP connection |

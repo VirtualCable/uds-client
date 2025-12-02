@@ -58,35 +58,11 @@ fn main() {
     ) = bounded(32);
 
     // Launch async thread with tokio runtime
-    asyncthread::run(messages_tx, stop.clone(), host, ticket, scrambler);
+    asyncthread::run(messages_tx.clone(), stop.clone(), host, ticket, scrambler);
+
+    js::gui::set_sender(messages_tx.clone());
 
     gui::run_gui(intl::get_catalog().clone(), None, messages_rx, stop.clone()).unwrap();
-
-    // let icon = logo::load_icon();
-
-    // // Window configuration
-    // let native_options = eframe::NativeOptions {
-    //     viewport: egui::ViewportBuilder::default()
-    //         .with_decorations(false)
-    //         .with_inner_size([320.0, 280.0])
-    //         .with_app_id("UDSLauncher")
-    //         .with_icon(icon)
-    //         .with_resizable(false),
-    //     centered: true,
-    //     ..Default::default()
-    // };
-
-    // if let Err(e) = eframe::run_native(
-    //     "UDS Launcher",
-    //     native_options,
-    //     Box::new(|_cc| {
-    //         // Return the app implementation.
-    //         Ok(Box::new(progress))
-    //     }),
-    // ) {
-    //     eprintln!("Error starting gui: {}", e);
-    //     log::error!("Error starting gui: {}", e);
-    // }
 
     // Gui closed, wait for app to finish also
     stop.wait();
