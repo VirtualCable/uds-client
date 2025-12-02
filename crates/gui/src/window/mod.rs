@@ -182,7 +182,7 @@ impl eframe::App for AppWindow {
                 }
                 types::GuiMessage::ConnectRdp(settings) => {
                     log::debug!("Received RDP connect message: {:?}", settings);
-                    self.enter_rdp_connection(ctx, settings).ok();
+                    self.enter_rdp_preconnection(ctx, settings).ok();
                 }
             }
         }

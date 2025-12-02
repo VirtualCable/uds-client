@@ -22,7 +22,7 @@ struct RdpSettings {
     pub use_nla: Option<bool>,
     pub screen_width: Option<u32>,
     pub screen_height: Option<u32>,
-    pub drives_to_redirect: Vec<String>,
+    pub drives_to_redirect: Option<Vec<String>>,
 }
 
 impl Default for RdpSettings {
@@ -37,7 +37,7 @@ impl Default for RdpSettings {
             use_nla: None,
             screen_width: None,
             screen_height: None,
-            drives_to_redirect: vec![],
+            drives_to_redirect: None,
         }
     }
 }
@@ -50,6 +50,7 @@ impl RdpSettings {
 
 fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let rdp_settings = extract_js_args!(args, ctx, RdpSettings);
+    shared::log::debug!("RDP settings from JS: {:?}", rdp_settings);
     if !rdp_settings.is_valid() {
         return Err(JsError::from_native(
             JsNativeError::error().with_message("Invalid RDP settings: 'server' is required"),
@@ -79,7 +80,7 @@ fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
         verify_cert: rdp_settings.verify_cert.unwrap_or(true),
         use_nla: rdp_settings.use_nla.unwrap_or(true),
         screen_size,
-        drives_to_redirect: rdp_settings.drives_to_redirect,
+        drives_to_redirect: rdp_settings.drives_to_redirect.unwrap_or_default(),
     };
 
     send_message(GuiMessage::ConnectRdp(settings));
