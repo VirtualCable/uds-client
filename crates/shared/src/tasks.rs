@@ -60,23 +60,27 @@ pub async fn wait_all_tunnels(stop: Trigger) {
     }
 }
 
-pub fn mark_internal_rdp_as_launched() {
-    let mut launched = INTERNAL_RDP_RUNNING.lock().unwrap();
-    *launched = true;
+pub fn mark_internal_rdp_as_running() {
+    log::debug!("Marking internal RDP client as running");
+    let mut running = INTERNAL_RDP_RUNNING.lock().unwrap();
+    *running = true;
 }
 
 pub fn mark_internal_rdp_as_not_running() {
-    let mut launched = INTERNAL_RDP_RUNNING.lock().unwrap();
-    *launched = false;
+    log::debug!("Marking internal RDP client as not running");
+    let mut running = INTERNAL_RDP_RUNNING.lock().unwrap();
+    *running = false;
+}
+
+pub fn is_internal_rdp_running() -> bool {
+    let running = INTERNAL_RDP_RUNNING.lock().unwrap();
+    log::debug!("Internal RDP running state is {}", *running);
+    *running
 }
 
 async fn wait_internal_rdp(stop: Trigger) {
     loop {
-        let running = {
-            let running = INTERNAL_RDP_RUNNING.lock().unwrap();
-            *running
-        };
-        if running
+        if !is_internal_rdp_running()
             || stop
                 .async_wait_timeout(std::time::Duration::from_secs(2))
                 .await

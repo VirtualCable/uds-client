@@ -92,6 +92,7 @@ impl<T> Deref for SafePtr<T> {
 
 pub type SafeHandle = SafePtr<std::os::raw::c_void>;
 
+
 impl SafeHandle {
     pub fn as_handle(&self) -> HANDLE {
         self.ptr.as_ptr() as HANDLE

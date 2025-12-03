@@ -30,6 +30,7 @@ pub struct RdpAppProxy<'a> {
     eframe_app: EframeWinitApplication<'a>,
     events: Sender<input::RawKey>,
     processing_events: Arc<AtomicBool>,
+    stop: Trigger,
 }
 
 // Implement ApplicationHandler to intercept events
@@ -45,6 +46,11 @@ impl ApplicationHandler<UserEvent> for RdpAppProxy<'_> {
         event: winit::event::WindowEvent,
     ) {
         // If a window event, try to push keyboard events to the channel
+        // If close event, trigger stop but allow eframe to handle closing
+        if let winit::event::WindowEvent::CloseRequested = &event {
+            self.stop.set();
+        }
+        
         if self.processing_events.load(Ordering::Relaxed)
             && let winit::event::WindowEvent::KeyboardInput { event, .. } = &event
             && let PhysicalKey::Code(code) = event.physical_key
@@ -126,6 +132,7 @@ pub fn run_gui(
 
     let winit_app = {
         let processing_events = processing_events.clone();
+        let stop = stop.clone();
         eframe::create_native(
             "UDS Launcher",
             native_options,
@@ -147,6 +154,7 @@ pub fn run_gui(
         events: keys_tx,
         eframe_app: winit_app,
         processing_events,
+        stop,
     };
 
     event_loop.run_app(&mut eframe_app_proxy)?;

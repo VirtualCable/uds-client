@@ -40,12 +40,18 @@ pub struct Rdp {
     update_tx: Option<Sender<RdpMessage>>,
     // GDI lock for thread safety
     gdi_lock: Arc<RwLock<()>>,
+    stop_event: SafeHandle,
     _pin: std::marker::PhantomPinned, // Do not allow moving
 }
 
 #[allow(dead_code)]
 impl Rdp {
     pub fn new(settings: RdpSettings, update_tx: Sender<RdpMessage>) -> Self {
+        let stop_event: HANDLE =
+            unsafe { CreateEventW(std::ptr::null_mut(), 1, 0, std::ptr::null()) };
+
+        let stop_event = SafeHandle::new(stop_event).unwrap();
+
         Rdp {
             config: Config {
                 settings,
@@ -54,6 +60,7 @@ impl Rdp {
             instance: None,
             update_tx: Some(update_tx),
             gdi_lock: Arc::new(RwLock::new(())),
+            stop_event,
             _pin: std::marker::PhantomPinned,
         }
     }
@@ -263,6 +270,19 @@ impl Rdp {
         };
     }
 
+    pub fn get_stop_event(&self) -> SafeHandle {
+        SafeHandle::new(self.stop_event.as_handle()).unwrap_or_else(|| {
+            panic!("Failed to clone stop event handle");
+        })
+    }
+
+    // Note: For conveinence only, does not has "self"
+    pub fn set_stop_event(stop_event: &SafeHandle) {
+        unsafe {
+            SetEvent(stop_event.as_handle());
+        }
+    }
+
     pub fn input(&self) -> Option<*mut rdpInput> {
         if let Some(context) = self.context() {
             let input = context.context().input;
@@ -318,11 +338,6 @@ impl Rdp {
             return Err(anyhow::anyhow!("No update sender provided"));
         };
 
-        let stop_event: HANDLE =
-            unsafe { CreateEventW(std::ptr::null_mut(), 1, 0, std::ptr::null()) };
-
-        let stop_event = SafeHandle::new(stop_event).unwrap();
-
         if context.is_null() {
             return Err(anyhow::anyhow!("RDP context is null"));
         }
@@ -353,7 +368,7 @@ impl Rdp {
                 break;
             }
             // Add our stop event handle
-            handles[handle_count] = stop_event.as_handle();
+            handles[handle_count] = self.stop_event.as_handle();
 
             let wait_result = unsafe {
                 WaitForMultipleObjects(
@@ -393,12 +408,7 @@ impl Rdp {
 
         // Ensure we wait a bit for the disconnect to process
         // Will know with the stop_event, that will be set on main before joining
-        unsafe { WaitForSingleObject(stop_event.as_handle(), 2000) };
-
-        // Destroy the stop event
-        unsafe {
-            CloseHandle(stop_event.as_handle());
-        }
+        unsafe { WaitForSingleObject(self.stop_event.as_handle(), 2000) };
 
         Ok(())
     }
@@ -442,6 +452,8 @@ impl Drop for Rdp {
                 freerdp_context_free(conn.as_mut_ptr());
                 freerdp_free(conn.as_mut_ptr());
                 self.instance = None;
+                // Destroy the stop event
+                CloseHandle(self.stop_event.as_handle());
             }
         }
     }

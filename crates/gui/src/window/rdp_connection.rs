@@ -123,7 +123,9 @@ impl AppWindow {
         }));
 
         std::thread::spawn(move || {
-            shared::tasks::mark_internal_rdp_as_launched();
+            // Note: This may already be marked as launched from external RDP launcher
+            // But ensure it is marked here as well (to allow using from other gui launchers as test app)
+            shared::tasks::mark_internal_rdp_as_running();
             let res = rdp.run();
             shared::tasks::mark_internal_rdp_as_not_running();
             log::debug!("RDP thread exiting...");
@@ -213,11 +215,13 @@ impl AppWindow {
                             log::debug!("RDP Disconnected");
                             // TODO: Handle disconnection properly
                             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                            self.stop.set();
                             break;
                         }
                         RdpMessage::Error(err) => {
                             log::debug!("RDP Error: {}", err);
                             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                            self.stop.set();
                             break;
                         }
                         RdpMessage::FocusRequired => {

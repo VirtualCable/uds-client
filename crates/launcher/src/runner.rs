@@ -147,8 +147,13 @@ pub async fn run(
         }
     }
 
-    // All done, send hide message
-    tx.send(GuiMessage::Hide).ok();
+    // All done, send hide message if NOT internal RDP is running
+    if shared::tasks::is_internal_rdp_running() {
+        log::debug!("Internal RDP is running.");
+    } else {
+        log::debug!("Hiding GUI.");
+        tx.send(GuiMessage::Hide).ok();
+    }
 
     // Execute the tasks in background, and wait with cleanup
     tasks::wait_all_and_cleanup(std::time::Duration::from_secs(4), stop).await;
