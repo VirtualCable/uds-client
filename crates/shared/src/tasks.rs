@@ -74,7 +74,6 @@ pub fn mark_internal_rdp_as_not_running() {
 
 pub fn is_internal_rdp_running() -> bool {
     let running = INTERNAL_RDP_RUNNING.lock().unwrap();
-    log::debug!("Internal RDP running state is {}", *running);
     *running
 }
 
