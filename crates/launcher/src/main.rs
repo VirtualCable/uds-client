@@ -12,13 +12,16 @@ mod logo;
 mod runner;
 
 fn collect_arguments() -> Option<(String, String, String)> {
+    let args = std::env::args().collect();
+
     // For debugging purposes, allow setting args via env variable
-    let args: Vec<String> = if cfg!(not(debug_assertions)) || std::env::var("UDS_DEBUG_ARGS").is_err() {
-        std::env::args().collect()
+    #[cfg(debug_assertions)]
+    let args = if let Ok(debug_args) = std::env::var("UDS_DEBUG_ARGS") {
+        ["program".to_string(), debug_args].to_vec()
     } else {
-        // These must exists on UDS broker test environment
-        ["program".to_string(), std::env::var("UDS_DEBUG_ARGS").unwrap()].to_vec()
+        args
     };
+
     // Should have only 1 argument, "udssv2://host/ticket/scrambler"
     if args.len() != 2 || !args[1].starts_with("udssv2://") {
         return None;
