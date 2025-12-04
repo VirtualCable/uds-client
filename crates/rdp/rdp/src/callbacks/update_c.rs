@@ -2,7 +2,7 @@ use freerdp_sys::{
     BITMAP_UPDATE, BOOL, BYTE, FreeRDP_Settings_Keys_UInt32_FreeRDP_DesktopHeight, FreeRDP_Settings_Keys_UInt32_FreeRDP_DesktopWidth, MONITOR_DEF, PALETTE_UPDATE, PLAY_SOUND_UPDATE, RECTANGLE_16, SURFACE_BITS_COMMAND, UINT16, UINT32, freerdp_settings_get_uint32, gdi_resize, rdpBounds, rdpContext, wStream
 };
 
-use super::{super::connection::context::OwnerFromCtx, update::UpdateCallbacks};
+use super::{super::context::OwnerFromCtx, update::UpdateCallbacks};
 use shared::log::debug;
 
 #[allow(dead_code)]

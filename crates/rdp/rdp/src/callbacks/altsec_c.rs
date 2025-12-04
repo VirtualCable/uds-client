@@ -6,7 +6,7 @@ use freerdp_sys::{
 };
 
 use super::{
-    super::{connection::context::OwnerFromCtx, utils::ToStringLossy},
+    super::{context::OwnerFromCtx, utils::ToStringLossy},
     altsec::AltSecCallbacks,
 };
 

@@ -13,8 +13,10 @@ pub mod geom;
 pub mod keymap;
 pub mod settings;
 
-// Re-export sys module
+pub mod context;
 pub mod messaging;
+
+// Re-export sys module
 pub mod sys;
 
 #[derive(Debug, Default)]
@@ -54,6 +56,65 @@ impl Rdp {
             disp: None,
             stop_event,
             _pin: std::marker::PhantomPinned,
+        }
+    }
+
+    pub fn context(&self) -> Option<&context::RdpContext> {
+        unsafe {
+            if let Some(instance) = self.instance {
+                let ctx = instance.context as *mut context::RdpContext;
+                if ctx.is_null() { None } else { Some(&*ctx) }
+            } else {
+                None
+            }
+        }
+    }
+
+    pub fn get_stop_event(&self) -> crate::utils::SafeHandle {
+        crate::utils::SafeHandle::new(self.stop_event.as_handle()).unwrap_or_else(|| {
+            panic!("Failed to clone stop event handle");
+        })
+    }
+
+    // Note: For conveinence only, does not has "self"
+    pub fn set_stop_event(stop_event: &crate::utils::SafeHandle) {
+        unsafe {
+            freerdp_sys::SetEvent(stop_event.as_handle());
+        }
+    }
+
+    pub fn input(&self) -> Option<*mut freerdp_sys::rdpInput> {
+        if let Some(context) = self.context() {
+            let input = context.context().input;
+            if input.is_null() { None } else { Some(input) }
+        } else {
+            None
+        }
+    }
+
+    pub fn gdi(&self) -> Option<*mut freerdp_sys::rdpGdi> {
+        if let Some(context) = self.context() {
+            let gdi = context.context().gdi;
+            if gdi.is_null() { None } else { Some(gdi) }
+        } else {
+            None
+        }
+    }
+
+    pub fn gdi_lock(&self) -> Arc<RwLock<()>> {
+        self.gdi_lock.clone()
+    }
+
+    // Note: Rdp does not knows if it is fullscree or not
+    // Always returns the current size unless there is no GDI
+    // then returns 0x0 (But not Full)
+    pub fn screen_size(&self) -> geom::ScreenSize {
+        if let Some(gdi) = self.gdi() {
+            let width = unsafe { (*gdi).width as u32 };
+            let height = unsafe { (*gdi).height as u32 };
+            geom::ScreenSize::Fixed(width, height)
+        } else {
+            geom::ScreenSize::Fixed(0, 0)
         }
     }
 }

@@ -35,6 +35,7 @@ pub(super) struct AppWindow {
     pub events: Receiver<input::RawKey>,
     pub gui_messages_rx: Receiver<types::GuiMessage>,
     pub stop: Trigger,             // For stopping any ongoing operations
+    pub screen_size: Option<(u32, u32)>, // Cached screen size
     pub catalog: gettext::Catalog, // For translations
 }
 
@@ -62,12 +63,19 @@ impl AppWindow {
             gui_messages_rx,
             processing_events,
             stop,
+            screen_size: None,
             catalog,
         }
     }
 
     pub fn gettext(&self, msgid: &str) -> String {
         self.catalog.gettext(msgid).to_string()
+    }
+
+    pub fn exit(&mut self, ctx: &eframe::egui::Context) {
+        log::debug!("Exiting application...");
+        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        self.stop.set();
     }
 
     pub fn resize_and_center(
@@ -77,9 +85,9 @@ impl AppWindow {
         decorations: bool,
     ) {
         let size = size.into() + [0.0, 48.0].into(); // Add some extra space for title bar
-        let screen_size = (1920.0, 1080.0); // TODO: Get actual screen size
-        let x_coord = (screen_size.0 - size.x) / 2.0;
-        let y_coord = (screen_size.1 - size.y) / 2.0;
+        let screen_size = self.screen_size.unwrap_or((1920, 1080));
+        let x_coord = (screen_size.0 as f32 - size.x) / 2.0;
+        let y_coord = (screen_size.1 as f32 - size.y) / 2.0;
 
         // Set window size and position
         ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));

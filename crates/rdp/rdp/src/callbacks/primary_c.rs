@@ -8,7 +8,7 @@ use freerdp_sys::{
 
 use super::{
     super::{utils::{ToStringLossy}},
-    super::connection::context::OwnerFromCtx,
+    super::context::OwnerFromCtx,
     primary::PrimaryCallbacks,
 };
 use shared::log::debug;

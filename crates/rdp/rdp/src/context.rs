@@ -105,7 +105,7 @@ impl<'a> OwnerFromCtx<'a> for *mut rdpInput {
     }
 }
 
-pub fn owner_from_ctx<'a>(ctx: *mut rdpContext) -> Option<&'a mut crate::connection::Rdp> {
+pub fn owner_from_ctx<'a>(ctx: *mut rdpContext) -> Option<&'a mut crate::Rdp> {
     unsafe {
         if ctx.is_null() {
             return None;

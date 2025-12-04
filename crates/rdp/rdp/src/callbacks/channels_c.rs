@@ -7,7 +7,7 @@ use freerdp_sys::{
 
 use shared::log::debug;
 
-use super::{super::connection::context::OwnerFromCtx, channels::ChannelsCallbacks};
+use super::{super::context::OwnerFromCtx, channels::ChannelsCallbacks};
 use crate::utils::ToStringLossy;
 
 /// # Safety

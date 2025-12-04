@@ -5,7 +5,7 @@ use freerdp_sys::{
 
 use shared::log;
 
-use super::super::connection::context::OwnerFromCtx;
+use super::super::context::OwnerFromCtx;
 use super::pointer_update::PointerCallbacks;
 
 #[allow(dead_code)]

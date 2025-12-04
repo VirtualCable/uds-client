@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::{
-    super::{connection::context::OwnerFromCtx, utils::ToStringLossy},
+    super::{context::OwnerFromCtx, utils::ToStringLossy},
     altsec_c,
     channels_c::{on_channel_connected, on_channel_disconnected},
     input_c,

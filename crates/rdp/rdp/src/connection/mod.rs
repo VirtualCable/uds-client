@@ -1,35 +1,16 @@
-use std::sync::{Arc, RwLock};
-
 use anyhow::Result;
 
 use freerdp_sys::*;
 
 use shared::log;
 
-use crate::{
-    Rdp,
-    callbacks::Callbacks,
-    messaging::RdpMessage,
-    utils::{SafeHandle, ToStringLossy},
-};
+use crate::{Rdp, context, messaging::RdpMessage, utils::ToStringLossy};
 
 pub mod builder;
-pub mod context;
-pub mod impl_callbacks;
+pub mod rdp_callbacks_impl;
 
 #[allow(dead_code)]
 impl Rdp {
-    pub fn context(&self) -> Option<&context::RdpContext> {
-        unsafe {
-            if let Some(instance) = self.instance {
-                let ctx = instance.context as *mut context::RdpContext;
-                if ctx.is_null() { None } else { Some(&*ctx) }
-            } else {
-                None
-            }
-        }
-    }
-
     #[cfg(debug_assertions)]
     pub fn debug_assert_instance(&self) {
         assert!(self.instance.is_some(), "RDP instance is not initialized");
@@ -222,57 +203,6 @@ impl Rdp {
                 );
             }
         };
-    }
-
-    pub fn get_stop_event(&self) -> SafeHandle {
-        SafeHandle::new(self.stop_event.as_handle()).unwrap_or_else(|| {
-            panic!("Failed to clone stop event handle");
-        })
-    }
-
-    // Note: For conveinence only, does not has "self"
-    pub fn set_stop_event(stop_event: &SafeHandle) {
-        unsafe {
-            SetEvent(stop_event.as_handle());
-        }
-    }
-
-    pub fn input(&self) -> Option<*mut rdpInput> {
-        if let Some(context) = self.context() {
-            let input = context.context().input;
-            if input.is_null() { None } else { Some(input) }
-        } else {
-            None
-        }
-    }
-
-    pub fn gdi(&self) -> Option<*mut rdpGdi> {
-        if let Some(context) = self.context() {
-            let gdi = context.context().gdi;
-            if gdi.is_null() { None } else { Some(gdi) }
-        } else {
-            None
-        }
-    }
-
-    pub fn gdi_lock(&self) -> Arc<RwLock<()>> {
-        self.gdi_lock.clone()
-    }
-
-    pub fn width(&self) -> i32 {
-        if let Some(gdi) = self.gdi() {
-            unsafe { (*gdi).width }
-        } else {
-            0
-        }
-    }
-
-    pub fn height(&self) -> i32 {
-        if let Some(gdi) = self.gdi() {
-            unsafe { (*gdi).height }
-        } else {
-            0
-        }
     }
 
     // Executes the RDP connection until end or stop is requested

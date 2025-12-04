@@ -214,15 +214,12 @@ impl AppWindow {
                         }
                         RdpMessage::Disconnect => {
                             log::debug!("RDP Disconnected");
-                            // TODO: Handle disconnection properly
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                            self.stop.set();
+                            self.exit(ctx);
                             break;
                         }
                         RdpMessage::Error(err) => {
-                            log::debug!("RDP Error: {}", err);
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                            self.stop.set();
+                            log::error!("RDP Error: {}", err);
+                            self.exit(ctx);
                             break;
                         }
                         RdpMessage::FocusRequired => {

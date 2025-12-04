@@ -1,3 +1,5 @@
+use crate::Rdp;
+
 pub mod altsec;
 pub mod altsec_c;
 
@@ -57,5 +59,46 @@ impl Default for Callbacks {
             input: vec![],
             altsec: vec![],
         }
+    }
+}
+
+impl Rdp {
+    #[allow(dead_code)]
+    pub fn set_update_callbacks(&mut self, callbacks: Vec<update_c::Callbacks>) {
+        self.config.callbacks.update = callbacks;
+    }
+
+    #[allow(dead_code)]
+    pub fn set_window_callbacks(&mut self, callbacks: Vec<window_c::Callbacks>) {
+        self.config.callbacks.window = callbacks;
+    }
+
+    #[allow(dead_code)]
+    pub fn set_primary_callbacks(&mut self, callbacks: Vec<primary_c::Callbacks>) {
+        self.config.callbacks.primary = callbacks;
+    }
+
+    #[allow(dead_code)]
+    pub fn set_secondary_callbacks(&mut self, callbacks: Vec<secondary_c::Callbacks>) {
+        self.config.callbacks.secondary = callbacks;
+    }
+
+    #[allow(dead_code)]
+    pub fn set_altsec_callbacks(&mut self, callbacks: Vec<altsec_c::Callbacks>) {
+        self.config.callbacks.altsec = callbacks;
+    }
+
+    #[allow(dead_code)]
+    pub fn set_pointer_callbacks(&mut self, callbacks: Vec<pointer_update_c::Callbacks>) {
+        self.config.callbacks.pointer = callbacks;
+    }
+
+    #[allow(dead_code)]
+    pub fn set_input_callbacks(&mut self, callbacks: Vec<input_c::Callbacks>) {
+        self.config.callbacks.input = callbacks;
+    }
+
+    pub fn get_callbacks(&self) -> &Callbacks {
+        &self.config.callbacks
     }
 }

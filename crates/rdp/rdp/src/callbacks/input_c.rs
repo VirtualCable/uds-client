@@ -2,7 +2,7 @@ use freerdp_sys::{BOOL, INT16, UINT8, UINT16, UINT32, rdpContext, rdpInput};
 
 use shared::log::debug;
 
-use super::{super::connection::context::OwnerFromCtx, input::InputCallbacks};
+use super::{super::context::OwnerFromCtx, input::InputCallbacks};
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

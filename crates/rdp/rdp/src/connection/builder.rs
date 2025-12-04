@@ -3,57 +3,13 @@ use std::ffi::CString;
 use anyhow::Result;
 use freerdp_sys::*;
 
-use crate::{
-    callbacks::{
-        altsec_c, input_c, instance_c, pointer_update_c, primary_c, secondary_c, update_c, window_c,
-    },
-    utils::SafePtr,
-};
+use crate::{callbacks::instance_c, utils::SafePtr};
 use shared::log::debug;
 
-use super::{Callbacks, Rdp, context::RdpContext};
+use super::{Rdp, context::RdpContext};
 
 #[allow(dead_code)]
 impl Rdp {
-    #[allow(dead_code)]
-    pub fn set_update_callbacks(&mut self, callbacks: Vec<update_c::Callbacks>) {
-        self.config.callbacks.update = callbacks;
-    }
-
-    #[allow(dead_code)]
-    pub fn set_window_callbacks(&mut self, callbacks: Vec<window_c::Callbacks>) {
-        self.config.callbacks.window = callbacks;
-    }
-
-    #[allow(dead_code)]
-    pub fn set_primary_callbacks(&mut self, callbacks: Vec<primary_c::Callbacks>) {
-        self.config.callbacks.primary = callbacks;
-    }
-
-    #[allow(dead_code)]
-    pub fn set_secondary_callbacks(&mut self, callbacks: Vec<secondary_c::Callbacks>) {
-        self.config.callbacks.secondary = callbacks;
-    }
-
-    #[allow(dead_code)]
-    pub fn set_altsec_callbacks(&mut self, callbacks: Vec<altsec_c::Callbacks>) {
-        self.config.callbacks.altsec = callbacks;
-    }
-
-    #[allow(dead_code)]
-    pub fn set_pointer_callbacks(&mut self, callbacks: Vec<pointer_update_c::Callbacks>) {
-        self.config.callbacks.pointer = callbacks;
-    }
-
-    #[allow(dead_code)]
-    pub fn set_input_callbacks(&mut self, callbacks: Vec<input_c::Callbacks>) {
-        self.config.callbacks.input = callbacks;
-    }
-
-    pub fn get_callbacks(&self) -> &Callbacks {
-        &self.config.callbacks
-    }
-
     pub fn build(self: std::pin::Pin<&mut Self>) -> Result<()> {
         debug!("Building RDP connection... {:p}", self);
         let mut_self = unsafe { self.get_unchecked_mut() };
@@ -86,7 +42,7 @@ impl Rdp {
                     .filter(|s| s.as_str() != "all")
                     .map(|s| s.as_str())
                     .collect::<Vec<&str>>()
-                    .join(","),
+                    .join(";"),
             )
             .unwrap();
 

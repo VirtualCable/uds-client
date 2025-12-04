@@ -2,7 +2,7 @@ use freerdp_sys::{BOOL, rdpContext, rdpPointer};
 
 use shared::log::debug;
 
-use super::{super::connection::context::OwnerFromCtx, graphics::GraphicsCallbacks};
+use super::{super::context::OwnerFromCtx, graphics::GraphicsCallbacks};
 
 /// # Safety
 /// This function is unsafe because it dereferences raw pointers to set callback functions.

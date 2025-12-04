@@ -1,7 +1,7 @@
 use freerdp_sys::{BOOL, freerdp, rdpContext};
 
-use super::{super::connection::context::OwnerFromCtx, entrypoint::EntrypointCallbacks};
-use crate::connection::context::RdpContext;
+use super::{super::context::OwnerFromCtx, entrypoint::EntrypointCallbacks};
+use crate::context::RdpContext;
 use shared::log;
 
 pub extern "C" fn client_global_init() -> BOOL {

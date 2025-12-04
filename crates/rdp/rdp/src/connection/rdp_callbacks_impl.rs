@@ -135,7 +135,7 @@ impl channels::ChannelsCallbacks for Rdp {
         }
         if name.as_bytes() == &freerdp_sys::DISP_DVC_CHANNEL_NAME[..freerdp_sys::DISP_DVC_CHANNEL_NAME.len()-1] {
             log::debug!("**** DISP channel disconnection accepted.");
-            // TOOD: handle DISP channel cleanup here
+            self.disp = None;
             return true;
         }
         if name.as_bytes() == &freerdp_sys::CLIPRDR_SVC_CHANNEL_NAME[..freerdp_sys::CLIPRDR_SVC_CHANNEL_NAME.len()-1] {

@@ -52,6 +52,11 @@ impl AppWindow {
     ) {
         egui::CentralPanel::default().show(ctx, |ui| {
             if state.start.elapsed().as_millis() > 100 {
+                if state.settings.screen_size.is_fullscreen() {
+                    // Get size now that window is created
+                    let screen_size = ctx.content_rect().size();
+                    self.screen_size = Some((screen_size.x as u32, screen_size.y as u32));
+                }
                 // Switch to RdpConnected after 1 second, this is only for setting fullscreen etc.
                 self.enter_rdp_connection(ctx, state.settings.clone()).ok();
             }

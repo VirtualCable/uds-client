@@ -3,7 +3,7 @@ use freerdp_sys::{
     WINDOW_ICON_ORDER, WINDOW_ORDER_INFO, WINDOW_STATE_ORDER, rdpContext,
 };
 
-use super::{super::connection::context::OwnerFromCtx, window::WindowCallbacks};
+use super::{super::context::OwnerFromCtx, window::WindowCallbacks};
 
 use shared::log::debug;
 
