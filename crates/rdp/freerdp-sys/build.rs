@@ -41,6 +41,13 @@ fn main() {
         .clang_arg(format!("-I{}", include_freerdp))
         .clang_arg(format!("-I{}", include_winpr))
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+        .opaque_type("NT_CONSOLE_PROPS")
+        .opaque_type("NT_FE_CONSOLE_PROPS")
+        .opaque_type("EXP_DARWIN_LINK")
+        .opaque_type("CABINETSTATE")
+        .opaque_type("SHELLSTATEA")
+        .opaque_type("SHELLSTATEW")
+        .opaque_type("SHELLFLAGSTATE")
         .generate()
         .expect("Bindings could not be generated");
 

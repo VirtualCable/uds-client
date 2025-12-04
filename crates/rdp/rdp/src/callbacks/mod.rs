@@ -29,6 +29,7 @@ pub mod entrypoint;
 pub mod entrypoint_c;
 
 pub mod channels_c;
+pub mod channels;
 
 #[derive(Debug)]
 pub struct Callbacks {

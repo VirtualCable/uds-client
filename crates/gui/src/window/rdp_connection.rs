@@ -14,7 +14,7 @@ use eframe::egui;
 use crate::log;
 
 use rdp::{
-    connection::{Rdp, RdpMessage},
+    Rdp, messaging::RdpMessage,
     settings::RdpSettings,
     sys::{rdpGdi, rdpInput},
 };
@@ -69,6 +69,7 @@ impl AppWindow {
 
         // Rdp shouls be pinned, as build() inserts self reference inside freedrp structs
         let mut rdp = Box::pin(Rdp::new(rdp_settings, tx));
+        
         // For reference: Currently, default callbacks are these also, so if no more are needed, this can be skipped
         // rdp.set_update_callbacks(vec![
         //     update_c::Callbacks::BeginPaint,

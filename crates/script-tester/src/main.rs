@@ -82,6 +82,7 @@ fn run_script() {
 
 fn main() -> Result<()> {
     log::setup_logging("debug", log::LogType::Tests);
+    rdp::wlog::setup_freerdp_logger(rdp::wlog::WLogLevel::Info);
     shared::tls::init_tls(None); // Initialize root certs and tls related stuff
 
     println!(
@@ -95,7 +96,6 @@ fn main() -> Result<()> {
     // }
 
     let fake_catalog = gettext::Catalog::empty(); // Empty catalog for now
-    log::setup_logging("trace", log::LogType::Tests);
     let (_messages_tx, messages_rx): (
         Sender<gui::window::types::GuiMessage>,
         Receiver<gui::window::types::GuiMessage>,

@@ -3,7 +3,7 @@ use freerdp_sys::{
     POINTER_POSITION_UPDATE, POINTER_SYSTEM_UPDATE, rdpContext,
 };
 
-use shared::log::debug;
+use shared::log;
 
 use super::super::connection::context::OwnerFromCtx;
 use super::pointer_update::PointerCallbacks;
@@ -36,11 +36,12 @@ impl Callbacks {
 /// # Safety
 /// This function is unsafe because it dereferences raw pointers to set callback functions.
 pub unsafe fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
+    log::debug!(" **** Setting Pointer Update Callbacks: {:?}", overrides);
     unsafe {
         let update = (*context).update;
         let pointer = (*update).pointer;
         if update.is_null() || pointer.is_null() {
-            debug!(" **** Pointer not initialized, cannot override callbacks.");
+            log::debug!(" **** Pointer not initialized, cannot override callbacks.");
             return;
         }
         for override_cb in overrides {
@@ -72,6 +73,7 @@ pub extern "C" fn pointer_position(
     context: *mut rdpContext,
     pointer_position: *const POINTER_POSITION_UPDATE,
 ) -> BOOL {
+    log::debug!(" **** Pointer Position callback invoked: {:?}", pointer_position);
     if let Some(owner) = context.owner() {
         owner.on_pointer_position(pointer_position).into()
     } else {
@@ -83,6 +85,7 @@ pub extern "C" fn pointer_system(
     context: *mut rdpContext,
     pointer_system: *const POINTER_SYSTEM_UPDATE,
 ) -> BOOL {
+    log::debug!(" **** Pointer System callback invoked: {:?}", pointer_system);
     if let Some(owner) = context.owner() {
         owner.on_pointer_system(pointer_system).into()
     } else {
@@ -105,6 +108,7 @@ pub extern "C" fn pointer_new(
     context: *mut rdpContext,
     pointer_new: *const POINTER_NEW_UPDATE,
 ) -> BOOL {
+    log::debug!(" **** Pointer New callback invoked: {:?}", pointer_new);
     if let Some(owner) = context.owner() {
         owner.on_pointer_new(pointer_new).into()
     } else {

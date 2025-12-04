@@ -4,67 +4,21 @@ use anyhow::Result;
 
 use freerdp_sys::*;
 
-use crossbeam::channel::Sender;
+use shared::log;
 
 use crate::{
+    Rdp,
     callbacks::Callbacks,
-    geom::Rect,
-    settings::RdpSettings,
-    utils::{SafeHandle, SafePtr, ToStringLossy},
+    messaging::RdpMessage,
+    utils::{SafeHandle, ToStringLossy},
 };
 
-use shared::log;
 pub mod builder;
 pub mod context;
 pub mod impl_callbacks;
 
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub enum RdpMessage {
-    UpdateRects(Vec<Rect>),
-    Disconnect,
-    FocusRequired,
-    Error(String),
-}
-
-#[derive(Debug, Default)]
-pub struct Config {
-    settings: RdpSettings,
-    callbacks: Callbacks,
-}
-
-#[derive(Debug)]
-pub struct Rdp {
-    config: Config,
-    instance: Option<SafePtr<freerdp>>,
-    update_tx: Option<Sender<RdpMessage>>,
-    // GDI lock for thread safety
-    gdi_lock: Arc<RwLock<()>>,
-    stop_event: SafeHandle,
-    _pin: std::marker::PhantomPinned, // Do not allow moving
-}
-
 #[allow(dead_code)]
 impl Rdp {
-    pub fn new(settings: RdpSettings, update_tx: Sender<RdpMessage>) -> Self {
-        let stop_event: HANDLE =
-            unsafe { CreateEventW(std::ptr::null_mut(), 1, 0, std::ptr::null()) };
-
-        let stop_event = SafeHandle::new(stop_event).unwrap();
-
-        Rdp {
-            config: Config {
-                settings,
-                ..Config::default()
-            },
-            instance: None,
-            update_tx: Some(update_tx),
-            gdi_lock: Arc::new(RwLock::new(())),
-            stop_event,
-            _pin: std::marker::PhantomPinned,
-        }
-    }
-
     pub fn context(&self) -> Option<&context::RdpContext> {
         unsafe {
             if let Some(instance) = self.instance {
@@ -154,8 +108,8 @@ impl Rdp {
                     FreeRDP_Settings_Keys_Bool_FreeRDP_AllowCacheWaitingList,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_DesktopResize,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_DynamicResolutionUpdate,
-                    // FreeRDP_Settings_Keys_Bool_FreeRDP_AsyncUpdate,
-                    // FreeRDP_Settings_Keys_Bool_FreeRDP_AsyncChannels,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_AsyncUpdate,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_AsyncChannels,
                 ]
                 .iter()
                 {

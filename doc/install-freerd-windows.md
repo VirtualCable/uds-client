@@ -99,11 +99,11 @@ cmake -B build `
   -DCMAKE_TOOLCHAIN_FILE="Z:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake" `
   -DVCPKG_TARGET_TRIPLET=x64-windows `
   -DCMAKE_MODULE_PATH="Z:/dev/vcpkg/installed/x64-windows/share/ffmpeg" `
-  -DWITH_CLIENT_COMMON=ON ` # common client code (libfreerdp-client)
-  -DWITH_INTERNAL_MD4=ON `  #  NTLM and old related auth
-  -DWITH_INTERNAL_MD5=ON `  #  needed for some auth methods
-  -DWITH_INTERNAL_RC4=ON `  #  needed for some auth methods
-  -DWITH_CLIENT=ON `        #  main client (freerdp)
+  -DWITH_CLIENT_COMMON=ON `
+  -DWITH_INTERNAL_MD4=ON `
+  -DWITH_INTERNAL_MD5=ON `
+  -DWITH_INTERNAL_RC4=ON `
+  -DWITH_CLIENT=ON `
   -DWITH_FFMPEG=ON `
   -DWITH_SDL=OFF `
   -DWITH_SERVER=OFF `
