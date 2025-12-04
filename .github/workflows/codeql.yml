@@ -1,5 +1,6 @@
 name: "CodeQL Rust Analysis"
-
+permissions:
+  contents: read
 on:
   push:
     branches: [ "main" ]
