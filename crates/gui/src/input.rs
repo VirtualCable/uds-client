@@ -130,12 +130,6 @@ impl AppWindow {
     ) {
         while let Ok(raw_key) = self.events.try_recv() {
             if let Some(scancode) = keymap::RdpScanCode::get_from_key(Some(&raw_key.keycode)) {
-                log::debug!(
-                    "Sending key event: keycode={:?}, scancode={:?}, pressed={}",
-                    raw_key.keycode,
-                    scancode,
-                    raw_key.pressed
-                );
                 unsafe {
                     freerdp_input_send_keyboard_event_ex(
                         rdp_input,

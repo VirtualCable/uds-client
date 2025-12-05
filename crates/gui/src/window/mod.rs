@@ -148,7 +148,7 @@ impl eframe::App for AppWindow {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             return;
         }
-        ctx.request_repaint_after(std::time::Duration::from_millis(16)); // Approx 60 FPS
+        let frame_start = std::time::Instant::now();
         // First, process any incoming GUI messages
         while let Ok(msg) = self.gui_messages_rx.try_recv() {
             match msg {
@@ -214,5 +214,9 @@ impl eframe::App for AppWindow {
             types::AppState::Error(message) => self.update_error(ctx, frame, message),
             types::AppState::Test => self.update_testing(ctx, frame),
         }
+        let frame_duration = frame_start.elapsed();
+        // ctx.request_repaint(); // Repaint asap
+        let remaining = std::time::Duration::from_millis(16).saturating_sub(frame_duration);
+        ctx.request_repaint_after(remaining); // Aim for ~60 FPS
     }
 }

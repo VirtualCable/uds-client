@@ -36,6 +36,7 @@ pub struct RdpConnectionState {
     gdi_lock: Arc<RwLock<()>>,
     input: *mut rdpInput,
     texture: egui::TextureHandle,
+    cursor: egui::TextureHandle,
     full_screen: Arc<AtomicBool>,
 }
 
@@ -114,6 +115,12 @@ impl AppWindow {
         };
         let image = egui::ColorImage::from_rgba_unmultiplied([pitch / 4, height], buffer);
         let texture = ctx.load_texture("rdp_framebuffer", image, egui::TextureOptions::LINEAR);
+        let initial_cursor_image = egui::ColorImage::example();
+        let cursor = ctx.load_texture(
+            "rdp_cursor",
+            initial_cursor_image,
+            egui::TextureOptions::LINEAR,
+        );
 
         self.set_app_state(AppState::RdpConnected(RdpConnectionState {
             update_rx: rx,
@@ -121,6 +128,7 @@ impl AppWindow {
             input,
             gdi_lock,
             texture,
+            cursor,
             full_screen: Arc::new(AtomicBool::new(is_full_screen)),
         }));
 
@@ -140,31 +148,6 @@ impl AppWindow {
         self.processing_events.store(true, Ordering::Relaxed); // Start processing events
 
         Ok(())
-    }
-
-    fn update_texture(&mut self, rects: Vec<rdp::geom::Rect>, rdp_state: &mut RdpConnectionState) {
-        let _guard = rdp_state.gdi_lock.write().unwrap();
-        for rect in rects {
-            let img = rect.extract(
-                unsafe {
-                    std::slice::from_raw_parts(
-                        (*rdp_state.gdi).primary_buffer as *const u8,
-                        ((*rdp_state.gdi).stride as usize)
-                            * (rdp_state.gdi.as_ref().unwrap().height as usize),
-                    )
-                },
-                unsafe { (*rdp_state.gdi).stride as usize },
-                unsafe { (*rdp_state.gdi).width as usize },
-                unsafe { (*rdp_state.gdi).height as usize },
-            );
-            if let Some(image) = img {
-                rdp_state.texture.set_partial(
-                    [rect.x as usize, rect.y as usize],
-                    image,
-                    egui::TextureOptions::LINEAR,
-                );
-            }
-        }
     }
 
     pub(super) fn update_rdp_connection(
@@ -188,7 +171,7 @@ impl AppWindow {
         let input = rdp_state.input;
         self.handle_input(ctx, frame, input, scale);
 
-        // TODO: Allow this, but need to implement Display channel at least to send resize
+        // TODO: We already have the display channel, finish and test dynamic resizing
         // let egui::Vec2 {
         //     x: actual_width,
         //     y: actual_height,
@@ -205,7 +188,7 @@ impl AppWindow {
         //         gdi_height
         //     );
         // }
-
+        ctx.set_cursor_icon(egui::CursorIcon::None);
         egui::CentralPanel::default()
             .frame(egui::Frame::default().inner_margin(0.0))
             .show(ctx, |ui| {
@@ -245,6 +228,10 @@ impl AppWindow {
                         .maintain_aspect_ratio(false)
                         .fit_to_exact_size(size),
                 );
+                // Custom cursor, after rendering the frame to be on top
+                if let Some(pos) = ctx.input(|i| i.pointer.latest_pos()) {
+                    self.custom_cursor(ui, pos);
+                }
                 log::trace!("RDP frame rendered took {:?}", start.elapsed());
             });
     }
@@ -280,5 +267,47 @@ impl AppWindow {
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
             rdp_state.full_screen.store(true, Ordering::Relaxed);
         }
+    }
+
+    fn update_texture(&mut self, rects: Vec<rdp::geom::Rect>, rdp_state: &mut RdpConnectionState) {
+        let _guard = rdp_state.gdi_lock.write().unwrap();
+        for rect in rects {
+            let img = rect.extract(
+                unsafe {
+                    std::slice::from_raw_parts(
+                        (*rdp_state.gdi).primary_buffer as *const u8,
+                        ((*rdp_state.gdi).stride as usize)
+                            * (rdp_state.gdi.as_ref().unwrap().height as usize),
+                    )
+                },
+                unsafe { (*rdp_state.gdi).stride as usize },
+                unsafe { (*rdp_state.gdi).width as usize },
+                unsafe { (*rdp_state.gdi).height as usize },
+            );
+            if let Some(image) = img {
+                rdp_state.texture.set_partial(
+                    [rect.x as usize, rect.y as usize],
+                    image,
+                    egui::TextureOptions::LINEAR,
+                );
+            }
+        }
+    }
+
+    fn custom_cursor(&self, ui: &mut egui::Ui, pos: egui::Pos2) {
+        let painter = ui.painter();
+        let radius = 6.0;
+
+        // Ejemplo: círculo rojo como cursor
+        painter.circle_filled(pos, radius, egui::Color32::RED);
+
+        // O cualquier otra forma personalizada
+        painter.text(
+            pos + egui::vec2(10.0, 0.0),
+            egui::Align2::LEFT_CENTER,
+            "✦",
+            egui::FontId::proportional(16.0),
+            egui::Color32::YELLOW,
+        );
     }
 }

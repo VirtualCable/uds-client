@@ -7,7 +7,7 @@ use shared::log;
 use crate::{Rdp, context, messaging::RdpMessage, utils::ToStringLossy};
 
 pub mod builder;
-pub mod rdp_callbacks_impl;
+pub mod callbacks_impl;
 
 #[allow(dead_code)]
 impl Rdp {
