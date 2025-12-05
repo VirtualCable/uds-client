@@ -12,11 +12,11 @@ mod logo;
 mod runner;
 
 fn collect_arguments() -> Option<(String, String, String)> {
-    let args = std::env::args().collect();
+    let args: Vec<String> = std::env::args().collect();
 
     // For debugging purposes, allow setting args via env variable
     #[cfg(debug_assertions)]
-    let args = if let Ok(debug_args) = std::env::var("UDS_DEBUG_ARGS") {
+    let args: Vec<String> = if let Ok(debug_args) = std::env::var("UDS_DEBUG_ARGS") {
         ["program".to_string(), debug_args].to_vec()
     } else {
         args

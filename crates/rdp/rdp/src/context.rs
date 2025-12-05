@@ -15,13 +15,6 @@ pub struct RdpContext {
 }
 
 impl RdpContext {
-    pub fn new() -> Self {
-        RdpContext {
-            common: unsafe { std::mem::zeroed() },
-            owner: std::ptr::null_mut(),
-        }
-    }
-
     pub fn context(&self) -> &rdpContext {
         &self.common.context
     }
@@ -59,13 +52,6 @@ impl RdpContext {
 
             Ok(ctx)
         }
-    }
-}
-
-impl Default for RdpContext {
-    fn default() -> Self {
-        debug!(" *#*#*#+  Default RdpContext called");
-        Self::new()
     }
 }
 

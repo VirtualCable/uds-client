@@ -9,19 +9,28 @@ use super::{super::context::OwnerFromCtx, graphics::GraphicsCallbacks};
 pub unsafe fn set_callbacks(context: *mut rdpContext) {
     unsafe {
         let graphics = (*context).graphics;
-        let pointer_proto = (*graphics).Pointer_Prototype;
-        if graphics.is_null() || pointer_proto.is_null() {
-            debug!(" **** Pointer not initialized, cannot override callbacks.");
-            return;
-        }
-        // Clear pointer_proto to avoid dangling pointers
-        std::ptr::write_bytes(pointer_proto, 0, 1);
-        (*pointer_proto).New = Some(pointer_new);
-        (*pointer_proto).Free = Some(pointer_free);
-        (*pointer_proto).Set = Some(pointer_set);
-        (*pointer_proto).SetNull = Some(pointer_set_null);
-        (*pointer_proto).SetDefault = Some(pointer_set_default);
-        (*pointer_proto).SetPosition = Some(pointer_position);
+
+        let pointer_proto = rdpPointer {
+            size: std::mem::size_of::<rdpPointer>(),
+            New: Some(pointer_new),
+            Free: Some(pointer_free),
+            Set: Some(pointer_set),
+            SetNull: Some(pointer_set_null),
+            SetDefault: Some(pointer_set_default),
+            SetPosition: Some(pointer_position),
+            paddingA: [0; 9],
+            xPos: 0,
+            yPos: 0,
+            width: 0,
+            height: 0,
+            xorBpp: 0,
+            lengthAndMask: 0,
+            lengthXorMask: 0,
+            xorMaskData: std::ptr::null_mut(),
+            andMaskData: std::ptr::null_mut(),
+            paddingB: [0; 7],
+        };
+        freerdp_sys::graphics_register_pointer(graphics, &pointer_proto);
     }
 }
 

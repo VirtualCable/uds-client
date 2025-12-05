@@ -4,14 +4,14 @@ use anyhow::Result;
 use freerdp_sys::*;
 
 use crate::{callbacks::instance_c, utils::SafePtr};
-use shared::log::debug;
+use shared::log;
 
 use super::{Rdp, context::RdpContext};
 
 #[allow(dead_code)]
 impl Rdp {
     pub fn build(self: std::pin::Pin<&mut Self>) -> Result<()> {
-        debug!("Building RDP connection... {:p}", self);
+        log::debug!("Building RDP connection... {:p}", self);
         let mut_self = unsafe { self.get_unchecked_mut() };
 
         unsafe {
@@ -39,8 +39,11 @@ impl Rdp {
                     .settings
                     .drives_to_redirect
                     .iter()
-                    .filter(|s| s.as_str() != "all")
-                    .map(|s| s.as_str())
+                    .map(|s| match s.as_str() {
+                        "all" => "*",
+                        "DynamicDrives" => "DynamicDrives",
+                        other => other,
+                    })
                     .collect::<Vec<&str>>()
                     .join(";"),
             )

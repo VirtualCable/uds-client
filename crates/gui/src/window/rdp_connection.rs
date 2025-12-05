@@ -14,7 +14,8 @@ use eframe::egui;
 use crate::log;
 
 use rdp::{
-    Rdp, messaging::RdpMessage,
+    Rdp,
+    messaging::RdpMessage,
     settings::RdpSettings,
     sys::{rdpGdi, rdpInput},
 };
@@ -69,7 +70,7 @@ impl AppWindow {
 
         // Rdp shouls be pinned, as build() inserts self reference inside freedrp structs
         let mut rdp = Box::pin(Rdp::new(rdp_settings, tx));
-        
+
         // For reference: Currently, default callbacks are these also, so if no more are needed, this can be skipped
         // rdp.set_update_callbacks(vec![
         //     update_c::Callbacks::BeginPaint,
@@ -141,6 +142,31 @@ impl AppWindow {
         Ok(())
     }
 
+    fn update_texture(&mut self, rects: Vec<rdp::geom::Rect>, rdp_state: &mut RdpConnectionState) {
+        let _guard = rdp_state.gdi_lock.write().unwrap();
+        for rect in rects {
+            let img = rect.extract(
+                unsafe {
+                    std::slice::from_raw_parts(
+                        (*rdp_state.gdi).primary_buffer as *const u8,
+                        ((*rdp_state.gdi).stride as usize)
+                            * (rdp_state.gdi.as_ref().unwrap().height as usize),
+                    )
+                },
+                unsafe { (*rdp_state.gdi).stride as usize },
+                unsafe { (*rdp_state.gdi).width as usize },
+                unsafe { (*rdp_state.gdi).height as usize },
+            );
+            if let Some(image) = img {
+                rdp_state.texture.set_partial(
+                    [rect.x as usize, rect.y as usize],
+                    image,
+                    egui::TextureOptions::LINEAR,
+                );
+            }
+        }
+    }
+
     pub(super) fn update_rdp_connection(
         &mut self,
         ctx: &egui::Context,
@@ -185,32 +211,14 @@ impl AppWindow {
             .show(ctx, |ui| {
                 // If the size of gdi is not equal to size of content, resize gdi and recreate texture
                 let start = std::time::Instant::now();
+                let mut rects_to_update: Vec<rdp::geom::Rect> = Vec::new();
                 while let Ok(message) = rdp_state.update_rx.try_recv() {
                     log::trace!("Got message {:?}", message);
+                    // Process all pending messages BUT only the last update_rect to avoid lagging behind
                     match message {
                         RdpMessage::UpdateRects(rects) => {
-                            let _guard = rdp_state.gdi_lock.write().unwrap();
-                            for rect in rects {
-                                let img = rect.extract(
-                                    unsafe {
-                                        std::slice::from_raw_parts(
-                                            (*rdp_state.gdi).primary_buffer as *const u8,
-                                            ((*rdp_state.gdi).stride as usize)
-                                                * (rdp_state.gdi.as_ref().unwrap().height as usize),
-                                        )
-                                    },
-                                    unsafe { (*rdp_state.gdi).stride as usize },
-                                    unsafe { (*rdp_state.gdi).width as usize },
-                                    unsafe { (*rdp_state.gdi).height as usize },
-                                );
-                                if let Some(image) = img {
-                                    rdp_state.texture.set_partial(
-                                        [rect.x as usize, rect.y as usize],
-                                        image,
-                                        egui::TextureOptions::LINEAR,
-                                    );
-                                }
-                            }
+                            // TODO: Append rect to list and calculate later the overlapping ones
+                            rects_to_update = rects;
                         }
                         RdpMessage::Disconnect => {
                             log::debug!("RDP Disconnected");
@@ -227,6 +235,7 @@ impl AppWindow {
                         }
                     }
                 }
+                self.update_texture(rects_to_update, rdp_state);
                 log::trace!("RDP update processing took {:?}", start.elapsed());
                 // Show the texture on 0,0, full size
                 let size = ui.available_size();

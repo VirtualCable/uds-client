@@ -148,6 +148,15 @@ impl channels::ChannelsCallbacks for Rdp {
     }
 }
 
+impl graphics::GraphicsCallbacks for Rdp {
+    fn on_pointer_set(&self, _pointer: *mut rdpPointer) -> bool {
+        log::debug!(" **** Custom Pointer Set called.");
+        // Here you can handle the custom pointer setting logic
+        true
+    }
+}
+
+
 impl input::InputCallbacks for Rdp {}
 impl pointer_update::PointerCallbacks for Rdp {}
 impl primary::PrimaryCallbacks for Rdp {}
@@ -155,4 +164,3 @@ impl secondary::SecondaryCallbacks for Rdp {}
 impl altsec::AltSecCallbacks for Rdp {}
 impl window::WindowCallbacks for Rdp {}
 impl entrypoint::EntrypointCallbacks for Rdp {}
-impl graphics::GraphicsCallbacks for Rdp {}

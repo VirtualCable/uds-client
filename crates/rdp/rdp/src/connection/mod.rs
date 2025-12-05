@@ -71,6 +71,7 @@ impl Rdp {
                     FreeRDP_Settings_Keys_Bool_FreeRDP_FastPathInput,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_FastPathOutput,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_BitmapCompressionDisabled,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteConsoleAudio,  // So audio is not played on server
                 ]
                 .iter()
                 {
@@ -80,8 +81,6 @@ impl Rdp {
                 for i in [
                     FreeRDP_Settings_Keys_Bool_FreeRDP_GfxThinClient,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_GfxProgressive,
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_SupportGraphicsPipeline,
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_GfxH264,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_BitmapCacheEnabled,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_BitmapCacheV3Enabled,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_AllowFontSmoothing,
@@ -89,11 +88,27 @@ impl Rdp {
                     FreeRDP_Settings_Keys_Bool_FreeRDP_AllowCacheWaitingList,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_DesktopResize,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_DynamicResolutionUpdate,
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_AsyncUpdate,
+                    // From proper client settings
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_FastPathOutput,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_FrameMarkerCommandEnabled,
+                    // FreeRDP_Settings_Keys_Bool_FreeRDP_AsyncUpdate,  // Note: currently works badly
                     FreeRDP_Settings_Keys_Bool_FreeRDP_AsyncChannels,
+                    // Audio
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_AudioPlayback,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_AudioCapture,
+                    // Compression
+                    // FreeRDP_Settings_Keys_Bool_FreeRDP_CompressionEnabled,
+                    // Graphics
+                    // TODO: Test this settings on all platforms (gfx related and h264)
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_GfxAVC444v2,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_GfxAVC444,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_GfxH264,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteFxCodec,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_SupportGraphicsPipeline,
                 ]
                 .iter()
                 {
+                    // Ignore the result, try with best effort
                     freerdp_settings_set_bool(settings, *i, true.into());
                 }
 
@@ -119,6 +134,9 @@ impl Rdp {
                     freerdp_settings_set_uint32(settings, *i, *v);
                 }
             }
+
+            // Set perfromance flags from settings
+            unsafe { freerdp_sys::freerdp_performance_flags_make(settings) };
         } else {
             log::debug!("Connection not built, cannot optimize settings.");
         }
