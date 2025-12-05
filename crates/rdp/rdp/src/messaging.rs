@@ -9,6 +9,7 @@ pub enum RdpMessage {
     Disconnect,
     FocusRequired,
     Error(String),
+    SetCursorIcon(Vec<u8>, u32, u32, u32, u32),  // x, y, (of pointer "pointer") width, height
 }
 
 pub type Sender = channel::Sender<RdpMessage>;

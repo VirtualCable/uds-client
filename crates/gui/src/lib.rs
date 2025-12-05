@@ -61,7 +61,8 @@ impl ApplicationHandler<UserEvent> for RdpAppProxy<'_> {
                 repeat: event.repeat,
             };
             if let Err(e) = self.events.send(raw_key) {
-                log::error!("Failed to send keyboard event: {}", e);
+                // Chanel may be full or disconnected, log and continue
+                log::warn!("Failed to send keyboard event: {}", e);
             }
         }
         // We can process Unidentified::NativeKeyCode if needed

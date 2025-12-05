@@ -37,7 +37,7 @@ pub unsafe fn set_callbacks(context: *mut rdpContext) {
 extern "C" fn pointer_new(context: *mut rdpContext, pointer_new: *mut rdpPointer) -> BOOL {
     log::debug!("**** PointerNew called: {:?}", unsafe { *pointer_new });
     if let Some(rdp) = context.owner() {
-        rdp.on_pointer_new(pointer_new).into()
+        unsafe { rdp.on_pointer_new(pointer_new).into() }
     } else {
         true.into()
     }
@@ -46,14 +46,14 @@ extern "C" fn pointer_new(context: *mut rdpContext, pointer_new: *mut rdpPointer
 extern "C" fn pointer_free(context: *mut rdpContext, pointer: *mut rdpPointer) {
     log::debug!("**** PointerFree called: {:?}", unsafe { *pointer });
     if let Some(rdp) = context.owner() {
-        rdp.on_pointer_free(pointer);
+        unsafe { rdp.on_pointer_free(pointer); }
     }
 }
 
 extern "C" fn pointer_set(context: *mut rdpContext, pointer_set: *mut rdpPointer) -> BOOL {
     log::debug!("**** PointerSet called: {:?}", unsafe { *pointer_set });
     if let Some(rdp) = context.owner() {
-        rdp.on_pointer_set(pointer_set).into()
+        unsafe { rdp.on_pointer_set(pointer_set).into() }
     } else {
         true.into()
     }

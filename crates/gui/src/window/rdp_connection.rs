@@ -11,7 +11,7 @@ use anyhow::Result;
 use crossbeam::channel::{Receiver, Sender, bounded};
 use eframe::egui;
 
-use crate::log;
+use crate::{log, logo::load_logo};
 
 use rdp::{
     Rdp,
@@ -30,13 +30,42 @@ use super::{
 const FRAMES_IN_FLIGHT: usize = 128;
 
 #[derive(Clone)]
+struct RdpMouseCursor {
+    texture: egui::TextureHandle,
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+}
+
+impl RdpMouseCursor {
+    fn size_vec2(&self) -> egui::Vec2 {
+        egui::Vec2::new(self.width as f32, self.height as f32)
+    }
+
+    fn position_pos2(&self) -> egui::Pos2 {
+        egui::Pos2::new(self.x as f32, self.y as f32)
+    }
+
+    fn update(&mut self, texture: egui::TextureHandle, x: u32, y: u32, width: u32, height: u32) {
+        self.texture = texture;
+        self.x = x;
+        self.y = y;
+        self.width = width;
+        self.height = height;
+    }
+}
+
+// Arcs are to keep original references when cloning
+// because states are cloned when switching app states
+#[derive(Clone)]
 pub struct RdpConnectionState {
     update_rx: crossbeam::channel::Receiver<RdpMessage>,
     gdi: *mut rdpGdi,
     gdi_lock: Arc<RwLock<()>>,
     input: *mut rdpInput,
     texture: egui::TextureHandle,
-    cursor: egui::TextureHandle,
+    cursor: Arc<RwLock<RdpMouseCursor>>,
     full_screen: Arc<AtomicBool>,
 }
 
@@ -115,10 +144,11 @@ impl AppWindow {
         };
         let image = egui::ColorImage::from_rgba_unmultiplied([pitch / 4, height], buffer);
         let texture = ctx.load_texture("rdp_framebuffer", image, egui::TextureOptions::LINEAR);
-        let initial_cursor_image = egui::ColorImage::example();
+        let cursor_img = load_logo();
+        let cursor_img_size = cursor_img.size;
         let cursor = ctx.load_texture(
             "rdp_cursor",
-            initial_cursor_image,
+            cursor_img,
             egui::TextureOptions::LINEAR,
         );
 
@@ -128,7 +158,13 @@ impl AppWindow {
             input,
             gdi_lock,
             texture,
-            cursor,
+            cursor: Arc::new(RwLock::new(RdpMouseCursor {
+                texture: cursor,
+                x: 0,
+                y: 0,
+                width: cursor_img_size[0] as u32,
+                height: cursor_img_size[1] as u32,
+            })),
             full_screen: Arc::new(AtomicBool::new(is_full_screen)),
         }));
 
@@ -216,6 +252,24 @@ impl AppWindow {
                         RdpMessage::FocusRequired => {
                             log::debug!("RDP Focus Required");
                         }
+                        RdpMessage::SetCursorIcon(data, x, y, width, height) => {
+                            log::debug!("Setting cursor icon, size: {width}x{height} on {x}, {y}");
+                            let cursor_image = egui::ColorImage::from_rgba_unmultiplied(
+                                [width as usize, height as usize],
+                                &data,
+                            );
+                            rdp_state.cursor.write().unwrap().update(
+                                ctx.load_texture(
+                                    "rdp_cursor",
+                                    cursor_image,
+                                    egui::TextureOptions::LINEAR,
+                                ),
+                                x,
+                                y,
+                                width,
+                                height,
+                            );
+                        }
                     }
                 }
                 self.update_texture(rects_to_update, rdp_state);
@@ -230,7 +284,7 @@ impl AppWindow {
                 );
                 // Custom cursor, after rendering the frame to be on top
                 if let Some(pos) = ctx.input(|i| i.pointer.latest_pos()) {
-                    self.custom_cursor(ui, pos);
+                    self.custom_cursor(ui, &rdp_state.cursor.read().unwrap(), pos);
                 }
                 log::trace!("RDP frame rendered took {:?}", start.elapsed());
             });
@@ -294,20 +348,15 @@ impl AppWindow {
         }
     }
 
-    fn custom_cursor(&self, ui: &mut egui::Ui, pos: egui::Pos2) {
-        let painter = ui.painter();
-        let radius = 6.0;
-
-        // Ejemplo: círculo rojo como cursor
-        painter.circle_filled(pos, radius, egui::Color32::RED);
-
-        // O cualquier otra forma personalizada
-        painter.text(
-            pos + egui::vec2(10.0, 0.0),
-            egui::Align2::LEFT_CENTER,
-            "✦",
-            egui::FontId::proportional(16.0),
-            egui::Color32::YELLOW,
+    fn custom_cursor(&self, ui: &mut egui::Ui, cursor: &RdpMouseCursor, pos: egui::Pos2) {
+        // Add self.cursor texture at pos
+        let cursor_size = cursor.size_vec2();
+        let cursor_pos = egui::Pos2::new(pos.x - cursor.x as f32, pos.y - cursor.y as f32);
+        ui.painter().image(
+            cursor.texture.id(),
+            egui::Rect::from_min_size(cursor_pos, cursor_size),
+            egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+            egui::Color32::WHITE,
         );
     }
 }
