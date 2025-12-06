@@ -197,8 +197,8 @@ impl eframe::App for AppWindow {
 
         // States shoud be clonable to work correctly
         // And changes should be reflected on all references
-        let mut app_state = self.app_state.clone();
-        match &mut app_state {
+        let app_state = self.app_state.clone();
+        match app_state {
             types::AppState::RdpConnecting(rdp_state) => self.update_rdp_preconnection(ctx, frame, rdp_state),
             types::AppState::RdpConnected(rdp_state) => {
                 self.update_rdp_connection(ctx, frame, rdp_state)
@@ -208,10 +208,10 @@ impl eframe::App for AppWindow {
             }
             types::AppState::Invisible => {} // Nothing to do
             types::AppState::YesNo(message, resp_tx) => {
-                self.update_yesno(ctx, frame, message, resp_tx)
+                self.update_yesno(ctx, frame, &message, resp_tx)
             }
-            types::AppState::Warning(message) => self.update_warning(ctx, frame, message),
-            types::AppState::Error(message) => self.update_error(ctx, frame, message),
+            types::AppState::Warning(message) => self.update_warning(ctx, frame, &message),
+            types::AppState::Error(message) => self.update_error(ctx, frame, &message),
             types::AppState::Test => self.update_testing(ctx, frame),
         }
         let frame_duration = frame_start.elapsed();

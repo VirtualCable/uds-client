@@ -32,7 +32,7 @@ impl AppWindow {
         ctx: &egui::Context,
         _frame: &mut eframe::Frame,
         message: &str,
-        resp_tx: &mut Arc<RwLock<Option<oneshot::Sender<bool>>>>,
+        resp_tx: Arc<RwLock<Option<oneshot::Sender<bool>>>>,
     ) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.set_width(300.0);

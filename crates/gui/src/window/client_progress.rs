@@ -69,7 +69,7 @@ impl AppWindow {
         &mut self,
         ctx: &egui::Context,
         _frame: &mut eframe::Frame,
-        state: &ProgressState,
+        state: ProgressState,
     ) {
         let elapsed = state.start.elapsed().as_secs_f32();
         let progress = state.progress.load(std::sync::atomic::Ordering::Relaxed) as f32;

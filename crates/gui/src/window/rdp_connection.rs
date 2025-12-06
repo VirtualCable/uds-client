@@ -66,7 +66,10 @@ pub struct RdpConnectionState {
     input: *mut rdpInput,
     texture: egui::TextureHandle,
     cursor: Arc<RwLock<RdpMouseCursor>>,
+    updating_texture: Arc<AtomicBool>,
     full_screen: Arc<AtomicBool>,
+    // For top pinbar
+    pinbar_visible: Arc<AtomicBool>,
 }
 
 impl fmt::Debug for RdpConnectionState {
@@ -146,11 +149,7 @@ impl AppWindow {
         let texture = ctx.load_texture("rdp_framebuffer", image, egui::TextureOptions::LINEAR);
         let cursor_img = load_logo();
         let cursor_img_size = cursor_img.size;
-        let cursor = ctx.load_texture(
-            "rdp_cursor",
-            cursor_img,
-            egui::TextureOptions::LINEAR,
-        );
+        let cursor = ctx.load_texture("rdp_cursor", cursor_img, egui::TextureOptions::LINEAR);
 
         self.set_app_state(AppState::RdpConnected(RdpConnectionState {
             update_rx: rx,
@@ -165,7 +164,9 @@ impl AppWindow {
                 width: cursor_img_size[0] as u32,
                 height: cursor_img_size[1] as u32,
             })),
+            updating_texture: Arc::new(AtomicBool::new(false)),
             full_screen: Arc::new(AtomicBool::new(is_full_screen)),
+            pinbar_visible: Arc::new(AtomicBool::new(false)),
         }));
 
         std::thread::spawn(move || {
@@ -189,8 +190,8 @@ impl AppWindow {
     pub(super) fn update_rdp_connection(
         &mut self,
         ctx: &egui::Context,
-        frame: &mut eframe::Frame,
-        rdp_state: &mut RdpConnectionState,
+        _frame: &mut eframe::Frame,
+        mut rdp_state: RdpConnectionState,
     ) {
         // Calculate relation between gdi size and egui content size
         let scale = {
@@ -200,12 +201,12 @@ impl AppWindow {
             egui::Vec2::new(gdi_width / egui_size.x, gdi_height / egui_size.y)
         };
 
-        if self.handle_hotkeys(ctx, frame, rdp_state) {
+        if self.handle_hotkeys(ctx, &mut rdp_state) {
             // Hotkey handled, skip input processing this frame
             return;
         }
         let input = rdp_state.input;
-        self.handle_input(ctx, frame, input, scale);
+        self.handle_input(ctx, input, scale);
 
         // TODO: We already have the display channel, finish and test dynamic resizing
         // let egui::Vec2 {
@@ -224,7 +225,6 @@ impl AppWindow {
         //         gdi_height
         //     );
         // }
-        ctx.set_cursor_icon(egui::CursorIcon::None);
         egui::CentralPanel::default()
             .frame(egui::Frame::default().inner_margin(0.0))
             .show(ctx, |ui| {
@@ -272,7 +272,7 @@ impl AppWindow {
                         }
                     }
                 }
-                self.update_texture(rects_to_update, rdp_state);
+                Self::update_texture(rects_to_update, rdp_state.clone());
                 log::trace!("RDP update processing took {:?}", start.elapsed());
                 // Show the texture on 0,0, full size
                 let size = ui.available_size();
@@ -282,35 +282,26 @@ impl AppWindow {
                         .maintain_aspect_ratio(false)
                         .fit_to_exact_size(size),
                 );
-                // Custom cursor, after rendering the frame to be on top
-                if let Some(pos) = ctx.input(|i| i.pointer.latest_pos()) {
-                    self.custom_cursor(ui, &rdp_state.cursor.read().unwrap(), pos);
-                }
+
                 log::trace!("RDP frame rendered took {:?}", start.elapsed());
             });
+        // Pinbar at top
+        self.show_pinbar(ctx, &mut rdp_state);
+        // Handle custom cursor
+        self.handle_cursor(ctx, &rdp_state);
     }
 
-    fn handle_hotkeys(
-        &mut self,
-        ctx: &egui::Context,
-        _frame: &eframe::Frame,
-        rdp_state: &mut RdpConnectionState,
-    ) -> bool {
+    fn handle_hotkeys(&mut self, ctx: &egui::Context, rdp_state: &mut RdpConnectionState) -> bool {
         match HotKey::from_input(ctx) {
             HotKey::ToggleFullScreen => {
-                self.toggle_fullscreen(ctx, _frame, rdp_state);
+                self.toggle_fullscreen(ctx, rdp_state);
                 true
             }
             HotKey::None => false,
         }
     }
 
-    fn toggle_fullscreen(
-        &mut self,
-        ctx: &egui::Context,
-        _frame: &eframe::Frame,
-        rdp_state: &mut RdpConnectionState,
-    ) {
+    fn toggle_fullscreen(&mut self, ctx: &egui::Context, rdp_state: &mut RdpConnectionState) {
         log::debug!("ALT+ENTER pressed, toggling fullscreen");
         if rdp_state.full_screen.load(Ordering::Relaxed) {
             // Switch to fixed size, restores original size
@@ -323,28 +314,73 @@ impl AppWindow {
         }
     }
 
-    fn update_texture(&mut self, rects: Vec<rdp::geom::Rect>, rdp_state: &mut RdpConnectionState) {
-        let _guard = rdp_state.gdi_lock.write().unwrap();
-        for rect in rects {
-            let img = rect.extract(
-                unsafe {
-                    std::slice::from_raw_parts(
-                        (*rdp_state.gdi).primary_buffer as *const u8,
-                        ((*rdp_state.gdi).stride as usize)
-                            * (rdp_state.gdi.as_ref().unwrap().height as usize),
-                    )
-                },
-                unsafe { (*rdp_state.gdi).stride as usize },
-                unsafe { (*rdp_state.gdi).width as usize },
-                unsafe { (*rdp_state.gdi).height as usize },
-            );
-            if let Some(image) = img {
-                rdp_state.texture.set_partial(
-                    [rect.x as usize, rect.y as usize],
-                    image,
-                    egui::TextureOptions::LINEAR,
-                );
+    /// Update only the changed rects in a separate thread
+    fn update_texture(rects: Vec<rdp::geom::Rect>, rdp_state: RdpConnectionState) {
+        // If already updating, or no rects, skip
+        if rects.is_empty() || rdp_state.updating_texture.swap(true, Ordering::Relaxed) {
+            return;
+        }
+        // Mark as updating
+        rdp_state.updating_texture.store(true, Ordering::Relaxed);
+        // Get framebuffer info
+        let (primary_buffer, stride, width, height) = unsafe {
+            let _guard = rdp_state.gdi_lock.write().unwrap();
+            (
+                std::slice::from_raw_parts(
+                    (*rdp_state.gdi).primary_buffer as *const u8,
+                    ((*rdp_state.gdi).stride as usize)
+                        * (rdp_state.gdi.as_ref().unwrap().height as usize),
+                ),
+                (*rdp_state.gdi).stride as usize,
+                (*rdp_state.gdi).width as usize,
+                (*rdp_state.gdi).height as usize,
+            )
+        };
+        let mut texture = rdp_state.texture.clone();
+        let updating_flag = rdp_state.updating_texture.clone();
+        std::thread::spawn(move || {
+            for rect in rects {
+                let img = rect.extract(primary_buffer, stride, width, height);
+                if let Some(image) = img {
+                    texture.set_partial(
+                        [rect.x as usize, rect.y as usize],
+                        image,
+                        egui::TextureOptions::LINEAR,
+                    );
+                }
             }
+            updating_flag.store(false, Ordering::Relaxed);
+        });
+    }
+
+    fn handle_cursor(&self, ctx: &egui::Context, rdp_state: &RdpConnectionState) {
+        // Set custom cursor
+        // Custom cursor, last to be on top
+        if let Some(pos) = ctx.input(|i| i.pointer.latest_pos()) {
+            // If pointer is in bounds (2*width/5, 0) - (3*width/5, 2)
+            let size = ctx.content_rect().size();
+            if size.x * 2.0 / 5.0 < pos.x && pos.x < size.x * 3.0 / 5.0 && pos.y < 2.0 {
+                // Also, show pinbar
+                rdp_state.pinbar_visible.store(true, Ordering::Relaxed);
+            } else if pos.y > 32.0 {
+                // Hide pinbar if pointer is away
+                rdp_state.pinbar_visible.store(false, Ordering::Relaxed);
+            }
+
+            // Default cursor for pinbar area
+            if rdp_state.pinbar_visible.load(Ordering::Relaxed) {
+                // If pinbar is visible, show default cursor
+                ctx.set_cursor_icon(egui::CursorIcon::Default);
+            } else {
+                // Hide system cursor
+                ctx.set_cursor_icon(egui::CursorIcon::None);
+            }
+            egui::Area::new("rdp_cursor_area".into())
+                .order(egui::Order::Foreground)
+                .fixed_pos(egui::pos2(0.0, 0.0))
+                .show(ctx, |ui| {
+                    self.custom_cursor(ui, &rdp_state.cursor.read().unwrap(), pos);
+                });
         }
     }
 
@@ -358,5 +394,40 @@ impl AppWindow {
             egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
             egui::Color32::WHITE,
         );
+    }
+
+    fn show_pinbar(&mut self, ctx: &egui::Context, rdp_state: &mut RdpConnectionState) {
+        let fullscreen = rdp_state.full_screen.clone();
+        if !rdp_state.pinbar_visible.load(Ordering::Relaxed) || !fullscreen.load(Ordering::Relaxed)
+        {
+            return;
+        }
+
+        egui::Area::new("pinbar".into())
+            .fixed_pos(egui::pos2(0.0, 0.0)) // Esquina superior izquierda
+            .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, 0.0)) // Centrado arriba
+            .order(egui::Order::Foreground) // Encima de todo
+            .constrain(true) // Mantener dentro de pantalla
+            .show(ctx, |ui| {
+                // Frame con márgenes para no ocupar todo el ancho
+                egui::Frame::popup(ui.style())
+                    .inner_margin(egui::Margin::symmetric(100, 8))
+                    .show(ui, |ui| {
+                        ui.horizontal_centered(|ui| {
+                            ui.label("UDS Connection ");
+                            ui.with_layout(
+                                egui::Layout::left_to_right(egui::Align::Center),
+                                |ui| {
+                                    if ui.button("🗙").clicked() {
+                                        self.exit(ctx);
+                                    }
+                                    if ui.button("⬜").clicked() {
+                                        self.toggle_fullscreen(ctx, rdp_state);
+                                    }
+                                },
+                            );
+                        });
+                    });
+            });
     }
 }

@@ -34,7 +34,6 @@ impl AppWindow {
     fn handle_mouse(
         &mut self,
         _ctx: &egui::Context,
-        _frame: &mut eframe::Frame,
         rdp_input: *mut rdpInput,
         input_state: &egui::InputState,
         scale: egui::Vec2,
@@ -124,7 +123,6 @@ impl AppWindow {
     fn handle_keyboard(
         &mut self,
         _ctx: &egui::Context,
-        _frame: &mut eframe::Frame,
         rdp_input: *mut rdpInput,
         _input_state: &egui::InputState,
     ) {
@@ -151,7 +149,6 @@ impl AppWindow {
     pub fn handle_input(
         &mut self,
         ctx: &egui::Context,
-        frame: &mut eframe::Frame,
         rdp_input: *mut rdpInput,
         scale: egui::Vec2,
     ) {
@@ -161,9 +158,9 @@ impl AppWindow {
             //     log::debug!("Input event: {:?}", ev);
             // }
             // Handle mouse input
-            self.handle_mouse(ctx, frame, rdp_input, input_state, scale);
+            self.handle_mouse(ctx, rdp_input, input_state, scale);
             // Handle keyboard input
-            self.handle_keyboard(ctx, frame, rdp_input, input_state);
+            self.handle_keyboard(ctx, rdp_input, input_state);
         });
     }
 }

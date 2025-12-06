@@ -48,7 +48,7 @@ impl AppWindow {
         &mut self,
         ctx: &egui::Context,
         _frame: &mut eframe::Frame,
-        state: &RdpConnectingState,
+        state: RdpConnectingState,
     ) {
         egui::CentralPanel::default().show(ctx, |ui| {
             if state.start.elapsed().as_millis() > 100 {
