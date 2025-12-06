@@ -132,6 +132,44 @@ impl Rdp {
                 }
             }
 
+            fn channels(
+                settings: *mut rdpSettings,
+                name: &str,
+                add_static: bool,
+                add_dynamic: bool,
+            ) {
+                unsafe {
+                    let channel = if cfg!(target_os = "windows") {
+                        "sys:winmm"
+                    } else if cfg!(target_os = "linux") {
+                        "sys:pulse"  // add support for alsa and oss
+                    } else if cfg!(target_os = "macos") {
+                        "sys:mac"
+                    } else {
+                        "sys:fake"
+                    };
+
+                    let cname = std::ffi::CString::new(name).unwrap();
+                    let cchannel = std::ffi::CString::new(channel).unwrap();
+                    let channels: [*const std::os::raw::c_char; 2] =
+                        [cname.as_ptr(), cchannel.as_ptr()];
+                    if add_static {
+                        freerdp_client_add_static_channel(
+                            settings,
+                            channels.len(),
+                            channels.as_ptr(),
+                        );
+                    }
+                    if add_dynamic {
+                        freerdp_client_add_dynamic_channel(
+                            settings,
+                            channels.len(),
+                            channels.as_ptr(),
+                        );
+                    }
+                }
+            }
+
             // Sound redirection
             unsafe {
                 // true-false = play on client
@@ -147,25 +185,7 @@ impl Rdp {
                     FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteConsoleAudio,
                     false.into(),
                 );
-                let name = std::ffi::CString::new("rdpsnd").unwrap();
-                #[cfg(target_os = "windows")]
-                let channel = std::ffi::CString::new("sys:winmm").unwrap();
-                // TODO: For linux, allow selecting between oss/alsa/pulse
-                #[cfg(target_os = "linux")]
-                let channel = std::ffi::CString::new("sys:alsa").unwrap();
-                #[cfg(target_os = "macos")]
-                let channel = std::ffi::CString::new("sys:mac").unwrap();
-                let channels: [*const std::os::raw::c_char; 2] = [name.as_ptr(), channel.as_ptr()];
-                freerdp_client_add_static_channel(
-                    settings, // tu puntero settings
-                    channels.len(),
-                    channels.as_ptr(),
-                );
-                freerdp_client_add_dynamic_channel(
-                    settings,
-                    channels.len(),
-                    channels.as_ptr(),
-                );
+                channels(settings, "rdpsnd", true, true);
             }
             // Microphone redirection
             unsafe {
@@ -174,6 +194,7 @@ impl Rdp {
                     FreeRDP_Settings_Keys_Bool_FreeRDP_AudioCapture,
                     true.into(),
                 );
+                channels(settings, "audin", false, true);
             }
 
             // Set config settings for clipboard redirection
