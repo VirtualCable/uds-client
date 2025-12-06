@@ -14,6 +14,19 @@ vcpkg install `
   sdl3:x64-windows `
   openh264:x64-windows `
   
+Values for direct audio support
+  -DWITH_ALSA=ON `
+  -DWITH_PULSE=ON `
+  -DWITH_WINMM=ON `
+  -DWITH_MACAUDIO=ON `
+
+Values for audio codecs
+  -DWITH_LAME=ON `
+  -DWITH_FAAD2=ON `
+  -DWITH_FAAC=ON `
+  -DWITH_GSM=ON `
+  -DWITH_SOXR=ON `
+  -DWITH_DSP_FFMPEG=ON
 
 cmake -B build `
   -DCMAKE_TOOLCHAIN_FILE="Z:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake" `
@@ -31,9 +44,11 @@ cmake -B build `
   -DBUILD_TESTING=OFF `
   -DWITH_MANPAGES=OFF `
   -DWITH_CHANNELS=ON `
+  -DWITH_CLIENT_CHANNELS=ON `
   -DWITH_RDPSND=ON `
-  -DWITH_WINMM=ON `
   -DWITH_AUDIN=ON `
+  -DWITH_LAME=ON `
+  -DWITH_DSP_FFMPEG=ON `
   -DWITH_CLIENT_SDL=OFF `
   -DWITH_LIBUSB=ON `
   -DWITH_URBDRC=ON `
@@ -42,7 +57,6 @@ cmake -B build `
   -DWITH_CLIENT_WINDOWS=OFF `
   -DWITH_VERBOSE_WINPR_ASSERT=OFF `
   -DWITH_OPENH264=ON `
-  -DWITH_LAME=ON `
   -DLIBUSB_1_INCLUDE_DIR="Z:/dev/vcpkg/installed/x64-windows/include/libusb-1.0" `
   -DLIBUSB_1_LIBRARY="Z:/dev/vcpkg/installed/x64-windows/lib/libusb-1.0.lib" `
   -DWITH_RDPGFX=ON `

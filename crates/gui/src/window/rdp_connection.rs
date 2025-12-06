@@ -254,7 +254,7 @@ impl AppWindow {
                             log::debug!("RDP Focus Required");
                         }
                         RdpMessage::SetCursorIcon(data, x, y, width, height) => {
-                            log::debug!("Setting cursor icon, size: {width}x{height} on {x}, {y}");
+                            // log::debug!("Setting cursor icon, size: {width}x{height} on {x}, {y}");
                             let cursor_image = egui::ColorImage::from_rgba_unmultiplied(
                                 [width as usize, height as usize],
                                 &data,
