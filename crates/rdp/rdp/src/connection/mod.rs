@@ -71,7 +71,7 @@ impl Rdp {
                     FreeRDP_Settings_Keys_Bool_FreeRDP_FastPathInput,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_FastPathOutput,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_BitmapCompressionDisabled,
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteConsoleAudio,  // So audio is not played on server
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteConsoleAudio, // So audio is not played on server
                 ]
                 .iter()
                 {
@@ -93,9 +93,6 @@ impl Rdp {
                     FreeRDP_Settings_Keys_Bool_FreeRDP_FrameMarkerCommandEnabled,
                     // FreeRDP_Settings_Keys_Bool_FreeRDP_AsyncUpdate,  // Note: currently works badly
                     FreeRDP_Settings_Keys_Bool_FreeRDP_AsyncChannels,
-                    // Audio
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_AudioPlayback,
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_AudioCapture,
                     // Compression
                     // FreeRDP_Settings_Keys_Bool_FreeRDP_CompressionEnabled,
                     // Graphics
@@ -133,6 +130,50 @@ impl Rdp {
                 {
                     freerdp_settings_set_uint32(settings, *i, *v);
                 }
+            }
+
+            // Sound redirection
+            unsafe {
+                // true-false = play on client
+                // false-true = play on server
+                // false-false = no audio
+                freerdp_settings_set_bool(
+                    settings,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_AudioPlayback,
+                    true.into(),
+                );
+                freerdp_settings_set_bool(
+                    settings,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteConsoleAudio,
+                    false.into(),
+                );
+                let name = std::ffi::CString::new("rdpsnd").unwrap();
+                #[cfg(target_os = "windows")]
+                let channel = std::ffi::CString::new("sys:winmm").unwrap();
+                // TODO: For linux, allow selecting between oss/alsa/pulse
+                #[cfg(target_os = "linux")]
+                let channel = std::ffi::CString::new("sys:alsa").unwrap();
+                #[cfg(target_os = "macos")]
+                let channel = std::ffi::CString::new("sys:mac").unwrap();
+                let channels: [*const std::os::raw::c_char; 2] = [name.as_ptr(), channel.as_ptr()];
+                freerdp_client_add_static_channel(
+                    settings, // tu puntero settings
+                    channels.len(),
+                    channels.as_ptr(),
+                );
+                freerdp_client_add_dynamic_channel(
+                    settings,
+                    channels.len(),
+                    channels.as_ptr(),
+                );
+            }
+            // Microphone redirection
+            unsafe {
+                freerdp_settings_set_bool(
+                    settings,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_AudioCapture,
+                    true.into(),
+                );
             }
 
             // Set config settings for clipboard redirection
