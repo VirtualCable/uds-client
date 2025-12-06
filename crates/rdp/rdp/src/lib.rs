@@ -19,6 +19,8 @@ pub mod messaging;
 // Re-export sys module
 pub mod sys;
 
+pub mod channels;
+
 #[derive(Debug, Default)]
 pub struct Config {
     settings: settings::RdpSettings,
@@ -32,8 +34,9 @@ pub struct Rdp {
     update_tx: Option<messaging::Sender>,
     // GDI lock for thread safety
     gdi_lock: Arc<RwLock<()>>,
-    // TODO: implement display context
-    disp: Option<utils::SafePtr<freerdp_sys::DispClientContext>>,
+    // Note: We need a clonable safe struct for channels
+    // because they are initialized after connection is created, on a later step
+    channels: Arc<RwLock<channels::RdpChannels>>,
     stop_event: utils::SafeHandle,
     _pin: std::marker::PhantomPinned, // Do not allow moving
 }
@@ -53,7 +56,7 @@ impl Rdp {
             instance: None,
             update_tx: Some(update_tx),
             gdi_lock: Arc::new(RwLock::new(())),
-            disp: None,
+            channels: Arc::new(RwLock::new(channels::RdpChannels::new())),
             stop_event,
             _pin: std::marker::PhantomPinned,
         }
@@ -90,6 +93,10 @@ impl Rdp {
         } else {
             None
         }
+    }
+
+    pub fn channels(&self) -> Arc<RwLock<channels::RdpChannels>> {
+        self.channels.clone()
     }
 
     pub fn gdi(&self) -> Option<*mut freerdp_sys::rdpGdi> {

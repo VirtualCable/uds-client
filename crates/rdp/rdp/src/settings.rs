@@ -17,6 +17,8 @@ pub struct RdpSettings {
     pub use_nla: bool,
     #[zeroize(skip)]
     pub screen_size: ScreenSize,
+    #[zeroize(skip)]
+    pub clipboard_redirection: bool,
     // Valid values for drives_to_redirect are "all" for all drives
     // % -> Home
     // * --> All drives
@@ -34,8 +36,9 @@ impl Default for RdpSettings {
             password: "".to_string(),
             domain: "".to_string(),
             verify_cert: false,
-            screen_size: ScreenSize::Fixed(1024, 768),
             use_nla: false,
+            screen_size: ScreenSize::Fixed(1024, 768),
+            clipboard_redirection: true,
             drives_to_redirect: vec!["all".to_string()], // By default, redirect all drives.
         }
     }

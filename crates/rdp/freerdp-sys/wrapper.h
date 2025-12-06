@@ -6,6 +6,7 @@
 #include <freerdp/codec/color.h>
 #include <freerdp/transport_io.h>
 #include <freerdp/client/disp.h>
+#include <freerdp/client/cliprdr.h>
 
 // Channels
 #include <freerdp/channels/disp.h>

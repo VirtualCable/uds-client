@@ -55,13 +55,13 @@ Writes a DWORD (32-bit unsigned integer) value to the HKCU registry key.
 
 ### readHkcu (Windows only)
 
-Reads a string value from the HKCU registry key. Note: Currently returns undefined; may be a bug.
+Reads a string value from the HKCU registry key.
 
 **Parameters:**
 - `key` (string): The registry key path.
 - `value_name` (string): The value name.
 
-**Returns:** undefined - Currently returns undefined; may be a bug.
+**Returns:** string or undefined - The read value, or undefined if not found or error.
 
 ### readHklm (Windows only)
 
@@ -429,6 +429,7 @@ Starts an RDP connection with the specified settings.
   - `use_nla` (boolean, optional): Whether to use Network Level Authentication (default: true).
   - `screen_width` (number, optional): The screen width (0 for full screen).
   - `screen_height` (number, optional): The screen height (0 for full screen).
+  - `clipboard_redirection` (boolean, optional): Whether to enable clipboard redirection (default: true).
   - `drives_to_redirect` (array of strings, optional): List of drive letters to redirect.
 
 **Returns:** undefined
@@ -447,6 +448,7 @@ RDP.start({
     use_nla: true,
     screen_width: 1920,
     screen_height: 1080,
+    clipboard_redirection: true,
     drives_to_redirect: ["C", "D"]
 });
 ```
@@ -459,7 +461,7 @@ RDP.start({
 | Utils   | cryptProtectData         | input: string | Encrypts data using Windows CryptProtectData (Windows only) |
 | Utils   | writeHkcu                | key: string, value_name: string, value_data: string | Writes string to HKCU registry (Windows only) |
 | Utils   | writeHkcuDword           | key: string, value_name: string, value_data: number | Writes DWORD to HKCU registry (Windows only) |
-| Utils   | readHkcu                 | key: string, value_name: string | Attempts to read string from HKCU registry (Windows only) - currently returns undefined |
+| Utils   | readHkcu                 | key: string, value_name: string | Reads string from HKCU registry (Windows only) |
 | Utils   | readHklm                 | key: string, value_name: string | Reads string from HKLM registry (Windows only) |
 | Utils   | testServer (async)       | host: string, port: number, timeout_ms: number | Tests server connectivity |
 | Utils   | sleep (async)            | milliseconds: number | Waits for a specified number of milliseconds |

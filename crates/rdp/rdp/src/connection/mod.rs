@@ -60,7 +60,7 @@ impl Rdp {
     /// This function modifies the FreeRDP settings to enable various performance
     /// optimizations such as enabling bitmap caching, graphics pipeline support,
     /// and disabling unnecessary features.
-    pub fn optimize(&self) {
+    fn set_connections_parameters(&self) {
         #[cfg(debug_assertions)]
         self.debug_assert_instance();
 
@@ -135,6 +135,15 @@ impl Rdp {
                 }
             }
 
+            // Set config settings for clipboard redirection
+            unsafe {
+                freerdp_settings_set_bool(
+                    settings,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_RedirectClipboard,
+                    self.config.settings.clipboard_redirection.into(),
+                );
+            }
+
             // Set perfromance flags from settings
             unsafe { freerdp_sys::freerdp_performance_flags_make(settings) };
         } else {
@@ -155,8 +164,7 @@ impl Rdp {
 
     /// Connects to the RDP server using the current settings
     pub fn connect(&self) -> Result<()> {
-        #[cfg(debug_assertions)]
-        self.debug_assert_instance();
+        self.set_connections_parameters();
 
         unsafe {
             if let Some(instance) = self.instance {

@@ -64,6 +64,7 @@ pub struct RdpConnectionState {
     gdi: *mut rdpGdi,
     gdi_lock: Arc<RwLock<()>>,
     input: *mut rdpInput,
+    channels: Arc<RwLock<rdp::channels::RdpChannels>>,
     texture: egui::TextureHandle,
     cursor: Arc<RwLock<RdpMouseCursor>>,
     updating_texture: Arc<AtomicBool>,
@@ -114,7 +115,6 @@ impl AppWindow {
 
         log::debug!("** Rdp address: {:p}", &rdp);
 
-        rdp.optimize();
         rdp.connect()?;
 
         #[cfg(debug_assertions)]
@@ -155,6 +155,7 @@ impl AppWindow {
             update_rx: rx,
             gdi,
             input,
+            channels: rdp.channels().clone(),
             gdi_lock,
             texture,
             cursor: Arc::new(RwLock::new(RdpMouseCursor {
@@ -303,6 +304,7 @@ impl AppWindow {
 
     fn toggle_fullscreen(&mut self, ctx: &egui::Context, rdp_state: &mut RdpConnectionState) {
         log::debug!("ALT+ENTER pressed, toggling fullscreen");
+        log::debug!("Channels: {:?}", rdp_state.channels.read().unwrap());
         if rdp_state.full_screen.load(Ordering::Relaxed) {
             // Switch to fixed size, restores original size
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
@@ -411,7 +413,12 @@ impl AppWindow {
             .show(ctx, |ui| {
                 // Frame con márgenes para no ocupar todo el ancho
                 egui::Frame::popup(ui.style())
-                    .inner_margin(egui::Margin{ left: 64, top: 8, right: 16, bottom: 8 })
+                    .inner_margin(egui::Margin {
+                        left: 64,
+                        top: 8,
+                        right: 16,
+                        bottom: 8,
+                    })
                     .show(ui, |ui| {
                         ui.horizontal_centered(|ui| {
                             ui.label("UDS Connection");

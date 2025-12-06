@@ -22,6 +22,7 @@ struct RdpSettings {
     pub use_nla: Option<bool>,
     pub screen_width: Option<u32>,
     pub screen_height: Option<u32>,
+    pub clipboard_redirection: Option<bool>,
     pub drives_to_redirect: Option<Vec<String>>,
 }
 
@@ -37,6 +38,7 @@ impl Default for RdpSettings {
             use_nla: None,
             screen_width: None,
             screen_height: None,
+            clipboard_redirection: None,
             drives_to_redirect: None,
         }
     }
@@ -80,6 +82,7 @@ fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
         verify_cert: rdp_settings.verify_cert.unwrap_or(true),
         use_nla: rdp_settings.use_nla.unwrap_or(true),
         screen_size,
+        clipboard_redirection: rdp_settings.clipboard_redirection.unwrap_or(true),
         drives_to_redirect: rdp_settings.drives_to_redirect.unwrap_or_default(),
     };
 
