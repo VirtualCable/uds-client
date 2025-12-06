@@ -411,10 +411,11 @@ impl AppWindow {
             .show(ctx, |ui| {
                 // Frame con márgenes para no ocupar todo el ancho
                 egui::Frame::popup(ui.style())
-                    .inner_margin(egui::Margin::symmetric(100, 8))
+                    .inner_margin(egui::Margin{ left: 64, top: 8, right: 16, bottom: 8 })
                     .show(ui, |ui| {
                         ui.horizontal_centered(|ui| {
-                            ui.label("UDS Connection ");
+                            ui.label("UDS Connection");
+                            ui.add_space(24.0);
                             ui.with_layout(
                                 egui::Layout::left_to_right(egui::Align::Center),
                                 |ui| {
