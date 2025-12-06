@@ -418,11 +418,11 @@ impl AppWindow {
                             ui.with_layout(
                                 egui::Layout::left_to_right(egui::Align::Center),
                                 |ui| {
-                                    if ui.button("🗙").clicked() {
-                                        self.exit(ctx);
-                                    }
                                     if ui.button("⬜").clicked() {
                                         self.toggle_fullscreen(ctx, rdp_state);
+                                    }
+                                    if ui.button("🗙").clicked() {
+                                        self.exit(ctx);
                                     }
                                 },
                             );
