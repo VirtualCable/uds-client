@@ -4,6 +4,14 @@ use tokio::sync::oneshot;
 
 use super::{client_progress, rdp_connection, rdp_preconnection};
 
+static WAS_MAXIMIZED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn is_maximized(current_maximized: bool) -> bool {
+    let previous = WAS_MAXIMIZED.load(std::sync::atomic::Ordering::Relaxed);
+    WAS_MAXIMIZED.store(current_maximized, std::sync::atomic::Ordering::Relaxed);
+    previous != current_maximized && current_maximized
+}
+
 #[derive(Debug)]
 pub enum GuiMessage {
     Close,                                                         // Close gui
@@ -43,7 +51,10 @@ pub enum HotKey {
 impl HotKey {
     pub fn from_input(ctx: &eframe::egui::Context) -> Self {
         ctx.input(|input| {
-            if input.key_pressed(eframe::egui::Key::Enter) && input.modifiers.alt {
+            if (input.key_pressed(eframe::egui::Key::Enter) && input.modifiers.alt)
+                || is_maximized(input.viewport().maximized.unwrap_or(false))
+            {
+                // Send restore so maximixed is toggled off and return toggle fullscreen
                 Self::ToggleFullScreen
             } else {
                 Self::None
