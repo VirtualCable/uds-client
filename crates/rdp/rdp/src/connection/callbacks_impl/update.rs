@@ -2,19 +2,32 @@ use freerdp_sys::*;
 
 use shared::log;
 
-use crate::{callbacks::update, utils::normalize_invalids};
+use crate::{callbacks::update, utils::nomralize_rects};
 
 use super::{Rdp, RdpMessage};
 
 impl update::UpdateCallbacks for Rdp {
     fn on_begin_paint(&mut self) -> bool {
-        let gdi = self.context().unwrap().context().gdi;
-        let primary = unsafe { &mut *(*gdi).primary };
-        let hwnd = unsafe { (*primary.hdc).hwnd };
+        // Note: Regions are cleared by update_begin_paint by FreeRDP itself
+        // Left this code here for rerefence, until we are sure it's not needed :).
 
-        // Reset invalid region
-        unsafe { (*(*hwnd).invalid).null = true.into() };
-        unsafe { (*hwnd).ninvalid = 0 };
+        // let gdi = self.gdi();
+        // unsafe {
+        //     let primary = &mut *(*gdi).primary;
+        //     let hwnd = (*primary.hdc).hwnd;
+
+        //     if hwnd.is_null() {
+        //         return true;
+        //     }
+
+        //     if (*hwnd).invalid.is_null() {
+        //         return true;
+        //     }
+
+        //     // Reset invalid region
+        //     (*(*hwnd).invalid).null = true.into();
+        //     (*hwnd).ninvalid = 0;
+        // }
 
         true
     }
@@ -24,20 +37,37 @@ impl update::UpdateCallbacks for Rdp {
         if let Some(tx) = &self.update_tx {
             // If no updates, skip
             if let Some(gdi) = self.gdi() {
-                let primary = unsafe { &mut *(*gdi).primary };
-                let width = unsafe { (*gdi).width } as u32;
-                let height = unsafe { (*gdi).height } as u32;
-                let hwnd = unsafe { (*primary.hdc).hwnd };
+                // We can simply get "invalid", that is the joined rects that needs update
+                // for more granular updates, we get all rects and send them individually
+                let (rects_raw, width, height) = unsafe {
+                    let primary = &mut *(*gdi).primary;
+                    let width = (*gdi).width as u32;
+                    let height = (*gdi).height as u32;
+                    let hwnd = (*primary.hdc).hwnd;
+                    if (*gdi).suppressOutput != 0
+                        || (*hwnd).invalid.is_null()
+                        || (*(*hwnd).invalid).null != 0
+                    {
+                        return true;
+                    }
 
-                let ninvalid = unsafe { (*hwnd).ninvalid };
-                let cinvalid = unsafe { (*hwnd).invalid };
-                if ninvalid <= 0 {
-                    // No invalid regions, skip
-                    return true;
-                }
-                let rects_raw = unsafe { std::slice::from_raw_parts(cinvalid, ninvalid as usize) };
+                    let ninvalid = (*hwnd).ninvalid;
+                    let cinvalid = (*hwnd).cinvalid;
 
-                if let Some(rects) = normalize_invalids(rects_raw, width, height) {
+                    log::debug!("Rects count: {}", ninvalid);
+
+                    if ninvalid <= 0 {
+                        // No invalid regions, skip
+                        return true;
+                    }
+                    (
+                        std::slice::from_raw_parts(cinvalid, ninvalid as usize),
+                        width,
+                        height,
+                    )
+                };
+
+                if let Some(rects) = nomralize_rects(rects_raw, width, height) {
                     let _ = tx.try_send(RdpMessage::UpdateRects(rects));
                 }
             }

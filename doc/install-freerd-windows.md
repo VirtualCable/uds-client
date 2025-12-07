@@ -47,7 +47,6 @@ cmake -B build `
   -DWITH_CLIENT_CHANNELS=ON `
   -DWITH_RDPSND=ON `
   -DWITH_AUDIN=ON `
-  -DWITH_LAME=ON `
   -DWITH_DSP_FFMPEG=ON `
   -DWITH_CLIENT_SDL=OFF `
   -DWITH_LIBUSB=ON `
@@ -57,10 +56,13 @@ cmake -B build `
   -DWITH_CLIENT_WINDOWS=OFF `
   -DWITH_VERBOSE_WINPR_ASSERT=OFF `
   -DWITH_OPENH264=ON `
+  -DCHANNEL_SERIAL_CLIENT=ON `
   -DLIBUSB_1_INCLUDE_DIR="Z:/dev/vcpkg/installed/x64-windows/include/libusb-1.0" `
   -DLIBUSB_1_LIBRARY="Z:/dev/vcpkg/installed/x64-windows/lib/libusb-1.0.lib" `
   -DWITH_RDPGFX=ON `
   -DWITH_DYNVC=ON `
+  -DCHANNEL_TELEMETRY_CLIENT=ON `
+  -DCHANNEL_TELEMETRY_SERVER=OFF `
   -DWITH_DEBUG_ALL=OFF `
   -DWITH_DEBUG_CAPABILITIES=OFF `
   -DWITH_DEBUG_CERTIFICATE=OFF `
@@ -139,7 +141,6 @@ cmake -B build `
   -DWITH_CLIENT_WINDOWS=ON `
   -DWITH_VERBOSE_WINPR_ASSERT=ON `
   -DWITH_OPENH264=ON `
-  -DWITH_LAME=ON `
   -DLIBUSB_1_INCLUDE_DIR="Z:/dev/vcpkg/installed/x64-windows/include/libusb-1.0" `
   -DLIBUSB_1_LIBRARY="Z:/dev/vcpkg/installed/x64-windows/lib/libusb-1.0.lib" `
   -DSDL2_TTF_INCLUDE_DIR="Z:/dev/vcpkg/installed/x64-windows/include/SDL2" `

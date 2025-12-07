@@ -1,5 +1,7 @@
 use crate::utils;
 
+pub mod disp;
+
 #[derive(Clone, Debug)]
 pub struct RdpChannels {
     disp: Option<utils::SafePtr<freerdp_sys::DispClientContext>>,

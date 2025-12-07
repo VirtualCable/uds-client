@@ -1,6 +1,7 @@
 use std::ops::Deref;
 
 use freerdp_sys::{GDI_RGN, HANDLE};
+use shared::log;
 
 use super::geom::Rect;
 
@@ -30,29 +31,54 @@ impl ToStringLossy for *const i8 {
     }
 }
 
-pub fn normalize_invalids(rects_raw: &[GDI_RGN], width: u32, height: u32) -> Option<Vec<Rect>> {
-    let mut rects = Vec::with_capacity(rects_raw.len());
-    for rect in rects_raw {
-        // If any rect is invalid, return full screen
-        if rect.x > 0x3FFFFFFF
-            || rect.x < 0
-            || rect.y > 0x3FFFFFFF
-            || rect.y < 0
-            || rect.w > 0x3FFFFFFF
-            || rect.w < 0
-            || rect.h > 0x3FFFFFFF
-            || rect.h < 0
-        {
-            return Some(vec![Rect::new(0, 0, width, height)]);
-        }
-        rects.push(Rect::new(
-            rect.x as u32,
-            rect.y as u32,
-            rect.w as u32,
-            rect.h as u32,
-        ));
-    }
-    if rects.is_empty() { None } else { Some(rects) }
+pub fn nomralize_rects(rects_raw: &[GDI_RGN], width: u32, height: u32) -> Option<Vec<Rect>> {
+    let width = width as i32;
+    let height = height as i32;
+    rects_raw.iter()
+        .filter_map(|r| {
+            if r.x <= width
+                && r.x >= 0
+                && r.y <= height
+                && r.y >= 0
+                && r.w <= width
+                && r.w >= 0
+                && r.h <= height
+                && r.h >= 0
+            {
+                Some(Rect {
+                    x: r.x as u32,
+                    y: r.y as u32,
+                    w: r.w as u32,
+                    h: r.h as u32,
+                })
+            } else {
+                log::debug!("Skipping invalid rect: {:?}", r);
+                None
+            }
+        })
+        .collect::<Vec<_>>()
+        .into()
+
+    // for rect in rects_raw {
+    //     // If any rect is invalid, skip it
+    //     if rect.x > width
+    //         || rect.x < 0
+    //         || rect.y > height
+    //         || rect.y < 0
+    //         || rect.w > width
+    //         || rect.w < 0
+    //         || rect.h > height
+    //         || rect.h < 0
+    //     {
+    //         log::debug!("Skipping invalid rect: {:?}", rect);
+    //         log::debug!("All rects: {:?}", rects_raw);
+    //         return Some(vec![Rect{ x: 0, y: 0, w: width as u32, h: height as u32 }])
+    //     }
+
+    //     #[allow(clippy::unnecessary_cast)] // Maybe on other platforms is not an i32...
+    //     rects.push(rect.into());
+    // }
+    // if rects.is_empty() { None } else { Some(rects) }
 }
 
 #[repr(transparent)]
@@ -91,7 +117,6 @@ impl<T> Deref for SafePtr<T> {
 }
 
 pub type SafeHandle = SafePtr<std::os::raw::c_void>;
-
 
 impl SafeHandle {
     pub fn as_handle(&self) -> HANDLE {

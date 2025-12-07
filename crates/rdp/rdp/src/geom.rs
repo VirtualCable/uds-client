@@ -12,6 +12,17 @@ impl Rect {
     }
 }
 
+impl From<&freerdp_sys::GDI_RGN> for Rect {
+    fn from(rgn: &freerdp_sys::GDI_RGN) -> Self {
+        Self {
+            x: rgn.x as u32,
+            y: rgn.y as u32,
+            w: rgn.w as u32,
+            h: rgn.h as u32,
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 pub enum ScreenSize {
     Full,

@@ -1,8 +1,6 @@
 #![allow(dead_code)]
 use std::{env, fs, io, path::PathBuf};
 
-const USE_DEBUG_DLLS: bool = false;
-
 fn copy_if_different(src: &PathBuf, dst: &PathBuf) -> io::Result<()> {
     if !dst.exists() || fs::metadata(src)?.len() != fs::metadata(dst)?.len() {
         // Si no existe o el tamaño es distinto, copiamos
@@ -29,10 +27,6 @@ fn copy_windows_dlls() {
     let vcpkg = PathBuf::from(r"Z:\dev\vcpkg");
     let vcpkg_bin = PathBuf::from(format!("{}/installed/x64-windows/bin", vcpkg.display()));
     let vcpkg_lib = PathBuf::from(format!("{}/installed/x64-windows/lib", vcpkg.display()));
-    let vcpkg_bin_debug = PathBuf::from(format!(
-        "{}/installed/x64-windows/debug/bin",
-        vcpkg.display()
-    ));
 
     println!("cargo:rerun-if-changed={}", out_dir.display());
 
@@ -57,7 +51,7 @@ fn copy_windows_dlls() {
         // "ogg.dll",
         // "brotlidec.dll",
         // "brotlicommon.dll",
-        "libmp3lame.dll",
+        // "libmp3lame.dll",
         "avcodec-61.dll",
         "avutil-59.dll",
         "swscale-8.dll",
@@ -70,9 +64,6 @@ fn copy_windows_dlls() {
         "cjson.dll",
     ];
 
-    // Debug libraries fron vcpkg
-    let vcpkg_debug_dlls: &[&str] = if USE_DEBUG_DLLS { &["zlibd1.dll"] } else { &[] };
-
     for dll in freerdp_dlls {
         copy_if_different(&freerdp_bin.join(dll), &out_dir.join(dll)).unwrap();
         println!("cargo:rerun-if-changed={}", freerdp_bin.join(dll).display());
@@ -81,14 +72,6 @@ fn copy_windows_dlls() {
     for dll in vcpkg_dlls {
         copy_if_different(&vcpkg_bin.join(dll), &out_dir.join(dll)).unwrap();
         println!("cargo:rerun-if-changed={}", vcpkg_bin.join(dll).display());
-    }
-
-    for dll in vcpkg_debug_dlls {
-        copy_if_different(&vcpkg_bin_debug.join(dll), &out_dir.join(dll)).unwrap();
-        println!(
-            "cargo:rerun-if-changed={}",
-            vcpkg_bin_debug.join(dll).display()
-        );
     }
 
     println!("cargo:rustc-link-search=native={}", vcpkg_lib.display());

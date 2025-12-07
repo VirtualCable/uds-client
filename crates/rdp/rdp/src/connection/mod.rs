@@ -60,7 +60,7 @@ impl Rdp {
     /// This function modifies the FreeRDP settings to enable various performance
     /// optimizations such as enabling bitmap caching, graphics pipeline support,
     /// and disabling unnecessary features.
-    fn set_connections_parameters(&self) {
+    fn set_rdp_settings(&self) {
         #[cfg(debug_assertions)]
         self.debug_assert_instance();
 
@@ -81,8 +81,6 @@ impl Rdp {
                 for i in [
                     FreeRDP_Settings_Keys_Bool_FreeRDP_GfxThinClient,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_GfxProgressive,
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_BitmapCacheEnabled,
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_BitmapCacheV3Enabled,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_AllowFontSmoothing,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_AllowDesktopComposition,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_AllowCacheWaitingList,
@@ -100,7 +98,7 @@ impl Rdp {
                     FreeRDP_Settings_Keys_Bool_FreeRDP_GfxAVC444v2,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_GfxAVC444,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_GfxH264,
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteFxCodec,
+                    // FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteFxCodec,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_SupportGraphicsPipeline,
                 ]
                 .iter()
@@ -226,7 +224,7 @@ impl Rdp {
 
     /// Connects to the RDP server using the current settings
     pub fn connect(&self) -> Result<()> {
-        self.set_connections_parameters();
+        self.set_rdp_settings();
 
         unsafe {
             if let Some(instance) = self.instance {

@@ -68,6 +68,7 @@ pub struct RdpConnectionState {
     texture: egui::TextureHandle,
     cursor: Arc<RwLock<RdpMouseCursor>>,
     updating_texture: Arc<AtomicBool>,
+    needs_full_update: Arc<AtomicBool>,
     full_screen: Arc<AtomicBool>,
     // For top pinbar
     pinbar_visible: Arc<AtomicBool>,
@@ -166,6 +167,7 @@ impl AppWindow {
                 height: cursor_img_size[1] as u32,
             })),
             updating_texture: Arc::new(AtomicBool::new(false)),
+            needs_full_update: Arc::new(AtomicBool::new(true)),
             full_screen: Arc::new(AtomicBool::new(is_full_screen)),
             pinbar_visible: Arc::new(AtomicBool::new(false)),
         }));
@@ -319,11 +321,26 @@ impl AppWindow {
     /// Update only the changed rects in a separate thread
     fn update_texture(rects: Vec<rdp::geom::Rect>, rdp_state: RdpConnectionState) {
         // If already updating, or no rects, skip
-        if rects.is_empty() || rdp_state.updating_texture.swap(true, Ordering::Relaxed) {
+        if rects.is_empty() {
+            return;
+        }
+        if rdp_state.updating_texture.swap(true, Ordering::Relaxed) {
+            rdp_state.needs_full_update.store(true, Ordering::Relaxed);
             return;
         }
         // Mark as updating
         rdp_state.updating_texture.store(true, Ordering::Relaxed);
+        // Reassig rect if full update is needed
+        let rects = if rdp_state.needs_full_update.swap(false, Ordering::Relaxed) {
+            vec![rdp::geom::Rect::new(
+                0,
+                0,
+                unsafe { (*rdp_state.gdi).width as u32 },
+                unsafe { (*rdp_state.gdi).height as u32 },
+            )]
+        } else {
+            rects
+        };
         // Get framebuffer info
         let (primary_buffer, stride, width, height) = unsafe {
             let _guard = rdp_state.gdi_lock.write().unwrap();
