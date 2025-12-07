@@ -239,8 +239,10 @@ impl AppWindow {
                     // Process all pending messages BUT only the last update_rect to avoid lagging behind
                     match message {
                         RdpMessage::UpdateRects(rects) => {
-                            // TODO: Append rect to list and calculate later the overlapping ones
-                            rects_to_update = rects;
+                            // TODO: Implement several optimizations:
+                            // 1.- The textue updater shoud be a thread with a channel, so we just send the rects to update here
+                            // 2.- The texture updater should merge rects to minimize updates with all the rects it has pending
+                            rects_to_update.extend_from_slice(&rects);
                         }
                         RdpMessage::Disconnect => {
                             log::debug!("RDP Disconnected");
@@ -324,52 +326,70 @@ impl AppWindow {
         if rects.is_empty() {
             return;
         }
+
+        // If already updating, mark for full update later because rects will be outdated
         if rdp_state.updating_texture.swap(true, Ordering::Relaxed) {
             rdp_state.needs_full_update.store(true, Ordering::Relaxed);
             return;
         }
-        // Mark as updating
-        rdp_state.updating_texture.store(true, Ordering::Relaxed);
+
+        // Maybe on other platforms stride is not an u32...
+        #[allow(clippy::unnecessary_cast)]
+        let (stride, width, height) = unsafe {
+            (
+                (*rdp_state.gdi).stride as u32,
+                (*rdp_state.gdi).width as u32,
+                (*rdp_state.gdi).height as u32,
+            )
+        };
+
         // Reassig rect if full update is needed
         let rects = if rdp_state.needs_full_update.swap(false, Ordering::Relaxed) {
-            vec![rdp::geom::Rect::new(
-                0,
-                0,
-                unsafe { (*rdp_state.gdi).width as u32 },
-                unsafe { (*rdp_state.gdi).height as u32 },
-            )]
+            vec![rdp::geom::Rect::new(0, 0, width, height)]
         } else {
             rects
         };
-        // Get framebuffer info
-        let (primary_buffer, stride, width, height) = unsafe {
-            let _guard = rdp_state.gdi_lock.write().unwrap();
-            (
-                std::slice::from_raw_parts(
-                    (*rdp_state.gdi).primary_buffer as *const u8,
-                    ((*rdp_state.gdi).stride as usize)
-                        * (rdp_state.gdi.as_ref().unwrap().height as usize),
-                ),
-                (*rdp_state.gdi).stride as usize,
-                (*rdp_state.gdi).width as usize,
-                (*rdp_state.gdi).height as usize,
-            )
-        };
-        let mut texture = rdp_state.texture.clone();
-        let updating_flag = rdp_state.updating_texture.clone();
-        std::thread::spawn(move || {
-            for rect in rects {
-                let img = rect.extract(primary_buffer, stride, width, height);
-                if let Some(image) = img {
-                    texture.set_partial(
-                        [rect.x as usize, rect.y as usize],
-                        image,
-                        egui::TextureOptions::LINEAR,
-                    );
-                }
+
+        // Fold all rects into one union rect to minimize updates
+        let unique_rect = rects.iter().fold(None, |acc: Option<rdp::geom::Rect>, r| {
+            if let Some(acc_rect) = acc {
+                Some(acc_rect.union(r))
+            } else {
+                Some(*r)
             }
-            updating_flag.store(false, Ordering::Relaxed);
         });
+
+        if let Some(rect) = unique_rect {
+            // Get framebuffer info
+            let (primary_buffer, stride, width, height) = unsafe {
+                let _guard = rdp_state.gdi_lock.write().unwrap();
+                (
+                    std::slice::from_raw_parts(
+                        (*rdp_state.gdi).primary_buffer as *const u8,
+                        (stride as usize) * (height as usize),
+                    ),
+                    stride as usize,
+                    width as usize,
+                    height as usize,
+                )
+            };
+            let mut texture = rdp_state.texture.clone();
+            std::thread::spawn({
+                let updating_flag = rdp_state.updating_texture.clone();
+                updating_flag.store(true, Ordering::Relaxed);
+                move || {
+                    let img = rect.extract(primary_buffer, stride, width, height);
+                    if let Some(image) = img {
+                        texture.set_partial(
+                            [rect.x as usize, rect.y as usize],
+                            image,
+                            egui::TextureOptions::LINEAR,
+                        );
+                    }
+                    updating_flag.store(false, Ordering::Relaxed);
+                }
+            });
+        }
     }
 
     fn handle_cursor(&self, ctx: &egui::Context, rdp_state: &RdpConnectionState) {

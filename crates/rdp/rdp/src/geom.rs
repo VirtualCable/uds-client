@@ -10,6 +10,19 @@ impl Rect {
     pub fn new(x: u32, y: u32, w: u32, h: u32) -> Self {
         Self { x, y, w, h }
     }
+    
+    pub fn union(&self, other: &Rect) -> Rect {
+        let x1 = self.x.min(other.x);
+        let y1 = self.y.min(other.y);
+        let x2 = (self.x + self.w).max(other.x + other.w);
+        let y2 = (self.y + self.h).max(other.y + other.h);
+        Rect {
+            x: x1,
+            y: y1,
+            w: x2 - x1,
+            h: y2 - y1,
+        }
+    }
 }
 
 impl From<&freerdp_sys::GDI_RGN> for Rect {

@@ -51,7 +51,7 @@ fn copy_windows_dlls() {
         // "ogg.dll",
         // "brotlidec.dll",
         // "brotlicommon.dll",
-        // "libmp3lame.dll",
+        "libmp3lame.dll",
         "avcodec-61.dll",
         "avutil-59.dll",
         "swscale-8.dll",

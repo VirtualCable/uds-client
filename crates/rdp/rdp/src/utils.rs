@@ -31,19 +31,20 @@ impl ToStringLossy for *const i8 {
     }
 }
 
-pub fn nomralize_rects(rects_raw: &[GDI_RGN], width: u32, height: u32) -> Option<Vec<Rect>> {
+pub fn normalize_rects(rects_raw: &[GDI_RGN], width: u32, height: u32) -> Option<Vec<Rect>> {
     let width = width as i32;
     let height = height as i32;
-    rects_raw.iter()
+    rects_raw
+        .iter()
         .filter_map(|r| {
             if r.x <= width
+                && r.y < height
                 && r.x >= 0
-                && r.y <= height
                 && r.y >= 0
                 && r.w <= width
-                && r.w >= 0
+                && r.w > 0
                 && r.h <= height
-                && r.h >= 0
+                && r.h > 0
             {
                 Some(Rect {
                     x: r.x as u32,
