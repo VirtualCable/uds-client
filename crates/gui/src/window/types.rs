@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use tokio::sync::oneshot;
 
-use super::{client_progress, rdp::rdp_connection, rdp::rdp_preconnection};
+use super::{client_progress, rdp::connection, rdp::preconnection};
 
 static WAS_MAXIMIZED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
@@ -33,8 +33,8 @@ pub enum AppState {
     ClientProgress(client_progress::ProgressState),
     // use this to set fullscreen prior to connection if needed
     // and anything else
-    RdpConnecting(rdp_preconnection::RdpConnectingState),
-    RdpConnected(rdp_connection::RdpConnectionState),
+    RdpConnecting(preconnection::RdpConnectingState),
+    RdpConnected(connection::RdpConnectionState),
     // This will be consumed once response is sent and only once
     YesNo(String, Arc<RwLock<Option<oneshot::Sender<bool>>>>),
     Error(String),

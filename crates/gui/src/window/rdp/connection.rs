@@ -72,6 +72,8 @@ impl AppWindow {
             false
         };
 
+        let use_rgba = !super::graphics::Screen::supports_bgra(frame);
+
         // Rdp shouls be pinned, as build() inserts self reference inside freedrp structs
         let mut rdp = Box::pin(Rdp::new(rdp_settings, tx));
 
@@ -123,7 +125,7 @@ impl AppWindow {
             input,
             channels: rdp.channels().clone(),
             gdi_lock,
-            screen: super::graphics::Screen::new(frame, texture_size),
+            screen: super::graphics::Screen::new(frame, texture_size, use_rgba),
             cursor: Rc::new(RefCell::new(super::mouse::RdpMouseCursor {
                 texture: cursor,
                 x: 0,

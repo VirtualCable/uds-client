@@ -3,7 +3,7 @@ use std::sync::atomic::Ordering;
 
 use eframe::egui;
 
-use super::rdp_connection::RdpConnectionState;
+use super::connection::RdpConnectionState;
 use crate::window::AppWindow;
 
 const FRAMES_IN_FLIGHT: usize = 128;

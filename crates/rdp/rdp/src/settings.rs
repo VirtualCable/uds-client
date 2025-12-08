@@ -24,7 +24,7 @@ pub struct RdpSettings {
     // * --> All drives
     // DynamicDrives --> Later connected drives
     #[zeroize(skip)]
-    pub drives_to_redirect: Vec<String>,  
+    pub drives_to_redirect: Vec<String>,
 }
 
 impl Default for RdpSettings {

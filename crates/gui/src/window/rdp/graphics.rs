@@ -8,7 +8,7 @@ use eframe::{
     glow::{self, HasContext, PixelUnpackData},
 };
 
-use super::rdp_connection::RdpConnectionState;
+use super::connection::RdpConnectionState;
 use crate::window::AppWindow;
 
 #[derive(Clone, Debug)]
@@ -16,22 +16,25 @@ pub struct Screen {
     texture: egui::TextureId,
     native_texture: glow::Texture,
     size: egui::Vec2,
+    use_rgba: bool,
 }
 
 impl Screen {
-    pub fn new(frame: &mut eframe::Frame, size: egui::Vec2) -> Self {
+    pub fn new(frame: &mut eframe::Frame, size: egui::Vec2, use_rgba: bool) -> Self {
         let gl = frame.gl().unwrap();
         let native_texture = unsafe { gl.create_texture().unwrap() };
+
+
         unsafe {
             gl.bind_texture(glow::TEXTURE_2D, Some(native_texture));
             gl.tex_image_2d(
                 glow::TEXTURE_2D,
                 0,
-                glow::BGRA as i32,
+                if use_rgba { glow::RGBA } else { glow::BGRA } as i32,
                 size.x as i32,
                 size.y as i32,
                 0,
-                glow::BGRA,
+                if use_rgba { glow::RGBA } else { glow::BGRA },
                 glow::UNSIGNED_BYTE,
                 PixelUnpackData::Slice(None),
             );
@@ -53,6 +56,16 @@ impl Screen {
             texture: frame.register_native_glow_texture(native_texture),
             native_texture,
             size,
+            use_rgba,
+        }
+    }
+
+    pub fn supports_bgra(frame: &mut eframe::Frame) -> bool {
+        let gl = frame.gl().unwrap();
+        unsafe {
+            // Extensions string (OK for desktop GL; on core profiles it may be limited)
+            let ext = gl.get_parameter_string(glow::EXTENSIONS);
+            ext.contains("GL_EXT_bgra") || ext.contains("GL_APPLE_texture_format_BGRA8888")
         }
     }
 
@@ -94,12 +107,11 @@ impl Screen {
             unsafe {
                 gl.bind_texture(glow::TEXTURE_2D, Some(self.native()));
 
-                // Configurar cómo se interpreta el buffer
                 gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, stride_pixels as i32);
                 gl.pixel_store_i32(glow::UNPACK_SKIP_PIXELS, rect.x as i32);
                 gl.pixel_store_i32(glow::UNPACK_SKIP_ROWS, rect.y as i32);
 
-                // Copiar subimagen directamente (BGRA nativo)
+                // Upload only the changed rect using texSubImage2D and desired format
                 gl.tex_sub_image_2d(
                     glow::TEXTURE_2D,
                     0, // mip level
@@ -107,7 +119,7 @@ impl Screen {
                     rect.y as i32,
                     rect.w as i32,
                     rect.h as i32,
-                    glow::BGRA, // formato de origen
+                    if self.use_rgba { glow::RGBA } else { glow::BGRA }, // formato de origen
                     glow::UNSIGNED_BYTE,
                     PixelUnpackData::Slice(Some(framebuffer)),
                 );
