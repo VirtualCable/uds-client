@@ -36,7 +36,7 @@ pub struct RdpConnectionState {
     pub input: *mut rdpInput,
     pub channels: Arc<RwLock<rdp::channels::RdpChannels>>,
     pub screen: super::graphics::Screen,
-    pub cursor: Rc<RefCell<super::graphics::RdpMouseCursor>>,
+    pub cursor: Rc<RefCell<super::mouse::RdpMouseCursor>>,
     pub full_screen: Arc<AtomicBool>,
     // For top pinbar
     pub pinbar_visible: Arc<AtomicBool>,
@@ -113,9 +113,6 @@ impl AppWindow {
             (*gdi).height as f32
         });
 
-        let (texture, native_texture) =
-            self.new_screen_texture(frame, texture_size.x as u32, texture_size.y as u32);
-
         let cursor_img = load_logo();
         let cursor_img_size = cursor_img.size;
         let cursor = ctx.load_texture("rdp_cursor", cursor_img, egui::TextureOptions::LINEAR);
@@ -126,8 +123,8 @@ impl AppWindow {
             input,
             channels: rdp.channels().clone(),
             gdi_lock,
-            screen: super::graphics::Screen::new(texture, native_texture, texture_size),
-            cursor: Rc::new(RefCell::new(super::graphics::RdpMouseCursor {
+            screen: super::graphics::Screen::new(frame, texture_size),
+            cursor: Rc::new(RefCell::new(super::mouse::RdpMouseCursor {
                 texture: cursor,
                 x: 0,
                 y: 0,
@@ -234,14 +231,15 @@ impl AppWindow {
                         }
                     }
                 }
-                Self::update_screen_texture(gl, rects_to_update, rdp_state.clone());
+                let screen = rdp_state.screen.clone();
+                screen.update_screen_texture(gl, rects_to_update, rdp_state.clone());
                 log::trace!("RDP update processing took {:?}", start.elapsed());
                 // Show the texture on 0,0, full size
                 let size = ui.available_size();
                 ui.add_sized(
                     size,
                     egui::Image::new(egui::load::SizedTexture::new(
-                        rdp_state.screen.texture_id(),
+                        screen.texture_id(),
                         size,
                     )),
                 );
