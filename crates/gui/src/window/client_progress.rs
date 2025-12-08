@@ -43,6 +43,7 @@ impl AppWindow {
     pub fn enter_client_progress(
         &mut self,
         ctx: &eframe::egui::Context,
+        _frame: &mut eframe::Frame,
         state: ProgressState,
     ) -> Result<()> {
         log::debug!("Switching to client progress window...");
@@ -60,9 +61,10 @@ impl AppWindow {
     pub fn restore_client_progress(
         &mut self,
         ctx: &eframe::egui::Context,
+        frame: &mut eframe::Frame,
         state: ProgressState,
     ) -> Result<()> {
-        self.enter_client_progress(ctx, state)
+        self.enter_client_progress(ctx, frame, state)
     }
 
     pub fn update_progress(

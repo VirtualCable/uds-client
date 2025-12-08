@@ -8,7 +8,12 @@ use super::{
 };
 
 impl AppWindow {
-    pub fn enter_error(&mut self, ctx: &egui::Context, message: String) -> Result<()> {
+    pub fn enter_error(
+        &mut self,
+        ctx: &egui::Context,
+        _frame: &mut eframe::Frame,
+        message: String,
+    ) -> Result<()> {
         let text_height = calculate_text_height(&message, 40);
         self.resize_and_center(ctx, [320.0, text_height + 48.0], true);
         self.set_app_state(AppState::Error(message));

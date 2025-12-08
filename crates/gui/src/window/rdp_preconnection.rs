@@ -24,6 +24,7 @@ impl AppWindow {
     pub fn enter_rdp_preconnection(
         &mut self,
         ctx: &eframe::egui::Context,
+        _frame: &mut eframe::Frame,
         settings: RdpSettings,
     ) -> Result<()> {
         // Default size for connecting window if no fullscreen
@@ -47,7 +48,7 @@ impl AppWindow {
     pub fn update_rdp_preconnection(
         &mut self,
         ctx: &egui::Context,
-        _frame: &mut eframe::Frame,
+        frame: &mut eframe::Frame,
         state: RdpConnectingState,
     ) {
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -58,7 +59,7 @@ impl AppWindow {
                     self.screen_size = Some((screen_size.x as u32, screen_size.y as u32));
                 }
                 // Switch to RdpConnected after 1 second, this is only for setting fullscreen etc.
-                self.enter_rdp_connection(ctx, state.settings.clone()).ok();
+                self.enter_rdp_connection(ctx, frame, state.settings.clone()).ok();
             }
             if state.switch_to_fullscreen.load(Ordering::Relaxed) {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));

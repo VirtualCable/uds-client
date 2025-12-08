@@ -34,9 +34,9 @@ pub(super) struct AppWindow {
     pub processing_events: Arc<AtomicBool>, // Set if we need to process wininit events (keyboard events right now)
     pub events: Receiver<input::RawKey>,
     pub gui_messages_rx: Receiver<types::GuiMessage>,
-    pub stop: Trigger,             // For stopping any ongoing operations
+    pub stop: Trigger,                   // For stopping any ongoing operations
     pub screen_size: Option<(u32, u32)>, // Cached screen size
-    pub catalog: gettext::Catalog, // For translations
+    pub catalog: gettext::Catalog,       // For translations
 }
 
 impl AppWindow {
@@ -112,30 +112,29 @@ impl AppWindow {
         self.app_state = new_state;
     }
 
-    pub fn restore_previous_state(&mut self, ctx: &eframe::egui::Context) {
+    pub fn restore_previous_state(&mut self, ctx: &eframe::egui::Context, frame: &mut eframe::Frame) {
         self.processing_events.store(false, Ordering::Relaxed); // Stop processing rdp raw events on event loop
         self.app_state = self.prev_app_state.clone();
         self.prev_app_state = types::AppState::default();
         // Call restore if necessary, that is, for testing and client_progress states
         // Other states do not need restoration
         match &self.app_state {
-            types::AppState::Test => self.restore_testing(ctx).ok(),
+            types::AppState::Test => self.restore_testing(ctx, frame).ok(),
             types::AppState::ClientProgress(state) => {
-                self.restore_client_progress(ctx, state.clone()).ok()
+                self.restore_client_progress(ctx, frame, state.clone()).ok()
             }
             _ => None,
         };
     }
 
-    pub fn enter_invisible(&mut self, ctx: &eframe::egui::Context) -> Result<()> {
+    pub fn enter_invisible(
+        &mut self,
+        ctx: &eframe::egui::Context,
+        _frame: &mut eframe::Frame,
+    ) -> Result<()> {
         self.set_app_state(types::AppState::Invisible);
 
         ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
-        Ok(())
-    }
-
-    pub fn exit_invisible(&mut self, ctx: &eframe::egui::Context) -> Result<()> {
-        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
         Ok(())
     }
 }
@@ -159,24 +158,28 @@ impl eframe::App for AppWindow {
                 }
                 types::GuiMessage::Hide => {
                     log::debug!("Received hide message, hiding window.");
-                    self.enter_invisible(ctx).ok();
+                    self.enter_invisible(ctx, frame).ok();
                 }
                 types::GuiMessage::ShowError(msg) => {
                     log::debug!("Received show error message: {}", msg);
-                    self.enter_error(ctx, msg.clone()).ok();
+                    self.enter_error(ctx, frame, msg.clone()).ok();
                 }
                 types::GuiMessage::ShowWarning(msg) => {
                     log::debug!("Received show warning message: {}", msg);
-                    self.enter_warning(ctx, msg.clone()).ok();
+                    self.enter_warning(ctx, frame, msg.clone()).ok();
                 }
                 types::GuiMessage::ShowYesNo(msg, resp_tx) => {
                     log::debug!("Received show yes/no message: {}", msg);
-                    self.enter_yesno(ctx, msg.clone(), resp_tx).ok();
+                    self.enter_yesno(ctx, frame, msg.clone(), resp_tx).ok();
                 }
                 types::GuiMessage::ShowProgress => {
                     log::debug!("Switching to client progress window...");
-                    self.enter_client_progress(ctx, client_progress::ProgressState::default())
-                        .ok();
+                    self.enter_client_progress(
+                        ctx,
+                        frame,
+                        client_progress::ProgressState::default(),
+                    )
+                    .ok();
                 }
                 types::GuiMessage::Progress(percentage, message) => {
                     log::debug!("Received progress update: {}% - {}", percentage, message);
@@ -190,7 +193,7 @@ impl eframe::App for AppWindow {
                 }
                 types::GuiMessage::ConnectRdp(settings) => {
                     log::debug!("Received RDP connect message: {:?}", settings);
-                    self.enter_rdp_preconnection(ctx, settings).ok();
+                    self.enter_rdp_preconnection(ctx, frame, settings).ok();
                 }
             }
         }
@@ -199,7 +202,9 @@ impl eframe::App for AppWindow {
         // And changes should be reflected on all references
         let app_state = self.app_state.clone();
         match app_state {
-            types::AppState::RdpConnecting(rdp_state) => self.update_rdp_preconnection(ctx, frame, rdp_state),
+            types::AppState::RdpConnecting(rdp_state) => {
+                self.update_rdp_preconnection(ctx, frame, rdp_state)
+            }
             types::AppState::RdpConnected(rdp_state) => {
                 self.update_rdp_connection(ctx, frame, rdp_state)
             }

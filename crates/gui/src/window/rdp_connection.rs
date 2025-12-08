@@ -9,7 +9,10 @@ use std::{
 
 use anyhow::Result;
 use crossbeam::channel::{Receiver, Sender, bounded};
-use eframe::egui;
+use eframe::{
+    egui,
+    glow::{self, HasContext, PixelUnpackData},
+};
 
 use crate::{log, logo::load_logo};
 
@@ -19,8 +22,6 @@ use rdp::{
     settings::RdpSettings,
     sys::{rdpGdi, rdpInput},
 };
-
-use crate::geom::RectExt; // For extracting rects from framebuffer
 
 use super::{
     AppWindow,
@@ -65,10 +66,10 @@ pub struct RdpConnectionState {
     gdi_lock: Arc<RwLock<()>>,
     input: *mut rdpInput,
     channels: Arc<RwLock<rdp::channels::RdpChannels>>,
-    texture: egui::TextureHandle,
+    texture: egui::TextureId,
+    native_texture: glow::Texture,
+    texture_size: egui::Vec2,
     cursor: Arc<RwLock<RdpMouseCursor>>,
-    updating_texture: Arc<AtomicBool>,
-    needs_full_update: Arc<AtomicBool>,
     full_screen: Arc<AtomicBool>,
     // For top pinbar
     pinbar_visible: Arc<AtomicBool>,
@@ -87,6 +88,7 @@ impl AppWindow {
     pub fn enter_rdp_connection(
         &mut self,
         ctx: &eframe::egui::Context,
+        frame: &mut eframe::Frame,
         rdp_settings: RdpSettings,
     ) -> Result<()> {
         self.processing_events.store(true, Ordering::Relaxed); // Start processing events
@@ -140,14 +142,13 @@ impl AppWindow {
         log::debug!("Obtained GDI pointer: {:?}", gdi);
         log::debug!("Gdi: {:?}", unsafe { *gdi });
 
-        // Stride in bytes
-        let pitch = unsafe { (*gdi).stride } as usize;
-        let height = unsafe { (*gdi).height } as usize;
-        let buffer = unsafe {
-            std::slice::from_raw_parts((*gdi).primary_buffer as *const u8, pitch * height)
-        };
-        let image = egui::ColorImage::from_rgba_unmultiplied([pitch / 4, height], buffer);
-        let texture = ctx.load_texture("rdp_framebuffer", image, egui::TextureOptions::LINEAR);
+        let texture_size = egui::Vec2::new(unsafe { (*gdi).width as f32 }, unsafe {
+            (*gdi).height as f32
+        });
+
+        let (texture, native_texture) =
+            self.new_texture(frame, texture_size.x as u32, texture_size.y as u32);
+
         let cursor_img = load_logo();
         let cursor_img_size = cursor_img.size;
         let cursor = ctx.load_texture("rdp_cursor", cursor_img, egui::TextureOptions::LINEAR);
@@ -159,6 +160,8 @@ impl AppWindow {
             channels: rdp.channels().clone(),
             gdi_lock,
             texture,
+            native_texture,
+            texture_size,
             cursor: Arc::new(RwLock::new(RdpMouseCursor {
                 texture: cursor,
                 x: 0,
@@ -166,8 +169,6 @@ impl AppWindow {
                 width: cursor_img_size[0] as u32,
                 height: cursor_img_size[1] as u32,
             })),
-            updating_texture: Arc::new(AtomicBool::new(false)),
-            needs_full_update: Arc::new(AtomicBool::new(true)),
             full_screen: Arc::new(AtomicBool::new(is_full_screen)),
             pinbar_visible: Arc::new(AtomicBool::new(false)),
         }));
@@ -193,7 +194,7 @@ impl AppWindow {
     pub(super) fn update_rdp_connection(
         &mut self,
         ctx: &egui::Context,
-        _frame: &mut eframe::Frame,
+        frame: &mut eframe::Frame,
         mut rdp_state: RdpConnectionState,
     ) {
         // Calculate relation between gdi size and egui content size
@@ -211,9 +212,7 @@ impl AppWindow {
         let input = rdp_state.input;
         self.handle_input(ctx, input, scale);
 
-        // TODO: We already have the display channel, finish and test dynamic resizing
-        // let egui::Vec2 {
-        //     x: actual_width,
+        let gl = frame.gl().unwrap();
         //     y: actual_height,
         // } = ctx.content_rect().size();
         // let (actual_width, actual_height) = (actual_width as i32, actual_height as i32);
@@ -277,15 +276,16 @@ impl AppWindow {
                         }
                     }
                 }
-                Self::update_texture(rects_to_update, rdp_state.clone());
+                Self::update_texture(gl, rects_to_update, rdp_state.clone());
                 log::trace!("RDP update processing took {:?}", start.elapsed());
                 // Show the texture on 0,0, full size
                 let size = ui.available_size();
                 ui.add_sized(
                     size,
-                    egui::Image::new(&rdp_state.texture)
-                        .maintain_aspect_ratio(false)
-                        .fit_to_exact_size(size),
+                    egui::Image::new(egui::load::SizedTexture::new(
+                        rdp_state.texture,
+                        rdp_state.texture_size,
+                    )),
                 );
 
                 log::trace!("RDP frame rendered took {:?}", start.elapsed());
@@ -320,35 +320,70 @@ impl AppWindow {
         }
     }
 
+    fn new_texture(
+        &self,
+        frame: &mut eframe::Frame,
+        width: u32,
+        height: u32,
+    ) -> (egui::TextureId, glow::Texture) {
+        let gl = frame.gl().unwrap();
+        let native_texture = unsafe { gl.create_texture().unwrap() };
+        unsafe {
+            gl.bind_texture(glow::TEXTURE_2D, Some(native_texture));
+            gl.tex_image_2d(
+                glow::TEXTURE_2D,
+                0,
+                glow::BGRA as i32,
+                width as i32,
+                height as i32,
+                0,
+                glow::BGRA,
+                glow::UNSIGNED_BYTE,
+                PixelUnpackData::Slice(None),
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MIN_FILTER,
+                glow::LINEAR as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MAG_FILTER,
+                glow::LINEAR as i32,
+            );
+        }
+
+        // TextureId is for egui to identify the texture
+        // native is for our operations
+        (
+            frame.register_native_glow_texture(native_texture),
+            native_texture,
+        )
+    }
+
     /// Update only the changed rects in a separate thread
-    fn update_texture(rects: Vec<rdp::geom::Rect>, rdp_state: RdpConnectionState) {
+    fn update_texture(
+        gl: &glow::Context,
+        rects: Vec<rdp::geom::Rect>,
+        rdp_state: RdpConnectionState,
+    ) {
         // If already updating, or no rects, skip
         if rects.is_empty() {
             return;
         }
-
-        // If already updating, mark for full update later because rects will be outdated
-        if rdp_state.updating_texture.swap(true, Ordering::Relaxed) {
-            rdp_state.needs_full_update.store(true, Ordering::Relaxed);
-            return;
-        }
-
-        // Maybe on other platforms stride is not an u32...
-        #[allow(clippy::unnecessary_cast)]
-        let (stride, width, height) = unsafe {
+        let (stride_bytes, fb_height) = unsafe {
             (
-                (*rdp_state.gdi).stride as u32,
-                (*rdp_state.gdi).width as u32,
-                (*rdp_state.gdi).height as u32,
+                (*rdp_state.gdi).stride as usize,
+                (*rdp_state.gdi).height as usize,
             )
         };
-
-        // Reassig rect if full update is needed
-        let rects = if rdp_state.needs_full_update.swap(false, Ordering::Relaxed) {
-            vec![rdp::geom::Rect::new(0, 0, width, height)]
-        } else {
-            rects
+        let framebuffer = unsafe {
+            std::slice::from_raw_parts(
+                (*rdp_state.gdi).primary_buffer as *const u8,
+                stride_bytes * fb_height,
+            )
         };
+        let stride_pixels = stride_bytes / 4;
 
         // Fold all rects into one union rect to minimize updates
         let unique_rect = rects.iter().fold(None, |acc: Option<rdp::geom::Rect>, r| {
@@ -360,35 +395,32 @@ impl AppWindow {
         });
 
         if let Some(rect) = unique_rect {
-            // Get framebuffer info
-            let (primary_buffer, stride, width, height) = unsafe {
-                let _guard = rdp_state.gdi_lock.write().unwrap();
-                (
-                    std::slice::from_raw_parts(
-                        (*rdp_state.gdi).primary_buffer as *const u8,
-                        (stride as usize) * (height as usize),
-                    ),
-                    stride as usize,
-                    width as usize,
-                    height as usize,
-                )
-            };
-            let mut texture = rdp_state.texture.clone();
-            std::thread::spawn({
-                let updating_flag = rdp_state.updating_texture.clone();
-                updating_flag.store(true, Ordering::Relaxed);
-                move || {
-                    let img = rect.extract(primary_buffer, stride, width, height);
-                    if let Some(image) = img {
-                        texture.set_partial(
-                            [rect.x as usize, rect.y as usize],
-                            image,
-                            egui::TextureOptions::LINEAR,
-                        );
-                    }
-                    updating_flag.store(false, Ordering::Relaxed);
-                }
-            });
+            unsafe {
+                gl.bind_texture(glow::TEXTURE_2D, Some(rdp_state.native_texture));
+
+                // Configurar cómo se interpreta el buffer
+                gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, stride_pixels as i32);
+                gl.pixel_store_i32(glow::UNPACK_SKIP_PIXELS, rect.x as i32);
+                gl.pixel_store_i32(glow::UNPACK_SKIP_ROWS, rect.y as i32);
+
+                // Copiar subimagen directamente (BGRA nativo)
+                gl.tex_sub_image_2d(
+                    glow::TEXTURE_2D,
+                    0, // mip level
+                    rect.x as i32,
+                    rect.y as i32,
+                    rect.w as i32,
+                    rect.h as i32,
+                    glow::BGRA, // formato de origen
+                    glow::UNSIGNED_BYTE,
+                    PixelUnpackData::Slice(Some(framebuffer)),
+                );
+
+                // Restaurar estado para no afectar otras cargas
+                gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, 0);
+                gl.pixel_store_i32(glow::UNPACK_SKIP_PIXELS, 0);
+                gl.pixel_store_i32(glow::UNPACK_SKIP_ROWS, 0);
+            }
         }
     }
 

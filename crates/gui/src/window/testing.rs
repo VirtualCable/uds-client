@@ -9,18 +9,18 @@ use rdp::{geom::ScreenSize, settings::RdpSettings};
 use super::{AppWindow, client_progress::ProgressState, types::AppState};
 
 impl AppWindow {
-    pub fn enter_testing(&mut self, ctx: &eframe::egui::Context) -> Result<()> {
+    pub fn enter_testing(&mut self, ctx: &eframe::egui::Context, _frame: &mut eframe::Frame) -> Result<()> {
         self.resize_and_center(ctx, [400.0, 300.0], true);
         self.set_app_state(AppState::Test);
 
         Ok(())
     }
 
-    pub fn restore_testing(&mut self, ctx: &eframe::egui::Context) -> Result<()> {
-        self.enter_testing(ctx)
+    pub fn restore_testing(&mut self, ctx: &eframe::egui::Context, frame: &mut eframe::Frame) -> Result<()> {
+        self.enter_testing(ctx, frame)
     }
 
-    pub fn update_testing(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    pub fn update_testing(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Test Screen");
             ui.label("Select action.");
@@ -29,6 +29,7 @@ impl AppWindow {
                 // For demonstration, we use a hardcoded host
                 if let Err(e) = self.enter_rdp_preconnection(
                     ctx,
+                    frame,
                     RdpSettings {
                         server: "172.27.247.161".to_string(),
                         user: "user".to_string(),
@@ -44,6 +45,7 @@ impl AppWindow {
                 // For demonstration, we use a hardcoded host
                 if let Err(e) = self.enter_rdp_connection(
                     ctx,
+                    frame,
                     RdpSettings {
                         server: "172.27.247.161".to_string(),
                         user: "user".to_string(),
@@ -56,25 +58,25 @@ impl AppWindow {
                 }
             }
             if ui.button("Progress").clicked()
-                && let Err(e) = self.enter_client_progress(ctx, ProgressState::default())
+                && let Err(e) = self.enter_client_progress(ctx, frame, ProgressState::default())
             {
                 ui.label(format!("Failed to show progress: {}", e));
             }
 
             if ui.button("Invisible").clicked()
-                && let Err(e) = self.enter_invisible(ctx)
+                && let Err(e) = self.enter_invisible(ctx, frame)
             {
                 ui.label(format!("Failed to go invisible: {}", e));
             }
 
             if ui.button("Warning").clicked()
-                && let Err(e) = self.enter_warning(ctx, "This is a warning message.".to_string())
+                && let Err(e) = self.enter_warning(ctx, frame, "This is a warning message.".to_string())
             {
                 ui.label(format!("Failed to show warning: {}", e));
             }
 
             if ui.button("Error").clicked()
-                && let Err(e) = self.enter_error(ctx, "This is an error message.".to_string())
+                && let Err(e) = self.enter_error(ctx, frame, "This is an error message.".to_string())
             {
                 ui.label(format!("Failed to show error: {}", e));
             }
@@ -83,6 +85,7 @@ impl AppWindow {
                 let (resp_tx, _resp_rx) = oneshot::channel::<bool>();
                 if let Err(e) = self.enter_yesno(
                     ctx,
+                    frame,
                     "Do you want to continue?".to_string(),
                     Arc::new(RwLock::new(Some(resp_tx))),
                 ) {

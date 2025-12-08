@@ -8,7 +8,12 @@ use super::{
 };
 
 impl AppWindow {
-    pub fn enter_warning(&mut self, ctx: &eframe::egui::Context, message: String) -> Result<()> {
+    pub fn enter_warning(
+        &mut self,
+        ctx: &eframe::egui::Context,
+        _frame: &mut eframe::Frame,
+        message: String,
+    ) -> Result<()> {
         let text_height = calculate_text_height(&message, 40);
         self.resize_and_center(ctx, [320.0, text_height + 48.0], true);
         self.set_app_state(AppState::Warning(message));
@@ -19,7 +24,7 @@ impl AppWindow {
     pub fn update_warning(
         &mut self,
         ctx: &egui::Context,
-        _frame: &mut eframe::Frame,
+        frame: &mut eframe::Frame,
         message: &str,
     ) {
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -41,7 +46,7 @@ impl AppWindow {
                                 .clicked()
                             {
                                 // Restore previos state
-                                self.restore_previous_state(ctx);
+                                self.restore_previous_state(ctx, frame);
                             }
                         });
                     });

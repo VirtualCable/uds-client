@@ -17,6 +17,7 @@ impl AppWindow {
     pub fn enter_yesno(
         &mut self,
         ctx: &egui::Context,
+        _frame: &mut eframe::Frame,
         message: String,
         resp_tx: Arc<RwLock<Option<oneshot::Sender<bool>>>>,
     ) -> Result<()> {
@@ -30,7 +31,7 @@ impl AppWindow {
     pub fn update_yesno(
         &mut self,
         ctx: &egui::Context,
-        _frame: &mut eframe::Frame,
+        frame: &mut eframe::Frame,
         message: &str,
         resp_tx: Arc<RwLock<Option<oneshot::Sender<bool>>>>,
     ) {
@@ -60,7 +61,7 @@ impl AppWindow {
                                         if let Some(tx) = resp_tx.write().unwrap().take() {
                                             let _ = tx.send(true);
                                         }
-                                        self.restore_previous_state(ctx);
+                                        self.restore_previous_state(ctx, frame);
                                     }
                                 },
                             );
@@ -78,7 +79,7 @@ impl AppWindow {
                                         if let Some(tx) = resp_tx.write().unwrap().take() {
                                             let _ = tx.send(false);
                                         }
-                                        self.restore_previous_state(ctx);
+                                        self.restore_previous_state(ctx, frame);
                                     }
                                 },
                             );
