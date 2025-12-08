@@ -2,7 +2,7 @@ use freerdp_sys::*;
 
 use shared::log;
 
-use crate::callbacks::channels;
+use crate::{callbacks::channels, channels::cliprdr::register_cliprdr_callbacks};
 
 use super::Rdp;
 
@@ -19,11 +19,15 @@ impl channels::ChannelsCallbacks for Rdp {
                 == &freerdp_sys::CLIPRDR_SVC_CHANNEL_NAME
                     [..freerdp_sys::CLIPRDR_SVC_CHANNEL_NAME.len() - 1] =>
             {
+                let interface = p_interface as *mut CliprdrClientContext;
+                unsafe {
+                    (*interface).custom =
+                        self.context().unwrap() as *const _ as *mut std::os::raw::c_void;
+                    register_cliprdr_callbacks(&mut *interface);
+                }
+
                 log::debug!("**** CLIPRDR channel connection accepted.");
-                self.channels
-                    .write()
-                    .unwrap()
-                    .set_cliprdr(p_interface as *mut CliprdrClientContext);
+                self.channels.write().unwrap().set_cliprdr(interface);
                 true
             }
             b if b

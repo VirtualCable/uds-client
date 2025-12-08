@@ -1,6 +1,7 @@
 use crate::utils;
 
 pub mod disp;
+pub mod cliprdr;
 
 #[derive(Clone, Debug)]
 pub struct RdpChannels {
