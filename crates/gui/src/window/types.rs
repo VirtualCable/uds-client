@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use tokio::sync::oneshot;
 
-use super::{client_progress, rdp_connection, rdp_preconnection};
+use super::{client_progress, rdp::rdp_connection, rdp::rdp_preconnection};
 
 static WAS_MAXIMIZED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 

@@ -13,8 +13,7 @@ use crate::input;
 use shared::{log, system::trigger::Trigger};
 
 mod client_progress;
-mod rdp_connection;
-mod rdp_preconnection;
+mod rdp;
 
 mod msgw_error;
 mod msgw_warning;

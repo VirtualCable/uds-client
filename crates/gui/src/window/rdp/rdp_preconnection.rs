@@ -9,9 +9,9 @@ use std::{
     time::Instant,
 };
 
-use rdp::settings::RdpSettings;
+use rdp::settings::RdpSettings;  // crate module, not super :)
 
-use super::{AppWindow, types::AppState};
+use crate::window::{AppWindow, types::AppState};
 
 #[derive(Clone, Debug)]
 pub struct RdpConnectingState {

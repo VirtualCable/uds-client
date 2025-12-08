@@ -14,8 +14,6 @@ use winit::{
 
 use shared::{log, system::trigger::Trigger};
 
-mod geom;
-
 pub mod consts;
 pub mod input;
 pub mod window;
