@@ -75,7 +75,7 @@ impl AppWindow {
         let use_rgba = !super::graphics::Screen::supports_bgra(frame);
 
         // Rdp shouls be pinned, as build() inserts self reference inside freedrp structs
-        let mut rdp = Box::pin(Rdp::new(rdp_settings, tx));
+        let mut rdp = Box::pin(Rdp::new(rdp_settings, tx, use_rgba));
 
         // For reference: Currently, default callbacks are these also, so if no more are needed, this can be skipped
         // rdp.set_update_callbacks(vec![

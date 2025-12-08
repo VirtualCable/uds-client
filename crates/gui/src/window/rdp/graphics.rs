@@ -60,12 +60,15 @@ impl Screen {
         }
     }
 
-    pub fn supports_bgra(frame: &mut eframe::Frame) -> bool {
-        let gl = frame.gl().unwrap();
-        unsafe {
-            // Extensions string (OK for desktop GL; on core profiles it may be limited)
-            let ext = gl.get_parameter_string(glow::EXTENSIONS);
-            ext.contains("GL_EXT_bgra") || ext.contains("GL_APPLE_texture_format_BGRA8888")
+    pub fn supports_bgra(_frame: &mut eframe::Frame) -> bool {
+        // All except macOS support BGRA natively
+        #[cfg(target_os = "macos")]
+        {
+            false
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            true
         }
     }
 

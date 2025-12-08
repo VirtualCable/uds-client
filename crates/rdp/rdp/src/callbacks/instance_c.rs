@@ -126,9 +126,14 @@ extern "C" fn post_connect(instance: *mut freerdp) -> BOOL {
     // const PIXEL_FORMAT_RGBA32: u32 = 0x20038888;
     // const PIXEL_FORMAT_RGB24: u32 = 0x18018888;
 
-    // Use 24 bits per pixel, ARGB=1, ABGR=2, RGBA=3, BGRA=4 (if 24 bit, ofc, no alpha is used, must be 0)
-    unsafe { gdi_init(instance, utils::pixel_format(32, 4, 8, 8, 8, 8)) };
     if let Some(owner) = instance.owner() {
+        // Use 32 bits per pixel, ARGB=1, ABGR=2, RGBA=3, BGRA=4 (if 24 bit, ofc, no alpha is used, must be 0)
+        let pixel_format = if owner.use_rgba() {
+            utils::pixel_format(32, 3, 8, 8, 8, 8) // RGBA
+        } else {
+            utils::pixel_format(32, 4, 8, 8, 8, 8) // BGRA
+        };
+        unsafe { gdi_init(instance, pixel_format) };
         debug!(" Owner: {:?}", &owner);
         let context = unsafe { (*instance).context };
         // Setup our callbacks

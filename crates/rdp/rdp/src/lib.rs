@@ -25,6 +25,7 @@ pub mod channels;
 pub struct Config {
     settings: settings::RdpSettings,
     callbacks: callbacks::Callbacks,
+    use_rgba: bool, // Whether to use RGBA pixel format or BGRA
 }
 
 #[derive(Debug)]
@@ -43,7 +44,7 @@ pub struct Rdp {
 
 #[allow(dead_code)]
 impl Rdp {
-    pub fn new(settings: settings::RdpSettings, update_tx: messaging::Sender) -> Self {
+    pub fn new(settings: settings::RdpSettings, update_tx: messaging::Sender, use_rgba: bool) -> Self {
         let stop_event: freerdp_sys::HANDLE =
             unsafe { freerdp_sys::CreateEventW(std::ptr::null_mut(), 1, 0, std::ptr::null()) };
 
@@ -51,6 +52,7 @@ impl Rdp {
         Rdp {
             config: Config {
                 settings,
+                use_rgba,
                 ..Config::default()
             },
             instance: None,
@@ -123,5 +125,9 @@ impl Rdp {
         } else {
             geom::ScreenSize::Fixed(0, 0)
         }
+    }
+
+    pub fn use_rgba(&self) -> bool {
+        self.config.use_rgba
     }
 }
