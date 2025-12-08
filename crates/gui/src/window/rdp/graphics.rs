@@ -24,7 +24,6 @@ impl Screen {
         let gl = frame.gl().unwrap();
         let native_texture = unsafe { gl.create_texture().unwrap() };
 
-
         unsafe {
             gl.bind_texture(glow::TEXTURE_2D, Some(native_texture));
             gl.tex_image_2d(
@@ -122,7 +121,11 @@ impl Screen {
                     rect.y as i32,
                     rect.w as i32,
                     rect.h as i32,
-                    if self.use_rgba { glow::RGBA } else { glow::BGRA }, // formato de origen
+                    if self.use_rgba {
+                        glow::RGBA
+                    } else {
+                        glow::BGRA
+                    }, // formato de origen
                     glow::UNSIGNED_BYTE,
                     PixelUnpackData::Slice(Some(framebuffer)),
                 );
@@ -133,6 +136,44 @@ impl Screen {
                 gl.pixel_store_i32(glow::UNPACK_SKIP_ROWS, 0);
             }
         }
+    }
+
+    pub fn resize_screen_texture(&mut self, gl: &glow::Context, new_size: egui::Vec2) {
+        unsafe {
+            gl.bind_texture(glow::TEXTURE_2D, Some(self.native_texture));
+            gl.tex_image_2d(
+                glow::TEXTURE_2D,
+                0,
+                if self.use_rgba {
+                    glow::RGBA
+                } else {
+                    glow::BGRA
+                } as i32,
+                new_size.x as i32,
+                new_size.y as i32,
+                0,
+                if self.use_rgba {
+                    glow::RGBA
+                } else {
+                    glow::BGRA
+                },
+                glow::UNSIGNED_BYTE,
+                PixelUnpackData::Slice(None), // Empty content
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MIN_FILTER,
+                glow::LINEAR as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MAG_FILTER,
+                glow::LINEAR as i32,
+            );
+        }
+
+        // Update the stored size
+        self.size = new_size;
     }
 
     pub fn texture_id(&self) -> egui::TextureId {
