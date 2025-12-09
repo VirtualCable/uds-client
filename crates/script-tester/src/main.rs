@@ -93,7 +93,7 @@ fn main() -> Result<()> {
     // if let Err(e) = script.verify_signature() {
     //     println!("Script signature verification failed: {}", e);
     //     return Ok(());
-    // }    
+    // }
 
     let fake_catalog = gettext::Catalog::empty(); // Empty catalog for now
     let (_messages_tx, messages_rx): (

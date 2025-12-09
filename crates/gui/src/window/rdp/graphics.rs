@@ -125,12 +125,12 @@ impl Screen {
                         glow::RGBA
                     } else {
                         glow::BGRA
-                    }, // formato de origen
+                    }, // source format
                     glow::UNSIGNED_BYTE,
                     PixelUnpackData::Slice(Some(framebuffer)),
                 );
 
-                // Restaurar estado para no afectar otras cargas
+                // Reset pixel store parameters
                 gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, 0);
                 gl.pixel_store_i32(glow::UNPACK_SKIP_PIXELS, 0);
                 gl.pixel_store_i32(glow::UNPACK_SKIP_ROWS, 0);
