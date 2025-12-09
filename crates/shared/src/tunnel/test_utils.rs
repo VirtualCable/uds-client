@@ -104,7 +104,7 @@ async fn handle_client(mut tcp: TcpStream, acceptor: TlsAcceptor, trigger: Trigg
             res = tls_reader.read(&mut buf) => {
                 match res {
                     Ok(0) => {
-                        // Peer cerró; cierre ordenado nuestro lado
+                        // Peer closed; perform an orderly shutdown on our side
                         let _ = tls_writer.shutdown().await;
                         break;
                     }

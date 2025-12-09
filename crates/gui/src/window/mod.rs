@@ -197,7 +197,7 @@ impl eframe::App for AppWindow {
             }
         }
 
-        // States shoud be clonable to work correctly
+        // States should be clonable to work correctly
         // And changes should be reflected on all references
         let app_state = self.app_state.clone();
         match app_state {

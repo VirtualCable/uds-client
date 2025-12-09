@@ -119,7 +119,7 @@ pub struct BrokerResponse<T> {
 impl<T> BrokerResponse<T> {
     pub fn into_result(self) -> Result<T, Error> {
         if let Some(err) = self.error {
-            // Maybe is a retryable error, soy this is normal
+            // This may be a retryable error, so this is normal
             Err(err)
         } else if let Some(res) = self.result {
             Ok(res)

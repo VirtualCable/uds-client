@@ -42,7 +42,7 @@ fn find_executable_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsRes
         }
     });
 
-    // Devolver resultado a JS
+    // Return the result to JS
     if let Some(path) = found {
         Ok(JsValue::from(JsString::from(path.to_string_lossy())))
     } else {
@@ -367,7 +367,7 @@ mod tests {
         let result = exec_script_with_result(&mut ctx, script)
             .await
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e));
-        // Shoud return an error
+        // Should return an error
         assert!(
             result.is_err(),
             "Expected error when executing non-existing app"
@@ -389,7 +389,7 @@ mod tests {
         let result = exec_script_with_result(&mut ctx, script)
             .await
             .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e));
-        // Shoud return an error
+        // Should return an error
         assert!(
             result.is_err(),
             "Expected error when waiting on non-existing process"

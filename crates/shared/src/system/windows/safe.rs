@@ -79,7 +79,7 @@ impl TryFrom<HANDLE> for SafeHandle {
     }
 }
 
-// AsRef para obtener el HANDLE sin mover
+// AsRef to obtain the HANDLE without moving it
 impl AsRef<HANDLE> for SafeHandle {
     fn as_ref(&self) -> &HANDLE {
         &self.inner.handle

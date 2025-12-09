@@ -72,7 +72,7 @@ fn read_key_str(key_type: KeyType, key: &str, value_name: &str) -> anyhow::Resul
     let value = PCWSTR::from_raw(value_w.as_ptr());
 
     unsafe {
-        // Abrimos la clave en HKCU
+        // Open the key in HKCU
         RegOpenKeyExW(
             if key_type == KeyType::Hkcu {
                 HKEY_CURRENT_USER
@@ -89,7 +89,7 @@ fn read_key_str(key_type: KeyType, key: &str, value_name: &str) -> anyhow::Resul
         let mut data_type = REG_NONE;
         let mut data_len: u32 = 0;
 
-        // Primera llamada: obtener tamaño
+        // First call: get the required size
         RegGetValueW(
             hkey,
             PCWSTR::null(),
@@ -101,10 +101,10 @@ fn read_key_str(key_type: KeyType, key: &str, value_name: &str) -> anyhow::Resul
         )
         .ok()?;
 
-        // Reservamos buffer
+        // Allocate buffer
         let mut buffer: Vec<u16> = vec![0; (data_len / 2) as usize];
 
-        // Segunda llamada: obtener valor real
+        // Second call: read the actual value
         RegGetValueW(
             hkey,
             PCWSTR::null(),

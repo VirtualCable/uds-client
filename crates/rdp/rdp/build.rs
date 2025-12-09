@@ -3,7 +3,7 @@ use std::{env, fs, io, path::PathBuf};
 
 fn copy_if_different(src: &PathBuf, dst: &PathBuf) -> io::Result<()> {
     if !dst.exists() || fs::metadata(src)?.len() != fs::metadata(dst)?.len() {
-        // Si no existe o el tamaño es distinto, copiamos
+        // If it doesn't exist or its size differs, copy it
         println!("cargo:warning=Copying {:?}", src.file_name().unwrap());
         fs::copy(src, dst)?;
     }

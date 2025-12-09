@@ -104,7 +104,7 @@ pub async fn run_js(script: &str, data: Option<serde_json::Value>) -> Result<()>
                 "  at {:?} (line: {})",
                 frame.position().position,
                 frame.position().path,
-                // La información de línea está en el frame
+                // The line information is available in the frame
             );
         }
         let error = res.err().unwrap();

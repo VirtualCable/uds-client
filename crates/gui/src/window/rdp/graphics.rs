@@ -216,12 +216,12 @@ impl AppWindow {
         }
 
         egui::Area::new("pinbar".into())
-            .fixed_pos(egui::pos2(0.0, 0.0)) // Esquina superior izquierda
-            .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, 0.0)) // Centrado arriba
-            .order(egui::Order::Foreground) // Encima de todo
-            .constrain(true) // Mantener dentro de pantalla
+            .fixed_pos(egui::pos2(0.0, 0.0)) // Top-left corner
+            .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, 0.0)) // Centered at top
+            .order(egui::Order::Foreground) // Above all layers
+            .constrain(true) // Keep within screen bounds
             .show(ctx, |ui| {
-                // Frame con márgenes para no ocupar todo el ancho
+                // Frame with margins so it does not occupy the entire width
                 egui::Frame::popup(ui.style())
                     .inner_margin(egui::Margin {
                         left: 64,

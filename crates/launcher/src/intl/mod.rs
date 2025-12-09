@@ -28,7 +28,7 @@ pub static CATALOG: LazyLock<Catalog> = LazyLock::new(|| {
     if let Some(file) = Locales::get(&path) {
         Catalog::parse(file.data.as_ref()).expect("failed to parse catalog")
     } else {
-        // Fallback a inglés
+        // Fallback to English
         let fallback = "en/LC_MESSAGES/myapp.mo";
         let file = Locales::get(fallback).expect("no fallback catalog found");
         Catalog::parse(file.data.as_ref()).expect("failed to parse fallback catalog")

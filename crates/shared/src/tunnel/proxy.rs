@@ -84,7 +84,7 @@ pub async fn start_proxy(
                         }
                     }
                     _ = trigger.async_wait() => {
-                        // Trigger fired, cerramos cliente
+                        // Trigger fired; close the client
                         let _ = client_writer.shutdown().await;
                         break;
                     }
