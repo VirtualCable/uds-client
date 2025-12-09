@@ -85,8 +85,6 @@ impl AppWindow {
         // ]);
         rdp.as_mut().build()?; // Build inserts "rdp" inside an struct for freedrp, must ensure that rdp does not move after this point
 
-        log::debug!("** Rdp address: {:p}", &rdp);
-
         rdp.connect()?;
 
         #[cfg(debug_assertions)]
@@ -107,9 +105,6 @@ impl AppWindow {
             .ok_or_else(|| anyhow::anyhow!("Input not initialized"))?;
         // And the lock
         let gdi_lock = rdp.gdi_lock();
-
-        log::debug!("Obtained GDI pointer: {:?}", gdi);
-        log::debug!("Gdi: {:?}", unsafe { *gdi });
 
         let texture_size = egui::Vec2::new(unsafe { (*gdi).width as f32 }, unsafe {
             (*gdi).height as f32

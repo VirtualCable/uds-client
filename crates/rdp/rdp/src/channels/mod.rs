@@ -1,12 +1,10 @@
-use crate::utils;
-
 pub mod disp;
 pub mod cliprdr;
 
 #[derive(Clone, Debug)]
 pub struct RdpChannels {
-    disp: Option<utils::SafePtr<freerdp_sys::DispClientContext>>,
-    cliprdr: Option<utils::SafePtr<freerdp_sys::CliprdrClientContext>>,
+    disp: Option<disp::DispChannel>,
+    cliprdr: Option<cliprdr::Clipboard>,
 }
 
 impl RdpChannels {
@@ -18,27 +16,27 @@ impl RdpChannels {
     }
 
     pub fn set_disp(&mut self, disp: *mut freerdp_sys::DispClientContext) {
-        self.disp = utils::SafePtr::new(disp);
+        self.disp = Some(disp::DispChannel::new(disp));
     }
 
     pub fn clear_disp(&mut self) {
         self.disp = None;
     }
 
-    pub fn disp(&self) -> Option<utils::SafePtr<freerdp_sys::DispClientContext>> {
-        self.disp
+    pub fn disp(&self) -> Option<disp::DispChannel> {
+        self.disp.clone()
     }
 
     pub fn set_cliprdr(&mut self, cliprdr: *mut freerdp_sys::CliprdrClientContext) {
-        self.cliprdr = utils::SafePtr::new(cliprdr);
+        self.cliprdr = Some(cliprdr::Clipboard::new(cliprdr));
     }
 
     pub fn clear_cliprdr(&mut self) {
         self.cliprdr = None;
     }
 
-    pub fn cliprdr(&self) -> Option<utils::SafePtr<freerdp_sys::CliprdrClientContext>> {
-        self.cliprdr
+    pub fn cliprdr(&self) -> Option<cliprdr::Clipboard> {
+        self.cliprdr.clone()
     }
 }
 

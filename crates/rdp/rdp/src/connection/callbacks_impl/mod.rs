@@ -1,7 +1,11 @@
-mod graphics;
-mod update;
-mod instance;
-mod channels;
+mod graphics;  // implements graphics callbacks
+mod update;    // implements update callbacks
+mod instance;  // implements instance callbacks
+mod channels;  // implements channel callbacks
+
+// Clipboard is set on channel connection. Callbacks will be registered then 
+// and will invoke us
+mod clipboard;  // implements clipboard callbacks
 
 use crate::{
     callbacks::{
@@ -20,3 +24,5 @@ impl secondary::SecondaryCallbacks for Rdp {}
 impl altsec::AltSecCallbacks for Rdp {}
 impl window::WindowCallbacks for Rdp {}
 impl entrypoint::EntrypointCallbacks for Rdp {}
+
+

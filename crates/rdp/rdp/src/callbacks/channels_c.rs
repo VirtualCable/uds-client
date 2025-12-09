@@ -31,10 +31,10 @@ pub unsafe extern "C" fn on_channel_connected(
     if let Some(rdp) = context.owner() {
         // Here we could notify the Rdp instance if needed.
         if rdp.on_channel_connected(size, &sender, &name, p_interface) {
-            debug!("**** Channel connection accepted by Rdp instance.");
+            debug!("++++  {name} Channel connection accepted by Rdp instance.");
             return;
         } else {
-            debug!("**** Channel connection not accepted by Rdp instance.");
+            debug!("----  {name} Channel connection not processed by Rdp instance.");
         }
     }
 

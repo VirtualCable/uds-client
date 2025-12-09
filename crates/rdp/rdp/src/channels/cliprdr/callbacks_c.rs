@@ -1,5 +1,23 @@
 use shared::log;
 
+use crate::{Rdp, channels::cliprdr::traits::ClipboardHandler, context::RdpContext};
+
+fn get_owner<'a>(context: *mut freerdp_sys::CliprdrClientContext) -> Option<&'a mut Rdp> {
+    if context.is_null() {
+        log::error!("CliprdrClientContext is null");
+        return None;
+    }
+
+    let owner_ptr = unsafe { (*context).custom };
+    if owner_ptr.is_null() {
+        log::error!("CliprdrClientContext.custom (owner) is null");
+        return None;
+    }
+
+    let rdp_context = unsafe { &mut *(owner_ptr as *mut RdpContext) };
+    unsafe { rdp_context.owner.as_mut() }
+}
+
 unsafe extern "C" fn monitor_ready(
     context: *mut freerdp_sys::CliprdrClientContext,
     monitor_ready: *const freerdp_sys::CLIPRDR_MONITOR_READY,
@@ -9,6 +27,9 @@ unsafe extern "C" fn monitor_ready(
         context,
         monitor_ready
     );
+    if let Some(rdp) = get_owner(context) {
+        return rdp.on_monitor_ready(unsafe { &*monitor_ready });
+    }
     freerdp_sys::CHANNEL_RC_OK
 }
 
@@ -21,6 +42,9 @@ unsafe extern "C" fn receive_server_capabilities(
         context,
         capabilities
     );
+    if let Some(rdp) = get_owner(context) {
+        return rdp.on_receive_server_capabilities(unsafe { &*capabilities });
+    }
     freerdp_sys::CHANNEL_RC_OK
 }
 
@@ -33,6 +57,9 @@ unsafe extern "C" fn receive_server_format_list(
         context,
         format_list
     );
+    if let Some(rdp) = get_owner(context) {
+        return rdp.on_receive_server_format_list(unsafe { &*format_list });
+    }
     freerdp_sys::CHANNEL_RC_OK
 }
 
@@ -45,6 +72,9 @@ unsafe extern "C" fn receive_format_list_response(
         context,
         format_list_response
     );
+    if let Some(rdp) = get_owner(context) {
+        return rdp.on_receive_format_list_response(unsafe { &*format_list_response });
+    }
     freerdp_sys::CHANNEL_RC_OK
 }
 
@@ -57,6 +87,9 @@ unsafe extern "C" fn receive_format_data_request(
         context,
         format_data_request
     );
+    if let Some(rdp) = get_owner(context) {
+        return rdp.on_receive_format_data_request(unsafe { &*format_data_request });
+    }
     freerdp_sys::CHANNEL_RC_OK
 }
 
@@ -69,6 +102,9 @@ unsafe extern "C" fn receive_format_data_response(
         context,
         format_data_response
     );
+    if let Some(rdp) = get_owner(context) {
+        return rdp.on_receive_format_data_response(unsafe { &*format_data_response });
+    }
     freerdp_sys::CHANNEL_RC_OK
 }
 

@@ -134,7 +134,6 @@ extern "C" fn post_connect(instance: *mut freerdp) -> BOOL {
             utils::pixel_format(32, 4, 8, 8, 8, 8) // BGRA
         };
         unsafe { gdi_init(instance, pixel_format) };
-        debug!(" Owner: {:?}", &owner);
         let context = unsafe { (*instance).context };
         // Setup our callbacks
         unsafe {
