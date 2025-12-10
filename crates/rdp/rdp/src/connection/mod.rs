@@ -140,7 +140,7 @@ impl Rdp {
                     let channel = if cfg!(target_os = "windows") {
                         "sys:winmm"
                     } else if cfg!(target_os = "linux") {
-                        "sys:pulse"  // add support for alsa and oss
+                        "sys:pulse" // add support for alsa and oss
                     } else if cfg!(target_os = "macos") {
                         "sys:mac"
                     } else {
@@ -414,6 +414,8 @@ impl Rdp {
 impl Drop for Rdp {
     fn drop(&mut self) {
         log::debug!(" **** Dropping RDP");
+        // If we have a clipboard native, stop it
+        self.channels.read().unwrap().stop_native();
 
         log::debug!("* Dropping Rdp instance, cleaning up resources...");
         unsafe {

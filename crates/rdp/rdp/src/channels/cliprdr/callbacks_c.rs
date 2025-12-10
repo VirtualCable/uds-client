@@ -107,6 +107,7 @@ unsafe extern "C" fn receive_format_data_response(
         context,
         format_data_response
     );
+    // Note: Currently we only request text data, so we expect text here
     if let Some(rdp) = get_owner(context) {
         // Compose a const slice from buffer pointer and length
         let data = unsafe {

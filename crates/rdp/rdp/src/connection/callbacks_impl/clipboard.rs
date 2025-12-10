@@ -4,7 +4,7 @@ use shared::log;
 
 use super::Rdp;
 
-use crate::channels::cliprdr::{ClipboardFormat, ClipboardHandler};
+use crate::channels::cliprdr::{ClipboardHandler, RdpClipboardFormat};
 
 impl ClipboardHandler for Rdp {
     fn on_monitor_ready(&mut self, monitor_ready: &freerdp_sys::CLIPRDR_MONITOR_READY) -> u32 {
@@ -15,9 +15,14 @@ impl ClipboardHandler for Rdp {
         if let Some(context) = self.channels.read().unwrap().cliprdr() {
             // Server expect capabilities + initial clipboard status available
             context.send_client_capabilities(freerdp_sys::CB_USE_LONG_FORMAT_NAMES);
-            // TODO: We have no initial data, but set to unicode here to make some tests work
             // Remove it and leave empty until we have real clipboard data
-            context.send_client_format_list(&[ClipboardFormat::TextUnicode]);
+            if let Some(native) = self.channels.read().unwrap().native()
+                && let Ok(text) = native.read().unwrap().get_text()
+                && !text.is_empty()
+            {
+                context.send_text_is_available(&text);
+            }
+            // context.send_client_format_list(&[RdpClipboardFormat::TextUnicode]);
 
             freerdp_sys::CHANNEL_RC_OK
         } else {
@@ -26,10 +31,7 @@ impl ClipboardHandler for Rdp {
         }
     }
 
-    fn on_receive_format_list_response(
-        &mut self,
-        success: bool,
-    ) -> u32 {
+    fn on_receive_format_list_response(&mut self, success: bool) -> u32 {
         log::debug!(
             "Clipboard Receive Format List Response event received in Rdp impl: {:?}",
             success
@@ -86,25 +88,31 @@ impl ClipboardHandler for Rdp {
                 "Clipboard Receive Server Format List event received in Rdp impl: {:?}",
                 format_list
             );
-            context.formats.clear();
+            context.remote_formats.clear();
             unsafe {
                 let formats_ptr = format_list.formats as *const freerdp_sys::CLIPRDR_FORMAT;
-                let mut supported: HashSet<ClipboardFormat> = HashSet::new();
+                let mut supported: HashSet<RdpClipboardFormat> = HashSet::new();
                 for i in 0..format_list.numFormats {
                     let format = &*formats_ptr.add(i as usize);
-                    if let Some(clip_format) = ClipboardFormat::from_format(format) {
+                    if let Some(clip_format) = RdpClipboardFormat::from_format(format) {
                         supported.insert(clip_format);
                     }
                 }
 
                 // Note: We are only interested right now on text formats
-                context.formats = supported.into_iter().collect(); // Convert HashSet to Vec
+                context.remote_formats = supported.into_iter().collect(); // Convert HashSet to Vec
 
-                log::debug!("Supported clipboard formats from remote: {:?}", context.formats);
+                log::debug!(
+                    "Supported clipboard formats from remote: {:?}",
+                    context.remote_formats
+                );
             }
-            context.send_format_list_response(!context.formats.is_empty());
+            context.send_format_list_response(!context.remote_formats.is_empty());
             // Request clipboard data in text format if available
-            if context.formats.contains(&ClipboardFormat::TextUnicode) {
+            if context
+                .remote_formats
+                .contains(&RdpClipboardFormat::TextUnicode)
+            {
                 let format_data_request = freerdp_sys::CLIPRDR_FORMAT_DATA_REQUEST {
                     common: freerdp_sys::CLIPRDR_HEADER {
                         msgType: 0,
@@ -112,7 +120,7 @@ impl ClipboardHandler for Rdp {
                         dataLen: std::mem::size_of::<freerdp_sys::CLIPRDR_FORMAT_DATA_REQUEST>()
                             as u32,
                     },
-                    requestedFormatId: ClipboardFormat::TextUnicode.to_format_id(),
+                    requestedFormatId: RdpClipboardFormat::TextUnicode.to_format_id(),
                 };
                 context.client_format_data_request(&format_data_request);
             }
@@ -130,12 +138,21 @@ impl ClipboardHandler for Rdp {
                 format_data_request
             );
             if let Some(format) =
-                ClipboardFormat::from_format_id(format_data_request.requestedFormatId)
+                RdpClipboardFormat::from_format_id(format_data_request.requestedFormatId)
             {
                 match format {
-                    ClipboardFormat::TextUnicode => {
+                    RdpClipboardFormat::TextUnicode => {
                         // Here we would retrieve the clipboard text from the local system
-                        let clipboard_text = "Testing clipboard text from RDP client";
+                        let clipboard_text = {
+                            if let Some(rdpclipboard) = &self.channels.read().unwrap().cliprdr() {
+                                rdpclipboard.get_local_text()
+                            } else {
+                                log::warn!("No RDP clipboard available to get local text");
+                                String::new()
+                            }
+                        };
+
+                        log::debug!("Providing clipboard text data: {}", clipboard_text);
 
                         let text_bytes = clipboard_text.encode_utf16().collect::<Vec<u16>>();
                         let byte_len = ((text_bytes.len() + 1) * 2) as u32; // +1 for null terminator
@@ -169,14 +186,33 @@ impl ClipboardHandler for Rdp {
     }
 
     // This is called by server in response to our format data request. It contains the actual clipboard data.
-    fn on_receive_format_data_response(
-        &mut self,
-        data: &[u8],
-    ) -> u32 {
+    fn on_receive_format_data_response(&mut self, data: &[u8]) -> u32 {
         log::debug!(
             "Clipboard Receive Format Data Response event received in Rdp impl: {:?}",
             data
         );
+        // Assume data is UTF-16LE encoded text
+        if !data.len().is_multiple_of(2) {
+            log::warn!("Received clipboard data length is not even, cannot be valid UTF-16");
+            return freerdp_sys::CHANNEL_RC_OK;
+        }
+        let u16_data: Vec<u16> = data
+            .chunks(2)
+            .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+            .collect();
+        // Now to String
+        if let Ok(text) = String::from_utf16(&u16_data) {
+            log::debug!("Received clipboard text data: {}", text);
+            // Set to local clipboard
+            if let Some(native) = self.channels.read().unwrap().native()
+                && let Err(e) = native.read().unwrap().set_text(&text)
+            {
+                log::error!("Failed to set local clipboard text: {}", e);
+            }
+        } else {
+            log::warn!("Failed to decode received clipboard data as UTF-16");
+        }
+
         freerdp_sys::CHANNEL_RC_OK
     }
 }

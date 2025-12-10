@@ -1,4 +1,7 @@
+use std::sync::{Arc, RwLock};
+
 mod callbacks_c;
+pub(super) mod native;
 mod traits;
 
 use crate::utils;
@@ -7,52 +10,54 @@ pub use callbacks_c::register_cliprdr_callbacks;
 pub use traits::ClipboardHandler;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub enum ClipboardFormat {
+pub enum RdpClipboardFormat {
     TextUnicode, // Unicode Text, UTF-16 LE
-    TextAscii,  // ASCII Text, ANSI
-    TextOem,  // OEM Text
+    TextAscii,   // ASCII Text, ANSI
+    TextOem,     // OEM Text
     Image,
 }
 
-impl ClipboardFormat {
+impl RdpClipboardFormat {
     pub fn from_format(format: &freerdp_sys::CLIPRDR_FORMAT) -> Option<Self> {
         Self::from_format_id(format.formatId)
     }
 
     pub fn from_format_id(format_id: u32) -> Option<Self> {
         match format_id {
-            freerdp_sys::CF_UNICODETEXT => Some(ClipboardFormat::TextUnicode),
-            freerdp_sys::CF_TEXT => Some(ClipboardFormat::TextAscii),
-            freerdp_sys::CF_OEMTEXT => Some(ClipboardFormat::TextOem),
-            freerdp_sys::CF_DIB => Some(ClipboardFormat::Image),
+            freerdp_sys::CF_UNICODETEXT => Some(RdpClipboardFormat::TextUnicode),
+            freerdp_sys::CF_TEXT => Some(RdpClipboardFormat::TextAscii),
+            freerdp_sys::CF_OEMTEXT => Some(RdpClipboardFormat::TextOem),
+            freerdp_sys::CF_DIB => Some(RdpClipboardFormat::Image),
             _ => None,
         }
     }
 
     pub fn to_format_id(&self) -> freerdp_sys::UINT32 {
         match self {
-            ClipboardFormat::TextUnicode => freerdp_sys::CF_UNICODETEXT,
-            ClipboardFormat::TextAscii => freerdp_sys::CF_TEXT,
-            ClipboardFormat::TextOem => freerdp_sys::CF_OEMTEXT,
-            ClipboardFormat::Image => freerdp_sys::CF_DIB,
+            RdpClipboardFormat::TextUnicode => freerdp_sys::CF_UNICODETEXT,
+            RdpClipboardFormat::TextAscii => freerdp_sys::CF_TEXT,
+            RdpClipboardFormat::TextOem => freerdp_sys::CF_OEMTEXT,
+            RdpClipboardFormat::Image => freerdp_sys::CF_DIB,
         }
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct Clipboard {
+pub struct RdpClipboard {
     ptr: Option<utils::SafePtr<freerdp_sys::CliprdrClientContext>>,
 
     pub caps_flags: u32,
-    pub formats: Vec<ClipboardFormat>, // Currently, we only support text format, but can be extended
+    pub remote_formats: Vec<RdpClipboardFormat>, // Currently, we only support text format, but can be extended
+    pub text: Arc<RwLock<String>>,               // Cached text from local clipboard
 }
 
-impl Clipboard {
+impl RdpClipboard {
     pub fn new(ptr: *mut freerdp_sys::CliprdrClientContext) -> Self {
         Self {
             ptr: utils::SafePtr::new(ptr),
-            caps_flags: 0,
-            formats: Vec::new(),
+            caps_flags: 0, // Currently we dont use the caps_flags from remote server, we assume server supports text formats :)
+            remote_formats: Vec::new(),
+            text: Arc::new(RwLock::new(String::new())),
         }
     }
 
@@ -113,7 +118,7 @@ impl Clipboard {
     // When data is locally avaiable on clipboard, use this to send supported formats on the clipboard to server
     // Example. On a text editor press CTRL+C, "this" app receives the notificiation, obtains what formats are available on clipboard,
     // and calls this method to inform server about available formats. So the server also knows what formats are available to request data from.
-    pub fn send_client_format_list(&self, formats: &[ClipboardFormat]) -> u32 {
+    pub fn send_client_format_list(&self, formats: &[RdpClipboardFormat]) -> u32 {
         let mut cliprdr_formats: Vec<freerdp_sys::CLIPRDR_FORMAT> = Vec::new();
 
         for format in formats {
@@ -134,6 +139,22 @@ impl Clipboard {
         };
 
         self.client_format_list(&format_list)
+    }
+
+    // Helper to set send format list response to server and store text
+    pub fn send_text_is_available(&self, text: &str) -> u32 {
+        // Store locally
+        {
+            let mut local_text = self.text.write().unwrap();
+            *local_text = text.to_string();
+        }
+        // Send format list to server
+        self.send_client_format_list(&[RdpClipboardFormat::TextUnicode])
+    }
+
+    pub fn get_local_text(&self) -> String {
+        let local_text = self.text.read().unwrap();
+        local_text.clone()
     }
 
     pub fn send_format_list_response(&self, success: bool) -> u32 {

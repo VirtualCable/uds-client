@@ -15,10 +15,14 @@ impl channels::ChannelsCallbacks for Rdp {
         p_interface: *mut std::os::raw::c_void,
     ) -> bool {
         match name.as_bytes() {
-            b if b
+            name if name
                 == &freerdp_sys::CLIPRDR_SVC_CHANNEL_NAME
                     [..freerdp_sys::CLIPRDR_SVC_CHANNEL_NAME.len() - 1] =>
             {
+                if !self.config.settings.clipboard_redirection {
+                    log::debug!("**** CLIPRDR channel connection rejected (disabled in settings).");
+                    return false;
+                }
                 let interface = p_interface as *mut CliprdrClientContext;
                 unsafe {
                     (*interface).custom =
@@ -27,17 +31,17 @@ impl channels::ChannelsCallbacks for Rdp {
                 }
 
                 log::debug!("**** CLIPRDR channel connection accepted.");
-                self.channels.write().unwrap().set_cliprdr(interface);
+                self.channels.write().unwrap().set_cliprdr_ptr(interface);
                 true
             }
-            b if b
+            name if name
                 == &freerdp_sys::RAIL_SVC_CHANNEL_NAME
                     [..freerdp_sys::RAIL_SVC_CHANNEL_NAME.len() - 1] =>
             {
                 log::debug!("**** RAIL channel connection accepted.");
                 true
             }
-            b if b
+            name if name
                 == &freerdp_sys::DISP_DVC_CHANNEL_NAME
                     [..freerdp_sys::DISP_DVC_CHANNEL_NAME.len() - 1] =>
             {
@@ -45,7 +49,7 @@ impl channels::ChannelsCallbacks for Rdp {
                 self.channels
                     .write()
                     .unwrap()
-                    .set_disp(p_interface as *mut DispClientContext);
+                    .set_disp_ptr(p_interface as *mut DispClientContext);
                 true
             }
             _ => false, // Defaults to false
@@ -60,7 +64,7 @@ impl channels::ChannelsCallbacks for Rdp {
         _p_interface: *mut std::os::raw::c_void,
     ) -> bool {
         match name.as_bytes() {
-            b if b
+            name if name
                 == &freerdp_sys::CLIPRDR_SVC_CHANNEL_NAME
                     [..freerdp_sys::CLIPRDR_SVC_CHANNEL_NAME.len() - 1] =>
             {
@@ -68,14 +72,14 @@ impl channels::ChannelsCallbacks for Rdp {
                 self.channels.write().unwrap().clear_cliprdr();
                 true
             }
-            b if b
+            name if name
                 == &freerdp_sys::RAIL_SVC_CHANNEL_NAME
                     [..freerdp_sys::RAIL_SVC_CHANNEL_NAME.len() - 1] =>
             {
                 log::debug!("**** RAIL channel disconnected.");
                 true
             }
-            b if b
+            name if name
                 == &freerdp_sys::DISP_DVC_CHANNEL_NAME
                     [..freerdp_sys::DISP_DVC_CHANNEL_NAME.len() - 1] =>
             {

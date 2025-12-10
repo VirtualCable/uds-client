@@ -1,10 +1,17 @@
-pub mod disp;
+use std::sync::{Arc, RwLock};
+
+use shared::log;
+
 pub mod cliprdr;
+pub mod disp;
 
 #[derive(Clone, Debug)]
 pub struct RdpChannels {
     disp: Option<disp::DispChannel>,
-    cliprdr: Option<cliprdr::Clipboard>,
+    cliprdr: Option<cliprdr::RdpClipboard>,
+
+    // Helper for clipbrdr channel, to connect with native clipboard
+    native: Option<Arc<RwLock<cliprdr::native::ClipboardNative>>>,
 }
 
 impl RdpChannels {
@@ -12,10 +19,11 @@ impl RdpChannels {
         RdpChannels {
             disp: None,
             cliprdr: None,
+            native: None,
         }
     }
 
-    pub fn set_disp(&mut self, disp: *mut freerdp_sys::DispClientContext) {
+    pub fn set_disp_ptr(&mut self, disp: *mut freerdp_sys::DispClientContext) {
         self.disp = Some(disp::DispChannel::new(disp));
     }
 
@@ -27,16 +35,29 @@ impl RdpChannels {
         self.disp.clone()
     }
 
-    pub fn set_cliprdr(&mut self, cliprdr: *mut freerdp_sys::CliprdrClientContext) {
-        self.cliprdr = Some(cliprdr::Clipboard::new(cliprdr));
+    pub fn set_cliprdr_ptr(&mut self, cliprdr: *mut freerdp_sys::CliprdrClientContext) {
+        let clipboard = cliprdr::RdpClipboard::new(cliprdr);
+        self.cliprdr = Some(clipboard.clone());
+        self.native = cliprdr::native::ClipboardNative::new(clipboard);
     }
 
     pub fn clear_cliprdr(&mut self) {
         self.cliprdr = None;
     }
 
-    pub fn cliprdr(&self) -> Option<cliprdr::Clipboard> {
+    pub fn cliprdr(&self) -> Option<cliprdr::RdpClipboard> {
         self.cliprdr.clone()
+    }
+
+    pub fn native(&self) -> Option<Arc<RwLock<cliprdr::native::ClipboardNative>>> {
+        self.native.clone()
+    }
+
+    pub fn stop_native(&self) {
+        if let Some(native) = &self.native {
+            log::debug!("Stopping clipboard native watcher");
+            native.write().unwrap().stop();
+        }
     }
 }
 
