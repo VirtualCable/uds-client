@@ -33,11 +33,11 @@ pub trait ClipboardHandler {
     }
     fn on_receive_format_list_response(
         &mut self,
-        format_list_response: &freerdp_sys::CLIPRDR_FORMAT_LIST_RESPONSE,
+        success: bool,
     ) -> u32 {
         log::debug!(
             "Clipboard Receive Format List Response event received: {:?}",
-            format_list_response
+            success
         );
         CHANNEL_RC_OK
     }
@@ -53,11 +53,11 @@ pub trait ClipboardHandler {
     }
     fn on_receive_format_data_response(
         &mut self,
-        format_data_response: &freerdp_sys::CLIPRDR_FORMAT_DATA_RESPONSE,
+        data: &[u8],
     ) -> u32 {
         log::debug!(
             "Clipboard Receive Format Data Response event received: {:?}",
-            format_data_response
+            data
         );
         CHANNEL_RC_OK
     }

@@ -6,49 +6,35 @@ use crate::utils;
 pub use callbacks_c::register_cliprdr_callbacks;
 pub use traits::ClipboardHandler;
 
-const HTML_FORMAT_NAME: &str = "HTML Format";
-const FILE_GROUP_DESCRIPTOR_W_NAME: &str = "FileGroupDescriptorW";
-
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum ClipboardFormat {
-    Text,
-    Html,
+    TextUnicode, // Unicode Text, UTF-16 LE
+    TextAscii,  // ASCII Text, ANSI
+    TextOem,  // OEM Text
     Image,
-    File,
 }
 
 impl ClipboardFormat {
     pub fn from_format(format: &freerdp_sys::CLIPRDR_FORMAT) -> Option<Self> {
-        unsafe {
-            if !format.formatName.is_null() {
-                let c_str = std::ffi::CStr::from_ptr(format.formatName);
-                if let Ok(name) = c_str.to_str() {
-                    match name {
-                        HTML_FORMAT_NAME => {
-                            return Some(ClipboardFormat::Html);
-                        }
-                        FILE_GROUP_DESCRIPTOR_W_NAME => {
-                            return Some(ClipboardFormat::File);
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        }
         Self::from_format_id(format.formatId)
     }
 
     pub fn from_format_id(format_id: u32) -> Option<Self> {
         match format_id {
-            freerdp_sys::CF_UNICODETEXT | freerdp_sys::CF_OEMTEXT | freerdp_sys::CF_TEXT => {
-                Some(ClipboardFormat::Text)
-            }
-            freerdp_sys::CF_DIB | freerdp_sys::CF_DIBV5 => {
-                Some(ClipboardFormat::Image)
-            }
-            _ => {
-                None
-            }
+            freerdp_sys::CF_UNICODETEXT => Some(ClipboardFormat::TextUnicode),
+            freerdp_sys::CF_TEXT => Some(ClipboardFormat::TextAscii),
+            freerdp_sys::CF_OEMTEXT => Some(ClipboardFormat::TextOem),
+            freerdp_sys::CF_DIB => Some(ClipboardFormat::Image),
+            _ => None,
+        }
+    }
+
+    pub fn to_format_id(&self) -> freerdp_sys::UINT32 {
+        match self {
+            ClipboardFormat::TextUnicode => freerdp_sys::CF_UNICODETEXT,
+            ClipboardFormat::TextAscii => freerdp_sys::CF_TEXT,
+            ClipboardFormat::TextOem => freerdp_sys::CF_OEMTEXT,
+            ClipboardFormat::Image => freerdp_sys::CF_DIB,
         }
     }
 }
@@ -85,6 +71,29 @@ impl Clipboard {
         }
     }
 
+    pub fn send_client_capabilities(&self, flags: u32) -> u32 {
+        let general_capability_set = freerdp_sys::CLIPRDR_GENERAL_CAPABILITY_SET {
+            capabilitySetType: freerdp_sys::CB_CAPSTYPE_GENERAL as u16,
+            capabilitySetLength: std::mem::size_of::<freerdp_sys::CLIPRDR_GENERAL_CAPABILITY_SET>()
+                as u16,
+            version: freerdp_sys::CB_CAPS_VERSION_2,
+            generalFlags: flags,
+        };
+
+        let capabilities = freerdp_sys::CLIPRDR_CAPABILITIES {
+            common: freerdp_sys::CLIPRDR_HEADER {
+                msgType: 0,
+                msgFlags: 0,
+                dataLen: 0,
+            },
+
+            cCapabilitiesSets: 1,
+            capabilitySets: &general_capability_set as *const _ as *mut _,
+        };
+        self.client_capabilities(&capabilities)
+    }
+
+    // Internal helper to send client format list
     pub fn client_format_list(&self, format_list: &freerdp_sys::CLIPRDR_FORMAT_LIST) -> u32 {
         if let Some(ptr) = &self.ptr
             && let Some(func) = ptr.ClientFormatList
@@ -98,6 +107,33 @@ impl Clipboard {
         } else {
             freerdp_sys::CHANNEL_RC_OK
         }
+    }
+
+    // Helper to send client format list but list is a slice of ClipboardFormat
+    // When data is locally avaiable on clipboard, use this to send supported formats on the clipboard to server
+    // Example. On a text editor press CTRL+C, "this" app receives the notificiation, obtains what formats are available on clipboard,
+    // and calls this method to inform server about available formats. So the server also knows what formats are available to request data from.
+    pub fn send_client_format_list(&self, formats: &[ClipboardFormat]) -> u32 {
+        let mut cliprdr_formats: Vec<freerdp_sys::CLIPRDR_FORMAT> = Vec::new();
+
+        for format in formats {
+            cliprdr_formats.push(freerdp_sys::CLIPRDR_FORMAT {
+                formatId: format.to_format_id(),
+                formatName: std::ptr::null_mut(),
+            });
+        }
+
+        let format_list = freerdp_sys::CLIPRDR_FORMAT_LIST {
+            common: freerdp_sys::CLIPRDR_HEADER {
+                msgType: 0,
+                msgFlags: 0,
+                dataLen: 0,
+            },
+            numFormats: cliprdr_formats.len() as u32,
+            formats: cliprdr_formats.as_ptr() as *mut _,
+        };
+
+        self.client_format_list(&format_list)
     }
 
     pub fn send_format_list_response(&self, success: bool) -> u32 {
@@ -126,7 +162,7 @@ impl Clipboard {
         }
     }
 
-    pub fn send_format_data_response(
+    pub fn send_client_format_data_response(
         &self,
         format_data_response: &freerdp_sys::CLIPRDR_FORMAT_DATA_RESPONSE,
     ) -> u32 {
@@ -137,6 +173,25 @@ impl Clipboard {
                 func(
                     ptr.as_mut_ptr(),
                     format_data_response as *const freerdp_sys::CLIPRDR_FORMAT_DATA_RESPONSE,
+                )
+            }
+        } else {
+            freerdp_sys::CHANNEL_RC_OK
+        }
+    }
+
+    // Used to request clipboard data in specific format from server
+    pub fn client_format_data_request(
+        &self,
+        format_data_request: &freerdp_sys::CLIPRDR_FORMAT_DATA_REQUEST,
+    ) -> u32 {
+        if let Some(ptr) = &self.ptr
+            && let Some(func) = ptr.ClientFormatDataRequest
+        {
+            unsafe {
+                func(
+                    ptr.as_mut_ptr(),
+                    format_data_request as *const freerdp_sys::CLIPRDR_FORMAT_DATA_REQUEST,
                 )
             }
         } else {

@@ -73,11 +73,15 @@ unsafe extern "C" fn receive_format_list_response(
         format_list_response
     );
     if let Some(rdp) = get_owner(context) {
-        return rdp.on_receive_format_list_response(unsafe { &*format_list_response });
+        // If not failed, send success. No other data is needed.
+        return rdp.on_receive_format_list_response(unsafe {
+            (*format_list_response).common.msgFlags & freerdp_sys::CB_RESPONSE_FAIL as u16 == 0
+        });
     }
     freerdp_sys::CHANNEL_RC_OK
 }
 
+// Invoked by serer to request clipboard data in specific format
 unsafe extern "C" fn receive_format_data_request(
     context: *mut freerdp_sys::CliprdrClientContext,
     format_data_request: *const freerdp_sys::CLIPRDR_FORMAT_DATA_REQUEST,
@@ -93,6 +97,7 @@ unsafe extern "C" fn receive_format_data_request(
     freerdp_sys::CHANNEL_RC_OK
 }
 
+// Invoked by server to send clipboard data in response to a client format data request (sent by us)
 unsafe extern "C" fn receive_format_data_response(
     context: *mut freerdp_sys::CliprdrClientContext,
     format_data_response: *const freerdp_sys::CLIPRDR_FORMAT_DATA_RESPONSE,
@@ -103,7 +108,20 @@ unsafe extern "C" fn receive_format_data_response(
         format_data_response
     );
     if let Some(rdp) = get_owner(context) {
-        return rdp.on_receive_format_data_response(unsafe { &*format_data_response });
+        // Compose a const slice from buffer pointer and length
+        let data = unsafe {
+            if !(*format_data_response).requestedFormatData.is_null()
+                && (*format_data_response).common.dataLen > 0
+            {
+                std::slice::from_raw_parts(
+                    (*format_data_response).requestedFormatData,
+                    (*format_data_response).common.dataLen as usize,
+                )
+            } else {
+                &[]
+            }
+        };
+        return rdp.on_receive_format_data_response(data);
     }
     freerdp_sys::CHANNEL_RC_OK
 }

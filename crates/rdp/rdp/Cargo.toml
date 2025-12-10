@@ -15,8 +15,13 @@ libc = "0.2.177"
 eframe = { version = "0.33.2" }
 winit = "0.30.12"
 
+# Security dependencies
 zeroize = { version = "1", features = ["derive"] }
+
+# Clipboard dependencies
+clipboard-rs = "0.3.1"
 
 # Windows dependencies
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_Networking_WinSock"] }
+
