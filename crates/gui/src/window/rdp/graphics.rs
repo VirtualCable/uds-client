@@ -82,13 +82,14 @@ impl Screen {
         if rects.is_empty() {
             return;
         }
+        let _gdi_guard = rdp_state.gdi_lock.read().unwrap();
+
         let (stride_bytes, fb_height) = unsafe {
             (
                 (*rdp_state.gdi).stride as usize,
                 (*rdp_state.gdi).height as usize,
             )
         };
-        log::debug!("stride_bytes: {}, fb_height: {}, framebuffer: {:p}", stride_bytes, fb_height, unsafe { (*rdp_state.gdi).primary_buffer });
         let framebuffer = unsafe {
             std::slice::from_raw_parts(
                 (*rdp_state.gdi).primary_buffer as *const u8,
