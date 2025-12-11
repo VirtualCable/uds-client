@@ -1,14 +1,17 @@
 #![allow(dead_code)]
 use std::{
-    cell::RefCell, fmt, rc::Rc, sync::{
+    cell::RefCell,
+    fmt,
+    rc::Rc,
+    sync::{
         Arc, RwLock,
         atomic::{AtomicBool, Ordering},
-    }
+    },
 };
 
 use anyhow::Result;
 use crossbeam::channel::{Receiver, Sender, bounded};
-use eframe::egui;
+use eframe::{egui, glow};
 
 use crate::{log, logo::load_logo};
 
@@ -40,6 +43,8 @@ pub struct RdpConnectionState {
     pub full_screen: Arc<AtomicBool>,
     // For top pinbar
     pub pinbar_visible: Arc<AtomicBool>,
+    // For resize, to avoiid too fast
+    pub last_resize: std::time::Instant,
 }
 
 impl fmt::Debug for RdpConnectionState {
@@ -130,6 +135,7 @@ impl AppWindow {
             })),
             full_screen: Arc::new(AtomicBool::new(is_full_screen)),
             pinbar_visible: Arc::new(AtomicBool::new(false)),
+            last_resize: std::time::Instant::now(),
         }));
 
         std::thread::spawn(move || {
@@ -168,24 +174,14 @@ impl AppWindow {
             // Hotkey handled, skip input processing this frame
             return;
         }
+
         let input = rdp_state.input;
         self.handle_input(ctx, input, scale);
 
         let gl = frame.gl().unwrap();
-        //     y: actual_height,
-        // } = ctx.content_rect().size();
-        // let (actual_width, actual_height) = (actual_width as i32, actual_height as i32);
-        // let (gdi_width, gdi_height) = unsafe { ((*rdp_state.gdi).width, (*rdp_state.gdi).height) };
 
-        // if actual_width != gdi_width || actual_height != gdi_height {
-        //     log::debug!(
-        //         "Viewport size changed: actual=({}, {}), gdi=({}, {}), resizing gdi and texture",
-        //         actual_width,
-        //         actual_height,
-        //         gdi_width,
-        //         gdi_height
-        //     );
-        // }
+        self.handle_screen_resize(gl, ctx.content_rect().size(), &mut rdp_state);
+
         egui::CentralPanel::default()
             .frame(egui::Frame::default().inner_margin(0.0))
             .show(ctx, |ui| {
@@ -235,10 +231,7 @@ impl AppWindow {
                 let size = ui.available_size();
                 ui.add_sized(
                     size,
-                    egui::Image::new(egui::load::SizedTexture::new(
-                        screen.texture_id(),
-                        size,
-                    )),
+                    egui::Image::new(egui::load::SizedTexture::new(screen.texture_id(), size)),
                 );
 
                 log::trace!("RDP frame rendered took {:?}", start.elapsed());
@@ -256,6 +249,44 @@ impl AppWindow {
                 true
             }
             HotKey::None => false,
+        }
+    }
+
+    fn handle_screen_resize(
+        &self,
+        gl: &glow::Context,
+        current_size: egui::Vec2,
+        rdp_state: &mut RdpConnectionState,
+    ) {
+        if rdp_state.last_resize.elapsed().as_millis() < 200 {
+            return;
+        }
+        let egui::Vec2 {
+            x: actual_width,
+            y: actual_height,
+        } = current_size;
+        let (actual_width, actual_height) = (actual_width as i32, actual_height as i32);
+        let (gdi_width, gdi_height) = unsafe { ((*rdp_state.gdi).width, (*rdp_state.gdi).height) };
+
+        if actual_width != gdi_width || actual_height != gdi_height {
+            log::debug!(
+                "Viewport size changed: actual=({}, {}), gdi=({}, {}), resizing gdi and texture",
+                actual_width,
+                actual_height,
+                gdi_width,
+                gdi_height
+            );
+            rdp_state.last_resize = std::time::Instant::now();
+            if let Some(disp) = rdp_state.channels.write().unwrap().disp() {
+                disp.send_monitor_layout(
+                    rdp::geom::Rect::new(0, 0, actual_width as u32, actual_height as u32),
+                    0,
+                    100, // in percent
+                    100, // in percent
+                );
+                let mut screen = rdp_state.screen.clone();
+                screen.resize_screen_texture(gl, current_size);
+            }
         }
     }
 }

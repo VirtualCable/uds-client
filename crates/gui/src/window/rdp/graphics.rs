@@ -170,6 +170,9 @@ impl Screen {
                 glow::TEXTURE_MAG_FILTER,
                 glow::LINEAR as i32,
             );
+            // Note: On egui, this resize will produce an error on disabling SRGB framebuffer
+            // but this only ocurrs on first frame, after that, the framebuffer is again fine
+            // This is harmless, we will loose a frame, but nothing more.
         }
 
         // Update the stored size

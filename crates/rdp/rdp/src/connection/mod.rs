@@ -246,51 +246,6 @@ impl Rdp {
         Ok(())
     }
 
-    pub fn send_resize(self, width: u32, height: u32) {
-        // TODO:: implement this
-        // We need the disp channel to send the resize request, not alredy implemented in our code
-        // Note: avoid too fast resizing, as it may cause issues
-        // with the server or client. (simply, implement a delay or debounce mechanism os 200ms or so)
-        log::debug!("send_resize not implemented yet: {}x{}", width, height);
-        if let Some(settings) = self.settings() {
-            let _dcml = unsafe {
-                DISPLAY_CONTROL_MONITOR_LAYOUT {
-                    Flags: DISPLAY_CONTROL_MONITOR_PRIMARY,
-                    Left: 0,
-                    Top: 0,
-                    Width: width,
-                    Height: height,
-                    Orientation: freerdp_settings_get_uint16(
-                        settings,
-                        FreeRDP_Settings_Keys_UInt16_FreeRDP_DesktopOrientation,
-                    ) as UINT32,
-                    DesktopScaleFactor: freerdp_settings_get_uint32(
-                        settings,
-                        FreeRDP_Settings_Keys_UInt32_FreeRDP_DesktopScaleFactor,
-                    ),
-                    DeviceScaleFactor: freerdp_settings_get_uint32(
-                        settings,
-                        FreeRDP_Settings_Keys_UInt32_FreeRDP_DeviceScaleFactor,
-                    ),
-                    PhysicalWidth: width,
-                    PhysicalHeight: height,
-                }
-            };
-            unsafe {
-                freerdp_settings_set_uint32(
-                    settings,
-                    FreeRDP_Settings_Keys_UInt32_FreeRDP_SmartSizingWidth,
-                    width,
-                );
-                freerdp_settings_set_uint32(
-                    settings,
-                    FreeRDP_Settings_Keys_UInt32_FreeRDP_SmartSizingHeight,
-                    height,
-                );
-            }
-        };
-    }
-
     // Executes the RDP connection until end or stop is requested
     pub fn run(&self) -> Result<()> {
         #[cfg(debug_assertions)]
