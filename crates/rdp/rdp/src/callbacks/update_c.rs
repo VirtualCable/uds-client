@@ -170,20 +170,6 @@ extern "C" fn synchronize(context: *mut rdpContext) -> BOOL {
 
 extern "C" fn desktop_resize(context: *mut rdpContext) -> BOOL {
     debug!(" **** DESKTOP RESIZE called... {:?}", context);
-    unsafe {
-        gdi_resize(
-            (*context).gdi,
-            freerdp_settings_get_uint32(
-                (*context).settings,
-                FreeRDP_Settings_Keys_UInt32_FreeRDP_DesktopWidth,
-            ),
-            freerdp_settings_get_uint32(
-                (*context).settings,
-                FreeRDP_Settings_Keys_UInt32_FreeRDP_DesktopHeight,
-            ),
-        );
-    }
-
     if let Some(owner) = context.owner() {
         owner.on_desktop_resize().into()
     } else {
