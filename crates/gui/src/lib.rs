@@ -14,19 +14,24 @@ use winit::{
 
 use shared::{log, system::trigger::Trigger};
 
-pub mod consts;
-pub mod input;
 pub mod window;
 
 pub mod about;
 
 pub mod logo;
 
+#[derive(Debug)]
+pub struct RawKey {
+    pub keycode: winit::keyboard::KeyCode,
+    pub pressed: bool,
+    pub repeat: bool,
+}
+
 /// Proxy over the eframe proxy to capture keyboard input events
 /// so we can get scancodes to send to RDP
 pub struct RdpAppProxy<'a> {
     eframe_app: EframeWinitApplication<'a>,
-    events: Sender<input::RawKey>,
+    events: Sender<RawKey>,
     processing_events: Arc<AtomicBool>,
     stop: Trigger,
 }
@@ -48,12 +53,12 @@ impl ApplicationHandler<UserEvent> for RdpAppProxy<'_> {
         if let winit::event::WindowEvent::CloseRequested = &event {
             self.stop.set();
         }
-        
+
         if self.processing_events.load(Ordering::Relaxed)
             && let winit::event::WindowEvent::KeyboardInput { event, .. } = &event
             && let PhysicalKey::Code(code) = event.physical_key
         {
-            let raw_key = input::RawKey {
+            let raw_key = RawKey {
                 keycode: code,
                 pressed: event.state.is_pressed(),
                 repeat: event.repeat,
@@ -113,7 +118,7 @@ pub fn run_gui(
     messages_rx: Receiver<window::types::GuiMessage>,
     stop: Trigger,
 ) -> Result<()> {
-    let (keys_tx, keys_rx): (Sender<input::RawKey>, Receiver<input::RawKey>) = bounded(1024);
+    let (keys_tx, keys_rx) = bounded::<RawKey>(1024);
     let processing_events = Arc::new(AtomicBool::new(false));
 
     let native_options = eframe::NativeOptions {

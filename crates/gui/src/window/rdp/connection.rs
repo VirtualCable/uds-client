@@ -40,11 +40,17 @@ pub struct RdpConnectionState {
     pub channels: Arc<RwLock<rdp::channels::RdpChannels>>,
     pub screen: super::graphics::Screen,
     pub cursor: Rc<RefCell<super::mouse::RdpMouseCursor>>,
-    pub full_screen: Arc<AtomicBool>,
+    pub full_screen: Rc<AtomicBool>,
     // For top pinbar
-    pub pinbar_visible: Arc<AtomicBool>,
-    // For resize, to avoiid too fast
-    pub last_resize: std::time::Instant,
+    pub pinbar_visible: Rc<AtomicBool>,
+
+    // For resize, to avoiid too fast resizes
+    pub last_resize: Rc<RefCell<std::time::Instant>>,
+
+    // FPS
+    // Very basic fps calculation
+    // We get time between frames
+    pub fps: Rc<RefCell<super::fps::Fps>>,
 }
 
 impl fmt::Debug for RdpConnectionState {
@@ -67,7 +73,7 @@ impl AppWindow {
         let (tx, rx): (Sender<RdpMessage>, Receiver<RdpMessage>) = bounded(FRAMES_IN_FLIGHT);
 
         let mut rdp_settings = rdp_settings;
-        // TODO: Handle screen size changes during session with RDP display channel
+
         let is_full_screen = if rdp_settings.screen_size.is_fullscreen() {
             let real_size = ctx.content_rect().size();
             rdp_settings.screen_size =
@@ -133,9 +139,10 @@ impl AppWindow {
                 width: cursor_img_size[0] as u32,
                 height: cursor_img_size[1] as u32,
             })),
-            full_screen: Arc::new(AtomicBool::new(is_full_screen)),
-            pinbar_visible: Arc::new(AtomicBool::new(false)),
-            last_resize: std::time::Instant::now(),
+            full_screen: Rc::new(AtomicBool::new(is_full_screen)),
+            pinbar_visible: Rc::new(AtomicBool::new(false)),
+            last_resize: Rc::new(RefCell::new(std::time::Instant::now())),
+            fps: Rc::new(RefCell::new(super::fps::Fps::new())),
         }));
 
         std::thread::spawn(move || {
@@ -238,14 +245,24 @@ impl AppWindow {
             });
         // Pinbar at top
         self.show_pinbar(ctx, &mut rdp_state);
+
+        rdp_state.fps.borrow_mut().record_frame();
         // Handle custom cursor
         self.handle_cursor(ctx, &rdp_state);
+
+        // Fps if enabled, last so it goes on top
+        rdp_state.fps.borrow().show(ctx);
     }
 
     fn handle_hotkeys(&mut self, ctx: &egui::Context, rdp_state: &mut RdpConnectionState) -> bool {
         match HotKey::from_input(ctx) {
             HotKey::ToggleFullScreen => {
                 self.toggle_fullscreen(ctx, rdp_state);
+                true
+            }
+            HotKey::Skip => true,
+            HotKey::ToggleFPS => {
+                rdp_state.fps.borrow_mut().toggle();
                 true
             }
             HotKey::None => false,
@@ -258,7 +275,7 @@ impl AppWindow {
         current_size: egui::Vec2,
         rdp_state: &mut RdpConnectionState,
     ) {
-        if rdp_state.last_resize.elapsed().as_millis() < 200 {
+        if rdp_state.last_resize.borrow().elapsed().as_millis() < 500 {
             return;
         }
         let egui::Vec2 {
@@ -287,7 +304,7 @@ impl AppWindow {
                 gdi_width,
                 gdi_height
             );
-            rdp_state.last_resize = std::time::Instant::now();
+            *rdp_state.last_resize.borrow_mut() = std::time::Instant::now();
             if let Some(disp) = rdp_state.channels.write().unwrap().disp() {
                 disp.send_monitor_layout(
                     rdp::geom::Rect::new(0, 0, actual_width as u32, actual_height as u32),

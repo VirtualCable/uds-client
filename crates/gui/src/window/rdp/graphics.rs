@@ -221,7 +221,6 @@ impl AppWindow {
         }
 
         egui::Area::new("pinbar".into())
-            .fixed_pos(egui::pos2(0.0, 0.0)) // Top-left corner
             .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, 0.0)) // Centered at top
             .order(egui::Order::Foreground) // Above all layers
             .constrain(true) // Keep within screen bounds

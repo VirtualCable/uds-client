@@ -4,7 +4,7 @@ use super::consts;
 use rdp::keymap;
 use shared::log;
 
-use super::window::AppWindow;
+use crate::window::AppWindow;
 use rdp::sys::{
     PTR_FLAGS_BUTTON1,
     PTR_FLAGS_BUTTON2,
@@ -23,12 +23,7 @@ use rdp::sys::{
     rdpInput,
 };
 
-#[derive(Debug)]
-pub struct RawKey {
-    pub keycode: winit::keyboard::KeyCode,
-    pub pressed: bool,
-    pub repeat: bool,
-}
+
 
 impl AppWindow {
     fn handle_mouse(

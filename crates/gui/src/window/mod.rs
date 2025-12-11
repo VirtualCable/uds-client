@@ -8,8 +8,6 @@ use anyhow::Result;
 use crossbeam::channel::Receiver;
 use eframe::egui;
 
-use crate::input;
-
 use shared::{log, system::trigger::Trigger};
 
 mod client_progress;
@@ -31,7 +29,7 @@ pub(super) struct AppWindow {
     pub prev_app_state: types::AppState,
     pub texture: egui::TextureHandle, // Logo texture, useful for various windows
     pub processing_events: Arc<AtomicBool>, // Set if we need to process wininit events (keyboard events right now)
-    pub events: Receiver<input::RawKey>,
+    pub events: Receiver<crate::RawKey>,
     pub gui_messages_rx: Receiver<types::GuiMessage>,
     pub stop: Trigger,                   // For stopping any ongoing operations
     pub screen_size: Option<(u32, u32)>, // Cached screen size
@@ -41,7 +39,7 @@ pub(super) struct AppWindow {
 impl AppWindow {
     pub fn new(
         processing_events: Arc<AtomicBool>,
-        events: Receiver<input::RawKey>,
+        events: Receiver<crate::RawKey>,
         gui_messages_rx: Receiver<types::GuiMessage>,
         stop: Trigger,
         catalog: gettext::Catalog,

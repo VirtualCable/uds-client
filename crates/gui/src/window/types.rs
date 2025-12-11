@@ -46,16 +46,29 @@ pub enum HotKey {
     #[default]
     None,
     ToggleFullScreen,
+    ToggleFPS,
+    Skip,
 }
 
 impl HotKey {
     pub fn from_input(ctx: &eframe::egui::Context) -> Self {
         ctx.input(|input| {
-            if (input.key_pressed(eframe::egui::Key::Enter) && input.modifiers.alt)
-                || is_maximized(input.viewport().maximized.unwrap_or(false))
-            {
-                // Send restore so maximixed is toggled off and return toggle fullscreen
+            if is_maximized(input.viewport().maximized.unwrap_or(false)) {
+                return Self::ToggleFullScreen; // If maximized state changed, toggle fullscreen
+            }
+
+            if !input.modifiers.alt || !input.modifiers.command || input.modifiers.shift {
+                return Self::None;
+            }
+
+            if input.key_pressed(eframe::egui::Key::Enter) {
                 Self::ToggleFullScreen
+            } else if input.key_pressed(eframe::egui::Key::F) {
+                Self::ToggleFPS
+            } else if input.key_released(eframe::egui::Key::Enter)
+                || input.key_released(eframe::egui::Key::F)
+            {
+                Self::Skip
             } else {
                 Self::None
             }
