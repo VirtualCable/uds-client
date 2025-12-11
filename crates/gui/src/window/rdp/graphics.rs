@@ -88,6 +88,7 @@ impl Screen {
                 (*rdp_state.gdi).height as usize,
             )
         };
+        log::debug!("stride_bytes: {}, fb_height: {}, framebuffer: {:p}", stride_bytes, fb_height, unsafe { (*rdp_state.gdi).primary_buffer });
         let framebuffer = unsafe {
             std::slice::from_raw_parts(
                 (*rdp_state.gdi).primary_buffer as *const u8,
