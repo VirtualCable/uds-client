@@ -253,7 +253,7 @@ impl AppWindow {
     }
 
     fn handle_screen_resize(
-        &self,
+        &mut self,
         gl: &glow::Context,
         current_size: egui::Vec2,
         rdp_state: &mut RdpConnectionState,
@@ -269,6 +269,17 @@ impl AppWindow {
         let (gdi_width, gdi_height) = unsafe { ((*rdp_state.gdi).width, (*rdp_state.gdi).height) };
 
         if actual_width != gdi_width || actual_height != gdi_height {
+            // We only allow fullscreen/windowed, so if actual is smalleer we have exit the fullscreen mode
+            // else, we have entered.
+            if actual_width < gdi_width {
+                rdp_state.full_screen.store(false, Ordering::Relaxed);
+            } else {
+                rdp_state.full_screen.store(true, Ordering::Relaxed);
+                // Store fullscreen for future possible use
+                if self.screen_size.is_none() {
+                    self.screen_size = Some((actual_width as u32, actual_height as u32))
+                }
+            }
             log::debug!(
                 "Viewport size changed: actual=({}, {}), gdi=({}, {}), resizing gdi and texture",
                 actual_width,
