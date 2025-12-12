@@ -1,11 +1,11 @@
 use std::{env, path::PathBuf};
 
-const FREERDP_PATH_ENV_VAR: &str = "FREERDP_PATH";
+const FREERDP_ROOT_ENV_VAR: &str = "FREERDP_ROOT";
 // On debian, for example, this path is /usr/include/freerdp3 and /usr/include/winpr3
 
 fn main() {
-    let (include_freerdp, include_winpr, lib_path) = if env::var(FREERDP_PATH_ENV_VAR).is_ok() {
-        let freerdp_path = env::var(FREERDP_PATH_ENV_VAR).unwrap();
+    let (include_freerdp, include_winpr, lib_path) = if env::var(FREERDP_ROOT_ENV_VAR).is_ok() {
+        let freerdp_path = env::var(FREERDP_ROOT_ENV_VAR).unwrap();
         (
             format!("{}/include/freerdp3", freerdp_path),
             format!("{}/include/winpr3", freerdp_path),
