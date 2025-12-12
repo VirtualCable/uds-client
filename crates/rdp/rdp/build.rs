@@ -11,8 +11,8 @@ fn copy_if_different(src: &PathBuf, dst: &PathBuf) -> io::Result<()> {
 }
 
 fn copy_windows_dlls() {
-    const FREERDP_PATH_ENV_VAR: &str = "FREERDP_PATH";
-    const VCPKG_PATH_ENV_VAR: &str = "VCPKG_PATH";
+    const FREERDP_ROOT_ENV_VAR: &str = "FREERDP_ROOT";
+    const VCPKG_ROOT_ENV_VAR: &str = "VCPKG_ROOT";
 
     // Out dir is our parent directory + "local_dlls"
     let out_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
@@ -25,23 +25,22 @@ fn copy_windows_dlls() {
         .join("local_dlls");
 
     fs::create_dir_all(&out_dir).unwrap();
-    let freerdp_path = env::var(FREERDP_PATH_ENV_VAR).unwrap_or_else(|_| {
+    let freerdp_path = env::var(FREERDP_ROOT_ENV_VAR).unwrap_or_else(|_| {
         panic!(
             "Environment variable {} is not set. Please set it to the FreeRDP installation path.",
-            FREERDP_PATH_ENV_VAR
+            FREERDP_ROOT_ENV_VAR
         );
     });
-    let vcpkg_path = env::var(VCPKG_PATH_ENV_VAR).unwrap_or_else(|_| {
+    let vcpkg_root = env::var(VCPKG_ROOT_ENV_VAR).unwrap_or_else(|_| {
         panic!(
             "Environment variable {} is not set. Please set it to the vcpkg installation path.",
-            VCPKG_PATH_ENV_VAR
+            VCPKG_ROOT_ENV_VAR
         );
     });
 
     let freerdp_bin = PathBuf::from(format!("{}/bin", freerdp_path));
-    let vcpkg = PathBuf::from(&vcpkg_path);
-    let vcpkg_bin = PathBuf::from(format!("{}/installed/x64-windows/bin", vcpkg.display()));
-    let vcpkg_lib = PathBuf::from(format!("{}/installed/x64-windows/lib", vcpkg.display()));
+    let vcpkg_bin = PathBuf::from(format!("{}/installed/x64-windows/bin", vcpkg_root));
+    let vcpkg_lib = PathBuf::from(format!("{}/installed/x64-windows/lib", vcpkg_root));
 
     println!("cargo:rerun-if-changed={}", out_dir.display());
 
@@ -94,14 +93,8 @@ fn copy_windows_dlls() {
     println!("cargo:rustc-link-search=native={}", vcpkg_lib.display());
 }
 
-fn linux_build() {
-    // Placeholder for Linux-specific build steps
-    // Set include paths (.../freerdp3 and ..../winpr3) for .h files if needed
-}
-
 fn main() {
     #[cfg(windows)]
     copy_windows_dlls();
-    #[cfg(target_os = "linux")]
-    linux_build();
+    // Currently, no additional steps are needed for other platforms
 }
