@@ -229,13 +229,10 @@ impl Rdp {
         unsafe {
             if let Some(instance) = self.instance {
                 if freerdp_connect(instance.as_mut_ptr()) == 0 {
-                    let code = freerdp_error_info(instance.as_mut_ptr());
-                    let name = freerdp_get_error_info_name(code);
-                    let msg = freerdp_get_error_info_string(code);
+                    let code = freerdp_get_last_error(instance.context);  // Allow panic if context is null
                     return Err(anyhow::anyhow!(
-                        "Failed to connect to RDP server: {} ({})",
-                        name.to_string_lossy(),
-                        msg.to_string_lossy()
+                        "Failed to connect to RDP server: 0x{:x}",
+                        code
                     ));
                 }
                 log::debug!("Connected to RDP server successfully.");

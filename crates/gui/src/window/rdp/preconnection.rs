@@ -9,7 +9,7 @@ use std::{
     time::Instant,
 };
 
-use rdp::settings::RdpSettings;  // crate module, not super :)
+use rdp::settings::RdpSettings; // crate module, not super :)
 
 use crate::window::{AppWindow, types::AppState};
 
@@ -59,13 +59,21 @@ impl AppWindow {
                     self.screen_size = Some((screen_size.x as u32, screen_size.y as u32));
                 }
                 // Switch to RdpConnected after 1 second, this is only for setting fullscreen etc.
-                self.enter_rdp_connection(ctx, frame, state.settings.clone()).ok();
+                if let Err(err) = self.enter_rdp_connection(ctx, frame, state.settings.clone()) {
+                    self.enter_error(
+                        ctx,
+                        frame,
+                        format!("Failed to connect to RDP server: {}", err),
+                    )
+                    .ok();
+                    return;
+                }
+                if state.switch_to_fullscreen.load(Ordering::Relaxed) {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
+                    state.switch_to_fullscreen.store(false, Ordering::Relaxed);
+                }
+                ui.label("Connecting to RDP server...");
             }
-            if state.switch_to_fullscreen.load(Ordering::Relaxed) {
-                ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
-                state.switch_to_fullscreen.store(false, Ordering::Relaxed);
-            }
-            ui.label("Connecting to RDP server...");
         });
     }
 }
