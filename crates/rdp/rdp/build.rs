@@ -11,6 +11,9 @@ fn copy_if_different(src: &PathBuf, dst: &PathBuf) -> io::Result<()> {
 }
 
 fn copy_windows_dlls() {
+    const FREERDP_PATH_ENV_VAR: &str = "FREERDP_PATH";
+    const VCPKG_PATH_ENV_VAR: &str = "VCPKG_PATH";
+
     // Out dir is our parent directory + "local_dlls"
     let out_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
         .parent()
@@ -22,9 +25,21 @@ fn copy_windows_dlls() {
         .join("local_dlls");
 
     fs::create_dir_all(&out_dir).unwrap();
+    let freerdp_path = env::var(FREERDP_PATH_ENV_VAR).unwrap_or_else(|_| {
+        panic!(
+            "Environment variable {} is not set. Please set it to the FreeRDP installation path.",
+            FREERDP_PATH_ENV_VAR
+        );
+    });
+    let vcpkg_path = env::var(VCPKG_PATH_ENV_VAR).unwrap_or_else(|_| {
+        panic!(
+            "Environment variable {} is not set. Please set it to the vcpkg installation path.",
+            VCPKG_PATH_ENV_VAR
+        );
+    });
 
-    let freerdp_bin = PathBuf::from(r"Z:\dev\freerdp\bin");
-    let vcpkg = PathBuf::from(r"Z:\dev\vcpkg");
+    let freerdp_bin = PathBuf::from(format!("{}/bin", freerdp_path));
+    let vcpkg = PathBuf::from(&vcpkg_path);
     let vcpkg_bin = PathBuf::from(format!("{}/installed/x64-windows/bin", vcpkg.display()));
     let vcpkg_lib = PathBuf::from(format!("{}/installed/x64-windows/lib", vcpkg.display()));
 
@@ -51,6 +66,8 @@ fn copy_windows_dlls() {
         // "ogg.dll",
         // "brotlidec.dll",
         // "brotlicommon.dll",
+
+        // Related to ffmpeg, for video decoding
         "libmp3lame.dll",
         "avcodec-61.dll",
         "avutil-59.dll",

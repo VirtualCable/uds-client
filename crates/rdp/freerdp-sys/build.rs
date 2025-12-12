@@ -1,22 +1,24 @@
 use std::{env, path::PathBuf};
 
+const FREERDP_PATH_ENV_VAR: &str = "FREERDP_PATH";
+// On debian, for example, this path is /usr/include/freerdp3 and /usr/include/winpr3
+
 fn main() {
-    // 🔹 Name of the environment variable we'll use
-    const ENV_VAR: &str = "FREERDP_PATH";
-    // 🔹 Default value if it's not defined
-    #[cfg(windows)]
-    const DEFAULT_PATH: &str = "Z:/dev/freerdp";
-    #[cfg(target_os = "linux")]
-    const DEFAULT_PATH: &str = "/home/dkmaster/projects/uds/5.0/repos/rdp/local";
-    #[cfg(target_os = "macos")]
-    const DEFAULT_PATH: &str = "/Users/dkmaster/projects/rdp/local";
-
-    // Read the environment variable or use the default value
-    let freerdp_path = env::var(ENV_VAR).unwrap_or_else(|_| DEFAULT_PATH.to_string());
-
-    let include_freerdp = format!("{}/include/freerdp3", freerdp_path);
-    let include_winpr = format!("{}/include/winpr3", freerdp_path);
-    let lib_path = format!("{}/lib", freerdp_path);
+    let (include_freerdp, include_winpr, lib_path) = if env::var(FREERDP_PATH_ENV_VAR).is_ok() {
+        let freerdp_path = env::var(FREERDP_PATH_ENV_VAR).unwrap();
+        (
+            format!("{}/include/freerdp3", freerdp_path),
+            format!("{}/include/winpr3", freerdp_path),
+            format!("{}/lib", freerdp_path),
+        )
+    } else {
+        // Try default paths
+        (
+            "/usr/include/freerdp3".to_string(),
+            "/usr/include/winpr3".to_string(),
+            "/usr/lib/x86_64-linux-gnu".to_string(),
+        )
+    };
 
     // Build the C shim
     cc::Build::new()

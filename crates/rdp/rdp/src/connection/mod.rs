@@ -4,7 +4,7 @@ use freerdp_sys::*;
 
 use shared::log;
 
-use crate::{Rdp, context, messaging::RdpMessage, utils::ToStringLossy};
+use crate::{Rdp, context, messaging::RdpMessage};
 
 pub mod builder;
 pub mod callbacks_impl;
@@ -229,7 +229,7 @@ impl Rdp {
         unsafe {
             if let Some(instance) = self.instance {
                 if freerdp_connect(instance.as_mut_ptr()) == 0 {
-                    let code = freerdp_get_last_error(instance.context);  // Allow panic if context is null
+                    let code = freerdp_get_last_error(instance.context); // Allow panic if context is null
                     return Err(anyhow::anyhow!(
                         "Failed to connect to RDP server: 0x{:x}",
                         code
