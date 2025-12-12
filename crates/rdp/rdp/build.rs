@@ -67,7 +67,7 @@ fn copy_windows_dlls() {
         // "brotlicommon.dll",
 
         // Related to ffmpeg, for video decoding
-        "libmp3lame.dll",
+        // "libmp3lame.dll",
         "avcodec-61.dll",
         "avutil-59.dll",
         "swscale-8.dll",
