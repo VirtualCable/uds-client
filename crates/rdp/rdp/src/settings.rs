@@ -2,6 +2,8 @@ use zeroize::Zeroize;
 
 use super::geom::ScreenSize;
 
+// For some reason, clippy thinks some fields are unused O.o (mayby zeroize related?)
+#[allow(dead_code)]
 #[derive(Zeroize, Debug, Clone)]
 pub struct RdpSettings {
     #[zeroize(skip)]
