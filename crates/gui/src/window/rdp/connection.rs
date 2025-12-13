@@ -282,7 +282,13 @@ impl AppWindow {
             x: actual_width,
             y: actual_height,
         } = current_size;
+        // Get actual size, but must be 4-aligned
         let (actual_width, actual_height) = (actual_width as i32, actual_height as i32);
+        let (actual_width, actual_height) = (
+            actual_width - (actual_width % 4),
+            actual_height - (actual_height % 4),
+        );
+        // Gdi will always be 4-aligned
         let (gdi_width, gdi_height) = unsafe { ((*rdp_state.gdi).width, (*rdp_state.gdi).height) };
 
         if actual_width != gdi_width || actual_height != gdi_height {

@@ -1,3 +1,4 @@
+#![allow(unused_assignments)]
 use zeroize::Zeroize;
 
 use super::geom::ScreenSize;
@@ -27,7 +28,6 @@ pub struct RdpSettings {
     pub drives_to_redirect: Vec<String>,
 }
 
-#[allow(unused_assignments)]
 impl Default for RdpSettings {
     fn default() -> Self {
         RdpSettings {
