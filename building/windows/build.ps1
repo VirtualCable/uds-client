@@ -5,5 +5,5 @@ docker build -t udsclient-builder .
 $projectDir = Convert-Path ../..
 
 # Run the container with the current directory mounted
-docker run --rm -v $projectDir:c:\crate -w c:\crate udsclient-builder cargo build --release
+docker run --rm -v ${projectDir}:c:\crate -w /crate udsclient-builder cargo build --release
 # Note: the target/release/launcher.exe binary will be created

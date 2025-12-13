@@ -21,7 +21,7 @@ pub mod sys;
 
 pub mod channels;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Config {
     settings: settings::RdpSettings,
     callbacks: callbacks::Callbacks,
@@ -53,7 +53,7 @@ impl Rdp {
             config: Config {
                 settings,
                 use_rgba,
-                ..Config::default()
+                callbacks: callbacks::Callbacks::default(),
             },
             instance: None,
             update_tx: Some(update_tx),

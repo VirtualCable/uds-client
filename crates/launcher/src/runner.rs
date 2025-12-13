@@ -4,8 +4,6 @@ use anyhow::Result;
 use crossbeam::channel::Sender;
 use tokio::sync::oneshot;
 
-use crate::tr;
-
 use gui::window::types::GuiMessage;
 use shared::{appdata, broker::api, consts, log, tasks};
 
