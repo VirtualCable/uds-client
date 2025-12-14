@@ -133,11 +133,16 @@ impl Rdp {
             fn channels(
                 settings: *mut rdpSettings,
                 name: &str,
+                channel: Option<&String>,
                 add_static: bool,
                 add_dynamic: bool,
             ) {
                 unsafe {
-                    let channel = if cfg!(target_os = "windows") {
+                    // Note: We can use the internal freerdp rdpsnd channel subsystems
+
+                    let channel = if let Some(channel) = channel {
+                        channel.as_str()
+                    } else if cfg!(target_os = "windows") {
                         "sys:winmm"
                     } else if cfg!(target_os = "linux") {
                         "sys:pulse" // add support for alsa and oss
@@ -183,7 +188,10 @@ impl Rdp {
                     FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteConsoleAudio,
                     false.into(),
                 );
-                channels(settings, "rdpsnd", true, true);
+                // let channel = format!("sys:{}", crate::addins::RDPSND_SUBSYSTEM_CUSTOM);
+                // channels(settings, "rdpsnd", Some(&channel), true, true);
+                // Default subsystem right now
+                channels(settings, "rdpsnd", None, true, true);
             }
             // Microphone redirection
             unsafe {
@@ -192,7 +200,8 @@ impl Rdp {
                     FreeRDP_Settings_Keys_Bool_FreeRDP_AudioCapture,
                     true.into(),
                 );
-                channels(settings, "audin", false, true);
+                // TODO: Allow configuration of the audio capture device
+                channels(settings, "audin", None, false, true);
             }
 
             // Set config settings for clipboard redirection

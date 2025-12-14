@@ -46,7 +46,7 @@ impl RdpContext {
             if ctx_ptr.is_null() {
                 return Err(anyhow::anyhow!("Failed to create client context"));
             }
-            // Override the addin provider to our custom one
+            // Override the addin provider to our custom one (in fact, "hook" the existing one)
             addin::register_channel_addin_loader();
 
             let ctx = ctx_ptr as *mut RdpContext;

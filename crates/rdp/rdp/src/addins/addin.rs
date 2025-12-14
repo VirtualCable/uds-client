@@ -1,14 +1,27 @@
-use std::ffi::CStr;
 use std::sync::OnceLock;
 
 use freerdp_sys::{
-    DWORD, FREERDP_LOAD_CHANNEL_ADDIN_ENTRY_FN, LPCSTR, PVIRTUALCHANNELENTRY,
-    freerdp_get_current_addin_provider, freerdp_register_addin_provider,
+    BOOL, DWORD, FREERDP_LOAD_CHANNEL_ADDIN_ENTRY_FN, LPCSTR, PVIRTUALCHANNELENTRY,
+    RDPSND_CHANNEL_NAME, UINT, freerdp_get_current_addin_provider, freerdp_register_addin_provider,
 };
 
+use super::sound;
 use shared::log;
 
 static FREERDP_ADDIN_PROVIDER: OnceLock<FREERDP_LOAD_CHANNEL_ADDIN_ENTRY_FN> = OnceLock::new();
+
+fn secure_cstr_from_lpcstr(psz: LPCSTR) -> String {
+    if psz.is_null() {
+        "<null>".to_string()
+    } else {
+        unsafe {
+            std::ffi::CStr::from_ptr(psz)
+                .to_str()
+                .unwrap_or("<invalid utf8>")
+                .to_string()
+        }
+    }
+}
 
 unsafe extern "C" fn custom_addin_provider(
     psz_name: LPCSTR,
@@ -16,41 +29,28 @@ unsafe extern "C" fn custom_addin_provider(
     psz_type: LPCSTR,
     dw_flags: DWORD,
 ) -> PVIRTUALCHANNELENTRY {
-    if let Some(freerdp_addin_provider) = FREERDP_ADDIN_PROVIDER.get().unwrap() {
-        unsafe {
-            let name = if psz_name.is_null() {
-                "<null>"
+    unsafe {
+        let name = secure_cstr_from_lpcstr(psz_name);
+        let subsystem = secure_cstr_from_lpcstr(psz_subsystem);
+
+        if let Some(freerdp_addin_provider) = FREERDP_ADDIN_PROVIDER.get().unwrap() {
+            if name.as_bytes() == &RDPSND_CHANNEL_NAME[..RDPSND_CHANNEL_NAME.len() - 1]
+                && subsystem == super::RDPSND_SUBSYSTEM_CUSTOM
+            {
+                log::info!("rdpsnd channel addin requested.");
+                Some(std::mem::transmute::<
+                    unsafe extern "C" fn(
+                        *mut freerdp_sys::FREERDP_RDPSND_DEVICE_ENTRY_POINTS,
+                    ) -> UINT,
+                    unsafe extern "C" fn(*mut freerdp_sys::tagCHANNEL_ENTRY_POINTS) -> BOOL,
+                >(sound::sound_entry))
             } else {
-                CStr::from_ptr(psz_name)
-                    .to_str()
-                    .unwrap_or("<invalid utf8>")
-            };
-            let subsystem = if psz_subsystem.is_null() {
-                "<null>"
-            } else {
-                CStr::from_ptr(psz_subsystem)
-                    .to_str()
-                    .unwrap_or("<invalid utf8>")
-            };
-            let typ = if psz_type.is_null() {
-                "<null>"
-            } else {
-                CStr::from_ptr(psz_type)
-                    .to_str()
-                    .unwrap_or("<invalid utf8>")
-            };
-            log::debug!(
-                "Custom addin provider called for channel: {:?}, subsystem: {:?}, type: {:?}, flags: {}",
-                name,
-                subsystem,
-                typ,
-                dw_flags
-            );
+                freerdp_addin_provider(psz_name, psz_subsystem, psz_type, dw_flags)
+            }
+        } else {
+            log::error!("No underlying addin provider found.");
+            None
         }
-        unsafe { freerdp_addin_provider(psz_name, psz_subsystem, psz_type, dw_flags) }
-    } else {
-        log::error!("Load function not set in custom addin provider.");
-        None
     }
 }
 

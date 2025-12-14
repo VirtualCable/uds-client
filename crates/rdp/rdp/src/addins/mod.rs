@@ -3,3 +3,6 @@
 // but not from external shared libraries, but from internal Rust code.
 pub(crate) mod addin;
 pub(crate) mod sound;
+
+pub const RDPSND_SUBSYSTEM_CUSTOM: &str = "bmsnd";
+

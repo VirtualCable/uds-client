@@ -16,7 +16,7 @@ pub struct SoundPlugin {
 // Returns CHANNEL_RC_OK on success, or an error code on failure. (it's marked as BOOL on freerdp lib, but ist's actually a UINT32)
 // Note that rdpsnd devices has a different entry point signature than other channels adding. This one is the correct one for rdpsnd.
 // and will need casting when used on the addin provider.
-unsafe extern "C" fn sound_entry(
+pub unsafe extern "C" fn sound_entry(
     p_entry_points: PFREERDP_RDPSND_DEVICE_ENTRY_POINTS,
 ) -> UINT {
     // Should never
@@ -81,7 +81,7 @@ unsafe extern "C" fn format_supported(
 ) -> BOOL {
     log::debug!(
         "Sound device format_supported called with format: {:?}",
-        format
+        unsafe { *format }
     );
     true.into()
 }
