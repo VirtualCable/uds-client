@@ -4,6 +4,7 @@ pub mod callbacks;
 
 pub mod connection;
 mod init;
+mod addins;
 pub mod utils;
 
 pub mod events;

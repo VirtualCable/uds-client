@@ -5,8 +5,10 @@
 #include <freerdp/gdi/gdi.h>
 #include <freerdp/codec/color.h>
 #include <freerdp/transport_io.h>
+
 #include <freerdp/client/disp.h>
 #include <freerdp/client/cliprdr.h>
+#include <freerdp/client/rdpsnd.h>
 
 // Channels
 #include <freerdp/channels/disp.h>
