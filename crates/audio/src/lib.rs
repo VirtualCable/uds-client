@@ -48,7 +48,9 @@ impl AudioHandle {
                     && let Some(range) = configs.next()
                 {
                     log::debug!("Using audio format: {:?}, range={}", range, sample_rate);
-                    let cfg = range.with_max_sample_rate().config();
+                    let cfg = range
+                        .try_with_sample_rate(cpal::SampleRate(sample_rate))
+                        .unwrap_or(range.with_max_sample_rate()).config();
                     // Store real output sample rate
                     output_sample_rate = cfg.sample_rate.0;
                     stream = Some(
