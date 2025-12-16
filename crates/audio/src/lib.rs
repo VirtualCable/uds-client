@@ -27,6 +27,8 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 use crossbeam::channel::{Sender, unbounded};
 use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
@@ -48,7 +50,12 @@ pub struct AudioHandle {
 }
 
 impl AudioHandle {
-    pub fn new(n_channels: u16, sample_rate: u32, bits_per_sample: u16, latency_threshold: u16) -> Self {
+    pub fn new(
+        n_channels: u16,
+        sample_rate: u32,
+        bits_per_sample: u16,
+        latency_threshold: u16,
+    ) -> Self {
         log::debug!(
             "Initializing audio: channels={}, sample_rate={}, bits_per_sample={}, latency_cushion={}",
             n_channels,
@@ -58,8 +65,7 @@ impl AudioHandle {
         );
         let (tx, rx) = unbounded::<AudioCommand>();
         let volume = Arc::new(RwLock::new(0xFFFFFFFF));
-        let latency = Arc::new(RwLock::new(0));
-
+        let latency = Arc::new(RwLock::new(190)); // Expected initial RDP latency for a single buffer
 
         thread::spawn({
             let volume = Arc::clone(&volume);
@@ -73,6 +79,8 @@ impl AudioHandle {
 
                 // Shared buffer for audio samples
                 let buffer: Arc<RwLock<VecDeque<f32>>> = Arc::new(RwLock::new(VecDeque::new()));
+
+                // Keep last 32 play requests stamp, to calculate the mean time between them
 
                 let mut output_sample_rate = sample_rate;
                 if let Some(dev) = device
@@ -115,11 +123,13 @@ impl AudioHandle {
                     log::error!("Audio disabled: cpal init failed");
                 }
 
+                let mut stats = AudioStats::new();
                 // Main loop
                 loop {
                     if let Ok(cmd) = rx.recv() {
                         match cmd {
                             AudioCommand::Play(data) => {
+                                stats.add_play_call();
                                 if stream.is_some() {
                                     // Convert PCM to f32, resample and push to buffer
                                     let resampled_iter = ResamplerIterator::new(
@@ -128,15 +138,23 @@ impl AudioHandle {
                                         output_sample_rate,
                                     );
                                     let mut buf = buffer.write().unwrap();
-                                    buf.extend(resampled_iter);
+                                    // Store current buffer length to calculate number of frames added
+                                    // This is so beceuse we use iterators and we don't know the length in advance
+                                    let added_frames = {
+                                        let buf_len = buf.len();
+                                        buf.extend(resampled_iter);
+                                        (buf.len() - buf_len) as u64 / n_channels as u64
+                                    };
+                                    stats.add_frames_played(added_frames);
 
                                     // Update approximate latency
                                     let frames = buf.len() as u32 / n_channels as u32;
                                     let ms = (frames as f32 / output_sample_rate as f32) * 1000.0;
                                     log::debug!(
-                                        "Audio buffer size: {} frames, approx latency: {:.2} ms",
+                                        "Audio buffer size: {} frames, approx latency: {:.2} ms, calls mean interval: {:.2} ms",
                                         frames,
-                                        ms
+                                        ms,
+                                        stats.mean_calls_interval()
                                     );
                                     *latency.write().unwrap() = ms as u32;
 
@@ -148,13 +166,16 @@ impl AudioHandle {
                                                 * n_channels as usize;
                                         if buf.len() > target_frames {
                                             let drop = buf.len() - target_frames;
+                                            stats.add_frames_dropped(
+                                                (drop / n_channels as usize) as u64,
+                                            );
                                             buf.drain(0..drop);
                                             log::warn!(
                                                 "Dropped {} frames to recover sync, new latency ~{} ms",
                                                 drop,
                                                 200
                                             );
-                                            *latency.write().unwrap() = 200;  // Proximate latency after drop
+                                            *latency.write().unwrap() = 200; // Proximate latency after drop
                                         }
                                     }
                                 }
@@ -270,6 +291,64 @@ fn pcm_to_f32<'a>(data: &'a [u8], bits_per_sample: u16) -> impl Iterator<Item = 
                 .map(|c| i32::from_le_bytes([c[0], c[1], c[2], c[3]]) as f32 / i32::MAX as f32),
         ) as Box<dyn Iterator<Item = f32>>,
         _ => Box::new(std::iter::empty()) as Box<dyn Iterator<Item = f32>>,
+    }
+}
+
+// Keep statistics about audio playback
+// Such as time between play calls, dropped frames, etc
+pub struct AudioStats {
+    last_call: Option<std::time::Instant>,
+    pub total_play_calls: u64,
+    pub total_frames_played: u64,
+    pub total_frames_dropped: u64,
+    // keep last 32 time between play calls to calculate average
+    pub time_between_play_calls: VecDeque<u128>, // time between play calls in ms
+}
+
+#[allow(clippy::new_without_default)]
+impl AudioStats {
+    pub fn new() -> Self {
+        AudioStats {
+            last_call: None,
+            total_play_calls: 0,
+            total_frames_played: 0,
+            total_frames_dropped: 0,
+            time_between_play_calls: VecDeque::with_capacity(32),
+        }
+    }
+
+    pub fn add_play_call(&mut self) {
+        let last_call = match self.last_call {
+            Some(t) => t,
+            None => {
+                self.last_call = Some(std::time::Instant::now());
+                return;
+            }
+        };
+        self.last_call = Some(std::time::Instant::now());
+        self.total_play_calls += 1;
+        let now = std::time::Instant::now();
+        let duration = now.duration_since(last_call).as_millis();
+        if self.time_between_play_calls.len() == 32 {
+            self.time_between_play_calls.pop_front();
+        }
+        self.time_between_play_calls.push_back(duration);
+    }
+
+    pub fn mean_calls_interval(&self) -> f32 {
+        if self.time_between_play_calls.is_empty() {
+            return 0.0;
+        }
+        let sum: u128 = self.time_between_play_calls.iter().sum();
+        sum as f32 / self.time_between_play_calls.len() as f32
+    }
+
+    pub fn add_frames_played(&mut self, frames: u64) {
+        self.total_frames_played += frames;
+    }
+
+    pub fn add_frames_dropped(&mut self, frames: u64) {
+        self.total_frames_dropped += frames;
     }
 }
 
