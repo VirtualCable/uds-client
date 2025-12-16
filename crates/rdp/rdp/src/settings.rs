@@ -63,7 +63,7 @@ pub struct RdpSettings {
     #[zeroize(skip)]
     pub drives_to_redirect: Vec<String>,
     #[zeroize(skip)]
-    pub sound_latency_threshold: u16,
+    pub sound_latency_threshold: Option<u16>,
 }
 
 impl Default for RdpSettings {
@@ -82,7 +82,7 @@ impl Default for RdpSettings {
             microphone_redirection: false,
             printer_redirection: false,
             drives_to_redirect: vec!["all".to_string()], // By default, redirect all drives.
-            sound_latency_threshold: 400,
+            sound_latency_threshold: None,
         }
     }
 }

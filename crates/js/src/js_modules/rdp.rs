@@ -128,7 +128,7 @@ fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
         drives_to_redirect: rdp_settings
             .drives_to_redirect
             .unwrap_or_else(|| vec!["all".to_string()]),
-        sound_latency_threshold: rdp_settings.sound_latency_threshold.unwrap_or(400),
+        sound_latency_threshold: rdp_settings.sound_latency_threshold,
     };
 
     send_message(GuiMessage::ConnectRdp(settings));
@@ -212,7 +212,7 @@ mod tests {
                     assert!(settings.audio_redirection);
                     assert!(!settings.microphone_redirection);
                     assert!(!settings.printer_redirection);
-                    assert_eq!(settings.sound_latency_threshold, 400);
+                    assert_eq!(settings.sound_latency_threshold, None);
                 }
                 _ => panic!("Expected GuiMessage::ConnectRdp"),
             },
@@ -266,7 +266,7 @@ mod tests {
                     assert!(settings.audio_redirection);
                     assert!(!settings.microphone_redirection);
                     assert!(!settings.printer_redirection);
-                    assert_eq!(settings.sound_latency_threshold, 400);
+                    assert_eq!(settings.sound_latency_threshold, None);
                 }
                 _ => panic!("Expected GuiMessage::ConnectRdp"),
             },

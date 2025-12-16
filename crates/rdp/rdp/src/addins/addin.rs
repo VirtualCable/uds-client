@@ -35,7 +35,7 @@ use freerdp_sys::{
     RDPSND_CHANNEL_NAME, UINT, freerdp_get_current_addin_provider, freerdp_register_addin_provider,
 };
 
-use super::sound;
+use super::audio_output;
 use shared::log;
 
 static FREERDP_ADDIN_PROVIDER: OnceLock<FREERDP_LOAD_CHANNEL_ADDIN_ENTRY_FN> = OnceLock::new();
@@ -73,7 +73,7 @@ unsafe extern "C" fn custom_addin_provider(
                         *mut freerdp_sys::FREERDP_RDPSND_DEVICE_ENTRY_POINTS,
                     ) -> UINT,
                     unsafe extern "C" fn(*mut freerdp_sys::tagCHANNEL_ENTRY_POINTS) -> BOOL,
-                >(sound::sound_entry))
+                >(audio_output::sound_entry))
             } else {
                 freerdp_addin_provider(psz_name, psz_subsystem, psz_type, dw_flags)
             }

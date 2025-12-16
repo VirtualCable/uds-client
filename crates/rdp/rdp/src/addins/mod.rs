@@ -30,7 +30,7 @@
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
 pub(crate) mod addin;
-pub(crate) mod sound;
+pub(crate) mod audio_output;
 
 pub const RDPSND_SUBSYSTEM_CUSTOM: &str = "bmsnd";
 

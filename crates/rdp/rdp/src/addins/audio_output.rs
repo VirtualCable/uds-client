@@ -109,7 +109,7 @@ unsafe extern "C" fn open(
         if let Some(rdp) = (unsafe { freerdp_rdpsnd_get_context(plugin.device.rdpsnd) }).owner() {
             rdp.config.settings.sound_latency_threshold
         } else {
-            400 // default value
+            Some(185 * 2) // default value
         };
     if let Some(audio_handle) = plugin.audio.take() {
         // Already opened, close it first
