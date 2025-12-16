@@ -94,10 +94,6 @@ unsafe extern "C" fn format_supported(
     _device: *mut rdpsndDevicePlugin,
     format: *const AUDIO_FORMAT,
 ) -> BOOL {
-    log::debug!(
-        "Sound device format_supported called with format: {:?}",
-        unsafe { *format }
-    );
     match unsafe { (*format).wFormatTag } {
         x if x == WAVE_FORMAT_PCM as u16 => {
             if unsafe { (*format).cbSize == 0 }
@@ -118,18 +114,15 @@ unsafe extern "C" fn format_supported(
 
 unsafe extern "C" fn get_volume(device: *mut rdpsndDevicePlugin) -> UINT32 {
     let plugin = unsafe { &*(device as *mut SoundPlugin) };
-    let volume = if let Some(audio) = &plugin.audio {
+    if let Some(audio) = &plugin.audio {
         *audio.volume.read().unwrap()
     } else {
         0
-    };
-    log::debug!("Sound device get_volume called, current volume: {}", volume);
-    volume
+    }
 }
 
 unsafe extern "C" fn set_volume(device: *mut rdpsndDevicePlugin, volume: UINT32) -> BOOL {
     let plugin = unsafe { &mut *(device as *mut SoundPlugin) };
-    log::debug!("Sound device set_volume called, new volume: {}", volume);
     if let Some(audio) = &plugin.audio {
         *audio.volume.write().unwrap() = volume;
     }
@@ -141,19 +134,17 @@ unsafe extern "C" fn play(
     data: *const BYTE,
     size: usize,
 ) -> UINT {
-    log::debug!(
-        "Sound device play called with data ptr: {:?}, size: {}",
-        data,
-        size
-    );
     let plugin = unsafe { &mut *(_device as *mut SoundPlugin) };
     if let Some(audio) = &plugin.audio {
         let slice = unsafe { std::slice::from_raw_parts(data, size) };
-        audio.play(slice.to_vec()).unwrap_or_else(|e| log::error!("Failed to send Play command: {}", e));
+        audio
+            .play(slice.to_vec())
+            .unwrap_or_else(|e| log::error!("Failed to send Play command: {}", e));
+        // Note, latency is 1 frame behind, as we return the latency of the previous play call
         *audio.latency.read().unwrap()
     } else {
         log::error!("Audio handle not initialized in play.");
-        1 // Error code
+        0 // No latency if audio not initialized
     }
 }
 
