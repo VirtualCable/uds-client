@@ -50,7 +50,8 @@ impl AudioHandle {
                     log::debug!("Using audio format: {:?}, range={}", range, sample_rate);
                     let cfg = range
                         .try_with_sample_rate(cpal::SampleRate(sample_rate))
-                        .unwrap_or(range.with_max_sample_rate()).config();
+                        .unwrap_or(range.with_max_sample_rate())
+                        .config();
                     // Store real output sample rate
                     output_sample_rate = cfg.sample_rate.0;
                     stream = Some(
@@ -99,8 +100,31 @@ impl AudioHandle {
 
                                     // Update approximate latency
                                     let frames = buf.len() as u32 / n_channels as u32;
-                                    let ms = (frames as f32 / sample_rate as f32) * 1000.0;
+                                    let ms = (frames as f32 / output_sample_rate as f32) * 1000.0;
+                                    log::debug!(
+                                        "Audio buffer size: {} frames, approx latency: {:.2} ms",
+                                        frames,
+                                        ms
+                                    );
                                     *latency.write().unwrap() = ms as u32;
+
+                                    // overflow control: if latency > 500 ms, drop some frames
+                                    if ms > 500.0 {
+                                        // try to get back to ~200 ms latency
+                                        let target_frames =
+                                            ((200.0 / 1000.0) * output_sample_rate as f32) as usize
+                                                * n_channels as usize;
+                                        if buf.len() > target_frames {
+                                            let drop = buf.len() - target_frames;
+                                            buf.drain(0..drop);
+                                            log::warn!(
+                                                "Dropped {} frames to recover sync, new latency ~{} ms",
+                                                drop,
+                                                200
+                                            );
+                                            *latency.write().unwrap() = 200;  // Proximate latency after drop
+                                        }
+                                    }
                                 }
                             }
                             AudioCommand::SetVolume(v) => {
