@@ -31,3 +31,4 @@ crossbeam = "0.8.4"
 
 [dev-dependencies]
 base64 = "0.22.1"
+serial_test = "3.2.0"

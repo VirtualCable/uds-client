@@ -19,20 +19,23 @@ pub struct AudioHandle {
 }
 
 impl AudioHandle {
-    pub fn new(n_channels: u16, sample_rate: u32, bits_per_sample: u16) -> Self {
+    pub fn new(n_channels: u16, sample_rate: u32, bits_per_sample: u16, latency_threshold: u16) -> Self {
         log::debug!(
-            "Initializing audio: channels={}, sample_rate={}, bits_per_sample={}",
+            "Initializing audio: channels={}, sample_rate={}, bits_per_sample={}, latency_cushion={}",
             n_channels,
             sample_rate,
-            bits_per_sample
+            bits_per_sample,
+            latency_threshold
         );
         let (tx, rx) = unbounded::<AudioCommand>();
         let volume = Arc::new(RwLock::new(0xFFFFFFFF));
         let latency = Arc::new(RwLock::new(0));
 
+
         thread::spawn({
             let volume = Arc::clone(&volume);
             let latency = Arc::clone(&latency);
+            let latency_threshold = (latency_threshold as f32).clamp(300.0, 1000.0);
 
             move || {
                 let host = cpal::default_host();
@@ -108,8 +111,8 @@ impl AudioHandle {
                                     );
                                     *latency.write().unwrap() = ms as u32;
 
-                                    // overflow control: if latency > 500 ms, drop some frames
-                                    if ms > 500.0 {
+                                    // overflow control: if latency > latency_threshold ms, drop some frames
+                                    if ms > latency_threshold {
                                         // try to get back to ~200 ms latency
                                         let target_frames =
                                             ((200.0 / 1000.0) * output_sample_rate as f32) as usize
@@ -247,14 +250,14 @@ mod tests {
 
     #[test]
     fn test_audio_handle_creation() {
-        let handle = AudioHandle::new(2, 44100, 16);
+        let handle = AudioHandle::new(2, 44100, 16, 500);
         assert!(handle.tx.send(AudioCommand::Close).is_ok());
     }
 
     #[test]
     fn test_audio_play_command() {
         log::setup_logging("debug", log::LogType::Tests);
-        let handle = AudioHandle::new(2, 44100, 16);
+        let handle = AudioHandle::new(2, 44100, 16, 500);
         *handle.latency.write().unwrap() = 8888; // set initial latency for later check
         let sample_data = vec![0u8; 44100 * 2 * 2]; // 1 second of silence in 16-bit stereo
         assert!(handle.tx.send(AudioCommand::Play(sample_data)).is_ok());

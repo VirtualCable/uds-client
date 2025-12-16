@@ -425,12 +425,16 @@ Starts an RDP connection with the specified settings.
   - `user` (string, optional): The username for authentication.
   - `password` (string, optional): The password for authentication.
   - `domain` (string, optional): The domain for authentication.
-  - `verify_cert` (boolean, optional): Whether to verify the server certificate (default: true).
-  - `use_nla` (boolean, optional): Whether to use Network Level Authentication (default: true).
-  - `screen_width` (number, optional): The screen width (0 for full screen).
-  - `screen_height` (number, optional): The screen height (0 for full screen).
+  - `verify_cert` (boolean, optional): Whether to verify the server certificate (default: false).
+  - `use_nla` (boolean, optional): Whether to use Network Level Authentication (default: false).
+  - `screen_width` (number, optional): The screen width (0 for full screen). If not provided, a default fixed size of 1024x768 is used.
+  - `screen_height` (number, optional): The screen height (0 for full screen). If not provided, a default fixed size of 1024x768 is used.
   - `clipboard_redirection` (boolean, optional): Whether to enable clipboard redirection (default: true).
-  - `drives_to_redirect` (array of strings, optional): List of drive letters to redirect.
+  - `audio_redirection` (boolean, optional): Whether to enable audio redirection (default: true).
+  - `microphone_redirection` (boolean, optional): Whether to enable microphone redirection (default: false).
+  - `printer_redirection` (boolean, optional): Whether to enable printer redirection (default: false).
+  - `drives_to_redirect` (array of strings, optional): List of drive letters to redirect. Valid special values include `"all"` (all drives).
+  - `sound_latency_threshold` (number, optional): Threshold in ms for sound latency (default: 400).
 
 **Returns:** undefined
 

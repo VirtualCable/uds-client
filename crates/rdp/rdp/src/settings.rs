@@ -20,12 +20,20 @@ pub struct RdpSettings {
     pub screen_size: ScreenSize,
     #[zeroize(skip)]
     pub clipboard_redirection: bool,
+    #[zeroize(skip)]
+    pub audio_redirection: bool,
+    #[zeroize(skip)]
+    pub microphone_redirection: bool,
+    #[zeroize(skip)]
+    pub printer_redirection: bool,
     // Valid values for drives_to_redirect are "all" for all drives
     // % -> Home
     // * --> All drives
     // DynamicDrives --> Later connected drives
     #[zeroize(skip)]
     pub drives_to_redirect: Vec<String>,
+    #[zeroize(skip)]
+    pub sound_latency_threshold: u16,
 }
 
 impl Default for RdpSettings {
@@ -40,7 +48,11 @@ impl Default for RdpSettings {
             use_nla: false,
             screen_size: ScreenSize::Fixed(1024, 768),
             clipboard_redirection: true,
+            audio_redirection: true,
+            microphone_redirection: false,
+            printer_redirection: false,
             drives_to_redirect: vec!["all".to_string()], // By default, redirect all drives.
+            sound_latency_threshold: 400,
         }
     }
 }

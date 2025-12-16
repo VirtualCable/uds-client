@@ -58,7 +58,12 @@ declare module "runtime" {
       use_nla?: boolean;
       screen_width?: number;
       screen_height?: number;
+      clipboard_redirection?: boolean;
+      audio_redirection?: boolean;
+      microphone_redirection?: boolean;
+      printer_redirection?: boolean;
       drives_to_redirect?: string[];
+      sound_latency_threshold?: number;
     }): void;
   }
 }

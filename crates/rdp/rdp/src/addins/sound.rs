@@ -1,9 +1,11 @@
 #![allow(dead_code)]
 use freerdp_sys::{
     AUDIO_FORMAT, BOOL, BYTE, CHANNEL_RC_NO_MEMORY, CHANNEL_RC_OK,
-    PFREERDP_RDPSND_DEVICE_ENTRY_POINTS, UINT, UINT32, WAVE_FORMAT_PCM, rdpsndDevicePlugin,
+    PFREERDP_RDPSND_DEVICE_ENTRY_POINTS, UINT, UINT32, WAVE_FORMAT_PCM, freerdp_rdpsnd_get_context,
+    rdpsndDevicePlugin,
 };
 
+use crate::context::OwnerFromCtx;
 use audio::{AudioCommand, AudioHandle};
 use shared::log;
 
@@ -73,6 +75,12 @@ unsafe extern "C" fn open(
         latency
     );
     let plugin = unsafe { &mut *(device as *mut SoundPlugin) };
+    let latency_threshold =
+        if let Some(rdp) = (unsafe { freerdp_rdpsnd_get_context(plugin.device.rdpsnd) }).owner() {
+            rdp.config.settings.sound_latency_threshold
+        } else {
+            400 // default value
+        };
     if let Some(audio_handle) = plugin.audio.take() {
         // Already opened, close it first
         log::debug!("Sound device already opened, closing existing audio handle.");
@@ -85,6 +93,7 @@ unsafe extern "C" fn open(
         unsafe { (*format).nChannels },
         unsafe { (*format).nSamplesPerSec },
         unsafe { (*format).wBitsPerSample },
+        latency_threshold,
     );
     plugin.audio = Some(audio_handle);
     true.into()

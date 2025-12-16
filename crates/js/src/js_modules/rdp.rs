@@ -23,7 +23,11 @@ struct RdpSettings {
     pub screen_width: Option<u32>,
     pub screen_height: Option<u32>,
     pub clipboard_redirection: Option<bool>,
+    pub audio_redirection: Option<bool>,
+    pub microphone_redirection: Option<bool>,
+    pub printer_redirection: Option<bool>,
     pub drives_to_redirect: Option<Vec<String>>,
+    pub sound_latency_threshold: Option<u16>,
 }
 
 impl Default for RdpSettings {
@@ -39,7 +43,11 @@ impl Default for RdpSettings {
             screen_width: None,
             screen_height: None,
             clipboard_redirection: None,
+            audio_redirection: None,
+            microphone_redirection: None,
+            printer_redirection: None,
             drives_to_redirect: None,
+            sound_latency_threshold: None,
         }
     }
 }
@@ -59,7 +67,8 @@ fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
         ));
     }
 
-    // If screensize width is 0 or height is 0, we can assume full screen
+    // If both screen_width and screen_height are provided, use them. If either is 0, treat as full screen.
+    // If none are provided, use the default fixed size from `rdp::settings` (1024x768).
     let screen_size = if let (Some(width), Some(height)) =
         (rdp_settings.screen_width, rdp_settings.screen_height)
     {
@@ -69,21 +78,28 @@ fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
             ScreenSize::Fixed(width, height)
         }
     } else {
-        ScreenSize::Full
+        ScreenSize::Fixed(1024, 768)
     };
 
-    // Generate Settings from our rdp_settings
+    // Generate Settings from our rdp_settings (defaults match `rdp::settings::RdpSettings` defaults)
     let settings = settings::RdpSettings {
         server: rdp_settings.server,
         port: rdp_settings.port.unwrap_or(3389),
         user: rdp_settings.user.unwrap_or_default(),
         password: rdp_settings.password.unwrap_or_default(),
         domain: rdp_settings.domain.unwrap_or_default(),
-        verify_cert: rdp_settings.verify_cert.unwrap_or(true),
-        use_nla: rdp_settings.use_nla.unwrap_or(true),
+        // Default to false to match the core RDP settings defaults
+        verify_cert: rdp_settings.verify_cert.unwrap_or(false),
+        use_nla: rdp_settings.use_nla.unwrap_or(false),
         screen_size,
         clipboard_redirection: rdp_settings.clipboard_redirection.unwrap_or(true),
-        drives_to_redirect: rdp_settings.drives_to_redirect.unwrap_or_default(),
+        audio_redirection: rdp_settings.audio_redirection.unwrap_or(true),
+        microphone_redirection: rdp_settings.microphone_redirection.unwrap_or(false),
+        printer_redirection: rdp_settings.printer_redirection.unwrap_or(false),
+        drives_to_redirect: rdp_settings
+            .drives_to_redirect
+            .unwrap_or_else(|| vec!["all".to_string()]),
+        sound_latency_threshold: rdp_settings.sound_latency_threshold.unwrap_or(400),
     };
 
     send_message(GuiMessage::ConnectRdp(settings));
@@ -115,6 +131,7 @@ mod tests {
     use shared::log;
 
     #[tokio::test]
+    #[serial_test::serial(js_modules)]
     async fn test_init_ctx() -> Result<()> {
         log::setup_logging("debug", log::LogType::Tests);
         let (messages_tx, messages_rx): (
@@ -161,6 +178,12 @@ mod tests {
                         _ => panic!("Expected fixed screen size"),
                     }
                     assert_eq!(settings.drives_to_redirect, vec!["C", "D"]);
+                    // Defaults defined in `rdp::settings::RdpSettings`
+                    assert!(settings.clipboard_redirection);
+                    assert!(settings.audio_redirection);
+                    assert!(!settings.microphone_redirection);
+                    assert!(!settings.printer_redirection);
+                    assert_eq!(settings.sound_latency_threshold, 400);
                 }
                 _ => panic!("Expected GuiMessage::ConnectRdp"),
             },
@@ -168,6 +191,61 @@ mod tests {
                 panic!("Expected a GuiMessage but none was sent: {}", e);
             }
         }
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[serial_test::serial(js_modules)]
+    async fn test_defaults() -> Result<()> {
+        log::setup_logging("debug", log::LogType::Tests);
+        let (messages_tx, messages_rx): (
+            Sender<gui::window::types::GuiMessage>,
+            Receiver<gui::window::types::GuiMessage>,
+        ) = bounded(32);
+
+        crate::gui::set_sender(messages_tx);
+
+        let mut ctx = create_context(None)?;
+        register(&mut ctx)?;
+        let script = r#"
+            let rdpSettings = {
+                server: "localhost"
+            };
+            RDP.start(rdpSettings);
+        "#;
+        _ = exec_script(&mut ctx, script).await;
+
+        match messages_rx.try_recv() {
+            Ok(gui_msg) => match gui_msg {
+                GuiMessage::ConnectRdp(settings) => {
+                    assert_eq!(settings.server, "localhost");
+                    assert_eq!(settings.port, 3389);
+                    assert_eq!(settings.user, "");
+                    assert_eq!(settings.password, "");
+                    assert_eq!(settings.domain, "");
+                    assert!(!settings.verify_cert);
+                    assert!(!settings.use_nla);
+                    match settings.screen_size {
+                        ScreenSize::Fixed(w, h) => {
+                            assert_eq!(w, 1024);
+                            assert_eq!(h, 768);
+                        }
+                        _ => panic!("Expected fixed screen size"),
+                    }
+                    assert_eq!(settings.drives_to_redirect, vec!["all"]);
+                    assert!(settings.clipboard_redirection);
+                    assert!(settings.audio_redirection);
+                    assert!(!settings.microphone_redirection);
+                    assert!(!settings.printer_redirection);
+                    assert_eq!(settings.sound_latency_threshold, 400);
+                }
+                _ => panic!("Expected GuiMessage::ConnectRdp"),
+            },
+            Err(e) => {
+                panic!("Expected a GuiMessage but none was sent: {}", e);
+            }
+        }
+
         Ok(())
     }
 }
