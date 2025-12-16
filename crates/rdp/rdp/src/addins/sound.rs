@@ -1,24 +1,24 @@
 #![allow(dead_code)]
 use freerdp_sys::{
     AUDIO_FORMAT, BOOL, BYTE, CHANNEL_RC_NO_MEMORY, CHANNEL_RC_OK,
-    PFREERDP_RDPSND_DEVICE_ENTRY_POINTS, UINT, UINT32, rdpsndDevicePlugin,
+    PFREERDP_RDPSND_DEVICE_ENTRY_POINTS, UINT, UINT32, WAVE_FORMAT_PCM, rdpsndDevicePlugin,
 };
 
+use audio::{AudioCommand, AudioHandle};
 use shared::log;
 
+#[repr(C)]
 pub struct SoundPlugin {
     device: rdpsndDevicePlugin,
 
     // Custom data
-    pub volume: u32,
+    audio: Option<AudioHandle>,
 }
 
 // Returns CHANNEL_RC_OK on success, or an error code on failure. (it's marked as BOOL on freerdp lib, but ist's actually a UINT32)
 // Note that rdpsnd devices has a different entry point signature than other channels adding. This one is the correct one for rdpsnd.
 // and will need casting when used on the addin provider.
-pub unsafe extern "C" fn sound_entry(
-    p_entry_points: PFREERDP_RDPSND_DEVICE_ENTRY_POINTS,
-) -> UINT {
+pub unsafe extern "C" fn sound_entry(p_entry_points: PFREERDP_RDPSND_DEVICE_ENTRY_POINTS) -> UINT {
     // Should never
     if p_entry_points.is_null() {
         return CHANNEL_RC_NO_MEMORY;
@@ -36,7 +36,7 @@ pub unsafe extern "C" fn sound_entry(
             // inicializa otros campos si los hay
             ..unsafe { std::mem::zeroed() }
         },
-        volume: 0xFFFFFFFF,
+        audio: None,
     });
 
     // let args: *const ADDIN_ARGV = unsafe { (*p_entry_points).args };
@@ -63,7 +63,7 @@ pub unsafe extern "C" fn sound_entry(
 }
 
 unsafe extern "C" fn open(
-    _device: *mut rdpsndDevicePlugin,
+    device: *mut rdpsndDevicePlugin,
     format: *const AUDIO_FORMAT,
     latency: UINT32,
 ) -> BOOL {
@@ -72,6 +72,21 @@ unsafe extern "C" fn open(
         format,
         latency
     );
+    let plugin = unsafe { &mut *(device as *mut SoundPlugin) };
+    if let Some(audio_handle) = plugin.audio.take() {
+        // Already opened, close it first
+        log::debug!("Sound device already opened, closing existing audio handle.");
+        audio_handle
+            .tx
+            .send(AudioCommand::Close)
+            .unwrap_or_else(|e| log::error!("Failed to send Close command: {}", e));
+    }
+    let audio_handle = AudioHandle::new(
+        unsafe { (*format).nChannels },
+        unsafe { (*format).nSamplesPerSec },
+        unsafe { (*format).wBitsPerSample },
+    );
+    plugin.audio = Some(audio_handle);
     true.into()
 }
 
@@ -83,22 +98,41 @@ unsafe extern "C" fn format_supported(
         "Sound device format_supported called with format: {:?}",
         unsafe { *format }
     );
-    true.into()
+    match unsafe { (*format).wFormatTag } {
+        x if x == WAVE_FORMAT_PCM as u16 => {
+            if unsafe { (*format).cbSize == 0 }
+                && (unsafe { (*format).nSamplesPerSec } <= 48000)
+                && (unsafe { (*format).wBitsPerSample } == 8
+                    || unsafe { (*format).wBitsPerSample } == 16
+                    || unsafe { (*format).wBitsPerSample } == 24
+                    || unsafe { (*format).wBitsPerSample } == 32)
+                && (unsafe { (*format).nChannels } >= 1 && unsafe { (*format).nChannels } <= 2)
+            {
+                return true.into();
+            }
+            false.into()
+        }
+        _ => false.into(),
+    }
 }
 
 unsafe extern "C" fn get_volume(device: *mut rdpsndDevicePlugin) -> UINT32 {
     let plugin = unsafe { &*(device as *mut SoundPlugin) };
-    log::debug!(
-        "Sound device get_volume called, current volume: {}",
-        plugin.volume
-    );
-    plugin.volume
+    let volume = if let Some(audio) = &plugin.audio {
+        *audio.volume.read().unwrap()
+    } else {
+        0
+    };
+    log::debug!("Sound device get_volume called, current volume: {}", volume);
+    volume
 }
 
 unsafe extern "C" fn set_volume(device: *mut rdpsndDevicePlugin, volume: UINT32) -> BOOL {
     let plugin = unsafe { &mut *(device as *mut SoundPlugin) };
     log::debug!("Sound device set_volume called, new volume: {}", volume);
-    plugin.volume = volume;
+    if let Some(audio) = &plugin.audio {
+        *audio.volume.write().unwrap() = volume;
+    }
     true.into()
 }
 
@@ -108,15 +142,30 @@ unsafe extern "C" fn play(
     size: usize,
 ) -> UINT {
     log::debug!(
-        "Sound device play called with data pointer: {:?}, size: {}",
+        "Sound device play called with data ptr: {:?}, size: {}",
         data,
         size
     );
-    CHANNEL_RC_OK as UINT
+    let plugin = unsafe { &mut *(_device as *mut SoundPlugin) };
+    if let Some(audio) = &plugin.audio {
+        let slice = unsafe { std::slice::from_raw_parts(data, size) };
+        audio.play(slice.to_vec()).unwrap_or_else(|e| log::error!("Failed to send Play command: {}", e));
+        *audio.latency.read().unwrap()
+    } else {
+        log::error!("Audio handle not initialized in play.");
+        1 // Error code
+    }
 }
 
 unsafe extern "C" fn close(_device: *mut rdpsndDevicePlugin) {
     log::debug!("Sound device close called.");
+    let plugin = unsafe { &mut *(_device as *mut SoundPlugin) };
+    if let Some(audio) = &plugin.audio.take() {
+        audio
+            .tx
+            .send(AudioCommand::Close)
+            .unwrap_or_else(|e| log::error!("Failed to send Close command: {}", e));
+    }
 }
 
 unsafe extern "C" fn free(device: *mut rdpsndDevicePlugin) {

@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 freerdp-sys = { path = "../freerdp-sys" }
 shared = { path = "../../shared" }
+audio = { path = "../../audio" }
 
 anyhow = "1.0.100"
 

@@ -188,10 +188,10 @@ impl Rdp {
                     FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteConsoleAudio,
                     false.into(),
                 );
-                // let channel = format!("sys:{}", crate::addins::RDPSND_SUBSYSTEM_CUSTOM);
-                // channels(settings, "rdpsnd", Some(&channel), true, true);
+                let channel = format!("sys:{}", crate::addins::RDPSND_SUBSYSTEM_CUSTOM);
+                channels(settings, "rdpsnd", Some(&channel), true, true);
                 // Default subsystem right now
-                channels(settings, "rdpsnd", None, true, true);
+                // channels(settings, "rdpsnd", None, true, true);
             }
             // Microphone redirection
             unsafe {

@@ -1,0 +1,10 @@
+[package]
+name = "audio"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+shared = { path = "../shared" }
+
+cpal = "0.16.0"
+crossbeam = "0.8"
