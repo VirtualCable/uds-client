@@ -63,21 +63,6 @@ impl Rdp {
             let user = CString::new(mut_self.config.settings.user.clone())?;
             let pass = CString::new(mut_self.config.settings.password.clone())?;
             let domain = CString::new(mut_self.config.settings.domain.clone())?;
-            let drives_to_redirect = CString::new(
-                mut_self
-                    .config
-                    .settings
-                    .drives_to_redirect
-                    .iter()
-                    .map(|s| match s.as_str() {
-                        "all" => "*",
-                        "DynamicDrives" => "DynamicDrives",
-                        other => other,
-                    })
-                    .collect::<Vec<&str>>()
-                    .join(";"),
-            )
-            .unwrap();
 
             freerdp_settings_set_string(
                 settings_ptr,
@@ -104,40 +89,6 @@ impl Rdp {
                 FreeRDP_Settings_Keys_UInt32_FreeRDP_ServerPort,
                 mut_self.config.settings.port,
             );
-            freerdp_settings_set_bool(
-                settings_ptr,
-                FreeRDP_Settings_Keys_Bool_FreeRDP_IgnoreCertificate,
-                !mut_self.config.settings.verify_cert as BOOL,
-            );
-
-            // NLA setting
-            freerdp_settings_set_bool(
-                settings_ptr,
-                FreeRDP_Settings_Keys_Bool_FreeRDP_NlaSecurity,
-                mut_self.config.settings.use_nla as BOOL,
-            );
-
-            let all_drives = mut_self
-                .config
-                .settings
-                .drives_to_redirect
-                .iter()
-                .any(|s| s.as_str() == "all");
-            let len_drives = mut_self.config.settings.drives_to_redirect.len();
-            freerdp_settings_set_bool(
-                settings_ptr,
-                FreeRDP_Settings_Keys_Bool_FreeRDP_RedirectDrives,
-                (len_drives != 0) as BOOL,
-            );
-            if !all_drives {
-                // Remove "all" and, if any rameaining, use FreeRDP_RedirectDrives
-                freerdp_settings_set_string(
-                    settings_ptr,
-                    FreeRDP_Settings_Keys_String_FreeRDP_DrivesToRedirect,
-                    drives_to_redirect.as_ptr(),
-                );
-            }
-
             Ok(())
         }
     }

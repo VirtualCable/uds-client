@@ -93,26 +93,23 @@ impl Rdp {
     fn set_rdp_settings(&self) {
         #[cfg(debug_assertions)]
         self.debug_assert_instance();
-
-        if let Some(settings) = self.settings() {
-            unsafe {
+        unsafe {
+            if let Some(settings) = self.settings() {
                 // Set Falses first
-                for i in [
+                [
                     FreeRDP_Settings_Keys_Bool_FreeRDP_FastPathInput,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_FastPathOutput,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_BitmapCompressionDisabled,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteConsoleAudio, // So audio is not played on server
                 ]
                 .iter()
-                {
+                .for_each(|i| {
                     freerdp_settings_set_bool(settings, *i, false.into());
-                }
+                });
                 // Then Trues
-                for i in [
+                [
                     FreeRDP_Settings_Keys_Bool_FreeRDP_GfxThinClient,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_GfxProgressive,
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_AllowFontSmoothing,
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_AllowDesktopComposition,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_AllowCacheWaitingList,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_DesktopResize,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_DynamicResolutionUpdate,
@@ -128,17 +125,18 @@ impl Rdp {
                     FreeRDP_Settings_Keys_Bool_FreeRDP_GfxAVC444v2,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_GfxAVC444,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_GfxH264,
-                    // FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteFxCodec,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_GfxProgressiveV2,
+                    //FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteFxCodec,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_SupportGraphicsPipeline,
                 ]
                 .iter()
-                {
+                .for_each(|i| {
                     // Ignore the result, try with best effort
                     freerdp_settings_set_bool(settings, *i, true.into());
-                }
+                });
 
                 // Set uint32 values
-                for (i, v) in [
+                [
                     (FreeRDP_Settings_Keys_UInt32_FreeRDP_ColorDepth, 32),
                     (
                         FreeRDP_Settings_Keys_UInt32_FreeRDP_DesktopWidth,
@@ -155,19 +153,18 @@ impl Rdp {
                     (FreeRDP_Settings_Keys_UInt32_FreeRDP_FrameAcknowledge, 0),
                 ]
                 .iter()
-                {
+                .for_each(|(i, v)| {
                     freerdp_settings_set_uint32(settings, *i, *v);
-                }
-            }
+                });
 
-            fn channels(
-                settings: *mut rdpSettings,
-                name: &str,
-                channel: Option<&String>,
-                add_static: bool,
-                add_dynamic: bool,
-            ) {
-                unsafe {
+                // Audio redirection settings
+                fn channels(
+                    settings: *mut rdpSettings,
+                    name: &str,
+                    channel: Option<&String>,
+                    add_static: bool,
+                    add_dynamic: bool,
+                ) {
                     // Note: We can use the internal freerdp rdpsnd channel subsystems
 
                     let channel = if let Some(channel) = channel {
@@ -186,67 +183,144 @@ impl Rdp {
                     let cchannel = std::ffi::CString::new(channel).unwrap();
                     let channels: [*const std::os::raw::c_char; 2] =
                         [cname.as_ptr(), cchannel.as_ptr()];
-                    if add_static {
-                        freerdp_client_add_static_channel(
-                            settings,
-                            channels.len(),
-                            channels.as_ptr(),
-                        );
-                    }
-                    if add_dynamic {
-                        freerdp_client_add_dynamic_channel(
-                            settings,
-                            channels.len(),
-                            channels.as_ptr(),
-                        );
+                    unsafe {
+                        if add_static {
+                            freerdp_client_add_static_channel(
+                                settings,
+                                channels.len(),
+                                channels.as_ptr(),
+                            );
+                        }
+                        if add_dynamic {
+                            freerdp_client_add_dynamic_channel(
+                                settings,
+                                channels.len(),
+                                channels.as_ptr(),
+                            );
+                        }
                     }
                 }
-            }
 
-            // Sound redirection
-            unsafe {
-                // true-false = play on client
-                // false-true = play on server
-                // false-false = no audio
-                freerdp_settings_set_bool(
-                    settings,
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_AudioPlayback,
-                    true.into(),
-                );
-                freerdp_settings_set_bool(
-                    settings,
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteConsoleAudio,
-                    false.into(),
-                );
-                let channel = format!("sys:{}", crate::addins::RDPSND_SUBSYSTEM_CUSTOM);
-                channels(settings, "rdpsnd", Some(&channel), true, true);
-                // Default subsystem right now
-                // channels(settings, "rdpsnd", None, true, true);
-            }
-            // Microphone redirection
-            unsafe {
-                freerdp_settings_set_bool(
-                    settings,
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_AudioCapture,
-                    true.into(),
-                );
-                // TODO: Allow configuration of the audio capture device
-                channels(settings, "audin", None, false, true);
-            }
+                if self.config.settings.audio_redirection {
+                    // Sound redirection
+                    // true-false = play on client
+                    // false-true = play on server
+                    // false-false = no audio
+                    freerdp_settings_set_bool(
+                        settings,
+                        FreeRDP_Settings_Keys_Bool_FreeRDP_AudioPlayback,
+                        true.into(),
+                    );
+                    freerdp_settings_set_bool(
+                        settings,
+                        FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteConsoleAudio,
+                        false.into(), // Always false, we want audio on client
+                    );
+                    let channel = format!("sys:{}", crate::addins::RDPSND_SUBSYSTEM_CUSTOM);
+                    channels(settings, "rdpsnd", Some(&channel), true, true);
+                    // Default subsystem right now
+                    // channels(settings, "rdpsnd", None, true, true);
+                }
+                // Microphone redirection
+                if self.config.settings.microphone_redirection {
+                    freerdp_settings_set_bool(
+                        settings,
+                        FreeRDP_Settings_Keys_Bool_FreeRDP_AudioCapture,
+                        true.into(),
+                    );
+                    channels(settings, "audin", None, false, true);
+                }
 
-            // Set config settings for clipboard redirection
-            unsafe {
+                // Set config settings for clipboard redirection
                 freerdp_settings_set_bool(
                     settings,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_RedirectClipboard,
                     self.config.settings.clipboard_redirection.into(),
                 );
-            }
 
-            // Set perfromance flags from settings
-            unsafe { freerdp_sys::freerdp_performance_flags_make(settings) };
-        } else {
-            log::debug!("Connection not built, cannot optimize settings.");
+                if self.config.settings.printer_redirection {
+                    freerdp_settings_set_bool(
+                        settings,
+                        FreeRDP_Settings_Keys_Bool_FreeRDP_RedirectPrinters,
+                        true.into(),
+                    );
+                }
+
+                freerdp_settings_set_bool(
+                    settings,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_IgnoreCertificate,
+                    (!self.config.settings.verify_cert).into(),
+                );
+
+                // NLA setting
+                freerdp_settings_set_bool(
+                    settings,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_NlaSecurity,
+                    self.config.settings.use_nla.into(),
+                );
+
+                let drives_to_redirect = std::ffi::CString::new(
+                    self.config
+                        .settings
+                        .drives_to_redirect
+                        .iter()
+                        .map(|s| match s.as_str() {
+                            "all" => "*",
+                            "DynamicDrives" => "DynamicDrives",
+                            other => other,
+                        })
+                        .collect::<Vec<&str>>()
+                        .join(";"),
+                )
+                .unwrap();
+
+                let all_drives = self
+                    .config
+                    .settings
+                    .drives_to_redirect
+                    .iter()
+                    .any(|s| s.as_str() == "all");
+                let len_drives = self.config.settings.drives_to_redirect.len();
+                freerdp_settings_set_bool(
+                    settings,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_RedirectDrives,
+                    (len_drives != 0) as BOOL,
+                );
+                if !all_drives {
+                    // Remove "all" and, if any rameaining, use FreeRDP_RedirectDrives
+                    freerdp_settings_set_string(
+                        settings,
+                        FreeRDP_Settings_Keys_String_FreeRDP_DrivesToRedirect,
+                        drives_to_redirect.as_ptr(),
+                    );
+                }
+
+                if self.config.settings.best_experience {
+                    [
+                        FreeRDP_Settings_Keys_Bool_FreeRDP_DisableWallpaper,
+                        FreeRDP_Settings_Keys_Bool_FreeRDP_DisableFullWindowDrag,
+                        FreeRDP_Settings_Keys_Bool_FreeRDP_DisableMenuAnims,
+                        FreeRDP_Settings_Keys_Bool_FreeRDP_DisableThemes,
+                    ]
+                    .iter()
+                    .for_each(|key| {
+                        freerdp_settings_set_bool(settings, *key, false.into());
+                    });
+                    [
+                        FreeRDP_Settings_Keys_Bool_FreeRDP_AllowFontSmoothing,
+                        FreeRDP_Settings_Keys_Bool_FreeRDP_AllowDesktopComposition,
+                    ]
+                    .iter()
+                    .for_each(|key| {
+                        freerdp_settings_set_bool(settings, *key, true.into());
+                    });
+                }
+
+                // Set perfromance flags from settings
+                freerdp_sys::freerdp_performance_flags_make(settings);
+            } else {
+                log::debug!("Connection not built, cannot optimize settings.");
+            }
         }
     }
 

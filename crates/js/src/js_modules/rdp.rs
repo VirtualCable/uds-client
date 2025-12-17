@@ -58,6 +58,7 @@ struct RdpSettings {
     pub printer_redirection: Option<bool>,
     pub drives_to_redirect: Option<Vec<String>>,
     pub sound_latency_threshold: Option<u16>,
+    pub best_experience: Option<bool>,
 }
 
 impl Default for RdpSettings {
@@ -78,6 +79,7 @@ impl Default for RdpSettings {
             printer_redirection: None,
             drives_to_redirect: None,
             sound_latency_threshold: None,
+            best_experience: None,
         }
     }
 }
@@ -129,6 +131,7 @@ fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
             .drives_to_redirect
             .unwrap_or_else(|| vec!["all".to_string()]),
         sound_latency_threshold: rdp_settings.sound_latency_threshold,
+        best_experience: rdp_settings.best_experience.unwrap_or(true),
     };
 
     send_message(GuiMessage::ConnectRdp(settings));

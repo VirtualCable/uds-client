@@ -344,7 +344,8 @@ impl AudioStats {
     /// so we will return 180.0 ms as a default value that is a bit less than initial expected RDP call rate.
     /// After that, it will be the actual mean interval.
     /// If sound is paused this value will grow a lot for the last calls, but it's acceptable
-    /// in our use case, where we can use it to adjust "drift" on playback.
+    /// in our use case, where we only use it to adjust "drift" on playback when latency is too high
+    /// compared with this value.
     pub fn mean_calls_interval(&self) -> f32 {
         const MIN_EXPECTED_INTERVAL: f32 = 180.0;
         if self.time_between_play_calls.is_empty() {
