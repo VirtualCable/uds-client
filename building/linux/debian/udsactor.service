@@ -1,0 +1,18 @@
+[Unit]
+Description=UDS Broker actor
+After=network.target
+
+[Service]
+KillMode=mixed
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/usr/share/udsactor
+ExecStart=uds-actor-service
+PrivateTmp=true
+Restart=on-failure
+RestartSec=5s
+
+
+[Install]
+WantedBy=multi-user.target

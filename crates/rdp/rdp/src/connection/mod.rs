@@ -172,7 +172,7 @@ impl Rdp {
                     } else if cfg!(target_os = "windows") {
                         "sys:winmm"
                     } else if cfg!(target_os = "linux") {
-                        "sys:pulse" // add support for alsa and oss
+                        "sys:pulse" // add support for alsa
                     } else if cfg!(target_os = "macos") {
                         "sys:mac"
                     } else {

@@ -1,0 +1,6 @@
+output/
+package/
+build-root/
+*.pkg
+*.dmg
+.DS_Store

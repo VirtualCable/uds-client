@@ -1,0 +1,29 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+# Project build
+override_dh_auto_build:
+	$(MAKE)
+
+# Staged installation of binaries and files
+override_dh_auto_install:
+	$(MAKE) DESTDIR=$(CURDIR)/debian/udsactor install-udsactor
+	$(MAKE) DESTDIR=$(CURDIR)/debian/udsactor-unmanaged install-udsactor-unmanaged
+
+# Cleaning the build environment
+override_dh_auto_clean:
+	rm -f build-stamp configure-stamp
+	dh_clean
+
+# Systemd activation
+override_dh_systemd_enable:
+	dh_systemd_enable
+
+override_dh_systemd_start:
+	dh_systemd_start
+
+# Installation of the init script (only if you want SysV compatibility)
+override_dh_installinit:
+	dh_installinit --no-stop-on-upgrade --no-start --name=udsactor

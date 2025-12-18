@@ -1,0 +1,14 @@
+[Desktop Entry]
+Name=UDS Actor Tool
+Comment=UDS Actor Userspace tools
+Exec=/usr/bin/udsactor-client
+Categories=Utility;System;
+StartupNotify=false
+Icon=/usr/share/udsactor/uds-icon.png
+Terminal=false
+Type=Application
+NoDisplay=true
+X-KDE-autostart-after=panel
+X-KDE-StartupNotify=false
+X-DBUS-StartupType=None
+X-KDE-UniqueApplet=false
