@@ -78,9 +78,7 @@ impl ClipboardNative {
     }
 
     pub fn clipboard_changed(&self) {
-        log::debug!("Clipboard change detected in native clipboard");
         if let Ok(text) = self.context.read().unwrap().get_text() {
-            log::debug!("New clipboard text: {}", text);
             // Store on RDP clipboard
             self.rdp_clipboard.send_text_is_available(&text);
         }

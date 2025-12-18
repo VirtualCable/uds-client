@@ -144,7 +144,6 @@ pub async fn run(
                 if script.verify_signature().is_err() {
                     anyhow::bail!(tr!("Script signature verification failed."));
                 }
-                log::debug!("Received script: {:?}", script);
                 tx.send(GuiMessage::Hide).ok();
                 js::run_script(&script).await?;
                 break;

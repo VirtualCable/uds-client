@@ -89,27 +89,6 @@ pub fn normalize_rects(rects_raw: &[GDI_RGN], width: u32, height: u32) -> Option
         })
         .collect::<Vec<_>>()
         .into()
-
-    // for rect in rects_raw {
-    //     // If any rect is invalid, skip it
-    //     if rect.x > width
-    //         || rect.x < 0
-    //         || rect.y > height
-    //         || rect.y < 0
-    //         || rect.w > width
-    //         || rect.w < 0
-    //         || rect.h > height
-    //         || rect.h < 0
-    //     {
-    //         log::debug!("Skipping invalid rect: {:?}", rect);
-    //         log::debug!("All rects: {:?}", rects_raw);
-    //         return Some(vec![Rect{ x: 0, y: 0, w: width as u32, h: height as u32 }])
-    //     }
-
-    //     #[allow(clippy::unnecessary_cast)] // Maybe on other platforms is not an i32...
-    //     rects.push(rect.into());
-    // }
-    // if rects.is_empty() { None } else { Some(rects) }
 }
 
 #[repr(transparent)]

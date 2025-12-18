@@ -231,7 +231,6 @@ impl AppWindow {
         rdp_state: &mut RdpConnectionState,
     ) {
         log::debug!("ALT+ENTER pressed, toggling fullscreen");
-        log::debug!("Channels: {:?}", rdp_state.channels.read().unwrap());
         if rdp_state.full_screen.load(Ordering::Relaxed) {
             // Switch to fixed size, restores original size
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));

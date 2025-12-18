@@ -150,12 +150,6 @@ impl AudioHandle {
                                     // Update approximate latency
                                     let frames = buf.len() as u32 / n_channels as u32;
                                     let ms = (frames as f32 / output_sample_rate as f32) * 1000.0;
-                                    log::debug!(
-                                        "Audio buffer size: {} frames, approx latency: {:.2} ms, calls mean interval: {:.2} ms",
-                                        frames,
-                                        ms,
-                                        stats.mean_calls_interval()
-                                    );
                                     *latency.write().unwrap() = ms as u32;
 
                                     let latency_threshold = match latency_threshold {
@@ -165,9 +159,10 @@ impl AudioHandle {
                                     // overflow control: if latency > latency_threshold ms, drop some frames
                                     if ms > latency_threshold {
                                         // try to get back to ~200 ms latency
-                                        let target_frames =
-                                            ((stats.mean_calls_interval() / 1000.0) * output_sample_rate as f32) as usize
-                                                * n_channels as usize;
+                                        let target_frames = ((stats.mean_calls_interval() / 1000.0)
+                                            * output_sample_rate as f32)
+                                            as usize
+                                            * n_channels as usize;
                                         if buf.len() > target_frames {
                                             let drop = buf.len() - target_frames;
                                             stats.add_frames_dropped(
