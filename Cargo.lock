@@ -496,7 +496,7 @@ dependencies = [
 
 [[package]]
 name = "audio"
-version = "0.1.0"
+version = "5.0.0"
 dependencies = [
  "cpal",
  "crossbeam",
@@ -837,7 +837,7 @@ dependencies = [
 
 [[package]]
 name = "builder"
-version = "0.1.0"
+version = "5.0.0"
 dependencies = [
  "chrono",
  "winres",
@@ -2364,7 +2364,7 @@ dependencies = [
 
 [[package]]
 name = "gui-tester"
-version = "0.1.0"
+version = "5.0.0"
 dependencies = [
  "anyhow",
  "crossbeam",
@@ -2901,7 +2901,7 @@ dependencies = [
 
 [[package]]
 name = "js"
-version = "0.1.0"
+version = "5.0.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2959,7 +2959,7 @@ checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "launcher"
-version = "0.1.0"
+version = "5.0.0"
 dependencies = [
  "anyhow",
  "builder",
@@ -3243,7 +3243,7 @@ dependencies = [
 
 [[package]]
 name = "mldsa-verify"
-version = "0.1.0"
+version = "5.0.0"
 dependencies = [
  "anyhow",
  "base64",
@@ -4912,7 +4912,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "script-tester"
-version = "0.1.0"
+version = "5.0.0"
 dependencies = [
  "anyhow",
  "base64",
@@ -5121,7 +5121,7 @@ dependencies = [
 
 [[package]]
 name = "shared"
-version = "0.1.0"
+version = "5.0.0"
 dependencies = [
  "anyhow",
  "async-trait",

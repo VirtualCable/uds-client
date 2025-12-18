@@ -1,0 +1,8 @@
+# .cargo/config.toml
+[target.'cfg(target_os = "linux")']
+rustflags = ["-C", "link-args=-Wl,-rpath,$ORIGIN"]
+
+[target.'cfg(target_os = "macos")']
+rustflags = ["-C", "link-args=-Wl,-rpath,@executable_path"]
+
+# En Windows no need for rpath, as the DLLs are located in the same folder as the executable.

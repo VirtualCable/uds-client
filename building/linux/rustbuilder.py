@@ -47,7 +47,7 @@ def build_for_distro(distro: str, crate_path: PathLike, debug: bool, extra_docke
         subprocess.run(["docker", "build", "-t", image_tag, str(build_dir)], check=True)
         stamp.touch()
 
-    # Clean
+    # Clean before build, just in case there are leftovers
     docker_run(crate_path, image_tag, ["cargo", "clean"])
 
     # Build
@@ -71,6 +71,7 @@ def build_for_distro(distro: str, crate_path: PathLike, debug: bool, extra_docke
     # Copy binaries and .so files
     executables = [f for f in release_dir.iterdir() if f.is_file() and os.access(f, os.X_OK)]
     so_files = [f for f in release_dir.iterdir() if f.suffix == ".so"]
+    symlinks = [f for f in release_dir.iterdir() if f.is_symlink() and '.so' in f.suffixes]
 
     if not executables:
         raise RuntimeError("No executables found in target/release")
@@ -80,6 +81,13 @@ def build_for_distro(distro: str, crate_path: PathLike, debug: bool, extra_docke
         dest = pathlib.Path(dest).resolve()
         print(f"→ Copying {src} to {dest}")
         dest.write_bytes(src.read_bytes())
+        
+    # Clean output directory
+    for item in output_dir.iterdir():
+        if item.is_file() or item.is_symlink():
+            item.unlink()
+        elif item.is_dir():
+            subprocess.run(["rm", "-rf", str(item)], check=True)
 
     # Copy executables
     for exe in executables:
@@ -94,6 +102,16 @@ def build_for_distro(distro: str, crate_path: PathLike, debug: bool, extra_docke
         copy(so, output_dir / so.name)
         # Strip .so files to reduce size
         subprocess.run(["strip", output_dir / so.name], check=True)
+        
+    # create symlinks for .so.X.Y files on 
+    for symlink in symlinks:
+        target = symlink.resolve()
+        link_name = output_dir / symlink.name
+        target_name = output_dir / target.name
+        print(f"→ Creating symlink {link_name} -> {target_name}")
+        if not target_name.exists():
+            raise RuntimeError(f"Target for symlink does not exist: {target_name}")
+        link_name.symlink_to(target_name.name)
 
     # Final clean
     docker_run(crate_path, image_tag, ["cargo", "clean"])
@@ -142,8 +160,18 @@ def main() -> None:
     distro: str = args.distro
     crate_path = pathlib.Path(args.crate_path).resolve()
     debug: bool = args.debug
-    # On debian 12, copy .so files after build to target
-    extra_docker_cmd: str = "cp /usr/local/lib/*so [TARGET]" if distro == "Debian12" else ""
+    # On debian 12 and openSUSE, copy .so files after build to target. Also, create the symlinks
+    # to them for .so.X.Y files.
+    SCRIPT: typing.Final[str] = (
+        "cp /usr/local/lib/*so [TARGET] && "
+        "cd [TARGET] && "
+        "for f in /usr/local/lib/*.so.*; do ln --force -s \"${f%%.*}.so\" \"$(basename $f)\"; done"
+    )
+
+    extra_docker_cmd: str = {
+        "Debian12": SCRIPT,
+        "openSUSE": SCRIPT.replace("/usr/local/lib", "/usr/local/lib64"),
+    }.get(distro, "")
 
     build_for_distro(distro, crate_path, debug, extra_docker_cmd)
     print("=== Build completed ===")
