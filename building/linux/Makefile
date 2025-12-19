@@ -1,7 +1,7 @@
 #!/usr/bin/make -f
 # -*- makefile -*-
 
-.PHONY: all install-udsclient install-udsclient-unmanaged install-udsclient-common clean
+.PHONY: all install-udslauncher install-udslauncher-unmanaged install-udslauncher-common clean
 
 VERSION := $(shell [ -f ../../../VERSION ] && cat ../../../VERSION || echo "devel")
 RELEASE := 1
@@ -14,72 +14,48 @@ DESTDIR ?= ./package/$(DISTRO)
 OUTPUTDIR := builders/$(DISTRO)/output
 
 # Install targets
-BINDIR := $(DESTDIR)/usr/bin
-SBINDIR := $(DESTDIR)/usr/sbin
 APPSDIR := $(DESTDIR)/usr/share/applications
-POLKITDIR := $(DESTDIR)/usr/share/polkit-1/actions
-SYSTEMDDIR := $(DESTDIR)/etc/systemd/system
-AUTOSTARTDIR := $(DESTDIR)/etc/xdg/autostart
-ICONDIR := $(DESTDIR)/usr/share/udsclient
+OWNDIR := $(DESTDIR)/usr/share/udslauncher
 
-# No all rule, because the build depends on the variant (managed/unmanaged), etc..
+# all rule is install-udslauncher
+all: install-udslauncher
 
 help:
 	@echo "Usage:"
-	@echo "  make install-udsclient DISTRO=Debian12"
-	@echo "  make install-udsclient-unmanaged DISTRO=Debian12"
+	@echo "  make install-udslauncher DISTRO=[Debian12 | Debian12 | Fedora | openSUSE]"
 	@echo "  make clean DISTRO=Debian12"
 
 
 # === Build binaries using rustbuilder.py ===
-$(OUTPUTDIR)/udsclient-client: rustbuilder.py
+$(OUTPUTDIR)/launcher: rustbuilder.py
 	python3 rustbuilder.py $(DISTRO)
-	@test -f $(OUTPUTDIR)/udsclient-client || (echo "Missing udsclient-client binary" && exit 1)
+	@test -f $(OUTPUTDIR)/launcher || (echo "Missing udslauncher-client binary" && exit 1)
 
 
 # === Common installation logic ===
-install-udsclient-common: $(OUTPUTDIR)/udsclient-client
-	mkdir -p $(BINDIR) $(SBINDIR) $(APPSDIR) $(POLKITDIR) $(AUTOSTARTDIR) $(ICONDIR)
+install-udslauncher: $(OUTPUTDIR)/launcher
+	mkdir -p $(APPSDIR) $(OWNDIR)
 
-	# Install shared Rust binaries
-	cp $(OUTPUTDIR)/udsclient-client $(BINDIR)/
-	cp $(OUTPUTDIR)/udsclient-service $(SBINDIR)/
-	cp $(OUTPUTDIR)/gui-helper $(BINDIR)/
+	# Install main binary
+	cp $(OUTPUTDIR)/launcher $(OWNDIR)/
+	# Install shared libraries if any (all *.so.* files)
+	cp -a $(OUTPUTDIR)/*.so* $(OWNDIR)/ 2>/dev/null || true
 
 	# Install icon
-	cp ../../assets/img/uds-icon.png $(ICONDIR)/
-
-	# Install PolicyKit
-	cp policy/org.openuds.pkexec.udsclient_config.policy $(POLKITDIR)/
+	cp ../../assets/img/uds-icon.png $(OWNDIR)/
 
 	# Install desktop entries
-	cp desktop/udsclient_config.desktop $(APPSDIR)/
-	cp desktop/udsclient_client.desktop $(AUTOSTARTDIR)/
-
-
-	# Install systemd service for RH-based distros
-ifneq (,$(filter $(DISTRO),Fedora41 openSUSE15))
-	mkdir -p $(SYSTEMDDIR)
-	cp debian/udsclient.service $(SYSTEMDDIR)/
-endif
+	cp desktop/udslauncher.desktop $(APPSDIR)/
 
 	# Permissions
-	chmod 755 $(BINDIR)/udsclient-client $(BINDIR)/gui-helper
-	chmod 755 $(SBINDIR)/udsclient-service
-	chmod 644 $(POLKITDIR)/org.openuds.pkexec.udsclient_config.policy
-	chmod 644 $(ICONDIR)/uds-icon.png
+	chmod 755 $(OWNDIR)/launcher
+	# If any .so files were copied, set their permissions too
+	chmod 644 $(OWNDIR)/*.so* 2>/dev/null || true
+	chmod 644 $(OWNDIR)/uds-icon.png
+	# Also, desktop file
+	chmod 644 $(APPSDIR)/udslauncher.desktop
 
-# === Install managed variant ===
-install-udsclient: install-udsclient-common
-	# Install managed config
-	cp $(OUTPUTDIR)/udsclient-config $(SBINDIR)/udsclient-config
-
-
-# === Install unmanaged variant ===
-install-udsclient-unmanaged: install-udsclient-common
-	# Install unmanaged config
-	cp $(OUTPUTDIR)/udsclient-unmanaged-config $(SBINDIR)/udsclient-config
-
+# TODO: Create appimage, igel and thinpro versions (as on v4.x)
 
 # === Clean build artifacts ===
 clean:

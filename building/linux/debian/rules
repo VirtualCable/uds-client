@@ -1,5 +1,7 @@
 #!/usr/bin/make -f
 
+DISTRO ?= Debian12
+
 %:
 	dh $@
 
@@ -9,8 +11,7 @@ override_dh_auto_build:
 
 # Staged installation of binaries and files
 override_dh_auto_install:
-	$(MAKE) DESTDIR=$(CURDIR)/debian/udsactor install-udsactor
-	$(MAKE) DESTDIR=$(CURDIR)/debian/udsactor-unmanaged install-udsactor-unmanaged
+	$(MAKE) DISTRO=$(DISTRO) DESTDIR=$(CURDIR)/debian/udslauncher install-udslauncher
 
 # Cleaning the build environment
 override_dh_auto_clean:
@@ -26,4 +27,4 @@ override_dh_systemd_start:
 
 # Installation of the init script (only if you want SysV compatibility)
 override_dh_installinit:
-	dh_installinit --no-stop-on-upgrade --no-start --name=udsactor
+	dh_installinit --no-stop-on-upgrade --no-start --name=udslauncher

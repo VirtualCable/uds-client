@@ -8,15 +8,15 @@ top=$(pwd)
 # Debian based
 dpkg-buildpackage -b
 
-for DISTRO in Fedora41 openSUSE15; do
+for DISTRO in Fedora openSUSE; do
     # managed an unmanaged
     for kind in managed unmanaged; do
       # convert distro for pkg name, "" if Fedora41, "suse" if openSUSE15
       case "$DISTRO" in
-          Fedora41)
+          Fedora)
               PKG_DISTRO=""
               ;;
-          openSUSE15)
+          openSUSE)
               PKG_DISTRO="-suse"
               ;;
       esac
