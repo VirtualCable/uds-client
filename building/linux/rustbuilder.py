@@ -93,7 +93,8 @@ def build_for_distro(distro: str, crate_path: PathLike, debug: bool, extra_docke
     for exe in executables:
         copy(exe, output_dir / exe.name)
         # Strip binaries to reduce size (with local stripping tool)
-        subprocess.run(["strip", output_dir / exe.name], check=True)
+        if not debug:
+            subprocess.run(["strip", output_dir / exe.name], check=True)
         # Also, ensure executable permissions
         os.chmod(output_dir / exe.name, 0o755)
 

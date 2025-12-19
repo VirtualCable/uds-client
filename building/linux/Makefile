@@ -1,7 +1,7 @@
 #!/usr/bin/make -f
 # -*- makefile -*-
 
-.PHONY: all install-udslauncher install-udslauncher-unmanaged install-udslauncher-common clean
+.PHONY: all install-udslauncher clean
 
 VERSION := $(shell [ -f ../../../VERSION ] && cat ../../../VERSION || echo "devel")
 RELEASE := 1
@@ -28,7 +28,7 @@ help:
 
 
 # === Build binaries using rustbuilder.py ===
-$(OUTPUTDIR)/launcher: rustbuilder.py
+$(OUTPUTDIR)/launcher: rustbuilder.py builders/$(DISTRO)/Dockerfile
 ifeq ($(IN_DOCKER),0)
 	python3 rustbuilder.py $(DISTRO)
 endif

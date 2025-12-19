@@ -10,6 +10,7 @@ RUN zypper refresh && zypper install -y \
     libavcodec-devel libavutil-devel libswscale-devel libavformat-devel libswresample-devel \
     krb5-devel cups-devel fuse3-devel libjpeg8-devel \
     libopenh264-devel \
+    rpm-build rpmdevtools \
     && zypper clean -a
 
 ENV FREERDP_ROOT="/usr/local"

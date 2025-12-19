@@ -7,6 +7,7 @@ RUN dnf install -y \
     pango-devel cairo-devel glib2-devel \
     freerdp-devel alsa-lib-devel pulseaudio-libs-devel clang-devel \
     ffmpeg-free-devel krb5-devel openh264-devel cups-devel fuse3-devel libusbx-devel \
+    rpm-build rpmdevtools strip redhat-rpm-config \
     && dnf clean all
 
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
