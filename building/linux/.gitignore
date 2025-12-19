@@ -3,10 +3,9 @@ udsactor-*[1-9].*.spec
 builders/**/output
 builders/**/build.stamp
 
-debian/udsactor/
-debian/udsactor-unmanaged/
+debian/udslauncher/
 debian/files
-debian/*.debhelper
+debian/*.debhelper*
 debian/*.substvars
 __pycache__/
 output/

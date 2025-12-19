@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=UDS Launcher
+Comment=UDS Launcher for VDI connections
+Keywords=uds;launcher;vdi;
+Exec=/usr/sharer/udslauncher/launcher %u
+Icon=help-browser
+StartupNotify=true
+Terminal=false
+Type=Application
+Categories=Utility;
+MimeType=x-scheme-handler/udssv2;
