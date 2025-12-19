@@ -23,8 +23,18 @@ Launcher for UDS Broker.
 %prep
 # Nothing
 
+%post
+/usr/bin/update-desktop-database
+if [ ! -d /media ]; then
+    mkdir -m 755 /media
+    echo "/media created for compatibility"
+fi
+
 %build
 # Nothing
+
+%postun
+/usr/bin/update-desktop-database
 
 %install
 cp -a %{DESTDIR}/* %{buildroot}/

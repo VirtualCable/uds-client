@@ -31,6 +31,7 @@ for debian_version in 12 13; do
     # Move to ../bin/debian${debian_version}
     outdir="${top}/../bin/debian${debian_version}"
     mkdir -p ${outdir}
+    rm -f ${outdir}/udslauncher_*.deb
     mv ${top}/../udslauncher_*.deb ${outdir}/
 done
 
@@ -74,6 +75,7 @@ for DISTRO in Fedora openSUSE; do
     # Move to ../bin/${distro}
     outdir="${top}/../bin/${DISTRO_LOWER}"
     mkdir -p ${outdir}
+    rm -f ${outdir}/udslauncher-*.rpm
     cp ${top}/rpm-${DISTRO_LOWER}/RPMS/x86_64/udslauncher-*.rpm ${outdir}/
     rpm --addsign ${outdir}/udslauncher-*.rpm
 done
