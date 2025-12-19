@@ -31,7 +31,7 @@ def build_for_distro(distro: str, crate_path: PathLike, debug: bool, extra_docke
     crate_path = pathlib.Path(crate_path).resolve()
     build_dir = pathlib.Path("builders") / distro
     output_dir = build_dir / "output"
-    image_tag = f"rust-builder-udsclient:{distro}"
+    image_tag = f"rust-builder-udslauncher:{distro}"
     dockerfile = build_dir / "Dockerfile"
     stamp = build_dir / "build.stamp"
 

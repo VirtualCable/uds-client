@@ -4,7 +4,8 @@ target/
 *_enterprise.*
 *_ignore.*
 /bin
-/udsclient*
+/building/udslauncher*
+/building/bin
 .vscode
 .vs
 *~

@@ -9,6 +9,7 @@ RELEASE := 1
 # Distro to build for (Debian12, Fedora41, openSUSE15)
 DISTRO ?= Debian12
 DESTDIR ?= ./package/$(DISTRO)
+IN_DOCKER ?= 0
 
 # Output directory from rustbuilder
 OUTPUTDIR := builders/$(DISTRO)/output
@@ -28,7 +29,9 @@ help:
 
 # === Build binaries using rustbuilder.py ===
 $(OUTPUTDIR)/launcher: rustbuilder.py
+ifeq ($(IN_DOCKER),0)
 	python3 rustbuilder.py $(DISTRO)
+endif
 	@test -f $(OUTPUTDIR)/launcher || (echo "Missing udslauncher-client binary" && exit 1)
 
 
