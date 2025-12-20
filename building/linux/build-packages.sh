@@ -3,6 +3,9 @@
 VERSION=$( [ -f ../../../VERSION ] && cat ../../../VERSION || echo "devel" )
 RELEASE=1
 
+UID_HOST=$(id -u)
+GID_HOST=$(id -g)
+
 top=$(pwd)
 # Resolve %top/../..
 crate=$(realpath ${top}/../..)
@@ -20,9 +23,9 @@ for debian_version in 12 13; do
     echo "=== Building for Debian ${debian_version} using ${docker_image} ==="
 
     docker run --rm \
+    -u ${UID_HOST}:${GID_HOST} \
     -e IN_DOCKER=1 \
     -e DISTRO=Debian${debian_version} \
-    -e DEB_VERSION_UPSTREAM="${VERSION}-deb${debian_version}-${RELEASE}" \
     -v $crate:/crate \
     -w /crate/building/linux \
     $docker_image \
@@ -59,7 +62,7 @@ for DISTRO in Fedora openSUSE; do
     echo "=== Building for ${DISTRO} using ${docker_image} ==="
     
     docker run --rm \
-    -e IN_DOCKER=1 \
+    -u ${UID_HOST}:${GID_HOST} \
     -e DISTRO=${DISTRO} \
     -v $crate:/crate \
     -w /crate/building/linux \
@@ -69,8 +72,7 @@ for DISTRO in Fedora openSUSE; do
     --define "version ${VERSION}" \
     --define "release ${RELEASE}" \
     --define "DESTDIR /crate/building/linux/rpm-${DISTRO_LOWER}-root" \
-    /crate/building/linux/rpm-${DISTRO_LOWER}/SPECS/udslauncher.spec \
-    chmod 666 "/crate/building/linux/rpm-${DISTRO_LOWER}/RPMS/x86_64/*.rpm"
+    /crate/building/linux/rpm-${DISTRO_LOWER}/SPECS/udslauncher.spec
     
     # Move to ../bin/${distro}
     outdir="${top}/../bin/${DISTRO_LOWER}"
