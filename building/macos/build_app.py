@@ -1,0 +1,402 @@
+#!/usr/bin/env python3
+import subprocess
+import shutil
+import typing
+from pathlib import Path
+import os
+import sys
+
+
+FREERDP_BASE_LIBS: typing.Final[list[str]] = [
+    "libfreerdp3.dylib",
+    "libfreerdp-client3.dylib",
+    "libwinpr3.dylib",
+    "libwinpr-tools3.dylib",
+]
+
+# Default FREERDP_ROOT to /usr/local if not set
+FREERDP_ROOT: Path = Path(os.environ.get("FREERDP_ROOT", "/Users/dkmaster/projects/rdp/local/"))
+
+
+X11_PREFIXES: typing.Final[tuple[str, ...]] = (
+    "/opt/homebrew/opt/libx11/",
+    "/opt/homebrew/opt/libxcb/",
+    "/opt/homebrew/opt/libxau/",
+    "/opt/homebrew/opt/libxdmcp/",
+)
+
+
+def get_macos_dependencies(binary: Path) -> list[str]:
+    """
+    Return the list of dynamic library dependencies for a given macOS binary
+    using `otool -L`. The binary may be a symlink; otool will resolve it.
+    """
+    result = subprocess.run(
+        ["otool", "-L", str(binary)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    deps: list[str] = []
+    lines = result.stdout.splitlines()
+
+    # Skip first line (binary itself)
+    for line in lines[1:]:
+        line = line.strip()
+        if not line:
+            continue
+
+        dep = line.split(" ", 1)[0]
+        deps.append(dep)
+
+    return deps
+
+
+def collect_dependencies(
+    binary: Path,
+    processed: set[str] | None = None,
+    level: int = 0,
+) -> set[str]:
+    """
+    Recursively collect all non-system dynamic library dependencies for a binary.
+    Prints intermediate steps to understand the dependency graph.
+    """
+
+    indent = "  " * level
+
+    if processed is None:
+        processed = set()
+
+    print(f"{indent}>> Checking: {binary}")
+
+    deps = get_macos_dependencies(binary)
+
+    for dep in deps:
+        if dep.startswith(X11_PREFIXES):
+            print(f"{indent}   - Skipping X11 dependency: {dep}")
+            continue
+
+        # Skip @rpath entries (internal to the bundle)
+        if dep.startswith("@rpath/"):
+            print(f"{indent}   - Skipping internal @rpath: {dep}")
+            continue
+
+        # Skip system libraries
+        if dep.startswith("/usr/lib/") or dep.startswith("/System/Library/"):
+            print(f"{indent}   - Skipping system lib: {dep}")
+            continue
+
+        # Skip already processed
+        if dep in processed:
+            print(f"{indent}   - Already processed: {dep}")
+            continue
+
+        print(f"{indent}   - External dependency: {dep}")
+        processed.add(dep)
+
+        dep_path = Path(dep)
+        if dep_path.exists():
+            collect_dependencies(dep_path, processed, level + 1)
+        else:
+            print(f"{indent}   - WARNING: dependency not found on disk: {dep}")
+
+    return processed
+
+
+def copy_external_dependency(
+    dep_path: Path,
+    dst_lib_dir: Path,
+    copied: set[str],
+    strip: bool = True,
+) -> None:
+    """
+    Copy only the real file of an external dependency.
+    Do NOT recreate symlinks (Homebrew symlinks can be circular).
+    """
+
+    real_name = dep_path.name
+
+    # Avoid duplicates
+    if real_name in copied:
+        print(f">> Skipping duplicate: {real_name}")
+        return
+
+    if not dep_path.exists():
+        raise FileNotFoundError(f"Dependency not found: {dep_path}")
+
+    dst_lib_dir.mkdir(parents=True, exist_ok=True)
+
+    real_dst = dst_lib_dir / real_name
+
+    # Copy real file only
+    shutil.copy2(dep_path, real_dst)
+    real_dst.chmod(0o755)
+    print(f">> Copied external lib: {real_dst}")
+
+    # Strip
+    if strip:
+        try:
+            subprocess.run(["strip", "-x", str(real_dst)], check=True)
+            print(f">> Stripped: {real_dst}")
+        except Exception as exc:
+            print(f">> WARN: strip failed for {real_dst}: {exc}")
+
+    copied.add(real_name)
+
+
+def fix_install_names(binary: Path) -> None:
+    """
+    Rewrite install_name and dependency paths for a binary inside the app bundle.
+    - Sets the binary's own install_name to @rpath/<filename> if it's a dylib.
+    - Rewrites external dependencies to @rpath/<filename>.
+    - Rewrites dependencies for executables to @executable_path/../Frameworks/<filename>.
+    """
+
+    print(f">> Fixing install names for: {binary}")
+
+    is_dylib = binary.suffix == ".dylib"
+
+    # Fix the binary's own install_name (only for dylibs)
+    if is_dylib:
+        new_id = f"@rpath/{binary.name}"
+        try:
+            subprocess.run(
+                ["install_name_tool", "-id", new_id, str(binary)],
+                check=True,
+            )
+            print(f"   - Set install_name to {new_id}")
+        except Exception as exc:
+            print(f"   - WARN: failed to set install_name: {exc}")
+
+    # Fix dependency paths
+    deps = get_macos_dependencies(binary)
+
+    for dep in deps:
+        if dep.startswith("@rpath/"):
+            continue
+        if dep.startswith("/usr/lib/") or dep.startswith("/System/Library/"):
+            continue
+
+        dep_name = Path(dep).name
+
+        if is_dylib:
+            new_path = f"@rpath/{dep_name}"
+        else:
+            new_path = f"@executable_path/../Frameworks/{dep_name}"
+
+        try:
+            subprocess.run(
+                ["install_name_tool", "-change", dep, new_path, str(binary)],
+                check=True,
+            )
+            print(f"   - Rewrote {dep} -> {new_path}")
+        except Exception as exc:
+            print(f"   - WARN: failed to rewrite {dep}: {exc}")
+
+
+def copy_freerdp_lib(
+    lib_name: str,
+    src_lib_dir: Path,
+    dst_lib_dir: Path,
+) -> None:
+    """
+    Copy a FreeRDP library preserving its full versioned structure:
+    - base symlink (e.g., libfreerdp3.dylib)
+    - intermediate symlink (e.g., libfreerdp3.0.dylib)
+    - real file (e.g., libfreerdp3.0.0.dylib)
+
+    The real file is stripped using `strip -x` to reduce size.
+    Symlinks are recreated inside the destination directory.
+    """
+
+    # Base symlink (e.g., libfreerdp3.dylib)
+    base = src_lib_dir / lib_name
+    if not base.exists():
+        raise FileNotFoundError(f"Library not found: {base}")
+    if not base.is_symlink():
+        raise RuntimeError(f"{base} is not a symlink; unexpected library structure")
+
+    # Get intermediate symlink (e.g., libfreerdp3.0.dylib)
+    intermediate_name = base.readlink()
+    intermediate = src_lib_dir / intermediate_name
+    if not intermediate.is_symlink():
+        raise RuntimeError(f"{intermediate} is not a symlink; unexpected library structure")
+
+    # Resolve real file (e.g., libfreerdp3.0.0.dylib)
+    real_name = intermediate.readlink()
+    real = src_lib_dir / real_name
+    if not real.is_file():
+        raise RuntimeError(f"{real} is not a file; unexpected library structure")
+
+    dst_lib_dir.mkdir(parents=True, exist_ok=True)
+
+    # Copy real file
+    real_dst = dst_lib_dir / real.name
+    shutil.copy2(real, real_dst)
+
+    # Strip real file to reduce size
+    try:
+        subprocess.run(["strip", "-x", str(real_dst)], check=True)
+        print(f">> Stripped: {real_dst}")
+    except Exception as exc:
+        print(f">> WARN: strip failed for {real_dst}: {exc}")
+
+    # Recreate intermediate symlink
+    intermediate_dst = dst_lib_dir / intermediate.name
+    if intermediate_dst.exists():
+        intermediate_dst.unlink()
+    intermediate_dst.symlink_to(real_dst.name)
+    print(f">> Symlink {intermediate_dst} -> {real_dst.name}")
+
+    # Recreate base symlink
+    base_dst = dst_lib_dir / base.name
+    if base_dst.exists():
+        base_dst.unlink()
+    base_dst.symlink_to(intermediate_dst.name)
+    print(f">> Symlink {base_dst} -> {intermediate_dst.name}")
+
+
+def fail(msg: str) -> typing.NoReturn:
+    print(f"ERROR: {msg}", file=sys.stderr)
+    sys.exit(1)
+
+
+def ensure_freerdp_libs() -> None:
+    lib_dir = FREERDP_ROOT / "lib"
+    if not lib_dir.is_dir():
+        fail(f"FREERDP_ROOT directory does not exist or lacks 'lib': {lib_dir}")
+
+    for lib in FREERDP_BASE_LIBS:
+        lib_path = lib_dir / lib
+        if not lib_path.is_file():
+            fail(f"Required FreeRDP library not found: {lib_path}")
+
+
+def validate_bundle_dependencies(app_dir: Path) -> bool:
+    """
+    Validate that all binaries and dylibs inside the app bundle only depend on:
+      - @rpath/...
+      - /usr/lib/...
+      - /System/Library/...
+    Returns True if everything is valid, False otherwise.
+    """
+
+    print("==> Validating bundle dependencies")
+
+    valid_prefixes = (
+        "@rpath/",
+        "/usr/lib/",
+        "/System/Library/",
+    )
+
+    # Collect all binaries and dylibs inside MacOS/ and Frameworks/
+    binaries: list[Path] = []
+
+    for subdir in ["Contents/MacOS", "Contents/Frameworks"]:
+        for path in (app_dir / subdir).glob("*"):
+            if path.is_file() and os.access(path, os.X_OK):
+                binaries.append(path)
+
+    all_ok = True
+
+    for binary in binaries:
+        print(f">> Checking: {binary}")
+        deps = get_macos_dependencies(binary)
+
+        for dep in deps:
+            if dep.startswith(valid_prefixes):
+                continue
+
+            print(f"   !! INVALID dependency: {dep}")
+            all_ok = False
+
+    if all_ok:
+        print("==> Bundle validation PASSED")
+    else:
+        print("==> Bundle validation FAILED")
+
+    return all_ok
+
+
+def main() -> None:
+    ensure_freerdp_libs()
+
+    # Determine project root (uds-client)
+    script_dir = Path(__file__).resolve().parent
+    project_root = script_dir.parent.parent
+
+    # Determine build directory (uds-client/building/macos)
+    build_dir = script_dir
+
+    dist_dir = build_dir / "dist"
+    app_name = "UDSLauncher.app"
+    app_dir = dist_dir / app_name
+
+    plist_source = project_root / "crates" / "mac-launcher" / "Info.plist"
+    plist_dest = app_dir / "Contents" / "Info.plist"
+
+    print("==> Cleaning dist directory")
+    if dist_dir.exists():
+        shutil.rmtree(dist_dir)
+    dist_dir.mkdir(parents=True, exist_ok=True)
+
+    print("==> Creating .app bundle structure")
+    (app_dir / "Contents" / "MacOS").mkdir(parents=True, exist_ok=True)
+    (app_dir / "Contents" / "Frameworks").mkdir(parents=True, exist_ok=True)
+    (app_dir / "Contents" / "Resources").mkdir(parents=True, exist_ok=True)
+
+    print("==> Copying application icon")
+    icon_src = project_root / "assets" / "macos" / "uds.icns"
+    shutil.copy(icon_src, app_dir / "Contents" / "Resources")
+
+    print("==> Copying Info.plist")
+    if not plist_source.is_file():
+        fail(f"plist file not found at: {plist_source}")
+    shutil.copy(plist_source, plist_dest)
+
+    # Copy built binaries
+    print("==> Copying binaries")
+    mac_launcher_bin = project_root / "target" / "release" / "mac-launcher"
+    launcher_bin = project_root / "target" / "release" / "launcher"
+
+    shutil.copy(mac_launcher_bin, app_dir / "Contents" / "MacOS")
+    shutil.copy(launcher_bin, app_dir / "Contents" / "MacOS")
+
+    src_lib_dir = FREERDP_ROOT / "lib"
+    dst_lib_dir = app_dir / "Contents" / "Frameworks"
+    dependencies: set[str] = set()
+    for lib in FREERDP_BASE_LIBS:
+        copy_freerdp_lib(lib, src_lib_dir, dst_lib_dir)
+        dependencies.update(collect_dependencies(dst_lib_dir / lib))
+
+    print("==> Copying external dependencies")
+    copied_deps: set[str] = set()
+    for dep in dependencies:
+        dep_path = Path(dep)
+        copy_external_dependency(dep_path, dst_lib_dir, copied_deps)
+
+    print("==> Fixing install names")
+
+    # FreeRDP libs
+    for lib in FREERDP_BASE_LIBS:
+        fix_install_names(dst_lib_dir / lib)
+
+    # External deps
+    for dep_name in copied_deps:
+        fix_install_names(dst_lib_dir / dep_name)
+
+    # Executables
+    fix_install_names(app_dir / "Contents" / "MacOS" / "mac-launcher")
+    fix_install_names(app_dir / "Contents" / "MacOS" / "launcher")
+    
+    # Validate bundle
+    if not validate_bundle_dependencies(app_dir):
+        fail("App bundle contains invalid dependencies")
+
+    print("==> App bundle structure created successfully")
+    print(f"Output path: {app_dir}")
+
+
+if __name__ == "__main__":
+    main()

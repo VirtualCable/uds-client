@@ -32,7 +32,6 @@ cmake -B build `
   -DCMAKE_TOOLCHAIN_FILE="Z:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake" `
   -DVCPKG_TARGET_TRIPLET=x64-windows `
   -DCMAKE_BUILD_TYPE=Release `
-  -DWITH_DEBUG_ALL=OFF `
   -DCMAKE_MODULE_PATH="Z:/dev/vcpkg/installed/x64-windows/share/ffmpeg" `
   -DWITH_CLIENT_COMMON=ON `
   -DWITH_INTERNAL_MD4=ON `

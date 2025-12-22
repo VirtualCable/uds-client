@@ -27,7 +27,7 @@
 
   <!-- Optional icon -->
   <key>CFBundleIconFile</key>
-  <string>AppIcon</string>
+  <string>uds.icns</string>
 
   <!-- Custom URL schemes -->
   <key>CFBundleURLTypes</key>

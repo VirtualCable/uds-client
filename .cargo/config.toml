@@ -3,6 +3,9 @@
 rustflags = ["-C", "link-args=-Wl,-rpath,$ORIGIN"]
 
 [target.'cfg(target_os = "macos")']
-rustflags = ["-C", "link-args=-Wl,-rpath,@executable_path"]
+rustflags = [
+    "-C", "link-args=-Wl,-rpath,@executable_path",
+    "-C", "link-args=-Wl,-rpath,@executable_path/../Frameworks",
+]
 
-# En Windows no need for rpath, as the DLLs are located in the same folder as the executable.
+# In Windows no need for rpath, as the DLLs are located in the same folder as the executable.
