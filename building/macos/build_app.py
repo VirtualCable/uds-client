@@ -6,6 +6,12 @@ from pathlib import Path
 import os
 import sys
 
+RPATH_SEARCH_DIRS: typing.Final[list[Path]] = [
+    Path("/opt/homebrew/lib"),
+    Path("/usr/local/lib"),
+    # ... add more if needed
+]
+
 
 FREERDP_BASE_LIBS: typing.Final[list[str]] = [
     "libfreerdp3.dylib",
@@ -15,15 +21,7 @@ FREERDP_BASE_LIBS: typing.Final[list[str]] = [
 ]
 
 # Default FREERDP_ROOT to /usr/local if not set
-FREERDP_ROOT: Path = Path(os.environ.get("FREERDP_ROOT", "/Users/dkmaster/projects/rdp/local/"))
-
-
-X11_PREFIXES: typing.Final[tuple[str, ...]] = (
-    "/opt/homebrew/opt/libx11/",
-    "/opt/homebrew/opt/libxcb/",
-    "/opt/homebrew/opt/libxau/",
-    "/opt/homebrew/opt/libxdmcp/",
-)
+FREERDP_ROOT: Path = Path(os.environ.get("FREERDP_ROOT", "/usr/local/"))
 
 
 def get_macos_dependencies(binary: Path) -> list[str]:
@@ -52,16 +50,28 @@ def get_macos_dependencies(binary: Path) -> list[str]:
 
     return deps
 
+def resolve_rpath_dylib(dep: str) -> Path | None:
+    """
+    Resolve an @rpath dependency by searching known library directories.
+    Returns the real path if found, otherwise None.
+    """
+    assert dep.startswith("@rpath/"), f"Not an @rpath entry: {dep}"
+
+    filename = dep.split("/", 1)[1]  # libsharpyuv.0.dylib
+
+    for base in RPATH_SEARCH_DIRS:
+        candidate = base / filename
+        if candidate.exists():
+            return candidate
+
+    return None
+
 
 def collect_dependencies(
     binary: Path,
     processed: set[str] | None = None,
     level: int = 0,
 ) -> set[str]:
-    """
-    Recursively collect all non-system dynamic library dependencies for a binary.
-    Prints intermediate steps to understand the dependency graph.
-    """
 
     indent = "  " * level
 
@@ -73,16 +83,19 @@ def collect_dependencies(
     deps = get_macos_dependencies(binary)
 
     for dep in deps:
-        if dep.startswith(X11_PREFIXES):
-            print(f"{indent}   - Skipping X11 dependency: {dep}")
-            continue
 
-        # Skip @rpath entries (internal to the bundle)
+        # --- NEW: resolve @rpath entries ---
         if dep.startswith("@rpath/"):
-            print(f"{indent}   - Skipping internal @rpath: {dep}")
-            continue
+            print(f"{indent}   - Resolving @rpath: {dep}")
+            resolved = resolve_rpath_dylib(dep)
+            if resolved is None:
+                raise RuntimeError(
+                    f"Could not resolve @rpath dependency: {dep}"
+                )
+            dep = str(resolved)
+            print(f"{indent}     -> Resolved to: {dep}")
 
-        # Skip system libraries
+        # Skip system libs
         if dep.startswith("/usr/lib/") or dep.startswith("/System/Library/"):
             print(f"{indent}   - Skipping system lib: {dep}")
             continue
@@ -99,7 +112,9 @@ def collect_dependencies(
         if dep_path.exists():
             collect_dependencies(dep_path, processed, level + 1)
         else:
-            print(f"{indent}   - WARNING: dependency not found on disk: {dep}")
+            raise RuntimeError(
+                f"{indent}ERROR: dependency not found on disk: {dep}"
+            )
 
     return processed
 
@@ -325,6 +340,13 @@ def main() -> None:
     # Determine project root (uds-client)
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent.parent
+    
+    print("==> Building Rust binaries (cargo build --release)")
+    subprocess.run(
+        ["cargo", "build", "--release"],
+        cwd=project_root,
+        check=True,
+    )    
 
     # Determine build directory (uds-client/building/macos)
     build_dir = script_dir
