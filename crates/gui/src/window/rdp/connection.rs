@@ -324,7 +324,7 @@ impl AppWindow {
         if actual_width != gdi_width || actual_height != gdi_height {
             // We only allow fullscreen/windowed, so if actual is smalleer we have exit the fullscreen mode
             // else, we have entered.
-            if actual_width < gdi_width {
+            if actual_width <= gdi_width {
                 rdp_state.full_screen.store(false, Ordering::Relaxed);
             } else {
                 rdp_state.full_screen.store(true, Ordering::Relaxed);
