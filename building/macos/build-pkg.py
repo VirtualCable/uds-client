@@ -41,20 +41,20 @@ FREERDP_ROOT: Path = Path(os.environ.get("FREERDP_ROOT", "/usr/local/"))
 
 # Hook for every binary after creation
 def process_binary_hook(binary_path: Path) -> None:
-    hook = os.environ.get("UDSCLIENT_PROCESS_BINARY")
+    hook = os.environ.get("UDS_PROCESS_BINARY")
     if hook:
         print(f"[HOOK] Processing {binary_path.name} with {hook}")
-        subprocess.run([hook, str(binary_path)], check=True)
+        subprocess.run([hook, str(binary_path.resolve())], check=True)
     else:
         print(f"[HOOK] No binary hook defined for {binary_path.name}")
 
 
 # Hook for the final package after creation
 def process_pkg_hook(pkg_path: Path) -> None:
-    hook = os.environ.get("UDSCLIENT_PROCESS_PKG")
+    hook = os.environ.get("UDS_PROCESS_PACKAGE")
     if hook:
         print(f"[HOOK] Processing package {pkg_path.name} with {hook}")
-        subprocess.run([hook, str(pkg_path)], check=True)
+        subprocess.run([hook, str(pkg_path.resolve())], check=True)
     else:
         print(f"[HOOK] No package hook defined for {pkg_path.name}")
 
@@ -250,6 +250,10 @@ def fix_install_names(binary: Path) -> None:
         except Exception as exc:
             print(f"   - WARN: failed to rewrite {dep}: {exc}")
 
+    # Invoke hook here
+    if binary.suffix == ".dylib": 
+        process_binary_hook(binary)    
+
 
 def copy_freerdp_lib(
     lib_name: str,
@@ -375,12 +379,12 @@ def validate_bundle_dependencies(app_dir: Path) -> bool:
     return all_ok
 
 
-def build_pkg(app_dir: Path, version: str) -> Path:
+def build_pkg() -> Path:
     print("=== Building .pkg ===")
-    pkgname = f"UDSLauncher-{version}.pkg"
+    pkgname = f"UDSLauncher-{VERSION}.pkg"
     pkg_path = OUTPUT_DIR / pkgname
 
-    subprocess.run(["productbuild", "--component", str(app_dir), "/Applications", str(pkg_path)], check=True)
+    subprocess.run(["productbuild", "--component", str(APP_DIR), "/Applications", str(pkg_path)], check=True)
     process_pkg_hook(pkg_path)
 
     return pkg_path
@@ -429,7 +433,6 @@ def main() -> None:
         if not binary_src.is_file():
             fail(f"Built binary not found: {binary_src}")
         shutil.copy(binary_src, APP_DIR / "Contents" / "MacOS")
-        process_binary_hook(APP_DIR / "Contents" / "MacOS" / binary)
 
     src_lib_dir = FREERDP_ROOT / "lib"
     dst_lib_dir = APP_DIR / "Contents" / "Frameworks"
@@ -464,6 +467,21 @@ def main() -> None:
 
     print("==> App bundle structure created successfully")
     print(f"Output path: {APP_DIR}")
+    
+    print("==> Final hook processing for executables")
+    for exe in ["mac-launcher", "launcher"]:
+        process_binary_hook(APP_DIR / "Contents" / "MacOS" / exe)
+
+    # Build .pkg
+    pkg_name = build_pkg()
+    print(f"Package created at: {pkg_name}")
+
+    # If an argument is given, move the package to that location
+    if len(sys.argv) > 1:
+        destination = Path(sys.argv[1]).resolve()
+        print(f"Moving package to {destination}")
+        # If already exists, remove
+        shutil.copy(pkg_name, destination)
 
 
 if __name__ == "__main__":
