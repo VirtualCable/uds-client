@@ -4,6 +4,6 @@ version = "5.0.0"
 edition = "2024"
 
 [dependencies]
-ml-dsa = "0.0.4"
-base64 = "0.22.1"
-anyhow = "1.0.100"
+ml-dsa = { workspace = true }
+base64 = { workspace = true }
+anyhow = { workspace = true }

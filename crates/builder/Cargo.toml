@@ -10,5 +10,5 @@ license = "BSD-3-Clause"
 path = "src/lib.rs"
 
 [dependencies]
-chrono = "0.4.42"
-winres = "0.1.12"
+chrono = { workspace = true }
+winres = { workspace = true }

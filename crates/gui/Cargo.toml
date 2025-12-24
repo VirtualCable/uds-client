@@ -13,7 +13,7 @@ crossbeam = { workspace = true }
 tokio = { workspace = true }
 
 eframe = { workspace = true }
-winit = "0.30.12"
+winit = { workspace = true }
 
 zeroize = { workspace = true }
 image = { workspace = true }

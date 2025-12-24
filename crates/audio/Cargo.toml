@@ -6,5 +6,5 @@ edition = "2024"
 [dependencies]
 shared = { path = "../shared" }
 
-cpal = "0.17.0"
+cpal = { workspace = true }
 crossbeam = { workspace = true }

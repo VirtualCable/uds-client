@@ -24,8 +24,8 @@ serde_json = { workspace = true }
 
 # i18n
 gettext = { workspace = true }
-rust-embed = "8.9.0"
-sys-locale = "0.3.2"
+rust-embed = { workspace = true }
+sys-locale = { workspace = true }
 
 crossbeam = { workspace = true }
 
