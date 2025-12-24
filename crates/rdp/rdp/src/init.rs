@@ -36,7 +36,7 @@ fn init_socks() {
 
     #[cfg(windows)]
     unsafe {
-        use windows_sys::Win32::Networking::WinSock::{WSADATA, WSAStartup};
+        use windows::Win32::Networking::WinSock::{WSADATA, WSAStartup};
 
         let mut wsa_data = std::mem::zeroed::<WSADATA>();
         let version: u16 = 0x0202;
@@ -52,7 +52,7 @@ fn init_socks() {
 fn uninit_socks() {
     #[cfg(windows)]
     unsafe {
-        windows_sys::Win32::Networking::WinSock::WSACleanup();
+        windows::Win32::Networking::WinSock::WSACleanup();
     }
 }
 

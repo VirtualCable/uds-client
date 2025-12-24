@@ -41,7 +41,6 @@ pub mod events;
 pub mod wlog;
 
 pub mod geom;
-pub mod keymap;
 pub mod settings;
 
 pub mod context;

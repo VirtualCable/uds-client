@@ -31,7 +31,7 @@
 use eframe::egui;
 
 use super::consts;
-use rdp::keymap;
+use crate::keymap;
 use shared::log;
 
 use crate::window::AppWindow;

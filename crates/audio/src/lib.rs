@@ -89,11 +89,11 @@ impl AudioHandle {
                 {
                     log::debug!("Using audio format: {:?}, range={}", range, sample_rate);
                     let cfg = range
-                        .try_with_sample_rate(cpal::SampleRate(sample_rate))
+                        .try_with_sample_rate(sample_rate as cpal::SampleRate)
                         .unwrap_or(range.with_max_sample_rate())
                         .config();
                     // Store real output sample rate
-                    output_sample_rate = cfg.sample_rate.0;
+                    output_sample_rate = cfg.sample_rate;
                     stream = Some(
                         dev.build_output_stream(
                             &cfg,

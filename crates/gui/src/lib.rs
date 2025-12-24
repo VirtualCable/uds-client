@@ -45,6 +45,7 @@ use winit::{
 use shared::{log, system::trigger::Trigger};
 
 pub mod window;
+pub mod keymap;
 
 pub mod about;
 
