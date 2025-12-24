@@ -43,11 +43,25 @@ fn main() {
         )
     } else {
         // Try default paths
-        (
-            "/usr/include/freerdp3".to_string(),
-            "/usr/include/winpr3".to_string(),
-            "/usr/lib/x86_64-linux-gnu".to_string(),
-        )
+        if cfg!(target_os = "windows") {
+            (
+                "C:/Program Files/FreeRDP/include/freerdp3".to_string(),
+                "C:/Program Files/FreeRDP/include/winpr3".to_string(),
+                "C:/Program Files/FreeRDP/lib".to_string(),
+            )
+        } else if cfg!(target_os = "macos") {
+            (
+                "/usr/local/include/freerdp3".to_string(),
+                "/usr/local/include/winpr3".to_string(),
+                "/usr/local/lib".to_string(),
+            )
+        } else {
+            (
+                "/usr/include/freerdp3".to_string(),
+                "/usr/include/winpr3".to_string(),
+                "/usr/lib/x86_64-linux-gnu".to_string(),
+            )
+        }
     };
 
     // Build the C shim
