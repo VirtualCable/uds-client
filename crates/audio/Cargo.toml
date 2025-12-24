@@ -7,4 +7,4 @@ edition = "2024"
 shared = { path = "../shared" }
 
 cpal = "0.17.0"
-crossbeam = "0.8.4"
+crossbeam = { workspace = true }

@@ -12,13 +12,11 @@ anyhow = { workspace = true }
 
 crossbeam = { workspace = true }
 
-libc = "0.2.177"
-
 # Security dependencies
 zeroize = { workspace = true }
 
 # Clipboard dependencies
-clipboard-rs = "0.3.1"
+clipboard-rs = { workspace = true }
 
 # Windows dependencies
 [target.'cfg(windows)'.dependencies]

@@ -18,7 +18,6 @@ winit = "0.30.12"
 zeroize = { workspace = true }
 image = { workspace = true }
 
-# For opening links
-open = "5.3"
+open = { workspace = true }
 
 gettext = { workspace = true }

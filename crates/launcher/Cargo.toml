@@ -16,7 +16,7 @@ tokio = { workspace = true }
 
 eframe = { workspace = true }
 image = { workspace = true }
-open = "5.3.2"
+open = { workspace = true }
 
 # Persistence
 serde = { workspace = true }
