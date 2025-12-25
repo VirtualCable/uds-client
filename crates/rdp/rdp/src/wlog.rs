@@ -118,7 +118,7 @@ pub fn setup_freerdp_logger(level: WLogLevel) {
 
         WLog_ConfigureAppender(
             appender,
-            b"callbacks\0".as_ptr() as *const i8,
+            b"callbacks\0".as_ptr() as *const ::std::os::raw::c_char,
             &callbacks as *const _ as *mut _,
         );
 

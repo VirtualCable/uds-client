@@ -48,7 +48,7 @@ pub trait ToStringLossy {
     fn to_string_lossy(&self) -> String;
 }
 
-impl ToStringLossy for *const std::os::raw::c_char {
+impl ToStringLossy for *const ::std::os::raw::c_char {
     fn to_string_lossy(&self) -> String {
         if self.is_null() {
             return String::new();
