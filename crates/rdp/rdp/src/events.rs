@@ -46,7 +46,7 @@ macro_rules! define_event {
                 unsafe {
                     freerdp_sys::PubSub_OnEvent(
                         pubsub,
-                        concat!(stringify!($name), "\0").as_ptr() as *const i8,
+                        concat!(stringify!($name), "\0").as_ptr() as *const ::std::os::raw::c_char,
                         context,
                         &(*e).e,
                     )
@@ -60,7 +60,7 @@ macro_rules! define_event {
                 unsafe {
                     freerdp_sys::PubSub_Subscribe(
                         pubsub,
-                        concat!(stringify!($name), "\0").as_ptr() as *const i8,
+                        concat!(stringify!($name), "\0").as_ptr() as *const ::std::os::raw::c_char,
                         handler,
                     )
                 }
@@ -73,7 +73,7 @@ macro_rules! define_event {
                 unsafe {
                     freerdp_sys::PubSub_Unsubscribe(
                         pubsub,
-                        concat!(stringify!($name), "\0").as_ptr() as *const i8,
+                        concat!(stringify!($name), "\0").as_ptr() as *const ::std::os::raw::c_char,
                         handler,
                     )
                 }
