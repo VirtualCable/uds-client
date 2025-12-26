@@ -5,6 +5,8 @@ RELEASE=1
 
 UID_HOST=$(id -u)
 GID_HOST=$(id -g)
+# Architecture
+ARCH=$(uname -m)
 
 top=$(pwd)
 # Resolve %top/../..
@@ -78,7 +80,7 @@ for DISTRO in Fedora openSUSE; do
     outdir="${top}/../bin/${DISTRO_LOWER}"
     mkdir -p ${outdir}
     rm -f ${outdir}/udslauncher-*.rpm
-    cp ${top}/rpm-${DISTRO_LOWER}/RPMS/x86_64/udslauncher-*.rpm ${outdir}/
+    cp ${top}/rpm-${DISTRO_LOWER}/RPMS/${ARCH}/udslauncher-*.rpm ${outdir}/
     rpm --addsign ${outdir}/udslauncher-*.rpm
 done
 
