@@ -8,79 +8,80 @@ GID_HOST=$(id -g)
 # Architecture
 ARCH=$(uname -m)
 
-top=$(pwd)
-# Resolve %top/../..
-crate=$(realpath ${top}/../..)
+TOP=$(pwd)
+# Resolve $TOP/../..
+CRATE_ROOT=$(realpath ${TOP}/../..)
 
 
 for debian_version in 12 13; do
     # Compile first the binary using rustbuilder.py
     echo "=== Building udslauncher binary using rustbuilder.py ==="
-    cd ${top}
+    cd ${TOP}
     python3 rustbuilder.py Debian${debian_version}
-
+    
     docker_image="rust-builder-udslauncher:Debian${debian_version}"
     # Debian based build inside docker
-
+    
     echo "=== Building for Debian ${debian_version} using ${docker_image} ==="
-
+    
+    # Build the deb package, disable fakeroot beceuse on docker it takes a lot of time
     docker run --rm \
     -u ${UID_HOST}:${GID_HOST} \
     -e IN_DOCKER=1 \
     -e DISTRO=Debian${debian_version} \
-    -v $crate:/crate \
+    -v ${CRATE_ROOT}:/crate \
     -w /crate/building/linux \
     $docker_image \
-    dpkg-buildpackage -b -us -uc
-
+    dpkg-buildpackage -b -us -uc -rfakeroot-
+    
     # Move to ../bin/debian${debian_version}
-    outdir="${top}/../bin/debian${debian_version}"
+    outdir="${TOP}/../bin/debian${debian_version}"
     mkdir -p ${outdir}
     rm -f ${outdir}/udslauncher_*.deb
-    mv ${top}/../udslauncher_*.deb ${outdir}/
+    mv ${TOP}/../udslauncher_*.deb ${outdir}/
 done
 
-for DISTRO in Fedora openSUSE; do
+for distro in Fedora openSUSE; do
     # We need to execute manually the Makefile to copy install files
-    DISTRO_LOWER=$(echo ${DISTRO} | tr '[:upper:]' '[:lower:]')
-    RPMROOT=${top}/rpm-${DISTRO_LOWER}
-    INSTALLROOT=${top}/rpm-${DISTRO_LOWER}-root
+    distro_lower=$(echo $distro | tr '[:upper:]' '[:lower:]')
+    rpm_root=${TOP}/rpm-${distro_lower}
+    install_root=${TOP}/rpm-${distro_lower}-root
     
-    echo "=== Preparing install files for ${DISTRO} ==="
-    rm -rf "${INSTALLROOT}"
-    mkdir -p ${INSTALLROOT}
-    make -C ${top} install-udslauncher \
+    echo "=== Preparing install files for $distro ==="
+    rm -rf "$install_root"
+    mkdir -p $install_root
+    make -C ${TOP} install-udslauncher \
     IN_DOCKER=0 \
-    DISTRO=${DISTRO} \
-    DESTDIR=${INSTALLROOT}
+    DISTRO=$distro \
+    DESTDIR=$install_root
     
     echo "=== Preparing RPM build tree ==="
-    rm -rf "${RPMROOT}"
-    mkdir -p ${RPMROOT}/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
-    cp ${top}/udslauncher.spec ${RPMROOT}/SPECS/udslauncher.spec
+    rm -rf "$rpm_root"
+    mkdir -p $rpm_root/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+    cp ${TOP}/udslauncher.spec $rpm_root/SPECS/udslauncher.spec
     
-    docker_image="rust-builder-udslauncher:${DISTRO}"
+    docker_image="rust-builder-udslauncher:$distro"
     
-    echo "=== Building for ${DISTRO} using ${docker_image} ==="
+    echo "=== Building for $distro using ${docker_image} ==="
     
     docker run --rm \
     -u ${UID_HOST}:${GID_HOST} \
-    -e DISTRO=${DISTRO} \
-    -v $crate:/crate \
+    -e DISTRO=$distro \
+    -v ${CRATE_ROOT}:/crate \
     -w /crate/building/linux \
     $docker_image \
     rpmbuild -bb \
-    --define "_topdir /crate/building/linux/rpm-${DISTRO_LOWER}" \
+    --define "_topdir /crate/building/linux/rpm-${distro_lower}" \
     --define "version ${VERSION}" \
     --define "release ${RELEASE}" \
-    --define "DESTDIR /crate/building/linux/rpm-${DISTRO_LOWER}-root" \
-    /crate/building/linux/rpm-${DISTRO_LOWER}/SPECS/udslauncher.spec
+    --define "DESTDIR /crate/building/linux/rpm-${distro_lower}-root" \
+    /crate/building/linux/rpm-${distro_lower}/SPECS/udslauncher.spec
     
     # Move to ../bin/${distro}
-    outdir="${top}/../bin/${DISTRO_LOWER}"
+    outdir="${TOP}/../bin/${distro_lower}"
     mkdir -p ${outdir}
     rm -f ${outdir}/udslauncher-*.rpm
-    cp ${top}/rpm-${DISTRO_LOWER}/RPMS/${ARCH}/udslauncher-*.rpm ${outdir}/
+    cp ${TOP}/rpm-${distro_lower}/RPMS/${ARCH}/udslauncher-*.rpm ${outdir}/
     rpm --addsign ${outdir}/udslauncher-*.rpm
 done
 
