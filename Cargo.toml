@@ -32,7 +32,7 @@ crossbeam = "0.8.4"
 
 # SSL/TLS
 rustls = "0.23.35"
-rustls-native-certs = "0.8.2"
+rustls-native-certs = "0.8.3"
 
 # async & async TLS
 tokio-rustls = "0.26.4"
@@ -49,9 +49,9 @@ futures = "0.3.31"
 async-trait = "0.1.89"
 
 # HTTP client
-reqwest = { version = "0.12.24", features = [
+reqwest = { version = "0.13.1", features = [
     "json",
-    "rustls-tls",
+    "rustls",
     "system-proxy",
 ] }
 
