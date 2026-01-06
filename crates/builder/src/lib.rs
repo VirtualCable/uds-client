@@ -1,5 +1,5 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.U.
+// Copyright (c) 2025, Virtual Cable S.L.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -72,9 +72,9 @@ pub fn build_windows(build_info: BuildInfo) {
     res.set("FileDescription", build_info.description);
     res.set(
         "LegalCopyright",
-        format!("Copyright © 2012-{current_year} Virtual Cable S.L.U.").as_str(),
+        format!("Copyright © 2012-{current_year} Virtual Cable S.L.").as_str(),
     );
-    res.set("CompanyName", "Virtual Cable S.L.U.");
+    res.set("CompanyName", "Virtual Cable S.L.");
 
     res.append_rc_content(&format!(r##"101 BITMAP DISCARDABLE "{}""##, bmp));
 
