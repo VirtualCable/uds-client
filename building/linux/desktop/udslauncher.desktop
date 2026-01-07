@@ -2,7 +2,7 @@
 Name=UDS Launcher
 Comment=UDS Launcher for VDI connections
 Keywords=uds;launcher;vdi;
-Exec=/usr/sharer/udslauncher/launcher %u
+Exec=/usr/shared/udslauncher/launcher %u
 Icon=help-browser
 StartupNotify=true
 Terminal=false
