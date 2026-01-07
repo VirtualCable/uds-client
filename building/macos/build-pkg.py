@@ -59,6 +59,14 @@ def process_binary_hook(binary_path: Path) -> None:
         print(f"[HOOK] No binary hook defined for {binary_path.name}")
 
 
+def process_app_hook(app_path: Path) -> None:
+    hook = os.environ.get("UDS_PROCESS_APP")
+    if hook:
+        print(f"[HOOK] Processing app {app_path.name} with {hook}")
+        subprocess.run([hook, str(app_path.resolve())], check=True)
+    else:
+        print(f"[HOOK] No app hook defined for {app_path.name}")
+
 # Hook for the final package after creation
 def process_pkg_hook(pkg_path: Path) -> None:
     hook = os.environ.get("UDS_PROCESS_PACKAGE")
@@ -481,6 +489,10 @@ def main() -> None:
     print("==> Final hook processing for executables")
     for exe in ["mac-launcher", "launcher"]:
         process_binary_hook(APP_DIR / "Contents" / "MacOS" / exe)
+    
+    # Now process App hook
+    print("==> Final hook processing for app bundle")
+    process_app_hook(APP_DIR)
 
     # Build .pkg
     pkg_name = build_pkg()
