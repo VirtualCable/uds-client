@@ -102,6 +102,7 @@ RUN cmake -Bbuild -GNinja \
 
 
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
+RUN mkdir /.rustup && chmod 777 /.rustup
 ENV PATH="/root/.cargo/bin:$PATH"
 
 WORKDIR /
