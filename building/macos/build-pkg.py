@@ -114,7 +114,7 @@ def resolve_rpath_dylib(dep: str) -> 'Path | None':
 
 def collect_dependencies(
     binary: Path,
-    processed: set[str] | None = None,
+    processed: 'set[str] | None' = None,
     level: int = 0,
 ) -> set[str]:
 
