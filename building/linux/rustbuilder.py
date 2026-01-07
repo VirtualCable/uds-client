@@ -20,7 +20,7 @@ def get_target_path(crate_path: PathLike, debug: bool) -> pathlib.Path:
     return crate_path / "target" / ("debug" if debug else "release")
 
 
-def get_builders() -> typing.List[str]:
+def get_builders() -> list[str]:
     """Get the list of available builders (distros)."""
     builders_dir = pathlib.Path("builders")
     return [d.name for d in builders_dir.iterdir() if d.is_dir()]
@@ -81,7 +81,7 @@ def build_for_distro(distro: str, crate_path: PathLike, debug: bool, extra_docke
         dest = pathlib.Path(dest).resolve()
         print(f"→ Copying {src} to {dest}")
         dest.write_bytes(src.read_bytes())
-        
+
     # Clean output directory
     for item in output_dir.iterdir():
         if item.is_file() or item.is_symlink():
@@ -103,8 +103,8 @@ def build_for_distro(distro: str, crate_path: PathLike, debug: bool, extra_docke
         copy(so, output_dir / so.name)
         # Strip .so files to reduce size
         subprocess.run(["strip", output_dir / so.name], check=True)
-        
-    # create symlinks for .so.X.Y files on 
+
+    # create symlinks for .so.X.Y files on
     for symlink in symlinks:
         target = symlink.resolve()
         link_name = output_dir / symlink.name
@@ -126,10 +126,26 @@ def docker_image_exists(image: str) -> bool:
     return result.returncode == 0
 
 
-def docker_run(crate_path: pathlib.Path, image: str, command: typing.List[str]) -> None:
+def docker_run(crate_path: pathlib.Path, image: str, command: list[str]) -> None:
     """Run a command inside Docker."""
+    uid = os.getuid()
+    gid = os.getgid()
+
     subprocess.run(
-        ["docker", "run", "--rm", "-v", f"{crate_path}:/crate", "-w", "/crate", image] + command, check=True
+        [
+            "docker",
+            "run",
+            "--rm",
+            "--user",
+            f"{uid}:{gid}",
+            "-v",
+            f"{crate_path}:/crate",
+            "-w",
+            "/crate",
+            image,  
+        ]
+        + command,
+        check=True,
     )
 
 

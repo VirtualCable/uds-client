@@ -32,7 +32,7 @@ for debian_version in 12 13; do
     -v ${CRATE_ROOT}:/crate \
     -w /crate/building/linux \
     $docker_image \
-    dpkg-buildpackage -b -us -uc -rfakeroot-
+    dpkg-buildpackage -b -us -uc -rfakeroot
     
     # Move to ../bin/debian${debian_version}
     outdir="${TOP}/../bin/debian${debian_version}"
@@ -82,7 +82,7 @@ for distro in Fedora openSUSE; do
     mkdir -p ${outdir}
     rm -f ${outdir}/udslauncher-*.rpm
     cp ${TOP}/rpm-${distro_lower}/RPMS/${ARCH}/udslauncher-*.rpm ${outdir}/
-    rpm --addsign ${outdir}/udslauncher-*.rpm
+    # rpm --addsign ${outdir}/udslauncher-*.rpm
 done
 
 
