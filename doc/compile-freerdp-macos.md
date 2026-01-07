@@ -1,4 +1,7 @@
-# 📜 Very simple guide to building FreeRDP on Windows with vcpkg
+# Very simple guide to building FreeRDP on mac
+# Needs homebrew and the following packages installed:
+# (Note, to be checked: i'm writing this from memory :P )
+# brew install cmake pkg-config libusb openssl ffmpeg jpeg-turbo openh264
 
 ## Clone the FreeRDP repository
 
