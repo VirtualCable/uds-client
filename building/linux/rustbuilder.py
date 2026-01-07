@@ -128,16 +128,11 @@ def docker_image_exists(image: str) -> bool:
 
 def docker_run(crate_path: pathlib.Path, image: str, command: list[str]) -> None:
     """Run a command inside Docker."""
-    uid = os.getuid()
-    gid = os.getgid()
-
     subprocess.run(
         [
             "docker",
             "run",
             "--rm",
-            "--user",
-            f"{uid}:{gid}",
             "-v",
             f"{crate_path}:/crate",
             "-w",
