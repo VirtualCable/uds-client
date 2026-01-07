@@ -95,7 +95,7 @@ def get_macos_dependencies(binary: Path) -> list[str]:
     return deps
 
 
-def resolve_rpath_dylib(dep: str) -> Path | None:
+def resolve_rpath_dylib(dep: str) -> 'Path | None':
     """
     Resolve an @rpath dependency by searching known library directories.
     Returns the real path if found, otherwise None.
