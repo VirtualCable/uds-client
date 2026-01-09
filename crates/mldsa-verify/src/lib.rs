@@ -29,35 +29,39 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 use anyhow::Result;
+use base64::engine::{Engine as _, general_purpose::STANDARD};
 
-use ml_dsa::{
-    EncodedSignature, EncodedVerifyingKey, MlDsa65, Signature, VerifyingKey, signature::Verifier,
-};
+use libcrux_ml_dsa::ml_dsa_65;
 
-// UDS Client ML DSA Public Key
+// UDS Client ML-DSA Public Key
 static PUBLIC_KEY: &[u8] = include_bytes!("../public-key.bin");
 
 pub fn verify_signature(message: &[u8], signature_b64: &str) -> Result<()> {
-    use base64::engine::{Engine as _, general_purpose::STANDARD};
+    // If public key len is not correct, return error
+    let public_key: [u8; 1952] = PUBLIC_KEY
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("Failed to convert public key bytes into array"))?;
+    let pk = ml_dsa_65::MLDSA65VerificationKey::new(public_key);
 
-    let encoded_vk = EncodedVerifyingKey::<MlDsa65>::try_from(PUBLIC_KEY).map_err(|e| {
-        anyhow::anyhow!(
-            "Failed to decode ML DSA verifying key from bytes: {}",
-            e
-        )
-    })?;
-    let recovered_vk = VerifyingKey::<MlDsa65>::decode(&encoded_vk);
-    let signature_bytes = STANDARD.decode(signature_b64).map_err(|e| {
-        anyhow::anyhow!("Failed to decode signature from base64: {}", e)
-    })?;
-    let signature_enc: EncodedSignature<MlDsa65> =
-        EncodedSignature::<MlDsa65>::try_from(signature_bytes.as_slice()).map_err(|e| {
-            anyhow::anyhow!("Failed to decode ML DSA signature from bytes: {}", e)
-        })?;
-    let signature = Signature::<MlDsa65>::decode(&signature_enc).ok_or_else(|| {
-        anyhow::anyhow!("Failed to recover ML DSA signature from encoded signature")
-    })?;
-    recovered_vk
-        .verify(message, &signature)
-        .map_err(|e| anyhow::anyhow!("Signature verification failed: {}", e))
+    // 2. Decodificar firma desde base64
+    let sig_bytes = STANDARD
+        .decode(signature_b64)
+        .map_err(|e| anyhow::anyhow!("Failed to decode signature from base64: {}", e))?;
+    // Must have exactly 3309 bytes
+
+    if sig_bytes.len() != 3309 {
+        return Err(anyhow::anyhow!(
+            "Invalid signature length: expected 3309 bytes, got {} bytes",
+            sig_bytes.len()
+        ));
+    }
+    let sig_bytes: [u8; 3309] = sig_bytes
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("Failed to convert signature bytes into array"))?;
+
+    // 3. Parsear firma desde bytes
+    let signature = ml_dsa_65::MLDSA65Signature::new(sig_bytes);
+    // 4. Verificar firma
+    ml_dsa_65::verify(&pk, message, &[], &signature)
+        .map_err(|_| anyhow::anyhow!("Signature verification failed"))
 }

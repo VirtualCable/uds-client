@@ -31,12 +31,12 @@ rand = "0.9.2"
 crossbeam = "0.8.4"
 
 # SSL/TLS
-rustls = "0.23.35"
+rustls = "0.23.36"
 rustls-native-certs = "0.8.3"
 
 # async & async TLS
 tokio-rustls = "0.26.4"
-tokio = { version = "1.48", features = [
+tokio = { version = "1.49.0", features = [
     "net",
     "io-util",
     "rt",
@@ -77,13 +77,13 @@ image = { version = "0.25.8", features = ["png"] }
 winit = { version = "0.30.12" }
 
 # Sound
-cpal = "0.17.0"
+cpal = "0.17.1"
 
 # For opening links
 open = "5.3"
 
 # ML-DSA verification
-ml-dsa = "0.0.4"
+libcrux-ml-dsa = "0.0.4"
 
 # regex
 regex = "1.12.2"
@@ -101,7 +101,7 @@ tracing-log = "0.2.0"
 
 # Testing
 rcgen = "0.14.6"
-serial_test = "3.2"
+serial_test = "3.3"
 mockito = "1.7"
 
 # Building
@@ -110,7 +110,7 @@ cc = "1.2"
 winres = "0.1.12"
 
 # Linux/macos
-libc = "0.2.178"
+libc = "0.2.180"
 
 # Windows
 windows = { version = "0.62.2", features = [
