@@ -295,6 +295,7 @@ pub async fn create_runner(port: u16) -> Result<(JoinHandle<()>, JoinHandle<()>,
         startup_time_ms: 10000,
         keep_listening_after_timeout: false,
         enable_ipv6: false,
+        params: None,
     };
     let listener = super::connection::create_listener(info.local_port, info.enable_ipv6)
         .await

@@ -32,8 +32,10 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use reqwest::{Client, ClientBuilder};
+use base64::{Engine as _, engine::general_purpose};
 
 use crate::{consts, log};
+use crypt::{Ticket, generate_key_pair};
 
 pub mod types;
 
@@ -123,24 +125,49 @@ impl BrokerApi for UdsBrokerApi {
             ticket,
             scrambler
         );
+
+        // Generate ephemeral KEM keypair
+        let (private_key, public_key) = generate_key_pair()?;
+        
+        // Prepare request body
+        let req: types::TicketReqBody = types::TicketReqBody {
+            scrambler,
+            kem_kyber_key: &general_purpose::STANDARD.encode(&public_key),
+            hostname: &self.hostname,
+            version: consts::UDS_CLIENT_VERSION,
+        };
+
         let response = self
             .client
-            .get(format!(
-                "{}/{}/{}?hostname={}&version={}",
+            .post(format!(
+                "{}/{}/ticket",
                 self.broker_url,
                 ticket,
-                scrambler,
-                self.hostname,
-                consts::UDS_CLIENT_VERSION
             ))
+            .json(&req)
             .headers(self.headers())
             .send()
             .await?;
 
+        // Extract real script info from Ticket
         response
-            .json::<types::BrokerResponse<types::Script>>()
-            .await?
-            .into_result()
+           .json::<types::BrokerResponse<Ticket>>()
+           .await?
+           .into_result()?
+           .recover_data_from_json(ticket.as_bytes(), private_key)
+           .map(|json_value| {
+               serde_json::from_value::<types::Script>(json_value)
+                   .map_err(|e| types::Error {
+                       message: format!("Failed to parse script from ticket data: {}", e),
+                       is_retryable: false,
+                       percent: 0,
+                   })
+           })?
+
+        // response
+        //     .json::<types::BrokerResponse<types::Script>>()
+        //     .await?
+        //     .into_result()
     }
 
     async fn send_log(&self, log_str: String) -> Result<()> {

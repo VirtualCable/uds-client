@@ -39,6 +39,8 @@ use bzip2::read::BzDecoder;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crypt::TunnelMaterial;
+
 use crate::log;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -66,6 +68,16 @@ impl From<&Error> for anyhow::Error {
     fn from(err: &Error) -> Self {
         log::debug!("Converting Broker Error to anyhow::Error: {}", err);
         anyhow::anyhow!(err.message.clone())
+    }
+}
+
+impl From<anyhow::Error> for Error {
+    fn from(err: anyhow::Error) -> Self {
+        Error {
+            message: err.to_string(),
+            is_retryable: false,
+            percent: 0,
+        }
     }
 }
 
@@ -175,6 +187,14 @@ impl From<&str> for ScriptType {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct TicketReqBody<'a> {
+    pub scrambler: &'a str,
+    pub kem_kyber_key: &'a str,
+    pub hostname: &'a str,
+    pub version: &'a str,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Script {
     pub script: String,
     #[serde(rename = "type")]
@@ -184,6 +204,7 @@ pub struct Script {
     pub signature_algorithm: String, // Optional signature algorithm
     pub params: String, // from codecs.encode(codecs.encode(json.dumps(self.parameters).encode(), 'bz2'), 'base64').decode()
     pub log: Log,
+    pub crypto_params: Option<TunnelMaterial>,  // provided by the broker for cryptographic operations
 }
 
 impl Script {
@@ -215,7 +236,7 @@ impl Script {
     pub fn verify_signature(&self) -> anyhow::Result<()> {
         let script = self.decoded_script()?;
 
-        mldsa_verify::verify_signature(script.as_bytes(), &self.signature)
+        crypt::verify_signature(script.as_bytes(), &self.signature)
     }
 }
 
@@ -320,6 +341,7 @@ pub fn get_test_script() -> Script {
             level: "debug".to_string(),
             ticket: Some("dummy_ticket".to_string()),
         },
+        crypto_params: None,
     }
 }
 

@@ -47,8 +47,8 @@ widestring = { workspace = true }
 
 # On a separate crate due to the dependency on the ML DSA crate
 # which is not needed elsewhere
-[dependencies.mldsa-verify]
-path = "../mldsa-verify"
+[dependencies.crypt]
+path = "../crypt"
 
 [dev-dependencies]
 rcgen = { workspace = true }

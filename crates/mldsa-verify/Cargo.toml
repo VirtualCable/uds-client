@@ -1,9 +1,0 @@
-[package]
-name = "mldsa-verify"
-version = "5.0.0"
-edition = "2024"
-
-[dependencies]
-libcrux-ml-dsa = { workspace = true }
-base64 = { workspace = true }
-anyhow = { workspace = true }

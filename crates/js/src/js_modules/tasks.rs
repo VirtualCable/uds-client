@@ -35,9 +35,10 @@ use boa_engine::{
     js_string,
     object::ObjectInitializer,
     property::Attribute,
+    value::TryFromJs,
 };
 
-use shared::{tasks, tunnel, log};
+use shared::{log, tasks, tunnel};
 
 fn add_early_unlinkable_file_fn(
     _: &JsValue,
@@ -71,6 +72,40 @@ fn add_waitable_app_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsRe
     Ok(JsValue::undefined())
 }
 
+#[derive(TryFromJs)]
+struct CryptoParams {
+    pub key_send: Vec<u8>,
+    pub key_receive: Vec<u8>,
+    pub nonce_send: Vec<u8>,
+    pub nonce_receive: Vec<u8>,
+}
+
+impl From<CryptoParams> for tunnel::TunnelMaterial {
+    fn from(cp: CryptoParams) -> Self {
+        tunnel::TunnelMaterial {
+            key_payload: [0; 32], // Not used in tunnel
+            key_send: cp.key_send.try_into().unwrap_or([0; 32]),
+            key_receive: cp.key_receive.try_into().unwrap_or([0; 32]),
+            nonce_send: cp.nonce_send.try_into().unwrap_or([0; 12]),
+            nonce_receive: cp.nonce_receive.try_into().unwrap_or([0; 12]),
+        }
+    }
+}
+
+// Struct for tunnel start parameters
+#[derive(TryFromJs, Default)]
+struct TunnelParams {
+    addr: String,
+    port: u16,
+    ticket: String,
+    startup_time_ms: Option<u64>,
+    check_certificate: Option<bool>,
+    local_port: Option<u16>,
+    keep_listening_after_timeout: Option<bool>,
+    enable_ipv6: Option<bool>,
+    crypto_params: Option<CryptoParams>,
+}
+
 async fn start_tunel_fn(
     _: &JsValue,
     args: &[JsValue],
@@ -78,47 +113,28 @@ async fn start_tunel_fn(
 ) -> JsResult<JsValue> {
     let tunnel_info = {
         let mut ctx_borrow = ctx.borrow_mut();
-        let (
-            addr,
-            port,
-            ticket,
-            startup_time_ms,
-            check_certificate,
-            local_port,
-            keep_listening_after_timeout,
-            enable_ipv6,
-        ) = extract_js_args!(
-            args,
-            &mut *ctx_borrow,
-            String,
-            u16,
-            String,
-            Option<u64>,
-            Option<bool>,
-            Option<u16>,
-            Option<bool>,
-            Option<bool>
-        );
+        let params = extract_js_args!(args, &mut *ctx_borrow, TunnelParams);
         log::debug!(
             "Starting tunnel to {}:{} with ticket {}, check_certificate: {:?}, listen_timeout_ms: {:?}, local_port: {:?}, keep_listening_after_timeout: {:?}, enable_ipv6: {:?}",
-            addr,
-            port,
-            ticket,
-            check_certificate,
-            startup_time_ms,
-            local_port,
-            keep_listening_after_timeout,
-            enable_ipv6
+            params.addr,
+            params.port,
+            params.ticket,
+            params.check_certificate,
+            params.startup_time_ms,
+            params.local_port,
+            params.keep_listening_after_timeout,
+            params.enable_ipv6
         );
         tunnel::TunnelConnectInfo {
-            addr,
-            port,
-            ticket,
-            check_certificate: check_certificate.unwrap_or(true),
-            local_port,
-            startup_time_ms: startup_time_ms.unwrap_or(0),
-            keep_listening_after_timeout: keep_listening_after_timeout.unwrap_or(false),
-            enable_ipv6: enable_ipv6.unwrap_or(false),
+            addr: params.addr,
+            port: params.port,
+            ticket: params.ticket,
+            check_certificate: params.check_certificate.unwrap_or(true),
+            local_port: params.local_port,
+            startup_time_ms: params.startup_time_ms.unwrap_or(0),
+            keep_listening_after_timeout: params.keep_listening_after_timeout.unwrap_or(false),
+            enable_ipv6: params.enable_ipv6.unwrap_or(false),
+            params: params.crypto_params.map(|cp| cp.into()),
         }
     };
 
@@ -165,8 +181,8 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{create_context, exec_script};
     use crate::log;
+    use crate::{create_context, exec_script};
 
     use super::*;
 

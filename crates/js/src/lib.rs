@@ -154,7 +154,10 @@ pub async fn run_script(script: &Script) -> Result<()> {
         ));
     }
     let script_content = script.decoded_script()?;
-    let params = script.decoded_params()?;
+    let mut params = script.decoded_params()?;
+    if let Some(crypto_params) = &script.crypto_params {
+        params["crypto_params"] = serde_json::to_value(crypto_params)?;
+    }
 
     run_js(&script_content, Some(params)).await
 }

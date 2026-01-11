@@ -32,6 +32,9 @@ use anyhow::Result;
 use std::time::Duration;
 use tokio::net::TcpListener;
 
+// Re-export TunnelMaterial from crypt crate
+pub use crypt::TunnelMaterial;
+
 mod connection;
 mod consts;
 mod proxy;
@@ -48,6 +51,7 @@ pub struct TunnelConnectInfo {
     pub startup_time_ms: u64,    // Timeout for listening
     pub keep_listening_after_timeout: bool, // whether to keep listening after timeout
     pub enable_ipv6: bool,       // whether to enable ipv6 (local and remote)
+    pub params: Option<TunnelMaterial>, // Optional tunnel material (for future use)
 }
 
 // On new releases, the min_listening_ms is the time the tunnel will stay alive waiting for initial connections
