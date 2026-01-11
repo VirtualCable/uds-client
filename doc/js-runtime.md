@@ -384,17 +384,60 @@ Adds an application handle to the list of waitable applications.
 Starts a tunnel connection.
 
 **Parameters:**
-- `addr` (string): The address to connect to.
-- `port` (number): The port number.
-- `ticket` (string): The connection ticket.
-- `startup_time_ms` (number, optional): Startup timeout in milliseconds (default: 0).
-- `check_certificate` (boolean, optional): Whether to check certificates (default: true).
-- `local_port` (number, optional): The local port to bind to.
-- `keep_listening_after_timeout` (boolean, optional): Whether to keep listening after timeout (default: false).
-- `enable_ipv6` (boolean, optional): Whether to enable IPv6 (default: false).
+- `params` (object): An object with the following properties:
+  - `addr` (string): The address to connect to.
+  - `port` (number): The port number.
+  - `ticket` (string): The connection ticket.
+  - `startup_time_ms` (number, optional): Startup timeout in milliseconds (default: 0).
+  - `check_certificate` (boolean, optional): Whether to check certificates (default: true).
+  - `local_port` (number, optional): The local port to bind to.
+  - `keep_listening_after_timeout` (boolean, optional): Whether to keep listening after timeout (default: false).
+  - `enable_ipv6` (boolean, optional): Whether to enable IPv6 (default: false).
+  - `crypto_params` (object, optional): Optional cryptographic material for the tunnel. If provided, it must be an object with the following fields:
+    - `key_send` (Uint8Array | array of numbers): 32-byte key used to encrypt outgoing data.
+    - `key_receive` (Uint8Array | array of numbers): 32-byte key used to decrypt incoming data.
+    - `nonce_send` (Uint8Array | array of numbers): 12-byte nonce used for outgoing packets.
+    - `nonce_receive` (Uint8Array | array of numbers): 12-byte nonce used for incoming packets.
 
 **Returns:** object - An object containing the assigned port: `{port: number}`.
 
+### Examples
+
+```javascript
+// Add files for cleanup
+Tasks.addEarlyUnlinkableFile("temp1.txt");
+Tasks.addLateUnlinkableFile("temp2.txt");
+
+// Add waitable app
+Tasks.addWaitableApp(12345);
+
+// Start tunnel without crypto params (object form)
+const tunnel = await Tasks.startTunnel({
+    addr: "example.com",
+    port: 443,
+    ticket: "ticket123",
+    startup_time_ms: 5000,
+    check_certificate: true
+});
+console.log("Tunnel port:", tunnel.port);
+
+// Start tunnel with explicit crypto parameters (Uint8Array or array of bytes)
+const crypto = {
+    key_send: new Uint8Array(32),       // fill with 32 bytes
+    key_receive: new Uint8Array(32),    // fill with 32 bytes
+    nonce_send: new Uint8Array(12),     // fill with 12 bytes
+    nonce_receive: new Uint8Array(12),  // fill with 12 bytes
+};
+const tunnelWithCrypto = await Tasks.startTunnel({
+    addr: "example.com",
+    port: 443,
+    ticket: "ticket123",
+    startup_time_ms: 5000,
+    check_certificate: true,
+    crypto_params: crypto
+});
+console.log("Tunnel port (with crypto):", tunnelWithCrypto.port);
+```
 ### Examples
 
 ```javascript
@@ -493,5 +536,5 @@ RDP.start({
 | Tasks   | addEarlyUnlinkableFile   | file_path: string | Adds file for early cleanup |
 | Tasks   | addLateUnlinkableFile    | file_path: string | Adds file for late cleanup |
 | Tasks   | addWaitableApp           | task_handle: number | Adds waitable application |
-| Tasks   | startTunnel (async)      | addr: string, port: number, ticket: string, startup_time_ms?: number, check_certificate?: boolean, local_port?: number, keep_listening_after_timeout?: boolean, enable_ipv6?: boolean | Starts tunnel connection |
+| Tasks   | startTunnel (async)      | params: { addr: string, port: number, ticket: string, startup_time_ms?: number, check_certificate?: boolean, local_port?: number, keep_listening_after_timeout?: boolean, enable_ipv6?: boolean, crypto_params?: object } | Starts tunnel connection |
 | RDP     | start            | settings: object | Starts RDP connection |

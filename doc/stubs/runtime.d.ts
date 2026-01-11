@@ -44,7 +44,7 @@ declare module "runtime" {
     function addEarlyUnlinkableFile(file_path: string): void;
     function addLateUnlinkableFile(file_path: string): void;
     function addWaitableApp(task_handle: number): void;
-    function startTunnel(addr: string, port: number, ticket: string, startup_time_ms?: number, check_certificate?: boolean, local_port?: number, keep_listening_after_timeout?: boolean, enable_ipv6?: boolean): Promise<{port: number}>;
+    function startTunnel(params: { addr: string, port: number, ticket: string, startup_time_ms?: number, check_certificate?: boolean, local_port?: number, keep_listening_after_timeout?: boolean, enable_ipv6?: boolean, crypto_params?: { key_send: Uint8Array | number[], key_receive: Uint8Array | number[], nonce_send: Uint8Array | number[], nonce_receive: Uint8Array | number[] } }): Promise<{port: number}>;
   }
 
   export namespace RDP {
