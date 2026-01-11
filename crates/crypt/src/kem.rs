@@ -11,6 +11,7 @@ use libcrux_ml_kem::mlkem768::generate_key_pair as ml_kem_generate_key_pair;
 
 // Note, changes to kem size (1024, 768 or 512) will need to update also SECRET_KEY_SIZE and CIPHERTEXT_SIZE
 pub const SECRET_KEY_SIZE: usize = 2400;
+pub const PUBLIC_KEY_SIZE: usize = 1184;
 pub const CIPHERTEXT_SIZE: usize = 1088;
 
 /// Generate a new KEM keypair (private key and public key)

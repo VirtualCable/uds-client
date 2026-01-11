@@ -65,14 +65,14 @@ const TEST_TICKET_JSON: &str = r#"{
 //   }
 // }
 
-fn get_private_key_bytes() -> Result<Vec<u8>> {
+fn get_private_key_bytes() -> Result<[u8; SECRET_KEY_SIZE]> {
     let kem_private_key_bytes = general_purpose::STANDARD
         .decode(PRIVATE_KEY_768_TESTING)
         .map_err(|e| anyhow::format_err!("Failed to decode base64 KEM private key: {}", e))?;
     let kem_private_key_bytes: [u8; SECRET_KEY_SIZE] = kem_private_key_bytes
         .try_into()
         .map_err(|_| anyhow::format_err!("Invalid KEM private key size"))?;
-    Ok(kem_private_key_bytes.to_vec())
+    Ok(kem_private_key_bytes)
 }
 
 #[test]
@@ -80,7 +80,7 @@ fn test_recover_invalid_data_from_json() {
     let ticket = Ticket::new("AES-256-GCM", "", "");
 
     let result =
-        ticket.recover_data_from_json(TICKET_ID_TESTING.as_bytes(), get_private_key_bytes().unwrap());
+        ticket.recover_data_from_json(TICKET_ID_TESTING.as_bytes(), &get_private_key_bytes().unwrap());
     assert!(result.is_err());
 }
 
@@ -89,7 +89,7 @@ fn test_recover_valid_data_from_json() {
     let ticket: Ticket = serde_json::from_str(TEST_TICKET_JSON).unwrap();
 
     let result =
-        ticket.recover_data_from_json(TICKET_ID_TESTING.as_bytes(), get_private_key_bytes().unwrap());
+        ticket.recover_data_from_json(TICKET_ID_TESTING.as_bytes(), &get_private_key_bytes().unwrap());
     assert!(
         result.is_ok(),
         "Failed to recover data from JSON ticket: {:?}",

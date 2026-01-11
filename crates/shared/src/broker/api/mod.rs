@@ -31,11 +31,11 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
-use reqwest::{Client, ClientBuilder};
 use base64::{Engine as _, engine::general_purpose};
+use reqwest::{Client, ClientBuilder};
 
 use crate::{consts, log};
-use crypt::{Ticket, generate_key_pair};
+use crypt::{PUBLIC_KEY_SIZE, SECRET_KEY_SIZE, Ticket, generate_key_pair};
 
 pub mod types;
 
@@ -54,6 +54,8 @@ pub struct UdsBrokerApi {
     client: Client,
     broker_url: String,
     hostname: String,
+    public_key: [u8; PUBLIC_KEY_SIZE],
+    private_key: [u8; SECRET_KEY_SIZE],
 }
 
 impl UdsBrokerApi {
@@ -74,13 +76,31 @@ impl UdsBrokerApi {
             builder = builder.no_proxy();
         }
 
-        // panic if client cannot be built, as this is a programming error (invalid URL, etc)
+
+        // Note: unwraps are intentinonal here, if we cannot build the client, we want to
+        // abort early.
+
         let client = builder.build().unwrap();
+
+        // Generate ephemeral KEM keypair
+        let (private_key, public_key) = generate_key_pair().unwrap();
 
         Self {
             client,
             broker_url: broker_url.to_string().trim_end_matches('/').to_string(),
             hostname: hostname::get().unwrap().to_string_lossy().to_string(),
+            public_key: public_key.try_into().unwrap(),
+            private_key: private_key.try_into().unwrap(),
+        }
+    }
+
+    // Only for tests
+    #[cfg(test)]
+    pub fn with_keys(self, private_key: [u8; SECRET_KEY_SIZE], public_key: [u8; PUBLIC_KEY_SIZE]) -> Self {
+        Self {
+            public_key,
+            private_key,
+            ..self
         }
     }
 
@@ -126,24 +146,17 @@ impl BrokerApi for UdsBrokerApi {
             scrambler
         );
 
-        // Generate ephemeral KEM keypair
-        let (private_key, public_key) = generate_key_pair()?;
-        
         // Prepare request body
         let req: types::TicketReqBody = types::TicketReqBody {
             scrambler,
-            kem_kyber_key: &general_purpose::STANDARD.encode(&public_key),
+            kem_kyber_key: &general_purpose::STANDARD.encode(self.public_key),
             hostname: &self.hostname,
             version: consts::UDS_CLIENT_VERSION,
         };
 
         let response = self
             .client
-            .post(format!(
-                "{}/{}/ticket",
-                self.broker_url,
-                ticket,
-            ))
+            .post(format!("{}/{}/ticket", self.broker_url, ticket,))
             .json(&req)
             .headers(self.headers())
             .send()
@@ -151,18 +164,17 @@ impl BrokerApi for UdsBrokerApi {
 
         // Extract real script info from Ticket
         response
-           .json::<types::BrokerResponse<Ticket>>()
-           .await?
-           .into_result()?
-           .recover_data_from_json(ticket.as_bytes(), private_key)
-           .map(|json_value| {
-               serde_json::from_value::<types::Script>(json_value)
-                   .map_err(|e| types::Error {
-                       message: format!("Failed to parse script from ticket data: {}", e),
-                       is_retryable: false,
-                       percent: 0,
-                   })
-           })?
+            .json::<types::BrokerResponse<Ticket>>()
+            .await?
+            .into_result()?
+            .recover_data_from_json(ticket.as_bytes(), &self.private_key)
+            .map(|json_value| {
+                serde_json::from_value::<types::Script>(json_value).map_err(|e| types::Error {
+                    message: format!("Failed to parse script from ticket data: {}", e),
+                    is_retryable: false,
+                    percent: 0,
+                })
+            })?
 
         // response
         //     .json::<types::BrokerResponse<types::Script>>()

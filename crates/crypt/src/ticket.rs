@@ -72,12 +72,8 @@ impl Ticket {
     pub fn recover_data_from_json(
         &self,
         ticket_id: &[u8],
-        kem_private_key: Vec<u8>,
+        kem_private_key: &[u8; SECRET_KEY_SIZE],
     ) -> Result<serde_json::Value> {
-        let kem_private_key: [u8; SECRET_KEY_SIZE] = kem_private_key
-            .try_into()
-            .map_err(|_| anyhow::format_err!("Invalid KEM private key size"))?;
-
         let kem_private_key = PrivateKey::from(kem_private_key);
 
         // Extract shared_secret from KEM ciphertext
