@@ -98,10 +98,12 @@ fn test_recover_valid_data_from_json() {
 
     // Test material fields are present
     let json_value = result.unwrap();
-    assert!(json_value.get("key_send").is_some());
-    assert!(json_value.get("key_receive").is_some());
-    assert!(json_value.get("nonce_send").is_some());
-    assert!(json_value.get("nonce_receive").is_some());
+    println!("Recovered JSON value: {}", json_value);
+    // Get object "crypto_params"
+    let crypto_params = json_value.get("crypto_params").expect("Missing crypto_params field");
+    assert!(crypto_params.is_object(), "crypto_params is not an object");
+    assert!(crypto_params.get("key_send").is_some());
+    assert!(crypto_params.get("key_receive").is_some());
 
     assert_eq!(
         json_value.get("script").unwrap(),

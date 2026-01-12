@@ -76,8 +76,6 @@ fn add_waitable_app_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsRe
 struct CryptoParams {
     pub key_send: Vec<u8>,
     pub key_receive: Vec<u8>,
-    pub nonce_send: Vec<u8>,
-    pub nonce_receive: Vec<u8>,
 }
 
 impl From<CryptoParams> for tunnel::TunnelMaterial {
@@ -86,8 +84,7 @@ impl From<CryptoParams> for tunnel::TunnelMaterial {
             key_payload: [0; 32], // Not used in tunnel
             key_send: cp.key_send.try_into().unwrap_or([0; 32]),
             key_receive: cp.key_receive.try_into().unwrap_or([0; 32]),
-            nonce_send: cp.nonce_send.try_into().unwrap_or([0; 12]),
-            nonce_receive: cp.nonce_receive.try_into().unwrap_or([0; 12]),
+            nonce_payload: [0; 12], // Not used in tunnel
         }
     }
 }

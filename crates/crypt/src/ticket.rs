@@ -16,8 +16,7 @@ pub struct TunnelMaterial {
     pub key_payload: [u8; 32],
     pub key_send: [u8; 32],
     pub key_receive: [u8; 32],
-    pub nonce_send: [u8; 12],
-    pub nonce_receive: [u8; 12],
+    pub nonce_payload: [u8; 12],
 }
 
 pub(crate) fn derive_tunnel_material(shared_secret: &[u8], ticket_id: &[u8]) -> Result<TunnelMaterial> {
@@ -28,28 +27,25 @@ pub(crate) fn derive_tunnel_material(shared_secret: &[u8], ticket_id: &[u8]) -> 
     // HKDF-Extract + Expand with SHA-256
     let hk = Hkdf::<Sha256>::new(Some(ticket_id), shared_secret);
 
-    let mut okm = [0u8; 120];
+    let mut okm = [0u8; 108];
     hk.expand(b"openuds-ticket-crypt", &mut okm)
         .map_err(|_| anyhow::format_err!("HKDF expand failed"))?;
 
     let mut key_payload = [0u8; 32];
     let mut key_send = [0u8; 32];
     let mut key_receive = [0u8; 32];
-    let mut nonce_send = [0u8; 12];
-    let mut nonce_receive = [0u8; 12];
+    let mut nonce_payload = [0u8; 12];
 
     key_payload.copy_from_slice(&okm[0..32]);
     key_send.copy_from_slice(&okm[32..64]);
     key_receive.copy_from_slice(&okm[64..96]);
-    nonce_send.copy_from_slice(&okm[96..108]);
-    nonce_receive.copy_from_slice(&okm[108..120]);
+    nonce_payload.copy_from_slice(&okm[96..108]);
 
     Ok(TunnelMaterial {
         key_payload,
         key_send,
         key_receive,
-        nonce_send,
-        nonce_receive,
+        nonce_payload,
     })
 }
 
@@ -96,7 +92,7 @@ impl Ticket {
         let material = derive_tunnel_material(&shared_secret, ticket_id)?;
 
         let cipher = Aes256Gcm::new(material.key_payload.as_ref().into());
-        let nonce: &Nonce<typenum::U12> = Nonce::from_slice(material.nonce_send.as_ref());
+        let nonce: &Nonce<typenum::U12> = Nonce::from_slice(material.nonce_payload.as_ref());
         let plaintext = cipher
             .decrypt(nonce, data.as_ref())
             .map_err(|_| anyhow::format_err!("AES-256-GCM decryption failed"))?;
