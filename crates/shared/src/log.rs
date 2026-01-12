@@ -275,7 +275,7 @@ mod tests {
     #[test]
     #[ignore] // Ignored because it requires Windows service environment
     fn test_logging_on_network_path() {
-        unsafe { std::env::set_var("UDSACTOR_TESTS_LOG_PATH", r"\\172.27.1.45\shared") }
+        unsafe { std::env::set_var("UDSCLIENT_TESTS_LOG_PATH", r"\\172.27.1.45\shared") }
         setup_logging("debug", LogType::Tests);
         info!("This is a test log entry on network path");
         debug!("Debug entry");
@@ -297,8 +297,8 @@ mod tests {
     #[test]
     fn test_logging_with_datetime() {
         unsafe {
-            std::env::set_var("UDSACTOR_TESTS_LOG_PATH", std::env::temp_dir());
-            std::env::set_var("UDSACTOR_TESTS_LOG_USE_DATETIME", "true");
+            std::env::set_var("UDSCLIENT_TESTS_LOG_PATH", std::env::temp_dir());
+            std::env::set_var("UDSCLIENT_TESTS_LOG_USE_DATETIME", "true");
         }
         setup_logging("debug", LogType::Tests);
         info!("This is a test log entry with datetime in filename");
@@ -312,7 +312,7 @@ mod tests {
     #[ignore] // Ignored because it generates a lot of log data on console
     fn test_logging_rotation() {
         let temp_dir = std::env::temp_dir();
-        unsafe { std::env::set_var("UDSACTOR_TESTS_LOG_PATH", &temp_dir) }
+        unsafe { std::env::set_var("UDSCLIENT_TESTS_LOG_PATH", &temp_dir) }
         setup_logging("debug", LogType::Tests);
         let log_file = temp_dir.join("udsactor-tests.log");
         // Write enough logs to exceed 16MB
