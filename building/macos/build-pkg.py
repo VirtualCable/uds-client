@@ -515,6 +515,12 @@ def main() -> None:
         print(f"Moving package to {destination}")
         # If already exists, remove
         shutil.copy(pkg_name, destination)
+        
+    # Note that the binaries and app are signed ad-hoc by default
+    print("=== Build process completed successfully ===")
+    print(f"App bundle: {APP_DIR}")
+    print(f"App is signed ad-hoc by default. Not to be distributed as-is.")
+    print(f"Package: {pkg_name}. Unsigned by default. Not to be distributed as-is.")
 
 
 if __name__ == "__main__":
