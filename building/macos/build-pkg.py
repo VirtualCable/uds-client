@@ -6,6 +6,7 @@ from pathlib import Path
 import os
 import sys
 
+
 def read_version(version_file: Path) -> str:
     # First, if environment variable UDS_VERSION is set, use it
     env_version = os.environ.get("UDS_VERSION")
@@ -15,6 +16,7 @@ def read_version(version_file: Path) -> str:
     if version_file.exists():
         return version_file.read_text().strip()
     return "DEVEL"
+
 
 # Constants
 SCRIPT_DIR: typing.Final[Path] = Path(__file__).resolve().parent
@@ -49,6 +51,12 @@ FREERDP_BASE_LIBS: typing.Final[list[str]] = [
 FREERDP_ROOT: Path = Path(os.environ.get("FREERDP_ROOT", "/usr/local/"))
 
 
+def ad_hoc_sign(path: Path, deep: bool = False) -> None:
+    print(f"[SIGN] Ad-hoc signing {path}")
+    args = ["codesign"] + (["--deep"] if deep else []) + ["--force", "--sign", "-", str(path)]
+    subprocess.run(args, check=True)
+
+
 # Hook for every binary after creation
 def process_binary_hook(binary_path: Path) -> None:
     hook = os.environ.get("UDS_PROCESS_BINARY")
@@ -56,7 +64,8 @@ def process_binary_hook(binary_path: Path) -> None:
         print(f"[HOOK] Processing {binary_path.name} with {hook}")
         subprocess.run([hook, str(binary_path.resolve())], check=True)
     else:
-        print(f"[HOOK] No binary hook defined for {binary_path.name}")
+        print(f"[HOOK] No binary hook defined for {binary_path.name}, signing ad-hoc")
+        ad_hoc_sign(binary_path)
 
 
 def process_app_hook(app_path: Path) -> None:
@@ -66,6 +75,8 @@ def process_app_hook(app_path: Path) -> None:
         subprocess.run([hook, str(app_path.resolve())], check=True)
     else:
         print(f"[HOOK] No app hook defined for {app_path.name}")
+        ad_hoc_sign(app_path, deep=True)
+
 
 # Hook for the final package after creation
 def process_pkg_hook(pkg_path: Path) -> None:
@@ -269,8 +280,8 @@ def fix_install_names(binary: Path) -> None:
             print(f"   - WARN: failed to rewrite {dep}: {exc}")
 
     # Invoke hook here
-    if binary.suffix == ".dylib": 
-        process_binary_hook(binary)    
+    if binary.suffix == ".dylib":
+        process_binary_hook(binary)
 
 
 def copy_freerdp_lib(
@@ -485,11 +496,11 @@ def main() -> None:
 
     print("==> App bundle structure created successfully")
     print(f"Output path: {APP_DIR}")
-    
+
     print("==> Final hook processing for executables")
     for exe in ["mac-launcher", "launcher"]:
         process_binary_hook(APP_DIR / "Contents" / "MacOS" / exe)
-    
+
     # Now process App hook
     print("==> Final hook processing for app bundle")
     process_app_hook(APP_DIR)
