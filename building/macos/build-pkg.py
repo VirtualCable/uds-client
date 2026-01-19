@@ -498,7 +498,7 @@ def main() -> None:
     print(f"Output path: {APP_DIR}")
 
     print("==> Final hook processing for executables")
-    for exe in ["launcer", "mac-launcher"]:
+    for exe in ["launcher", "mac-launcher"]:
         process_binary_hook(APP_DIR / "Contents" / "MacOS" / exe)
 
     # Now process App hook
