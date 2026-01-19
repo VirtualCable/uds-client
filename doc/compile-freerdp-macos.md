@@ -3,10 +3,9 @@
 # Also python is needed (maybe pyenv to manage versions)
 # brew install git cmake pkg-config libusb openssl ffmpeg jpeg-turbo openh264
 # Note:
-# To ensure the macos compatibility target is set to at least 12.0
-# export MACOSX_DEPLOYMENT_TARGET=12.0
-# brew reinstall --build-from-source ...
-
+# Will build against the latest macOS SDK installed on your system.
+# To ensure compat with older macOS versions, better compile it
+# on the oldest macOS you want to support. (homebrew, etc..)
 
 ## Clone the FreeRDP repository
 
@@ -15,7 +14,6 @@ cd FreeRDP
 
 cmake -B build \
   -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
   -DWITH_CLIENT_COMMON=ON \
   -DWITH_INTERNAL_MD4=ON \
   -DWITH_INTERNAL_MD5=ON \
