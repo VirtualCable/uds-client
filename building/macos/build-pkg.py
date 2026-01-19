@@ -487,8 +487,8 @@ def main() -> None:
         fix_install_names(dst_lib_dir / dep_name)
 
     # Executables
-    fix_install_names(APP_DIR / "Contents" / "MacOS" / "mac-launcher")
     fix_install_names(APP_DIR / "Contents" / "MacOS" / "launcher")
+    fix_install_names(APP_DIR / "Contents" / "MacOS" / "mac-launcher")
 
     # Validate bundle
     if not validate_bundle_dependencies(APP_DIR):
@@ -498,7 +498,7 @@ def main() -> None:
     print(f"Output path: {APP_DIR}")
 
     print("==> Final hook processing for executables")
-    for exe in ["mac-launcher", "launcher"]:
+    for exe in ["launcer", "mac-launcher"]:
         process_binary_hook(APP_DIR / "Contents" / "MacOS" / exe)
 
     # Now process App hook
