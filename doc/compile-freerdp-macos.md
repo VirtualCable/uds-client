@@ -1,6 +1,7 @@
 # Very simple guide to building FreeRDP on mac
 # Needs homebrew and the following packages installed:
-# brew install cmake pkg-config libusb openssl ffmpeg jpeg-turbo openh264
+# Also python is needed (maybe pyenv to manage versions)
+# brew install git cmake pkg-config libusb openssl ffmpeg jpeg-turbo openh264
 # Note:
 # To ensure the macos compatibility target is set to at least 12.0
 # export MACOSX_DEPLOYMENT_TARGET=12.0
@@ -79,4 +80,4 @@ cmake -B build \
   -DWITH_DEBUG_XV=OFF
 
 cmake --build build --config Release --parallel 16
-cmake --install ./build/ --config Release --prefix /Users/dkmaster/projects/rdp/local
+cmake --install ./build/ --config Release --prefix /usr/local

@@ -161,12 +161,12 @@ pub fn setup_panic_hook() {
 pub fn setup_logging(level: &str, log_type: LogType) {
     let (level_key, log_path, use_datetime, log_name) = (
         format!(
-            "UDSCLIENT_{}_LOG_LEVEL",
+            "UDSLAUNCHER_{}_LOG_LEVEL",
             log_type.to_string().to_uppercase()
         ),
-        format!("UDSCLIENT_{}_LOG_PATH", log_type.to_string().to_uppercase()),
+        format!("UDSLAUNCHER_{}_LOG_PATH", log_type.to_string().to_uppercase()),
         format!(
-            "UDSCLIENT_{}_LOG_USE_DATETIME",
+            "UDSLAUNCHER_{}_LOG_USE_DATETIME",
             log_type.to_string().to_uppercase()
         ),
         format!("uds-{}", log_type.to_string().to_lowercase()),
