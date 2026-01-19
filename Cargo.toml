@@ -79,8 +79,8 @@ cpal = "0.17.1"
 open = "5.3"
 
 # Post-quantum cryptography
-libcrux-ml-dsa = "0.0.4"
-libcrux-ml-kem = "0.0.4"
+libcrux-ml-dsa = "0.0.5"
+libcrux-ml-kem = "0.0.5"
 
 # key derivation
 hkdf = "0.12"
@@ -102,7 +102,7 @@ tracing-subscriber = { version = "0.3.22", features = [
 tracing-log = "0.2.0"
 
 # Testing
-rcgen = "0.14.6"
+rcgen = "0.14.7"
 serial_test = "3.3"
 mockito = "1.7"
 
