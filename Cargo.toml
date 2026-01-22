@@ -110,6 +110,7 @@ mockito = "1.7"
 bindgen = "0.72"
 cc = "1.2"
 winres = "0.1.12"
+glob = "0.3.3"
 
 # Linux/macos
 libc = "0.2.180"

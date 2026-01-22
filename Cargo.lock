@@ -4713,6 +4713,7 @@ dependencies = [
  "clipboard-rs",
  "crossbeam",
  "freerdp-sys",
+ "glob",
  "shared",
  "windows 0.62.2",
  "zeroize",

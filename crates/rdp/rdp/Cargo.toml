@@ -22,3 +22,5 @@ clipboard-rs = { workspace = true }
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true }
 
+[build-dependencies]
+glob = { workspace = true }

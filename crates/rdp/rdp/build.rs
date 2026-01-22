@@ -29,7 +29,9 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 #![allow(dead_code)]
-use std::{env, fs, io, path::PathBuf};
+use std::{env, fs, io, path::{PathBuf, Path}};
+
+use glob::glob;
 
 fn copy_if_different(src: &PathBuf, dst: &PathBuf) -> io::Result<()> {
     if !dst.exists() || fs::metadata(src)?.len() != fs::metadata(dst)?.len() {
@@ -38,6 +40,17 @@ fn copy_if_different(src: &PathBuf, dst: &PathBuf) -> io::Result<()> {
         fs::copy(src, dst)?;
     }
     Ok(())
+}
+
+fn resolve_name(path: &Path, name: &str) -> String {
+    // Resulves names with * wildcards
+    let path = path.join(name);
+    // try globbing
+    let pattern = path.to_string_lossy().to_string();
+    if let Some(path) = glob(&pattern).expect("Failed to read glob pattern").flatten().next() {
+        return path.file_name().unwrap().to_string_lossy().to_string();
+    }
+    name.to_string()
 }
 
 fn copy_windows_dlls() {
@@ -55,6 +68,7 @@ fn copy_windows_dlls() {
         .join("local_dlls");
 
     fs::create_dir_all(&out_dir).unwrap();
+
     let freerdp_path = env::var(FREERDP_ROOT_ENV_VAR).unwrap_or_else(|_| {
         panic!(
             "Environment variable {} is not set. Please set it to the FreeRDP installation path.",
@@ -98,26 +112,24 @@ fn copy_windows_dlls() {
 
         // Related to ffmpeg, for video decoding
         // "libmp3lame.dll",
-        "avcodec-61.dll",
-        "avutil-59.dll",
-        "swscale-8.dll",
-        "swresample-5.dll",
-        "openh264-7.dll",
-        "avcodec-61.dll",
-        "swscale-8.dll",
-        "avutil-59.dll",
-        "swresample-5.dll",
+        "avcodec-*.dll",
+        "avutil-*.dll",
+        "swscale-*.dll",
+        "openh264-*.dll",
+        "swresample-*.dll",
         "cjson.dll",
     ];
 
     for dll in freerdp_dlls {
-        copy_if_different(&freerdp_bin.join(dll), &out_dir.join(dll)).unwrap();
+        let dll = resolve_name(&freerdp_bin, dll);
+        copy_if_different(&freerdp_bin.join(&dll), &out_dir.join(&dll)).unwrap();
         println!("cargo:rerun-if-changed={}", freerdp_bin.join(dll).display());
     }
 
     for dll in vcpkg_dlls {
-        copy_if_different(&vcpkg_bin.join(dll), &out_dir.join(dll)).unwrap();
-        println!("cargo:rerun-if-changed={}", vcpkg_bin.join(dll).display());
+        let dll = resolve_name(&vcpkg_bin, dll);
+        copy_if_different(&vcpkg_bin.join(&dll), &out_dir.join(&dll)).unwrap();
+        println!("cargo:rerun-if-changed={}", vcpkg_bin.join(&dll).display());
     }
 
     println!("cargo:rustc-link-search=native={}", vcpkg_lib.display());
