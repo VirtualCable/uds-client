@@ -109,11 +109,11 @@ pub async fn connect_and_upgrade(
     Ok(split(tls_stream))
 }
 
-async fn send_cmd(
-    reader: &mut ReadHalf<TlsStream<TcpStream>>,
-    writer: &mut WriteHalf<TlsStream<TcpStream>>,
-    cmd: &[u8],
-) -> Result<()> {
+async fn send_cmd<R, W>(reader: &mut R, writer: &mut W, cmd: &[u8]) -> Result<()>
+where
+    R: AsyncReadExt + Unpin,
+    W: AsyncWriteExt + Unpin,
+{
     log::debug!("Sending command: {:?}", cmd);
     // Send command
     writer
@@ -134,10 +134,11 @@ async fn send_cmd(
     Ok(())
 }
 
-pub async fn send_test_cmd(
-    reader: &mut ReadHalf<TlsStream<TcpStream>>,
-    writer: &mut WriteHalf<TlsStream<TcpStream>>,
-) -> Result<()> {
+pub async fn send_test_cmd<R, W>(reader: &mut R, writer: &mut W) -> Result<()>
+where
+    R: AsyncReadExt + Unpin,
+    W: AsyncWriteExt + Unpin,
+{
     // Send CMD_TEST with timeout
     timeout(
         consts::CMD_TIMEOUT_SECS,
@@ -147,11 +148,11 @@ pub async fn send_test_cmd(
     .context("CMD_TEST timed out")?
 }
 
-pub async fn send_open_cmd(
-    reader: &mut ReadHalf<TlsStream<TcpStream>>,
-    writer: &mut WriteHalf<TlsStream<TcpStream>>,
-    ticket: &str,
-) -> Result<()> {
+pub async fn send_open_cmd<R, W>(reader: &mut R, writer: &mut W, ticket: &str) -> Result<()>
+where
+    R: AsyncReadExt + Unpin,
+    W: AsyncWriteExt + Unpin,
+{
     // Convert ticket to bytes and send OPEN command with timeout
 
     let cmd_open = [consts::CMD_OPEN, ticket.as_bytes()].concat();

@@ -131,7 +131,7 @@ impl AppWindow {
                     ui.add_space(20.0);
 
                     if ui.add_sized([80.0, 30.0], egui::Button::new(self.gettext("Cancel"))).clicked() {
-                        self.stop.set();  // main update will handle this
+                        self.stop.trigger();  // main update will handle this
                     }
                 });
             });

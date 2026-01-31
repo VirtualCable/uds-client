@@ -44,7 +44,7 @@ impl Trigger {
         }
     }
 
-    pub fn set(&self) {
+    pub fn trigger(&self) {
         let (lock, cvar, notify) = &*self.state;
         let mut guard = lock.lock().unwrap();
         *guard = true;
@@ -52,7 +52,7 @@ impl Trigger {
         notify.notify_waiters();
     }
 
-    pub fn is_set(&self) -> bool {
+    pub fn is_triggered(&self) -> bool {
         let (lock, _, _) = &*self.state;
         *lock.lock().unwrap()
     }
@@ -74,7 +74,7 @@ impl Trigger {
         *guard
     }
 
-    pub async fn async_wait(&self) {
+    pub async fn wait_async(&self) {
         let (lock, _, notify) = &*self.state;
         {
             let guard = lock.lock().unwrap();
@@ -85,7 +85,7 @@ impl Trigger {
         notify.notified().await;
     }
 
-    pub async fn async_wait_timeout(&self, timeout: std::time::Duration) -> bool {
+    pub async fn wait_timeout_async(&self, timeout: std::time::Duration) -> bool {
         let (lock, _, notify) = &*self.state;
         {
             let guard = lock.lock().unwrap();
@@ -119,7 +119,7 @@ mod tests {
         let handle = thread::spawn(move || {
             // Wait 100ms and then set the trigger
             thread::sleep(Duration::from_millis(100));
-            trigger_clone.set();
+            trigger_clone.trigger();
         });
         handle.join().unwrap();
         trigger.wait();
@@ -135,10 +135,10 @@ mod tests {
     #[test]
     fn trigger_is_set() {
         let trigger = Trigger::new();
-        assert!(!trigger.is_set());
-        trigger.set();
-        assert!(trigger.is_set());
+        assert!(!trigger.is_triggered());
+        trigger.trigger();
+        assert!(trigger.is_triggered());
         trigger.wait(); // Should return immediately
-        assert!(trigger.is_set());
+        assert!(trigger.is_triggered());
     }
 }

@@ -70,7 +70,7 @@ pub async fn wait_all_apps(stop: Trigger) {
         };
         if all_done
             || stop
-                .async_wait_timeout(std::time::Duration::from_secs(2))
+                .wait_timeout_async(std::time::Duration::from_secs(2))
                 .await
         {
             break;
@@ -82,7 +82,7 @@ pub async fn wait_all_tunnels(stop: Trigger) {
     loop {
         if !is_any_tunnel_active()
             || stop
-                .async_wait_timeout(std::time::Duration::from_secs(2))
+                .wait_timeout_async(std::time::Duration::from_secs(2))
                 .await
         {
             break;
@@ -111,7 +111,7 @@ async fn wait_internal_rdp(stop: Trigger) {
     loop {
         if !is_internal_rdp_running()
             || stop
-                .async_wait_timeout(std::time::Duration::from_secs(2))
+                .wait_timeout_async(std::time::Duration::from_secs(2))
                 .await
         {
             break;
@@ -154,7 +154,7 @@ pub fn unlink_late_files() {
 
 // Wait the time indicated, remove early unlinkable files, wait all apps, then remove late unlinkable files
 pub async fn wait_all_and_cleanup(timeout: std::time::Duration, stop: Trigger) {
-    stop.async_wait_timeout(timeout).await;
+    stop.wait_timeout_async(timeout).await;
     unlink_early_files();
 
     // Wait all apps to finish, or until stop is set

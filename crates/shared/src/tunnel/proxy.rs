@@ -75,7 +75,7 @@ pub async fn start_proxy(
                             }
                         }
                     }
-                    _ = trigger.async_wait() => {
+                    _ = trigger.wait_async() => {
                         // Trigger fired, ensure send close_notify
                         let _ = tls_writer.shutdown().await;
                         break;
@@ -113,7 +113,7 @@ pub async fn start_proxy(
                             }
                         }
                     }
-                    _ = trigger.async_wait() => {
+                    _ = trigger.wait_async() => {
                         // Trigger fired; close the client
                         let _ = client_writer.shutdown().await;
                         break;

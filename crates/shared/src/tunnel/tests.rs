@@ -49,7 +49,7 @@ async fn test_connect_and_upgrade() {
     writer.shutdown().await.ok();
     drop(writer);
     drop(reader);
-    trigger.set();
+    trigger.trigger();
     server_handle.await.unwrap();
 }
 
@@ -66,7 +66,7 @@ async fn test_test_cmd() {
     writer.shutdown().await.ok();
     drop(writer);
     drop(reader);
-    trigger.set();
+    trigger.trigger();
     server_handle.await.unwrap();
 }
 
@@ -87,7 +87,7 @@ async fn test_open_cmd() {
     writer.shutdown().await.ok();
     drop(writer);
     drop(reader);
-    trigger.set();
+    trigger.trigger();
     server_handle.await.unwrap();
 }
 
@@ -111,7 +111,7 @@ async fn test_tunnel_runner_starts_and_stop() {
     log::debug!("Test server and runner started on port {}", listen_port);
 
     // Stop the server and runner
-    trigger.set();
+    trigger.trigger();
 
     runner_handle.await.unwrap();
     server_handle.await.unwrap();
@@ -165,7 +165,7 @@ async fn test_tunnel_runner_some_data() {
         .expect("Failed to shutdown connection");
     log::debug!("Sent test and open commands successfully");
 
-    trigger.set();
+    trigger.trigger();
 
     log::debug!("Stopping runner");
     runner_handle.await.unwrap();

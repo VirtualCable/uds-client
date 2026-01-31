@@ -57,7 +57,7 @@ pub fn run(tx: Sender<GuiMessage>, stop: Trigger, host: String, ticket: String, 
                         tx.send(GuiMessage::ShowError(e.to_string())).ok();
                     } else {
                         tx.send(GuiMessage::Close).ok();
-                        stop.set();
+                        stop.trigger();
                     }
                 }
             });

@@ -336,10 +336,10 @@ mod tests {
             "Application thread should be running before stop_notifier is triggered"
         );
         assert!(
-            !stop.is_set(),
+            !stop.is_triggered(),
             "Stop notifier should not be set before triggering"
         );
-        stop.set();
+        stop.trigger();
         let result = handle.join().unwrap();
         assert!(
             result.is_ok(),

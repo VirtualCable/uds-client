@@ -70,7 +70,7 @@ impl AppWindow {
                                 .clicked()
                             {
                                 // Set stop
-                                self.stop.set();
+                                self.stop.trigger();
                             }
                             ui.add_space(12.0);
                         });

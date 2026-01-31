@@ -98,7 +98,7 @@ async fn echo_all_data(
                     }
                 }
             }
-            _ = trigger.async_wait() => {
+            _ = trigger.wait_async() => {
                 // External cancellation: orderly shutdown
                 let _ = writer.shutdown().await;
                 break;
@@ -184,7 +184,7 @@ async fn handle_client(mut tcp: TcpStream, acceptor: TlsAcceptor, trigger: Trigg
                     }
                 }
             }
-            _ = trigger.async_wait() => {
+            _ = trigger.wait_async() => {
                 // External cancellation: orderly shutdown
                 let _ = tls_writer.shutdown().await;
                 break;
@@ -224,7 +224,7 @@ pub async fn run_test_server(port: u16, trigger: Trigger) -> Result<()> {
                     }
                 }
             }
-            _ = trigger.async_wait() => {
+            _ = trigger.wait_async() => {
                 log::info!("Test server stopped by trigger");
                 break;
             }

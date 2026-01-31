@@ -51,6 +51,6 @@ fn main() {
     )
     .unwrap();
 
-    stop_trigger.set();
+    stop_trigger.trigger();
 }
     

@@ -97,7 +97,7 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
                     }
                 });
             }
-            _ = trigger.async_wait() => {
+            _ = trigger.wait_async() => {
                 log::info!("Tunnel runner triggered to stop accepting new connections.");
                 break;
             }
@@ -106,7 +106,7 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
 
     log::debug!("Tunnel runner exiting");
     // Ensure our trigger is set
-    trigger.set();
+    trigger.trigger();
 
     Ok(())
 }

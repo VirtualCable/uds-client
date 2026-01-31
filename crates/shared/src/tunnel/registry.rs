@@ -75,13 +75,13 @@ pub(super) fn register_tunnel(
         let trigger = trigger.clone();
         let active_connections = active_connections.clone();
         async move {
-            trigger.async_wait_timeout(minimum_lifetime).await;
+            trigger.wait_timeout_async(minimum_lifetime).await;
             loop {
                 // If already triggered, async_wait_timeout will return immediately
-                if trigger.async_wait_timeout(Duration::from_secs(1)).await
+                if trigger.wait_timeout_async(Duration::from_secs(1)).await
                     || active_connections.load(std::sync::atomic::Ordering::Relaxed) == 0
                 {
-                    if !trigger.is_set() {
+                    if !trigger.is_triggered() {
                         log::info!(
                             "Minimum lifetime elapsed and no active connections, stopping tunnel {}",
                             id
@@ -91,7 +91,7 @@ pub(super) fn register_tunnel(
                     break;
                 }
                 // Soft poll every second to check active connections
-                trigger.async_wait_timeout(Duration::from_secs(1)).await;
+                trigger.wait_timeout_async(Duration::from_secs(1)).await;
             }
         }
     });
@@ -101,7 +101,7 @@ pub(super) fn register_tunnel(
 pub(super) fn unregister_tunnel(tunnel_id: u32) {
     // Ensure stop trigger is activated
     if let Some(info) = TUNNEL_INFOS.lock().unwrap().get(&tunnel_id) {
-        info.stop.set();
+        info.stop.trigger();
     }
     TUNNEL_INFOS.lock().unwrap().remove(&tunnel_id);
 }
@@ -115,7 +115,7 @@ pub fn is_any_tunnel_active() -> bool {
 pub fn stop_tunnels() {
     let infos = TUNNEL_INFOS.lock().unwrap();
     for (_id, info) in infos.iter() {
-        info.stop.set();
+        info.stop.trigger();
     }
 }
 

@@ -64,7 +64,7 @@ fn register_process() -> (u32, trigger::Trigger) {
 fn unregister_process(process_id: u32) {
     // Ensure trigger is set before unregistering, because someone might be waiting on it
     if let Some(info) = PROCESS_INFOS.lock().unwrap().get(&process_id) {
-        info.stop.set();
+        info.stop.trigger();
     }
     PROCESS_INFOS.lock().unwrap().remove(&process_id);
 }
@@ -107,7 +107,7 @@ pub fn is_running(process_id: u32) -> bool {
 #[allow(dead_code)]
 pub fn stop(process_id: u32) -> anyhow::Result<()> {
     if let Some(info) = PROCESS_INFOS.lock().unwrap().get(&process_id) {
-        info.stop.set();
+        info.stop.trigger();
         Ok(())
     } else {
         Err(anyhow::anyhow!("Process ID {} not found", process_id))
@@ -120,7 +120,7 @@ pub async fn wait(process_id: u32) -> anyhow::Result<()> {
         guard.get(&process_id).cloned()
     };
     if let Some(info) = info {
-        info.stop.async_wait().await;
+        info.stop.wait_async().await;
         Ok(())
     } else {
         Err(anyhow::anyhow!("Process ID {} not found", process_id))
@@ -133,7 +133,7 @@ pub async fn wait_timeout(process_id: u32, timeout: std::time::Duration) -> anyh
         guard.get(&process_id).cloned()
     };
     if let Some(info) = info {
-        let triggered = info.stop.async_wait_timeout(timeout).await;
+        let triggered = info.stop.wait_timeout_async(timeout).await;
         Ok(triggered)
     } else {
         Err(anyhow::anyhow!("Process ID {} not found", process_id))

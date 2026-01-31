@@ -79,8 +79,8 @@ cpal = "0.17.1"
 open = "5.3"
 
 # Post-quantum cryptography
-libcrux-ml-dsa = "0.0.5"
-libcrux-ml-kem = "0.0.5"
+libcrux-ml-dsa = "0.0.6"
+libcrux-ml-kem = "0.0.6"
 
 # key derivation
 hkdf = "0.12"

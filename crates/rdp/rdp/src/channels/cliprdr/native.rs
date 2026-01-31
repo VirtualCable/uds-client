@@ -62,7 +62,7 @@ impl Debug for ClipboardNative {
 
 impl ClipboardNative {
     pub fn stop(&mut self) {
-        self.stop.set();
+        self.stop.trigger();
     }
 
     pub fn set_text(&self, text: &str) -> Result<()> {

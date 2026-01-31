@@ -82,7 +82,7 @@ impl ApplicationHandler<UserEvent> for RdpAppProxy<'_> {
         // If a window event, try to push keyboard events to the channel
         // If close event, trigger stop but allow eframe to handle closing
         if let winit::event::WindowEvent::CloseRequested = &event {
-            self.stop.set();
+            self.stop.trigger();
         }
 
         if self.processing_events.load(Ordering::Relaxed)
