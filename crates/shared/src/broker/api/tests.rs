@@ -106,11 +106,11 @@ const TICKET_RESPONSE_JSON: &str = r#"{
 }"#;
 const TICKET_ID: &str = "c6s9FAa5fhb854BVMckqUBJ4hOXg2iE5i1FYPCuktks4eNZD";
 
-fn get_keypair() -> Result<([u8; SECRET_KEY_SIZE], [u8; PUBLIC_KEY_SIZE])> {
+fn get_keypair() -> Result<([u8; PRIVATE_KEY_SIZE], [u8; PUBLIC_KEY_SIZE])> {
     let kem_private_key_bytes = general_purpose::STANDARD
         .decode(PRIVATE_KEY_768_TESTING)
         .map_err(|e| anyhow::format_err!("Failed to decode base64 KEM private key: {}", e))?;
-    let kem_private_key_bytes: [u8; SECRET_KEY_SIZE] = kem_private_key_bytes
+    let kem_private_key_bytes: [u8; PRIVATE_KEY_SIZE] = kem_private_key_bytes
         .try_into()
         .map_err(|_| anyhow::format_err!("Invalid KEM private key size"))?;
     let kem_public_key_bytes = general_purpose::STANDARD

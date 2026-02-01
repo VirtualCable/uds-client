@@ -35,7 +35,7 @@ use base64::{Engine as _, engine::general_purpose};
 use reqwest::{Client, ClientBuilder};
 
 use crate::{consts, log};
-use crypt::{PUBLIC_KEY_SIZE, SECRET_KEY_SIZE, Ticket, generate_key_pair};
+use crypt::{PUBLIC_KEY_SIZE, PRIVATE_KEY_SIZE, Ticket, generate_key_pair};
 
 pub mod types;
 
@@ -55,7 +55,7 @@ pub struct UdsBrokerApi {
     broker_url: String,
     hostname: String,
     public_key: [u8; PUBLIC_KEY_SIZE],
-    private_key: [u8; SECRET_KEY_SIZE],
+    private_key: [u8; PRIVATE_KEY_SIZE],
 }
 
 impl UdsBrokerApi {
@@ -76,7 +76,6 @@ impl UdsBrokerApi {
             builder = builder.no_proxy();
         }
 
-
         // Note: unwraps are intentinonal here, if we cannot build the client, we want to
         // abort early.
 
@@ -96,7 +95,11 @@ impl UdsBrokerApi {
 
     // Only for tests
     #[cfg(test)]
-    pub fn with_keys(self, private_key: [u8; SECRET_KEY_SIZE], public_key: [u8; PUBLIC_KEY_SIZE]) -> Self {
+    pub fn with_keys(
+        self,
+        private_key: [u8; PRIVATE_KEY_SIZE],
+        public_key: [u8; PUBLIC_KEY_SIZE],
+    ) -> Self {
         Self {
             public_key,
             private_key,
@@ -175,11 +178,6 @@ impl BrokerApi for UdsBrokerApi {
                     percent: 0,
                 })
             })?
-
-        // response
-        //     .json::<types::BrokerResponse<types::Script>>()
-        //     .await?
-        //     .into_result()
     }
 
     async fn send_log(&self, log_str: String) -> Result<()> {

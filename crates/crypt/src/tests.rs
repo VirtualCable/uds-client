@@ -1,7 +1,7 @@
 use anyhow::Result;
 use base64::{Engine as _, engine::general_purpose};
 
-use crate::{Ticket, SECRET_KEY_SIZE};
+use crate::{Ticket, PRIVATE_KEY_SIZE};
 
 const PRIVATE_KEY_768_TESTING: &str = "TzpPr8sQk1BBjmEFpTqCqdhTNfGdTpK37GBFaQWnigW8AZqMzrlSxRa+grYDdjJ1JiaiuSkpptCtIKsf\
     6QiD6HRJrAPNCJyxbmihz3KS0IOmjzUx4BYh/Ap/nYbE/0qWZFG0KdGKtSKWnOoQFCph0vOLQKnN8HGq\
@@ -65,11 +65,11 @@ const TEST_TICKET_JSON: &str = r#"{
 //   }
 // }
 
-fn get_private_key_bytes() -> Result<[u8; SECRET_KEY_SIZE]> {
+fn get_private_key_bytes() -> Result<[u8; PRIVATE_KEY_SIZE]> {
     let kem_private_key_bytes = general_purpose::STANDARD
         .decode(PRIVATE_KEY_768_TESTING)
         .map_err(|e| anyhow::format_err!("Failed to decode base64 KEM private key: {}", e))?;
-    let kem_private_key_bytes: [u8; SECRET_KEY_SIZE] = kem_private_key_bytes
+    let kem_private_key_bytes: [u8; PRIVATE_KEY_SIZE] = kem_private_key_bytes
         .try_into()
         .map_err(|_| anyhow::format_err!("Invalid KEM private key size"))?;
     Ok(kem_private_key_bytes)

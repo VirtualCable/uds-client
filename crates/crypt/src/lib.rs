@@ -5,7 +5,7 @@ mod ticket;
 pub use ticket::{Ticket, TunnelMaterial};
 
 mod kem;
-pub use kem::{CIPHERTEXT_SIZE, SECRET_KEY_SIZE, PUBLIC_KEY_SIZE, generate_key_pair};
+pub use kem::{CIPHERTEXT_SIZE, PRIVATE_KEY_SIZE, PUBLIC_KEY_SIZE, generate_key_pair};
 
 #[cfg(test)]
 mod tests;
