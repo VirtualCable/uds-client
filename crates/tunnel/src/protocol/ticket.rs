@@ -26,45 +26,72 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+//
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 use anyhow::Result;
+use rand::{prelude::*, distr::Alphanumeric};
 
-pub fn split_lines(text: &str, max_width: usize) -> Vec<&str> {
-    let mut lines = Vec::new();
-    for line in text.lines() {
-        let line = line.trim();
-        let mut start = 0;
-        let line_len = line.len();
-        while start < line_len {
-            let end = usize::min(start + max_width, line_len);
-            lines.push(&line[start..end]);
-            start += max_width;
+use super::consts::TICKET_LENGTH;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Ticket([u8; TICKET_LENGTH]);
+
+impl Ticket {
+    pub fn new(id: [u8; TICKET_LENGTH]) -> Self {
+        Ticket(id)
+    }
+
+    pub fn new_random() -> Self {
+        let rng = rand::rng();
+        let id = rng
+            .sample_iter(Alphanumeric)
+            .take(TICKET_LENGTH)
+            .collect::<Vec<u8>>()
+            .try_into()
+            .expect("Failed to create Ticket");
+        Self(id)
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        if !self.0.iter().all(|&c| c.is_ascii_alphanumeric()) {
+            return Err(anyhow::anyhow!("Invalid ticket"));
         }
+        Ok(())
     }
-    lines
+
+    pub fn as_str(&self) -> &str {
+        std::str::from_utf8(&self.0).expect("Ticket is not valid UTF-8")
+    }
 }
 
-pub fn hex_to_bytes<const N: usize>(input: &str) -> Result<[u8; N]> {
-    if input.len() != N * 2 {
-        anyhow::bail!("Invalid hex string length");
+impl AsRef<[u8; TICKET_LENGTH]> for Ticket {
+    fn as_ref(&self) -> &[u8; TICKET_LENGTH] {
+        &self.0
     }
-
-    let mut out = [0u8; N];
-    let bytes = input.as_bytes();
-    for (i, item) in out.iter_mut().enumerate().take(N) {
-        let hi = bytes[2 * i];
-        let lo = bytes[2 * i + 1];
-        *item = (hex_val(hi)? << 4) | hex_val(lo)?;
-    }
-    Ok(out)
 }
 
-fn hex_val(b: u8) -> Result<u8> {
-    match b {
-        b'0'..=b'9' => Ok(b - b'0'),
-        b'a'..=b'f' => Ok(b - b'a' + 10),
-        b'A'..=b'F' => Ok(b - b'A' + 10),
-        _ => Err(anyhow::anyhow!("invalid hex")),
+impl From<[u8; TICKET_LENGTH]> for Ticket {
+    fn from(id: [u8; TICKET_LENGTH]) -> Self {
+        Ticket::new(id)
+    }
+}
+
+impl From<&[u8; TICKET_LENGTH]> for Ticket {
+    fn from(id: &[u8; TICKET_LENGTH]) -> Self {
+        Ticket::new(*id)
+    }
+}
+
+impl TryFrom<&[u8]> for Ticket {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &[u8]) -> Result<Ticket> {
+        if value.len() != TICKET_LENGTH {
+            return Err(anyhow::anyhow!("Invalid ticket length"));
+        }
+        let mut id = [0u8; TICKET_LENGTH];
+        id.copy_from_slice(value);
+        Ok(Ticket::new(id))
     }
 }

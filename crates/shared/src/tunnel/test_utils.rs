@@ -35,7 +35,7 @@ use rcgen::generate_simple_self_signed;
 use rustls::ServerConfig;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 
-use rand::{Rng, distr::Alphanumeric, rng};
+use rand::{prelude::*, distr::Alphanumeric, rng};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf, split},
     net::{TcpListener, TcpStream},
@@ -243,7 +243,7 @@ pub async fn connect(
     tokio::task::JoinHandle<()>,
     trigger::Trigger,
 )> {
-    log::setup_logging("debug", log::LogType::Tests);
+    log::setup_logging("debug", log::LogType::Test);
     crate::tls::init_tls(None);
     let trigger = Trigger::new();
     let server_handle = if server.is_none() {
@@ -273,7 +273,7 @@ pub async fn connect(
 }
 
 pub async fn create_runner(port: u16) -> Result<(JoinHandle<()>, JoinHandle<()>, u16, Trigger)> {
-    log::setup_logging("debug", log::LogType::Tests);
+    log::setup_logging("debug", log::LogType::Test);
     crate::tls::init_tls(None);
 
     let trigger = Trigger::new();

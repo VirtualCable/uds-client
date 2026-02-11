@@ -97,7 +97,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_log() -> Result<()> {
-        log::setup_logging("trace", log::LogType::Tests);
+        log::setup_logging("trace", log::LogType::Test);
         let mut ctx = create_context(None)?;
 
         // Register the utils module

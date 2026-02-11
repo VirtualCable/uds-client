@@ -65,13 +65,17 @@ impl Trigger {
         }
     }
 
-    pub fn wait_timeout(&self, timeout: std::time::Duration) -> bool {
+    pub fn wait_timeout(&self, timeout: std::time::Duration) -> Result<(), std::io::Error> {
         let (lock, cvar, _) = &*self.state;
         let triggered = lock.lock().unwrap();
         let (guard, _result) = cvar
             .wait_timeout_while(triggered, timeout, |t| !*t)
             .unwrap();
-        *guard
+        if *guard {
+            Ok(())
+        } else {
+            Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "timeout"))
+        }
     }
 
     pub async fn wait_async(&self) {
@@ -85,17 +89,20 @@ impl Trigger {
         notify.notified().await;
     }
 
-    pub async fn wait_timeout_async(&self, timeout: std::time::Duration) -> bool {
+    pub async fn wait_timeout_async(
+        &self,
+        timeout: std::time::Duration,
+    ) -> Result<(), std::io::Error> {
         let (lock, _, notify) = &*self.state;
         {
             let guard = lock.lock().unwrap();
             if *guard {
-                return true;
+                return Ok(());
             }
         }
         tokio::select! {
-            _ = notify.notified() => true,
-            _ = tokio::time::sleep(timeout) => false,
+            _ = notify.notified() => Ok(()),
+            _ = tokio::time::sleep(timeout) => Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "timeout")),
         }
     }
 }
@@ -129,7 +136,7 @@ mod tests {
     fn trigger_wait_timeout() {
         let trigger = Trigger::new();
         let result = trigger.wait_timeout(Duration::from_millis(100));
-        assert!(!result);
+        assert!(result.is_err());
     }
 
     #[test]

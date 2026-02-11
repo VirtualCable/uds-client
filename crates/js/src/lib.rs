@@ -170,7 +170,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_init_ctx() -> Result<()> {
-        log::setup_logging("debug", log::LogType::Tests);
+        log::setup_logging("debug", log::LogType::Test);
         let mut ctx = create_context(None)?;
         init_runtime(&mut ctx)?;
 
@@ -203,7 +203,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_exec_script() -> Result<()> {
-        log::setup_logging("debug", log::LogType::Tests);
+        log::setup_logging("debug", log::LogType::Test);
         let mut ctx = create_context(None)?;
         let script = r#"
             let a = 5;
@@ -222,7 +222,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_run_js_with_data() -> Result<()> {
-        log::setup_logging("debug", log::LogType::Tests);
+        log::setup_logging("debug", log::LogType::Test);
         let script = r#"
             let result = data.value1 + data.value2;
             result;

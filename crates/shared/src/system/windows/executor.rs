@@ -210,7 +210,7 @@ pub fn execute_app(
             move || {
                 log::debug!("Trigger wait thread started");
                 while keep_running.is_set() {
-                    if stop.wait_timeout(std::time::Duration::from_millis(300)) {
+                    if stop.wait_timeout(std::time::Duration::from_millis(300)).is_ok() {
                         log::debug!("Trigger activated, signaling stop_event");
                         stop_event.signal();
                         break;
@@ -263,7 +263,7 @@ pub fn execute_app(
 mod tests {
 
     use super::*;
-    use rand::Rng;
+    use rand::prelude::*;
     use std::env;
     use std::fs;
     use std::path::PathBuf;
@@ -272,7 +272,7 @@ mod tests {
 
     /// Helper function to run exec_wait_application with a temp file and custom window state.
     fn run_exec_wait_application_with_temp_file() -> (anyhow::Result<()>, PathBuf) {
-        log::setup_logging("debug", log::LogType::Tests);
+        log::setup_logging("debug", log::LogType::Test);
         let folder_name = "C:\\Windows\\System32";
         let temp_dir = env::temp_dir();
         let random_suffix: String = rand::rng()
@@ -309,7 +309,7 @@ mod tests {
 
     #[test]
     fn test_exec_wait_application_invalid_path() {
-        log::setup_logging("debug", log::LogType::Tests);
+        log::setup_logging("debug", log::LogType::Test);
         let folder_name = "C:\\";
         let application = r"C:\\Path\\To\\NonExistentApp.exe";
         let result = execute_app(application, &[], None, Some(folder_name));
@@ -322,7 +322,7 @@ mod tests {
 
     #[test]
     fn test_exec_wait_application_stop_notifier() {
-        log::setup_logging("debug", log::LogType::Tests);
+        log::setup_logging("debug", log::LogType::Test);
         let stop = trigger::Trigger::new();
         let folder_name = "C:\\";
         let application = r"c:\\windows\\notepad.exe";

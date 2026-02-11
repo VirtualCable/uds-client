@@ -134,7 +134,7 @@ pub async fn wait_timeout(process_id: u32, timeout: std::time::Duration) -> anyh
     };
     if let Some(info) = info {
         let triggered = info.stop.wait_timeout_async(timeout).await;
-        Ok(triggered)
+        Ok(triggered.is_ok())
     } else {
         Err(anyhow::anyhow!("Process ID {} not found", process_id))
     }

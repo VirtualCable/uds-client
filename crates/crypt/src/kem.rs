@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use rand::{TryRngCore, rngs::OsRng};
+use rand::{prelude::*, rngs::StdRng};
 
 // reexport Ciphertext, PrivateKey, decapsulate, generate_keypair
 pub use libcrux_ml_kem::mlkem768::{
@@ -16,10 +16,9 @@ pub const CIPHERTEXT_SIZE: usize = 1088;
 
 /// Generate a new KEM keypair (private key and public key)
 pub fn generate_key_pair() -> Result<(Vec<u8>, Vec<u8>)> {
-    let mut rng = OsRng;
+    let mut rng: StdRng = rand::make_rng();
     let mut randomness = [0u8; 64];
-    rng.try_fill_bytes(&mut randomness)
-        .map_err(|e| anyhow::format_err!("Failed to generate randomness: {}", e))?;
+    rng.fill_bytes(&mut randomness);
     let keypair = ml_kem_generate_key_pair(randomness);
     Ok((
         keypair.private_key().as_slice().to_vec(),

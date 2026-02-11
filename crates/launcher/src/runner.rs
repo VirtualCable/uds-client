@@ -167,7 +167,7 @@ pub async fn run(
         // Retry after some time, trigger returns true if triggered
         if stop
             .wait_timeout_async(std::time::Duration::from_secs(8))
-            .await
+            .await.is_ok()
         {
             log::info!("Stopping runner.");
             return Ok(());

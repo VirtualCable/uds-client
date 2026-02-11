@@ -93,7 +93,7 @@ async fn test_open_cmd() {
 
 #[tokio::test]
 async fn test_connect_and_upgrade_invalid_server() {
-    log::setup_logging("debug", log::LogType::Tests);
+    log::setup_logging("debug", log::LogType::Test);
     crate::tls::init_tls(None);
     log::debug!("Starting test_connect_and_upgrade_invalid_server");
     let result = connect_and_upgrade("invalid.server.name", 44916, false).await;

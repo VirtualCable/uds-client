@@ -75,10 +75,10 @@ pub(super) fn register_tunnel(
         let trigger = trigger.clone();
         let active_connections = active_connections.clone();
         async move {
-            trigger.wait_timeout_async(minimum_lifetime).await;
+            trigger.wait_timeout_async(minimum_lifetime).await.ok();
             loop {
                 // If already triggered, async_wait_timeout will return immediately
-                if trigger.wait_timeout_async(Duration::from_secs(1)).await
+                if trigger.wait_timeout_async(Duration::from_secs(1)).await.is_ok()
                     || active_connections.load(std::sync::atomic::Ordering::Relaxed) == 0
                 {
                     if !trigger.is_triggered() {
@@ -91,7 +91,7 @@ pub(super) fn register_tunnel(
                     break;
                 }
                 // Soft poll every second to check active connections
-                trigger.wait_timeout_async(Duration::from_secs(1)).await;
+                trigger.wait_timeout_async(Duration::from_secs(1)).await.ok();
             }
         }
     });

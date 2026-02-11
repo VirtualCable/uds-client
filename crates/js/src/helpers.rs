@@ -31,7 +31,7 @@
 use std::{fs::File, io::Write, net::ToSocketAddrs, time::Duration};
 use tokio::{net::TcpStream, time::timeout};
 
-use rand::{Rng, distr::Alphabetic};
+use rand::{prelude::*, distr::Alphabetic};
 
 use anyhow::{Context as _, Result};
 use regex::Regex;

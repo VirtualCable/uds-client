@@ -165,7 +165,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial(js_modules)]
     async fn test_init_ctx() -> Result<()> {
-        log::setup_logging("debug", log::LogType::Tests);
+        log::setup_logging("debug", log::LogType::Test);
         let (messages_tx, messages_rx): (
             Sender<gui::window::types::GuiMessage>,
             Receiver<gui::window::types::GuiMessage>,
@@ -229,7 +229,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial(js_modules)]
     async fn test_defaults() -> Result<()> {
-        log::setup_logging("debug", log::LogType::Tests);
+        log::setup_logging("debug", log::LogType::Test);
         let (messages_tx, messages_rx): (
             Sender<gui::window::types::GuiMessage>,
             Receiver<gui::window::types::GuiMessage>,

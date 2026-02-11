@@ -190,7 +190,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_utils_expandvars() -> Result<()> {
-        log::setup_logging("debug", log::LogType::Tests);
+        log::setup_logging("debug", log::LogType::Test);
         let mut ctx = create_context(None)?;
 
         // Register the utils module
@@ -227,7 +227,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "Requires a server to access internet"]
     async fn test_utils_test_server_works() -> Result<()> {
-        log::setup_logging("debug", log::LogType::Tests);
+        log::setup_logging("debug", log::LogType::Test);
         let mut ctx = create_context(None)?;
 
         // Register the utils module
@@ -257,7 +257,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_utils_test_server_fails() -> Result<()> {
-        log::setup_logging("debug", log::LogType::Tests);
+        log::setup_logging("debug", log::LogType::Test);
         let mut ctx = create_context(None)?;
 
         // Register the utils module
@@ -287,7 +287,7 @@ mod tests {
     #[cfg(target_os = "windows")]
     async fn test_utils_crypt_protect_data() -> Result<()> {
         use base64::{Engine as _, engine::general_purpose};
-        log::setup_logging("debug", log::LogType::Tests);
+        log::setup_logging("debug", log::LogType::Test);
         let mut ctx = create_context(None)?;
         // Register the utils module
         register(&mut ctx)?;
@@ -317,7 +317,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_utils_sleep() -> Result<()> {
-        log::setup_logging("debug", log::LogType::Tests);
+        log::setup_logging("debug", log::LogType::Test);
         let mut ctx = create_context(None)?;
         // Register the utils module
         register(&mut ctx)?;

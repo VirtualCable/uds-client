@@ -106,14 +106,14 @@ impl<'a> fmt::MakeWriter<'a> for RotatingWriter {
 #[derive(PartialEq)]
 pub enum LogType {
     Launcher,
-    Tests,
+    Test,
 }
 
 impl std::fmt::Display for LogType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LogType::Launcher => write!(f, "launcher"),
-            LogType::Tests => write!(f, "launcher-tests"),
+            LogType::Test => write!(f, "launcher-tests"),
         }
     }
 }
@@ -248,7 +248,7 @@ pub fn setup_logging(level: &str, log_type: LogType) {
             .ok();
 
         // Setup panic hook, not if testing
-        if log_type != LogType::Tests {
+        if log_type != LogType::Test {
             setup_panic_hook();
         }
     });
@@ -276,7 +276,7 @@ mod tests {
     #[ignore] // Ignored because it requires Windows service environment
     fn test_logging_on_network_path() {
         unsafe { std::env::set_var("UDSCLIENT_TESTS_LOG_PATH", r"\\172.27.1.45\shared") }
-        setup_logging("debug", LogType::Tests);
+        setup_logging("debug", LogType::Test);
         info!("This is a test log entry on network path");
         debug!("Debug entry");
         warn!("Warning entry");
@@ -286,7 +286,7 @@ mod tests {
 
     #[test]
     fn test_logging_on_default_path() {
-        setup_logging("debug", LogType::Tests);
+        setup_logging("debug", LogType::Test);
         info!("This is a test log entry on default path");
         debug!("Debug entry");
         warn!("Warning entry");
@@ -300,7 +300,7 @@ mod tests {
             std::env::set_var("UDSCLIENT_TESTS_LOG_PATH", std::env::temp_dir());
             std::env::set_var("UDSCLIENT_TESTS_LOG_USE_DATETIME", "true");
         }
-        setup_logging("debug", LogType::Tests);
+        setup_logging("debug", LogType::Test);
         info!("This is a test log entry with datetime in filename");
         debug!("Debug entry");
         warn!("Warning entry");
@@ -313,7 +313,7 @@ mod tests {
     fn test_logging_rotation() {
         let temp_dir = std::env::temp_dir();
         unsafe { std::env::set_var("UDSCLIENT_TESTS_LOG_PATH", &temp_dir) }
-        setup_logging("debug", LogType::Tests);
+        setup_logging("debug", LogType::Test);
         let log_file = temp_dir.join("udsactor-tests.log");
         // Write enough logs to exceed 16MB
         for i in 0..20000 {

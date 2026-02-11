@@ -112,7 +112,7 @@ fn run_script() {
 }
 
 fn main() -> Result<()> {
-    log::setup_logging("debug", log::LogType::Tests);
+    log::setup_logging("debug", log::LogType::Test);
     rdp::wlog::setup_freerdp_logger(rdp::wlog::WLogLevel::Info);
     shared::tls::init_tls(None); // Initialize root certs and tls related stuff
 

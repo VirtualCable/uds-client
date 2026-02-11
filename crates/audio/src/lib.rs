@@ -75,23 +75,26 @@ impl AudioHandle {
             move || {
                 let host = cpal::default_host();
                 let device = host.default_output_device();
+                log::debug!(
+                    "Default audio output device: {:?}",
+                    device.as_ref().map(|d| d.description())
+                );
                 let mut stream = None;
 
                 // Shared buffer for audio samples
                 let buffer: Arc<RwLock<VecDeque<f32>>> = Arc::new(RwLock::new(VecDeque::new()));
 
                 // Keep last 32 play requests stamp, to calculate the mean time between them
-
                 let mut output_sample_rate = sample_rate;
-                if let Some(dev) = device
-                    && let Ok(mut configs) = dev.supported_output_configs()
-                    && let Some(range) = configs.next()
+                if let Some(dev) = device && let Some(cfg) =
+                    AudioHandle::get_stream_config(&dev, sample_rate)
                 {
-                    log::debug!("Using audio format: {:?}, range={}", range, sample_rate);
-                    let cfg = range
-                        .try_with_sample_rate(sample_rate as cpal::SampleRate)
-                        .unwrap_or(range.with_max_sample_rate())
-                        .config();
+                    log::debug!(
+                        "Using audio format: {:?}, range={}",
+                        cfg.sample_format(),
+                        cfg.sample_rate()
+                    );
+                    let cfg = cfg.config();
                     // Store real output sample rate
                     output_sample_rate = cfg.sample_rate;
                     stream = Some(
@@ -196,6 +199,23 @@ impl AudioHandle {
         }
     }
 
+    pub fn get_stream_config(
+        dev: &cpal::Device,
+        sample_rate: u32,
+    ) -> Option<cpal::SupportedStreamConfig> {
+        if let Ok(configs) = dev.supported_output_configs() {
+            for cfg in configs {
+                if cfg.min_sample_rate() <= sample_rate && sample_rate <= cfg.max_sample_rate() {
+                    return Some(
+                        cfg.try_with_sample_rate(sample_rate)
+                            .unwrap_or(cfg.with_max_sample_rate()),
+                    );
+                }
+            }
+        }
+        None
+    }
+
     pub fn play(&self, data: Vec<u8>) -> Result<(), crossbeam::channel::SendError<AudioCommand>> {
         self.tx.send(AudioCommand::Play(data))
     }
@@ -247,7 +267,7 @@ impl<I: Iterator<Item = f32>> Iterator for ResamplerIterator<I> {
         let i = self.pos.floor() as usize;
         let frac = self.pos - i as f32;
 
-        if i + 1 >= self.buffer.len() {
+        while i + 1 >= self.buffer.len() {
             // load more data
             if let Some(sample) = self.inner.next() {
                 self.buffer.push(sample);
@@ -371,7 +391,7 @@ mod tests {
 
     #[test]
     fn test_audio_play_command() {
-        log::setup_logging("debug", log::LogType::Tests);
+        log::setup_logging("debug", log::LogType::Test);
         let handle = AudioHandle::new(2, 44100, 16, None);
         *handle.latency.write().unwrap() = 8888; // set initial latency for later check
         let sample_data = vec![0u8; 44100 * 2 * 2]; // 1 second of silence in 16-bit stereo

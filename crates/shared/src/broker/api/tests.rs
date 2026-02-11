@@ -125,7 +125,7 @@ fn get_keypair() -> Result<([u8; PRIVATE_KEY_SIZE], [u8; PUBLIC_KEY_SIZE])> {
 // Helper to create a ServerRestApi pointing to mockito server
 // Helper to create a mockito server and a ServerRestApi pointing to it
 async fn setup_server_and_api() -> (mockito::ServerGuard, UdsBrokerApi) {
-    log::setup_logging("debug", log::LogType::Tests);
+    log::setup_logging("debug", log::LogType::Test);
 
     let server = Server::new_async().await;
     let url = server.url() + "/"; // For testing, our base URL will be the mockito server
@@ -138,7 +138,7 @@ async fn setup_server_and_api() -> (mockito::ServerGuard, UdsBrokerApi) {
 
 #[tokio::test]
 async fn test_get_version() {
-    log::setup_logging("debug", log::LogType::Tests);
+    log::setup_logging("debug", log::LogType::Test);
     let (mut server, api) = setup_server_and_api().await;
     let result = types::BrokerResponse::<types::Version> {
         result: Some(types::Version {
@@ -165,7 +165,7 @@ async fn test_get_version() {
 
 #[tokio::test]
 async fn test_get_script() {
-    log::setup_logging("debug", log::LogType::Tests);
+    log::setup_logging("debug", log::LogType::Test);
     let (mut server, api) = setup_server_and_api().await;
     let (privk, pubk) = get_keypair().unwrap();
     let api = api.with_keys(privk, pubk);
@@ -187,7 +187,7 @@ async fn test_get_script() {
 
 #[tokio::test]
 async fn test_get_script_fails() {
-    log::setup_logging("debug", log::LogType::Tests);
+    log::setup_logging("debug", log::LogType::Test);
     let (mut server, api) = setup_server_and_api().await;
     let result = r#"{"error": {"message": "Test error", "is_retryable": false, "percent": 0}}"#;
     let _m = server
@@ -213,7 +213,7 @@ async fn test_get_script_fails() {
 
 #[tokio::test]
 async fn test_send_logs() {
-    log::setup_logging("debug", log::LogType::Tests);
+    log::setup_logging("debug", log::LogType::Test);
     let (mut server, api) = setup_server_and_api().await;
     let _m = server
         .mock("POST", "/logs")

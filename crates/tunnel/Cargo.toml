@@ -1,0 +1,22 @@
+[package]
+name = "tunnel"
+version = "5.0.0"
+edition = "2024"
+
+[dependencies]
+shared = { path = "../shared" }
+
+anyhow = {workspace = true }
+rand = { workspace = true }
+num_enum = { workspace = true }
+
+flume = { workspace = true }
+
+# async runtime
+tokio = { workspace = true }
+futures = { workspace = true }
+
+# Encryption
+aes-gcm = { workspace = true }
+hkdf = { workspace = true }
+sha2 = { workspace = true }

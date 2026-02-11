@@ -35,7 +35,7 @@ use shared::{log, system::trigger::Trigger};
 
 fn main() {
     let fake_catalog = gettext::Catalog::empty(); // Empty catalog for now
-    log::setup_logging("trace", log::LogType::Tests);
+    log::setup_logging("trace", log::LogType::Test);
     let (_messages_tx, messages_rx): (
         Sender<gui::window::types::GuiMessage>,
         Receiver<gui::window::types::GuiMessage>,
