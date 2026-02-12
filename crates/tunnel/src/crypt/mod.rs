@@ -44,6 +44,7 @@ pub mod tunnel;
 pub mod types;
 
 pub struct Crypt {
+    key: types::SharedSecret,
     cipher: Aes256Gcm,
     seq: u64,
 }
@@ -52,7 +53,11 @@ impl Crypt {
     pub fn new(key: &types::SharedSecret, seq: u64) -> Self {
         log::debug!("Creating Crypt with initial seq: {}", seq);
         let cipher = Aes256Gcm::new(key.as_ref().into());
-        Crypt { cipher, seq }
+        Crypt {
+            key: *key,
+            cipher,
+            seq,
+        }
     }
 
     /// Increments and returns the internal seq.
@@ -157,6 +162,18 @@ impl Crypt {
             )
         })?);
         Ok((&buffer[2..len], channel))
+    }
+}
+
+impl Clone for Crypt {
+    fn clone(&self) -> Self {
+        log::debug!("Cloning Crypt with seq: {}", self.seq);
+        let cipher = Aes256Gcm::new(self.key.as_ref().into());
+        Crypt {
+            cipher,
+            key: self.key,
+            seq: self.seq,
+        }
     }
 }
 

@@ -66,7 +66,7 @@ pub fn execute_app(
                 }
                 None => {
                     // Has the stop trigger been activated?
-                    if stop.wait_timeout(Duration::from_millis(300)) {
+                    if stop.wait_timeout(Duration::from_millis(300)).is_ok() {
                         log::info!("Stop trigger activated, killing process");
                         let _ = child.kill();
                         let _ = child.wait();

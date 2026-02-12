@@ -26,8 +26,10 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-use crate::{crypt::types::SharedSecret, proxy::Command};
+use crate::{
+    crypt::{self, Crypt, types::SharedSecret},
+    proxy::Command,
+};
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 use super::*;
@@ -41,6 +43,8 @@ struct TestContext {
     ctrl_rx: flume::Receiver<Command>,
     payload_tx: flume::Sender<PayloadWithChannel>,
     payload_rx: flume::Receiver<PayloadWithChannel>,
+    crypt_inbound: Crypt,
+    crypt_outbound: Crypt,
     stop: Trigger,
 }
 
@@ -58,6 +62,9 @@ fn create_client() -> TestContext {
 
     let stop = Trigger::new();
 
+    let crypt_inbound = Crypt::new(&secret_in, 0);
+    let crypt_outbound = Crypt::new(&secret_out, 16);
+
     // Crate a tunnel client with async-everything to ease testing
     TestContext {
         client: TunnelClient {
@@ -65,14 +72,16 @@ fn create_client() -> TestContext {
             writer: client_writer,
             tx: client_tx,
             rx: client_rx,
-            crypt_inbound: Crypt::new(&secret_in, 0),
-            crypt_outbound: Crypt::new(&secret_out, 16),
+            crypt_inbound: crypt_inbound.clone(),
+            crypt_outbound: crypt_outbound.clone(),
             stop: stop.clone(),
             proxy: Handler::new(ctrl_tx.clone()),
         },
         local,
         ctrl_tx,
         ctrl_rx,
+        crypt_inbound,
+        crypt_outbound,
         payload_tx,
         payload_rx,
         stop,
@@ -118,7 +127,7 @@ async fn check_stop() {
 }
 
 #[tokio::test]
-async fn check_connection_closed() {
+async fn check_remote_connection_closed() {
     let TestContext {
         client,
         local,
@@ -162,7 +171,7 @@ async fn check_connection_closed() {
 }
 
 #[tokio::test]
-async fn inbound_channel_closed_works_finely() {
+async fn inbound_chan_closed_works_finely() {
     let TestContext {
         client,
         ctrl_tx: _ctrl_tx,
@@ -190,6 +199,7 @@ async fn inbound_channel_closed_works_finely() {
     });
 
     drop(payload_tx);
+    // Send something using locak, to ensure data is got
 
     // If not stopped in time, it's a failure, as it means the client did not detect the channel closure
     stopped
@@ -202,4 +212,103 @@ async fn inbound_channel_closed_works_finely() {
         ctrl_rx.try_recv().is_err(),
         "Expected no commands to be sent to proxy after channel closure"
     );
+}
+
+#[tokio::test]
+async fn outbound_chan_closed_works_finely() {
+    let TestContext {
+        client,
+        mut local, // We need to keep the cannels alive, event if not used
+        ctrl_tx: _ctrl_tx,
+        ctrl_rx,
+        payload_tx: _payload_tx,
+        payload_rx,
+        mut crypt_outbound,
+        stop,
+        ..
+    } = create_client();
+    let stopped = Trigger::new(); // used to signal test completion
+    tokio::spawn({
+        let stopped = stopped.clone();
+        async move {
+            // Run the client, it should stop when we receive connection closed from server
+            if client.run(None).await.is_err() {
+                // Must return err, because chanel is closed
+                log::info!("Client run failed as expected:");
+                stopped.trigger(); // Signal that the client has stopped
+            } else {
+                log::error!(
+                    "Client run completed successfully, expected failure due to channel closure"
+                );
+            }
+            log::info!("Client run completed");
+        }
+    });
+
+    drop(payload_rx);
+
+    // Sends a valid packet, but as the channel is closed, it should cause the client to stop with an error
+    crypt_outbound
+        .write(&stop, &mut local, 1, b"test")
+        .await
+        .unwrap();
+
+    // If not stopped in time, it's a failure, as it means the client did not detect the channel closure
+    stopped
+        .wait_timeout_async(std::time::Duration::from_secs(1))
+        .await
+        .unwrap();
+
+    // No message on ctrl_rx, ensure
+    assert!(
+        ctrl_rx.try_recv().is_err(),
+        "Expected no commands to be sent to proxy after channel closure"
+    );
+}
+
+#[tokio::test]
+async fn sends_data() {
+    let TestContext {
+        client,
+        mut local,
+        // We need to keep the channels alive, event if not used
+        ctrl_tx: _ctrl_tx,
+        ctrl_rx: _ctrl_rx,
+        payload_tx,
+        payload_rx: _payload_rx,
+        mut crypt_outbound,
+        stop,
+        ..
+    } = create_client();
+    tokio::spawn({
+        let stop = stop.clone();
+        async move {
+            // Run the client, it should stop when we receive connection closed from server
+            if let Err(e) = client.run(None).await {
+                log::error!("Client run failed: {:?}", e);
+            } else {
+                log::info!("Client run completed successfully");
+            }
+            log::info!("Client run completed");
+            stop.trigger(); // Signal that the client has stopped
+        }
+    });
+
+    // Send something using payload_tx
+    payload_tx
+        .send_async(PayloadWithChannel::new(1, b"test"))
+        .await
+        .unwrap();
+
+    // Read from local and decrypt
+    let mut buffer = PacketBuffer::new();
+    let (data, channel_id) = crypt_outbound
+        .read(&stop, &mut local, &mut buffer)
+        .await
+        .unwrap();
+
+    assert_eq!(channel_id, 1);
+    assert_eq!(data, b"test");
+
+    stop.trigger(); // Stop the client
 }

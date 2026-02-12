@@ -133,7 +133,7 @@ where
                     packet = self.crypt_inbound.read(&self.stop, &mut self.reader, &mut buffer) => {
                         let (decrypted_data, channel) = packet.context("Failed to read packet from tunnel server")?;
                         // if decrypted_data is empty, it means the connection was closed
-                        if decrypted_data.is_empty() {
+                        if decrypted_data.is_empty() && !self.stop.is_triggered() {
                             log::info!("Tunnel server closed the connection");
                             self.proxy
                                 .connection_closed()
