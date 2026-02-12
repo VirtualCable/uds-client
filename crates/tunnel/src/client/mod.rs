@@ -124,6 +124,7 @@ where
         loop {
             tokio::select! {
                     _ = self.stop.wait_async() => {
+                        // The only exit point that does not notifies
                         break;
                     }
                     packet = self.rx.recv_async() => {
@@ -131,11 +132,21 @@ where
                     }
                     packet = self.crypt_inbound.read(&self.stop, &mut self.reader, &mut buffer) => {
                         let (decrypted_data, channel) = packet.context("Failed to read packet from tunnel server")?;
+                        // if decrypted_data is empty, it means the connection was closed
+                        if decrypted_data.is_empty() {
+                            log::info!("Tunnel server closed the connection");
+                            self.proxy
+                                .connection_closed()
+                                .await
+                                .ok(); // Notify proxy of connection closure correctly
+                            break;
+                        }
                         // Send to proxy
                         if let Err(e) = self.tx.send_async(super::protocol::PayloadWithChannel {
                             channel_id: channel,
                             payload: decrypted_data.into(),
                         }).await {
+                            // This is an "internal" error, as it means the proxy is not processing commands, so we just log it and stop the client
                             log::error!("Failed to send packet to proxy: {:?}", e);
                             break;
                         }

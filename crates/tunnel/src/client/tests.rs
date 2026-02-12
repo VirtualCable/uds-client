@@ -37,14 +37,19 @@ use tokio::io::{DuplexStream, ReadHalf, WriteHalf};
 struct TestContext {
     client: TunnelClient<ReadHalf<DuplexStream>, WriteHalf<DuplexStream>>,
     local: DuplexStream,
+    ctrl_tx: flume::Sender<Command>, // To keep the channel alive on our tests
     ctrl_rx: flume::Receiver<Command>,
+    payload_tx: flume::Sender<PayloadWithChannel>,
+    payload_rx: flume::Receiver<PayloadWithChannel>,
     stop: Trigger,
 }
 
 fn create_client() -> TestContext {
+    shared::log::setup_logging("debug", shared::log::LogType::Test);
+
     let (client, local) = tokio::io::duplex(1024);
-    let (client_tx, local_rx) = flume::bounded(10);
-    let (local_tx, client_rx) = flume::bounded(10);
+    let (client_tx, payload_rx) = flume::bounded(10);
+    let (payload_tx, client_rx) = flume::bounded(10);
     let (ctrl_tx, ctrl_rx) = flume::bounded(1);
 
     let (client_reader, client_writer) = tokio::io::split(client);
@@ -63,17 +68,29 @@ fn create_client() -> TestContext {
             crypt_inbound: Crypt::new(&secret_in, 0),
             crypt_outbound: Crypt::new(&secret_out, 16),
             stop: stop.clone(),
-            proxy: Handler::new(ctrl_tx),
+            proxy: Handler::new(ctrl_tx.clone()),
         },
         local,
+        ctrl_tx,
         ctrl_rx,
+        payload_tx,
+        payload_rx,
         stop,
     }
 }
 
 #[tokio::test]
 async fn check_stop() {
-    let TestContext { client, stop, .. } = create_client();
+    let TestContext {
+        client,
+        stop,
+        // We need to keep the cannels alive, event if not used
+        ctrl_tx: _ctrl_tx,
+        ctrl_rx,
+        payload_tx: _payload_tx,
+        payload_rx: _payload_rx,
+        ..
+    } = create_client();
 
     let stopped = Trigger::new(); // used to signal test completion
     tokio::spawn({
@@ -88,7 +105,101 @@ async fn check_stop() {
     // Send stop command
     stop.trigger();
 
-    stop.wait_timeout_async(std::time::Duration::from_secs(1))
+    // no message on ctrl_rx, ensure
+    assert!(
+        ctrl_rx.try_recv().is_err(),
+        "Expected no commands to be sent to proxy after stop"
+    );
+
+    stopped
+        .wait_timeout_async(std::time::Duration::from_secs(1))
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn check_connection_closed() {
+    let TestContext {
+        client,
+        local,
+        // We need to keep the cannels alive, event if not used
+        ctrl_tx: _ctrl_tx,
+        ctrl_rx,
+        payload_tx: _payload_tx,
+        payload_rx: _payload_rx,
+        ..
+    } = create_client();
+    let stopped = Trigger::new(); // used to signal test completion
+    tokio::spawn({
+        let stopped = stopped.clone();
+        async move {
+            // Run the client, it should stop when we receive connection closed from server
+            if let Err(e) = client.run(None).await {
+                log::error!("Client run failed: {:?}", e);
+            } else {
+                log::info!("Client run completed successfully");
+            }
+            log::info!("Client run completed");
+            stopped.trigger(); // Signal that the client has stopped
+        }
+    });
+
+    // Close the local end, which simulates the server closing the connection
+    drop(local);
+
+    // We should receive a ConnectionClosed command in the proxy
+    match ctrl_rx.recv_async().await.unwrap() {
+        Command::ConnectionClosed => {
+            // Expected, do nothing
+        }
+        other => panic!("Expected ConnectionClosed command, got {:?}", other),
+    }
+
+    stopped
+        .wait_timeout_async(std::time::Duration::from_secs(1))
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn inbound_channel_closed_works_finely() {
+    let TestContext {
+        client,
+        ctrl_tx: _ctrl_tx,
+        ctrl_rx,
+        payload_tx,
+        payload_rx: _payload_rx,
+        ..
+    } = create_client();
+    let stopped = Trigger::new(); // used to signal test completion
+    tokio::spawn({
+        let stopped = stopped.clone();
+        async move {
+            // Run the client, it should stop when we receive connection closed from server
+            if client.run(None).await.is_err() {
+                // Must return err, because chanel is closed
+                log::info!("Client run failed as expected:");
+                stopped.trigger(); // Signal that the client has stopped
+            } else {
+                log::error!(
+                    "Client run completed successfully, expected failure due to channel closure"
+                );
+            }
+            log::info!("Client run completed");
+        }
+    });
+
+    drop(payload_tx);
+
+    // If not stopped in time, it's a failure, as it means the client did not detect the channel closure
+    stopped
+        .wait_timeout_async(std::time::Duration::from_secs(1))
+        .await
+        .unwrap();
+
+    // No message on ctrl_rx, ensure
+    assert!(
+        ctrl_rx.try_recv().is_err(),
+        "Expected no commands to be sent to proxy after channel closure"
+    );
 }

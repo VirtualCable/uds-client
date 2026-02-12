@@ -251,6 +251,12 @@ impl Proxy {
                 // TODO: implement
                 unimplemented!();
             }
+            handler::Command::ConnectionClosed => {
+                log::info!(
+                    "Received connection closed command from client, will attempt to reconnect"
+                );
+                // TODO: Close all servers (Send empty messsage to all servers)
+            }
             handler::Command::ChannelError { packet, message } => {
                 self.recovery_packet = packet;
                 log::error!(

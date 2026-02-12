@@ -32,6 +32,7 @@ use anyhow::{Context, Result};
 
 use super::super::protocol::PayloadWithChannel;
 
+#[derive(Debug)]
 pub enum Command {
     Request {
         channel_id: u16,
@@ -43,6 +44,8 @@ pub enum Command {
     ChannelClosed {
         channel_id: u16,
     },
+    // From client to proxy, signals ordered eof of connection to tunnel
+    ConnectionClosed,
     // From client to proxy, signals that an error occurred on the channel, so it can be closed and cleaned up by proxy
     // Sends the packet that could not be sent, so we can resent it if the error is recoverable (e.g. temporary network issue)
     ChannelError {
@@ -89,6 +92,13 @@ impl Handler {
             .context("Failed to send channel closed command")
     }
 
+    pub async fn connection_closed(&self) -> Result<()> {
+        self.ctrl_tx
+            .send_async(Command::ConnectionClosed)
+            .await
+            .context("Failed to send connection closed command")
+    }
+
     pub async fn channel_error(
         &self,
         packet: Option<PayloadWithChannel>,
@@ -108,6 +118,6 @@ impl Handler {
     }
 
     pub fn new_command_channel() -> (flume::Sender<Command>, flume::Receiver<Command>) {
-        flume::bounded(4)  // No need for more than a few commands buffered, as they are processed sequentially by the handler
+        flume::bounded(4) // No need for more than a few commands buffered, as they are processed sequentially by the handler
     }
 }
