@@ -1,3 +1,6 @@
+use std::ops::Deref;
+use std::ops::DerefMut;
+
 use anyhow::Result;
 
 mod command;
@@ -31,6 +34,20 @@ impl From<&[u8]> for Payload {
 impl AsRef<[u8]> for Payload {
     fn as_ref(&self) -> &[u8] {
         &self.0
+    }
+}
+
+impl Deref for Payload {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Payload {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 

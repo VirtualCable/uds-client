@@ -312,3 +312,46 @@ async fn sends_data() {
 
     stop.trigger(); // Stop the client
 }
+
+#[tokio::test]
+async fn receives_data() {
+    let TestContext {
+        client,
+        mut local,
+        // We need to keep the channels alive, event if not used
+        ctrl_tx: _ctrl_tx,
+        ctrl_rx: _ctrl_rx,
+        payload_tx: _payload_tx,
+        payload_rx,
+        mut crypt_inbound,
+        stop,
+        ..
+    } = create_client();
+
+    tokio::spawn({
+        let stop = stop.clone();
+        async move {
+            // Run the client, it should stop when we receive connection closed from server
+            if let Err(e) = client.run(None).await {
+                log::error!("Client run failed: {:?}", e);
+            } else {
+                log::info!("Client run completed successfully");
+            }
+            log::info!("Client run completed");
+            stop.trigger(); // Signal that the client has stopped
+        }
+    });
+
+    // Send something using local, encrypting it first
+    crypt_inbound
+        .write(&stop, &mut local, 1, b"test")
+        .await
+        .unwrap();
+
+    // Read from payload_rx
+    let payload = payload_rx.recv_async().await.unwrap();
+    assert_eq!(payload.channel_id, 1);
+    assert_eq!(payload.payload.as_ref(), b"test");
+
+    stop.trigger(); // Stop the client
+}
