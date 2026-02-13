@@ -50,6 +50,7 @@ pub enum Command {
     // Sends the packet that could not be sent, so we can resent it if the error is recoverable (e.g. temporary network issue)
     ChannelError {
         packet: Option<PayloadWithChannel>,
+        sequence: (u64, u64), // For next crypt recreation
         message: String,
     },
     // Used internally by proxy to signal server close or error, not sent by handler
@@ -57,9 +58,6 @@ pub enum Command {
     ClientError {
         message: String,
     },
-
-    // Crypt related
-    UpdateSeq(u64, u64),
 }
 
 pub struct Handler {
@@ -102,19 +100,17 @@ impl Handler {
     pub async fn channel_error(
         &self,
         packet: Option<PayloadWithChannel>,
+        sequence: (u64, u64),
         message: String,
     ) -> Result<()> {
         self.ctrl_tx
-            .send_async(Command::ChannelError { packet, message })
+            .send_async(Command::ChannelError {
+                packet,
+                sequence,
+                message,
+            })
             .await
             .context("Failed to send channel error command")
-    }
-
-    pub async fn update_seq(&self, inbound: u64, outbound: u64) -> Result<()> {
-        self.ctrl_tx
-            .send_async(Command::UpdateSeq(inbound, outbound))
-            .await
-            .context("Failed to send update seq command")
     }
 
     pub fn new_command_channel() -> (flume::Sender<Command>, flume::Receiver<Command>) {

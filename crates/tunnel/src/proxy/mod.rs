@@ -257,8 +257,9 @@ impl Proxy {
                 );
                 // TODO: Close all servers (Send empty messsage to all servers)
             }
-            handler::Command::ChannelError { packet, message } => {
+            handler::Command::ChannelError { packet, message, sequence } => {
                 self.recovery_packet = packet;
+                self.seqs = sequence;
                 log::error!(
                     "Channel error: {}, packet for recovery: {:?}",
                     message,
@@ -270,9 +271,6 @@ impl Proxy {
             handler::Command::ClientClose => {}
             handler::Command::ClientError { message } => {
                 eprintln!("Client error: {}", message);
-            }
-            handler::Command::UpdateSeq(inbound, outbound) => {
-                self.seqs = (inbound, outbound);
             }
         }
         Ok(())

@@ -34,13 +34,10 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use shared::{log, system::trigger::Trigger};
 
-use crate::protocol::PayloadWithChannel;
-
-use super::proxy::Handler;
-
 use super::{
-    crypt::{Crypt, types::PacketBuffer},
-    protocol::{PayloadWithChannelReceiver, PayloadWithChannelSender},
+    crypt::{Crypt, consts::CRYPT_PACKET_SIZE, types::PacketBuffer},
+    protocol::{PayloadWithChannel, PayloadWithChannelReceiver, PayloadWithChannelSender},
+    proxy::Handler,
 };
 
 pub struct TunnelClient<R, W>
@@ -58,7 +55,7 @@ where
     crypt_outbound: Crypt,
 
     stop: Trigger,
-    proxy: Handler,
+    proxy_ctrl: Handler,
 }
 
 impl<R, W> TunnelClient<R, W>
@@ -75,7 +72,7 @@ where
         crypt_inbound: Crypt,
         crypt_outbound: Crypt,
         stop: Trigger,
-        proxy: Handler,
+        proxy_ctrl: Handler,
     ) -> Self {
         Self {
             reader,
@@ -85,33 +82,7 @@ where
             crypt_inbound,
             crypt_outbound,
             stop,
-            proxy,
-        }
-    }
-
-    pub async fn write_packet(&mut self, packet: &PayloadWithChannel) -> Result<()> {
-        match self
-            .crypt_outbound
-            .write(
-                &self.stop,
-                &mut self.writer,
-                packet.channel_id,
-                packet.payload.as_ref(),
-            )
-            .await
-        {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                self.proxy
-                    .channel_error(
-                        Some(packet.clone()),
-                        format!("Failed to write initial packet to tunnel server: {:?}", e),
-                    )
-                    .await
-                    .ok();
-                log::error!("Failed to write initial packet to tunnel server: {:?}", e);
-                Err(e).context("Failed to write initial packet to tunnel server")
-            }
+            proxy_ctrl,
         }
     }
 
@@ -119,7 +90,7 @@ where
         let mut buffer = PacketBuffer::new();
         if let Some(packet) = initial_packet {
             // We have an initial packet, process it first
-            self.write_packet(&packet).await?;
+            self.send_data(&packet).await?;
         }
         loop {
             tokio::select! {
@@ -128,14 +99,14 @@ where
                         break;
                     }
                     packet = self.rx.recv_async() => {
-                        self.write_packet(&packet.context("Failed to receive packet from proxy")?).await?;
+                        self.send_data(&packet.context("Failed to receive packet from proxy")?).await?;
                     }
                     packet = self.crypt_inbound.read(&self.stop, &mut self.reader, &mut buffer) => {
                         let (decrypted_data, channel) = packet.context("Failed to read packet from tunnel server")?;
                         // if decrypted_data is empty, it means the connection was closed
                         if decrypted_data.is_empty() && !self.stop.is_triggered() {
                             log::info!("Tunnel server closed the connection");
-                            self.proxy
+                            self.proxy_ctrl
                                 .connection_closed()
                                 .await
                                 .ok(); // Notify proxy of connection closure correctly
@@ -152,6 +123,39 @@ where
                         }
                     }
             }
+        }
+
+        Ok(())
+    }
+
+    async fn send_data(&mut self, data: &PayloadWithChannel) -> Result<()> {
+        let mut offset = 0;
+
+        let payload = data.payload.as_ref();
+        // Divide data into CRYPT_PACKET_SIZE chunks and send them
+        while offset < payload.len() {
+            let end = (offset + CRYPT_PACKET_SIZE).min(payload.len());
+            let chunk = &payload[offset..end];
+            if let Err(e) = self
+                .crypt_outbound
+                .write(&self.stop, &mut self.writer, data.channel_id, chunk)
+                .await
+            {
+                self.proxy_ctrl
+                    .channel_error(
+                        Some(data.clone()),
+                        (
+                            self.crypt_inbound.current_seq(),
+                            self.crypt_outbound.current_seq(),
+                        ),
+                        format!("Failed to write packet chunk to tunnel server: {:?}", e),
+                    )
+                    .await
+                    .ok();
+                log::error!("Failed to write packet chunk to tunnel server: {:?}", e);
+                return Err(e).context("Failed to write packet chunk to tunnel server");
+            }
+            offset = end;
         }
 
         Ok(())

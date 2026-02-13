@@ -27,7 +27,7 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 use crate::{
-    crypt::{self, Crypt, types::SharedSecret},
+    crypt::{Crypt, types::SharedSecret},
     proxy::Command,
 };
 
@@ -75,7 +75,7 @@ fn create_client() -> TestContext {
             crypt_inbound: crypt_inbound.clone(),
             crypt_outbound: crypt_outbound.clone(),
             stop: stop.clone(),
-            proxy: Handler::new(ctrl_tx.clone()),
+            proxy_ctrl: Handler::new(ctrl_tx.clone()),
         },
         local,
         ctrl_tx,
@@ -174,6 +174,7 @@ async fn check_remote_connection_closed() {
 async fn inbound_chan_closed_works_finely() {
     let TestContext {
         client,
+        local: _local,
         ctrl_tx: _ctrl_tx,
         ctrl_rx,
         payload_tx,
@@ -185,9 +186,9 @@ async fn inbound_chan_closed_works_finely() {
         let stopped = stopped.clone();
         async move {
             // Run the client, it should stop when we receive connection closed from server
-            if client.run(None).await.is_err() {
+            if let Err(e) = client.run(None).await {
                 // Must return err, because chanel is closed
-                log::info!("Client run failed as expected:");
+                log::info!("Client run failed as expected: {}", e);
                 stopped.trigger(); // Signal that the client has stopped
             } else {
                 log::error!(
