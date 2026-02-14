@@ -35,6 +35,8 @@ use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 
 use shared::{log, system::trigger::Trigger};
 
+use crate::protocol::{PayloadReceiver, PayloadSender, payload_pair};
+
 use super::{
     client::TunnelClient,
     crypt::types::SharedSecret,
@@ -68,6 +70,13 @@ pub struct Proxy {
     rx_sender: PayloadWithChannelSender, // Sender for the client
     rx: PayloadWithChannelReceiver,      // For receiving messages from the client side
 
+    // Channels comms for the server side (the one that will connect to the local servers)
+    tx_server: PayloadWithChannelSender, // For sending messages to the server side
+    tx_server_receiver: PayloadWithChannelReceiver, // Receiver for the server
+
+    rx_server_sender: PayloadSender, // Sender for the server
+    rx_server: PayloadReceiver,      // For receiving messages from the server side
+
     recover_connection: bool,
     recovery_packet: Option<PayloadWithChannel>,
 }
@@ -79,8 +88,14 @@ impl Proxy {
         shared_secret: SharedSecret,
         initial_timeout: Duration,
     ) -> Self {
+        // Client side channels
         let (tx, tx_receiver) = payload_with_channel_pair();
         let (rx_sender, rx) = payload_with_channel_pair();
+
+        // Server side channels
+        let (tx_server, tx_server_receiver) = payload_with_channel_pair();
+        let (rx_server_sender, rx_server) = payload_pair();
+
         Self {
             tunnel_server: tunnel_server.to_string(),
             ticket,
@@ -92,6 +107,10 @@ impl Proxy {
             tx_receiver,
             rx,
             rx_sender,
+            tx_server,
+            tx_server_receiver,
+            rx_server_sender,
+            rx_server,
             recover_connection: false,
             recovery_packet: None,
         }
@@ -239,16 +258,25 @@ impl Proxy {
         ctrl_tx: &flume::Sender<handler::Command>,
     ) -> Result<()> {
         match cmd {
-            handler::Command::Request { channel_id } => {
-                // TODO: implement
-                unimplemented!();
+            handler::Command::RequestChannel {
+                channel_id,
+                response,
+            } => {
+                // TODO: open the client side to tonnel server before sending the response
+                // Do this in a separate task to avoid blocking the command handling loop
+                response
+                    .send_async(Ok(handler::ServerChannels {
+                        tx: self.tx_server.clone(),
+                        rx: self.rx_server.clone(),
+                    }))
+                    .await?;
             }
-            handler::Command::Release { channel_id } => {
-                // TODO: implement
+            handler::Command::ReleaseChannel { channel_id } => {
+                // TODO: implement close the client side CHANNEL connection to tunnel server for this channel
                 unimplemented!();
             }
             handler::Command::ChannelClosed { channel_id } => {
-                // TODO: implement
+                // TODO: implement 
                 unimplemented!();
             }
             handler::Command::ConnectionClosed => {
@@ -257,7 +285,11 @@ impl Proxy {
                 );
                 // TODO: Close all servers (Send empty messsage to all servers)
             }
-            handler::Command::ChannelError { packet, message, sequence } => {
+            handler::Command::ChannelError {
+                packet,
+                message,
+                sequence,
+            } => {
                 self.recovery_packet = packet;
                 self.seqs = sequence;
                 log::error!(

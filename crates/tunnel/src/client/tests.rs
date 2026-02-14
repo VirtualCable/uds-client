@@ -171,7 +171,7 @@ async fn check_remote_connection_closed() {
 }
 
 #[tokio::test]
-async fn inbound_chan_closed_works_finely() {
+async fn inbound_chan_closed_works() {
     let TestContext {
         client,
         local: _local,
@@ -188,7 +188,7 @@ async fn inbound_chan_closed_works_finely() {
             // Run the client, it should stop when we receive connection closed from server
             if let Err(e) = client.run(None).await {
                 // Must return err, because chanel is closed
-                log::info!("Client run failed as expected: {}", e);
+                log::info!("Client run failed as expected: {}", e.to_string());
                 stopped.trigger(); // Signal that the client has stopped
             } else {
                 log::error!(
@@ -216,7 +216,7 @@ async fn inbound_chan_closed_works_finely() {
 }
 
 #[tokio::test]
-async fn outbound_chan_closed_works_finely() {
+async fn outbound_chan_closed_works() {
     let TestContext {
         client,
         mut local, // We need to keep the cannels alive, event if not used

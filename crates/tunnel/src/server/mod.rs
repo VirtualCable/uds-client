@@ -93,25 +93,29 @@ where
                     match result {
                         Ok(0) => {
                             // EOF, stop the server
+                            self.proxy_ctrl.release_channel(self.channel_id).await?;
                             break;
                         }
                         Ok(n) => {
-                            // Send to proxy
+                            // Send to proxy, if error, no proxy so no notification of release channel
+                            // Note: This may trigger stop for stopping the full tunnel processes group
                             if let Err(e) = self.tx.send_async(PayloadWithChannel::new(self.channel_id, &buffer[..n])).await {
                                 log::error!("Failed to send data to proxy: {:?}", e);
-                                break;
+                                return Err(e.into());
                             }
                         }
                         Err(e) => {
                             log::error!("Failed to read from socket: {:?}", e);
-                            break;
+                            self.proxy_ctrl.release_channel(self.channel_id).await?;
+                            return Err(e.into());
                         }
                     }
                 }
 
                 // Read from proxy
                 result = self.rx.recv_async() => {
-                    // Error receiving from proxy, stop the server as the proxy connection is lost
+                    // Error receiving from proxy, stop the server as the proxy connection is losy without notification
+                    // Note: This may trigger stop for stopping the full tunnel processes group
                     let payload = result?;
                     // Write to socket
                     self.writer.write_all(&payload).await?;
@@ -123,7 +127,6 @@ where
                 }
             }
         }
-        self.proxy_ctrl.release_channel(self.channel_id).await?;
         Ok(())
     }
 }

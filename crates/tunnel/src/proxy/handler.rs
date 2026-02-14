@@ -30,14 +30,24 @@
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 use anyhow::{Context, Result};
 
+use flume::Sender;
+
+use crate::protocol::{PayloadReceiver, PayloadWithChannelSender};
+
 use super::super::protocol::PayloadWithChannel;
+
+pub struct ServerChannels {
+    pub tx: PayloadWithChannelSender,
+    pub rx: PayloadReceiver,
+}
 
 #[derive(Debug)]
 pub enum Command {
-    Request {
+    RequestChannel {
         channel_id: u16,
+        response: Sender<Result<ServerChannels>>,
     },
-    Release {
+    ReleaseChannel {
         channel_id: u16,
     },
     // From client to proxy, signals that channel is closed (either by client or server)
@@ -69,16 +79,30 @@ impl Handler {
         Self { ctrl_tx }
     }
 
-    pub async fn request_channel(&self, channel_id: u16) -> Result<()> {
+    pub async fn request_channel(&self, channel_id: u16) -> Result<ServerChannels> {
+        let (response_tx, response_rx) = flume::bounded(1);
         self.ctrl_tx
-            .send_async(Command::Request { channel_id })
+            .send_async(Command::RequestChannel {
+                channel_id,
+                response: response_tx,
+            })
             .await
-            .context("Failed to send request channel command")
+            .context("Failed to send request channel command")?;
+
+        // Wait for the response with timeout
+        tokio::select! {
+            _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {
+                Err(anyhow::anyhow!("Timeout waiting for channel response"))
+            }
+            result = response_rx.recv_async() => {
+                result.context("Failed to receive channel response")?
+            }
+        }
     }
 
     pub async fn release_channel(&self, channel_id: u16) -> Result<()> {
         self.ctrl_tx
-            .send_async(Command::Release { channel_id })
+            .send_async(Command::ReleaseChannel { channel_id })
             .await
             .context("Failed to send release channel command")
     }
