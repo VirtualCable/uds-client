@@ -13,6 +13,12 @@ pub use command::Command;
 #[derive(Debug, Clone)]
 pub struct Payload(pub Vec<u8>);
 
+impl Payload {
+    pub fn new(data: &[u8]) -> Self {
+        Payload(data.to_vec())
+    }
+}
+
 impl From<Vec<u8>> for Payload {
     fn from(value: Vec<u8>) -> Self {
         Payload(value)
