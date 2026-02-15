@@ -294,10 +294,7 @@ async fn sends_data() {
     });
 
     // Send something using payload_tx
-    payload_tx
-        .send_async(Payload::new(b"test"))
-        .await
-        .unwrap();
+    payload_tx.send_async(Payload::new(b"test")).await.unwrap();
 
     // Read from local
     let mut buf = [0u8; 4];
@@ -306,6 +303,121 @@ async fn sends_data() {
     assert_eq!(&buf, b"test");
 
     stop.trigger(); // Stop the client
+}
+
+#[tokio::test]
+async fn write_error_stops_server() {
+    // Dummy failing writer to simulate write errors
+    struct FailingWriter;
+
+    impl tokio::io::AsyncWrite for FailingWriter {
+        fn poll_write(
+            self: std::pin::Pin<&mut Self>,
+            _cx: &mut std::task::Context<'_>,
+            _buf: &[u8],
+        ) -> std::task::Poll<Result<usize, std::io::Error>> {
+            std::task::Poll::Ready(Err(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "simulated broken pipe",
+            )))
+        }
+
+        fn poll_flush(
+            self: std::pin::Pin<&mut Self>,
+            _cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Result<(), std::io::Error>> {
+            std::task::Poll::Ready(Ok(()))
+        }
+
+        fn poll_shutdown(
+            self: std::pin::Pin<&mut Self>,
+            _cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Result<(), std::io::Error>> {
+            std::task::Poll::Ready(Ok(()))
+        }
+    }
+
+    shared::log::setup_logging("debug", shared::log::LogType::Test);
+
+    let (client_tx, _payload_rx) = flume::bounded(10);
+    let (payload_tx, client_rx) = flume::bounded(10);
+    let (ctrl_tx, _ctrl_rx) = flume::bounded(1);
+    let stop = Trigger::new();
+
+    // Dummy reader
+    let (client, _local) = tokio::io::duplex(1024);
+    let (client_reader, _) = tokio::io::split(client);
+
+    let server = TunnelServer::new(
+        client_reader,
+        FailingWriter,
+        1,
+        client_tx,
+        client_rx,
+        stop.clone(),
+        Handler::new(ctrl_tx),
+    );
+
+    let stopped = Trigger::new();
+    tokio::spawn({
+        let stopped = stopped.clone();
+        async move {
+            let res = server.run().await;
+            assert!(
+                res.is_err(),
+                "Server should fail when writing to a closed socket"
+            );
+            stopped.trigger();
+        }
+    });
+
+    // Send data from proxy to trigger the write attempt on the server
+    payload_tx
+        .send_async(Payload::new(b"trigger write error"))
+        .await
+        .unwrap();
+
+    stopped
+        .wait_timeout_async(std::time::Duration::from_secs(1))
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn large_payload_passthrough() {
+    let TestContext {
+        server,
+        mut local,
+        ctrl_tx: _ctrl_tx,
+        ctrl_rx: _ctrl_rx,
+        payload_tx: _payload_tx,
+        payload_rx,
+        stop,
+    } = create_server(1);
+
+    tokio::spawn(async move {
+        if let Err(e) = server.run().await {
+            log::error!("Server error: {:?}", e);
+        }
+    });
+
+    // Create data larger than the internal buffer (16KB) to ensure multiple reads/writes
+    let data = vec![65u8; 32 * 1024]; // 32KB of 'A'
+    let data_write = data.clone();
+
+    // Write in a separate task to avoid potential deadlock if channel fills up
+    tokio::spawn(async move {
+        local.write_all(&data_write).await.unwrap();
+    });
+
+    let mut received_data = Vec::new();
+    while received_data.len() < data.len() {
+        let payload = payload_rx.recv_async().await.unwrap();
+        received_data.extend_from_slice(&payload.payload);
+    }
+
+    assert_eq!(received_data, data);
+    stop.trigger();
 }
 
 #[tokio::test]
