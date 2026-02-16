@@ -164,6 +164,7 @@ impl Proxy {
                 .try_into()
                 .context("Invalid ticket format in handshake response")?,
         );
+        log::debug!("Received handshake response, reconnect ticket: {:?}", self.ticket);
 
         // Create the server and run it in a separate task
         Ok(TunnelClient::new(

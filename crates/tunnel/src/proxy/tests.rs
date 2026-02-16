@@ -28,26 +28,23 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpListener,
-    sync::Mutex,
-};
+use tokio::{io::AsyncWriteExt, io::AsyncReadExt, net::TcpListener};
 
 use shared::log;
 
 use crate::{
-    crypt::{Crypt, types::SharedSecret},
-    protocol::ticket::Ticket,
+    crypt::types::SharedSecret,
+    protocol::{consts::HANDSHAKE_V2_SIGNATURE, ticket::Ticket},
+    proxy::handler::ServerChannels,
 };
 
 use super::*;
 
-// Helper to create dummy ticket
+// Helper to create dummy ticket, ensure always the same
 fn dummy_ticket() -> Ticket {
-    Ticket::new_random()
+    Ticket::new([b'x'; 48])
 }
 
 // Helper to create dummy shared secret
@@ -57,45 +54,83 @@ fn dummy_shared_secret() -> SharedSecret {
 
 struct RemoteServer {
     addr: String,
-    crypt: Arc<Mutex<Crypt>>,
     stop: Trigger,
+    rx: PayloadWithChannelReceiver,
+    tx: PayloadWithChannelSender,
 }
 
 async fn remote_server_dispatcher(
     stop: Trigger,
-    crypt: Arc<Mutex<Crypt>>,
     mut socket: tokio::net::TcpStream,
+    rx: PayloadWithChannelReceiver,
+    tx: PayloadWithChannelSender,
 ) {
+    let (mut crypt_output, mut crypt_input) =
+        get_tunnel_crypts(&dummy_shared_secret(), &dummy_ticket(), (0, 0)).unwrap();
+
     let ticket = dummy_ticket();
-    // Intiial is send ticket as response on channel 0
+    let mut buf = PacketBuffer::new();
+    // Read handshake, but do not check it, just skip for tests
+    // Do not check real data received, that has it specific test elsewhere
+    {
+        let handshake_buf = &mut [0u8; HANDSHAKE_V2_SIGNATURE.len() + 1 + 48]; // Handshake header + cmd + ticket
+        socket.read_exact(handshake_buf).await.unwrap();
+        // Now read encripted ticket again, but do not check it, just skip for tests
+        crypt_input
+            .read(&stop, &mut socket, &mut buf)
+            .await
+            .unwrap();
+    }
     if let Err(e) = {
-        let mut guard = crypt.lock().await;
-        guard.write(&stop, &mut socket, 0, ticket.as_ref()).await
+        crypt_output
+            .write(&stop, &mut socket, 0, ticket.as_ref())
+            .await
     } {
         log::error!("Error writing to socket: {:?}", e);
         stop.trigger();
         return;
     }
-    let mut buf = [0u8; 1024];
+
 
     loop {
         tokio::select! {
             _ = stop.wait_async() => {
                 log::debug!("Stop signal received, shutting down remote server dispatcher");
+                return;
             }
-            data = socket.read(&mut buf) => {
+            data = crypt_input.read(&stop, &mut socket, &mut buf) => {
                 log::debug!("Data received: {:?}", data);
-                if let Err(e) = data {
-                    log::error!("Error reading from socket: {:?}", e);
-                }
-                // Send data back, same as received
-                if let Err(e) = {
-                    let mut guard = crypt.lock().await;
-                    guard.write(&stop, &mut socket, 0, &buf).await
-                } {
-                    log::error!("Error writing to socket: {:?}", e);
+                // Decrypt data
+                let (data, channel_id) = match data {
+                    Ok((data, channel_id)) => (data, channel_id),
+                    Err(e) => {
+                        log::error!("Error reading from socket: {:?}", e);
+                        stop.trigger();
+                        return;
+                    }
+                };
+                // Send data back, same as received and to tx
+                if let Err(e) = tx.send_async(PayloadWithChannel::new(channel_id, data)).await {
+                    log::error!("Error sending to channel: {:?}", e);
                     stop.trigger();
                     return;
+                }
+            }
+            channel_data = rx.recv_async() => {
+                log::debug!("Data received from channel: {:?}", channel_data);
+                match channel_data {
+                    Ok(data) => {
+                        log::debug!("Data received from channel: {:?}", data);
+                        crypt_output.write(&stop, &mut socket, data.channel_id, &data.payload).await.unwrap_or_else(|e| {
+                            log::error!("Error writing to socket: {:?}", e);
+                            stop.trigger();
+                        });
+                    },
+                    Err(e) => {
+                        log::error!("Error receiving from channel: {:?}", e);
+                        stop.trigger();
+                        return;
+                    }
                 }
             }
         }
@@ -103,18 +138,18 @@ async fn remote_server_dispatcher(
 }
 
 async fn dummy_remote_server() -> RemoteServer {
-    let crypt = Arc::new(Mutex::new(Crypt::new(&dummy_shared_secret(), 0)));
     let stop = Trigger::new();
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap().to_string();
+    let (tx, server_rx) = flume::unbounded();
+    let (server_tx, rx) = flume::unbounded();
 
     tokio::spawn({
         let stop = stop.clone();
-        let crypt = crypt.clone();
         async move {
             tokio::select! {
-                
+
                 _ = stop.wait_async() => {
                     log::debug!("Stop signal received, shutting down dummy remote server");
                 }
@@ -122,7 +157,10 @@ async fn dummy_remote_server() -> RemoteServer {
                     match accepted {
                         Ok((socket, _)) => {
                             log::debug!("Client connected to dummy remote server");
-                            remote_server_dispatcher(stop, crypt, socket).await;
+                            socket.set_nodelay(true).unwrap_or_else(|e| {
+                                log::error!("Error setting nodelay on socket: {:?}", e);
+                            });
+                            remote_server_dispatcher(stop, socket, server_rx, server_tx).await;
                         }
                         Err(e) => {
                             log::error!("Error accepting connection: {:?}", e);
@@ -134,15 +172,13 @@ async fn dummy_remote_server() -> RemoteServer {
         }
     });
 
-    log::debug!(
-        "Dummy remote server listening on {}",
-        address
-    );
+    log::debug!("Dummy remote server listening on {}", address);
 
     RemoteServer {
         addr: address,
-        crypt,
         stop,
+        rx,
+        tx,
     }
 }
 
@@ -284,4 +320,111 @@ async fn test_handler_release_channel() {
     let result = handler.release_channel(99).await;
     assert!(result.is_ok());
     task.await.unwrap();
+}
+
+#[tokio::test]
+async fn test_connect() -> Result<()> {
+    log::setup_logging("debug", log::LogType::Test);
+
+    log::debug!("Creating proxy");
+    let remote_server = dummy_remote_server().await;
+    let stop = Trigger::new();
+    let proxy = Proxy::new(
+        &remote_server.addr,
+        dummy_ticket(),
+        dummy_shared_secret(),
+        Duration::from_millis(100),
+        stop.clone(),
+    );
+
+    proxy.run().await.context("Failed to run proxy")?;
+    // If result is ok, the connection is done, data has been sent and received
+
+    stop.trigger();
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_recv_data() -> Result<()> {
+    log::setup_logging("debug", log::LogType::Test);
+
+    log::debug!("Creating proxy");
+    let remote_server = dummy_remote_server().await;
+    let proxy = Proxy::new(
+        &remote_server.addr,
+        dummy_ticket(),
+        dummy_shared_secret(),
+        Duration::from_millis(100),
+        remote_server.stop.clone(),
+    );
+
+    let handler = proxy.run().await.context("Failed to run proxy")?;
+    // Create a client
+    let ServerChannels { tx: _tx, rx } = handler
+        .request_channel(1)
+        .await
+        .context("Failed to request channel")?;
+
+    // Send data to channel
+    remote_server
+        .tx
+        .send_async(PayloadWithChannel::new(1, b"hello"))
+        .await?;
+
+    let data = rx
+        .recv_async()
+        .await
+        .context("Failed to receive data from channel")?;
+
+    log::debug!("Received data: {:?}", data);
+    assert_eq!(data.as_ref(), b"hello");
+
+    handler.release_channel(1).await?;
+
+    remote_server.stop.trigger();
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_send_data() -> Result<()> {
+    log::setup_logging("debug", log::LogType::Test);
+
+    log::debug!("Creating proxy");
+    let remote_server = dummy_remote_server().await;
+    let proxy = Proxy::new(
+        &remote_server.addr,
+        dummy_ticket(),
+        dummy_shared_secret(),
+        Duration::from_millis(100),
+        remote_server.stop.clone(),
+    );
+
+    let handler = proxy.run().await.context("Failed to run proxy")?;
+    // Create a client
+    let ServerChannels { tx, rx: _rx } = handler
+        .request_channel(1)
+        .await
+        .context("Failed to request channel")?;
+
+    log::debug!("Sending data to channel");
+    // Send data to channel
+    tx.send_async(PayloadWithChannel::new(1, b"hello"))
+        .await
+        .context("Failed to send data to channel")?;
+
+    log::debug!("Waiting for data from remote server");
+    let data = remote_server
+        .rx
+        .recv_async()
+        .await
+        .context("Failed to receive data from remote server")?;
+
+    log::debug!("Received data: {:?}", data);
+    assert_eq!(data.payload.as_ref(), b"hello");
+    assert_eq!(data.channel_id, 1);
+
+    handler.release_channel(1).await?;
+
+    remote_server.stop.trigger();
+    Ok(())
 }

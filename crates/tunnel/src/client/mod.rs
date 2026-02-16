@@ -90,6 +90,7 @@ where
         let mut buffer = PacketBuffer::new();
         if let Some(packet) = initial_packet {
             // We have an initial packet, process it first
+            log::debug!("Processing initial recovery packet before entering main loop");
             self.send_data(&packet).await?;
         }
         loop {
@@ -134,6 +135,12 @@ where
         let payload = data.payload.as_ref();
         // Divide data into CRYPT_PACKET_SIZE chunks and send them
         while offset < payload.len() {
+            log::debug!(
+                "Sending packet chunk to tunnel server: channel_id={}, offset={}, chunk_size={}",
+                data.channel_id,
+                offset,
+                (payload.len() - offset).min(CRYPT_PACKET_SIZE),
+            );
             let end = (offset + CRYPT_PACKET_SIZE).min(payload.len());
             let chunk = &payload[offset..end];
             if let Err(e) = self

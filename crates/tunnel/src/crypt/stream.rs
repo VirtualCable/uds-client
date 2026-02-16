@@ -40,13 +40,15 @@ use super::{
 };
 
 impl Crypt {
-    async fn do_read_stream<R: AsyncReadExt + Unpin>(
+    async fn read_stream<R: AsyncReadExt + Unpin>(
         stop: &Trigger,
         reader: &mut R,
         buffer: &mut [u8],
         length: usize,
         disallow_eof: bool,
     ) -> Result<usize> {
+        let timeout = std::time::Duration::from_secs(CRYPT_PACKET_TIMEOUT_SECS);
+
         let mut read = 0;
 
         while read < length {
@@ -70,28 +72,14 @@ impl Crypt {
                         }
                     }
                 }
+                _ = tokio::time::sleep(timeout) => {
+                    return Err(anyhow::anyhow!("read timed out after {:?} seconds", timeout.as_secs()));
+                }
+
             };
             read += n;
         }
         Ok(read)
-    }
-
-    async fn read_stream<R: AsyncReadExt + Unpin>(
-        stop: &Trigger,
-        reader: &mut R,
-        buffer: &mut [u8],
-        length: usize,
-        disallow_eof: bool,
-    ) -> Result<usize> {
-        let timeout = std::time::Duration::from_secs(CRYPT_PACKET_TIMEOUT_SECS);
-        tokio::select! {
-            result = Self::do_read_stream(stop, reader, buffer, length, disallow_eof) => {
-                result
-            }
-            _ = tokio::time::sleep(timeout) => {
-                Err(anyhow::anyhow!("read timed out after {:?} seconds", timeout.as_secs()))
-            }
-        }
     }
 
     // Reads data into buffer, decrypting it inplace
