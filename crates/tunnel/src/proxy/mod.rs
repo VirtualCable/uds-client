@@ -35,8 +35,6 @@ use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 
 use shared::{log, system::trigger::Trigger};
 
-use crate::protocol::{PayloadReceiver, PayloadSender, payload_pair};
-
 use super::{
     client::TunnelClient,
     crypt::types::SharedSecret,
@@ -64,14 +62,11 @@ pub struct Proxy {
     seqs: (u64, u64),
 
     // Channels for comms with the client side (the one that will connect to the tunnel server)
-    tx: PayloadWithChannelSender, // For sending messages to the client side
-    tx_receiver: PayloadWithChannelReceiver, // Receiver for the client
+    client_tx: PayloadWithChannelSender, // For sending messages to the client side
+    client_tx_receiver: PayloadWithChannelReceiver, // Receiver for the client
 
-    rx_sender: PayloadWithChannelSender, // Sender for the client
-    rx: PayloadWithChannelReceiver,      // For receiving messages from the client side
-
-    rx_server_sender: PayloadWithChannelSender, // Sender for the server
-    rx_server: PayloadWithChannelReceiver,      // For receiving messages from the server side
+    client_rx_sender: PayloadWithChannelSender, // Sender for the client
+    client_rx: PayloadWithChannelReceiver,      // For receiving messages from the client side
 
     recover_connection: bool,
     recovery_packet: Option<PayloadWithChannel>,
@@ -90,9 +85,6 @@ impl Proxy {
         let (tx, tx_receiver) = payload_with_channel_pair();
         let (rx_sender, rx) = payload_with_channel_pair();
 
-        // Server side channels
-        let (rx_server_sender, rx_server) = payload_with_channel_pair();
-
         Self {
             tunnel_server: tunnel_server.to_string(),
             ticket,
@@ -100,12 +92,10 @@ impl Proxy {
             stop: Trigger::new(),
             initial_timeout,
             seqs: (0, 0),
-            tx,
-            tx_receiver,
-            rx,
-            rx_sender,
-            rx_server_sender,
-            rx_server,
+            client_tx: tx,
+            client_tx_receiver: tx_receiver,
+            client_rx: rx,
+            client_rx_sender: rx_sender,
             recover_connection: false,
             recovery_packet: None,
             servers: servers::ServerChannels::new(),
@@ -178,8 +168,8 @@ impl Proxy {
         Ok(TunnelClient::new(
             reader,
             writer,
-            self.rx_sender.clone(),
-            self.tx_receiver.clone(),
+            self.client_rx_sender.clone(),
+            self.client_tx_receiver.clone(),
             inbound_crypt,
             outbound_crypt,
             self.stop.clone(),
@@ -213,39 +203,63 @@ impl Proxy {
         // Launch server or return an error
         self.launch_server(ctrl_tx.clone()).await?;
 
-        // Execute the proxy task
-        tokio::spawn({
-            let ctrl_tx = ctrl_tx.clone();
-            async move {
-                // Main loop to handle tunnel communication, moves self into the async task
-                loop {
-                    tokio::select! {
-                        // Check for stop signal
-                        _ = self.stop.wait_async() => {
-                            break;
-                        }
+        // Launch the main proxy task
+        tokio::spawn(self.run_task(ctrl_tx.clone(), ctrl_rx));
 
-                        // Handle control commands from the TunnelHandler
-                        cmd = ctrl_rx.recv_async() => {
-                            match cmd {
-                                Ok(cmd) => {
-                                    if let Err(e) = self.handle_command(cmd, &ctrl_tx).await {
-                                        eprintln!("Error handling command: {:?}", e);
-                                        break;
-                                    }
-                                }
-                                Err(_) => {
-                                    // Control channel closed, we should stop
-                                    break;
-                                }
+        Ok(handler::Handler::new(ctrl_tx))
+    }
+
+    pub async fn run_task(
+        mut self,
+        ctrl_tx: flume::Sender<Command>,
+        ctrl_rx: flume::Receiver<Command>,
+    ) -> Result<()> {
+        // Execute the proxy task
+        // Main loop to handle tunnel communication, moves self into the async task
+        loop {
+            tokio::select! {
+                // Check for stop signal
+                _ = self.stop.wait_async() => {
+                    break;
+                }
+
+                // Handle control commands
+                cmd = ctrl_rx.recv_async() => {
+                    match cmd {
+                        Ok(cmd) => {
+                            if let Err(e) = self.handle_command(cmd, &ctrl_tx).await {
+                                log::error!("Error handling command: {:?}", e);
+                                break;
                             }
+                        }
+                        Err(_) => {
+                            // Control channel closed, we should stop
+                            break;
                         }
                     }
                 }
+                msg = self.servers.recv() => {
+                    match msg {
+                        Ok(msg) => {
+                            if let Err(e) = self.client_tx.send_async(msg).await {
+                                log::error!("Error sending message to channel: {:?}", e);
+                            }
+                        }
+                        Err(_) => {
+                            // Server channel closed, we should stop
+                            break;
+                        }
+                    }
+                }
+                msg = self.client_rx.recv_async() => {
+                    let msg = msg.context("Failed to receive message from channel")?;
+                    if let Err(e) = self.servers.send_to_channel(msg).await {
+                        log::error!("Error sending message to server: {:?}", e);
+                    }
+                }
             }
-        });
-
-        Ok(handler::Handler::new(ctrl_tx))
+        }
+        Ok(())
     }
 
     async fn handle_command(
@@ -259,12 +273,9 @@ impl Proxy {
                 response,
             } => {
                 // Register a new server, and return the comms channel for it
-                let rx = self.servers.register_server(channel_id).await?;
+                let (tx, rx) = self.servers.register_server(channel_id).await?;
                 response
-                    .send_async(Ok(handler::ServerChannels {
-                        tx: self.rx_server_sender.clone(),
-                        rx,
-                    }))
+                    .send_async(Ok(handler::ServerChannels { tx, rx }))
                     .await?;
             }
             handler::Command::ReleaseChannel { channel_id } => {

@@ -59,8 +59,14 @@ impl ServerChannels {
     pub async fn register_server(
         &mut self,
         stream_channel_id: u16,
-    ) -> Result<flume::Receiver<protocol::Payload>> {
-        log::debug!("Creating server for stream_channel_id: {}", stream_channel_id);
+    ) -> Result<(
+        protocol::PayloadWithChannelSender,
+        protocol::PayloadReceiver,
+    )> {
+        log::debug!(
+            "Creating server for stream_channel_id: {}",
+            stream_channel_id
+        );
         // Ensure vector is large enough
         if self.server_senders.len() < stream_channel_id as usize {
             self.server_senders.resize(stream_channel_id as usize, None);
@@ -78,7 +84,14 @@ impl ServerChannels {
         let stop = Trigger::new();
 
         self.server_senders[(stream_channel_id - 1) as usize] = Some(ServerInfo { sender, stop });
-        Ok(receiver)
+        Ok((self.sender.clone(), receiver))
+    }
+
+    /// Closes the server for the given stream_channel_id
+    pub fn close_server(&mut self, stream_channel_id: u16) {
+        if self.server_senders.len() >= stream_channel_id as usize {
+            self.server_senders[(stream_channel_id - 1) as usize] = None;
+        }
     }
 
     pub async fn send_to_channel(&self, msg: protocol::PayloadWithChannel) -> Result<()> {
@@ -95,15 +108,6 @@ impl ServerChannels {
         Ok(())
     }
 
-    pub async fn stop_server(&self, stream_channel_id: u16) {
-        if stream_channel_id == 0 || stream_channel_id as usize > self.server_senders.len() {
-            return;
-        }
-        if let Some(server) = &self.server_senders[(stream_channel_id - 1) as usize] {
-            server.stop.trigger();
-        }
-    }
-
     pub fn stop_all_servers(&self) {
         for server in self.server_senders.iter().flatten() {
             server.stop.trigger();
@@ -114,11 +118,133 @@ impl ServerChannels {
         let msg = self.receiver.recv_async().await?;
         Ok(msg)
     }
+}
 
-    /// Closes the server for the given stream_channel_id
-    pub fn close_server(&mut self, stream_channel_id: u16) {
-        if self.server_senders.len() >= stream_channel_id as usize {
-            self.server_senders[(stream_channel_id - 1) as usize] = None;
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protocol::PayloadWithChannel;
+
+    #[tokio::test]
+    async fn test_register_and_communication() {
+        let mut channels = ServerChannels::new();
+        let channel_id = 1;
+
+        // Register server
+        let (tx, rx) = channels.register_server(channel_id).await.unwrap();
+
+        // 1. Test Server -> Proxy (recv)
+        let payload = vec![1, 2, 3, 4];
+        let msg = PayloadWithChannel::new(channel_id, &payload);
+
+        // Send using the sender returned by register_server
+        tx.send_async(msg).await.unwrap();
+
+        // Receive using channels.recv()
+        let received = channels.recv().await.unwrap();
+        assert_eq!(received.channel_id, channel_id);
+        assert_eq!(received.payload.as_ref(), payload.as_slice());
+
+        // 2. Test Proxy -> Server (send_to_channel)
+        let response_payload = vec![5, 6, 7, 8];
+        let response_msg = PayloadWithChannel::new(channel_id, &response_payload);
+
+        channels.send_to_channel(response_msg).await.unwrap();
+
+        // Receive using the receiver returned by register_server
+        let received_response = rx.recv_async().await.unwrap();
+        assert_eq!(received_response.as_ref(), response_payload.as_slice());
+    }
+
+    #[tokio::test]
+    async fn test_multiple_channels() {
+        let mut channels = ServerChannels::new();
+
+        let (tx1, rx1) = channels.register_server(1).await.unwrap();
+        let (tx2, rx2) = channels.register_server(2).await.unwrap();
+
+        // Send to channel 1
+        channels
+            .send_to_channel(PayloadWithChannel::new(1, &[10]))
+            .await
+            .unwrap();
+        assert_eq!(rx1.recv_async().await.unwrap().as_ref(), &[10]);
+
+        // Send to channel 2
+        channels
+            .send_to_channel(PayloadWithChannel::new(2, &[20]))
+            .await
+            .unwrap();
+        assert_eq!(rx2.recv_async().await.unwrap().as_ref(), &[20]);
+
+        // Server 1 sends to proxy
+        tx1.send_async(PayloadWithChannel::new(1, &[11]))
+            .await
+            .unwrap();
+        let msg = channels.recv().await.unwrap();
+        assert_eq!(msg.channel_id, 1);
+        assert_eq!(msg.payload.as_ref(), &[11]);
+
+        // Server 2 sends to proxy
+        tx2.send_async(PayloadWithChannel::new(2, &[22]))
+            .await
+            .unwrap();
+        let msg = channels.recv().await.unwrap();
+        assert_eq!(msg.channel_id, 2);
+        assert_eq!(msg.payload.as_ref(), &[22]);
+    }
+
+    #[tokio::test]
+    async fn test_invalid_channel() {
+        let channels = ServerChannels::new();
+        // Channel 0 is invalid
+        let err = channels
+            .send_to_channel(PayloadWithChannel::new(0, &[]))
+            .await;
+        assert!(err.is_err());
+
+        // Channel 1 not registered (but vector might be empty, so out of bounds)
+        let err = channels
+            .send_to_channel(PayloadWithChannel::new(1, &[]))
+            .await;
+        // If len is 0, 1 > 0, so it returns error.
+        assert!(err.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_channel_replacement() {
+        let mut channels = ServerChannels::new();
+
+        let (_tx1, rx1) = channels.register_server(1).await.unwrap();
+        let (_tx2, rx2) = channels.register_server(1).await.unwrap();
+
+        // Send to channel 1
+        channels
+            .send_to_channel(PayloadWithChannel::new(1, &[99]))
+            .await
+            .unwrap();
+
+        // rx2 should receive it
+        assert_eq!(rx2.recv_async().await.unwrap().as_ref(), &[99]);
+
+        // rx1 should be disconnected because the sender was dropped
+        assert!(rx1.recv_async().await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_close_server() {
+        let mut channels = ServerChannels::new();
+        let (_tx, rx) = channels.register_server(1).await.unwrap();
+
+        channels.close_server(1);
+
+        // Sender should be dropped
+        assert!(rx.recv_async().await.is_err());
+
+        // Sending to channel 1 should now be ignored (Ok but no action)
+        let res = channels
+            .send_to_channel(PayloadWithChannel::new(1, &[1]))
+            .await;
+        assert!(res.is_ok());
     }
 }
