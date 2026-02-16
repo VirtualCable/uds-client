@@ -70,15 +70,13 @@ pub struct Proxy {
     rx_sender: PayloadWithChannelSender, // Sender for the client
     rx: PayloadWithChannelReceiver,      // For receiving messages from the client side
 
-    // Channels comms for the server side (the one that will connect to the local servers)
-    tx_server: PayloadWithChannelSender, // For sending messages to the server side
-    tx_server_receiver: PayloadWithChannelReceiver, // Receiver for the server
-
-    rx_server_sender: PayloadSender, // Sender for the server
-    rx_server: PayloadReceiver,      // For receiving messages from the server side
+    rx_server_sender: PayloadWithChannelSender, // Sender for the server
+    rx_server: PayloadWithChannelReceiver,      // For receiving messages from the server side
 
     recover_connection: bool,
     recovery_packet: Option<PayloadWithChannel>,
+
+    servers: servers::ServerChannels,
 }
 
 impl Proxy {
@@ -93,8 +91,7 @@ impl Proxy {
         let (rx_sender, rx) = payload_with_channel_pair();
 
         // Server side channels
-        let (tx_server, tx_server_receiver) = payload_with_channel_pair();
-        let (rx_server_sender, rx_server) = payload_pair();
+        let (rx_server_sender, rx_server) = payload_with_channel_pair();
 
         Self {
             tunnel_server: tunnel_server.to_string(),
@@ -107,12 +104,11 @@ impl Proxy {
             tx_receiver,
             rx,
             rx_sender,
-            tx_server,
-            tx_server_receiver,
             rx_server_sender,
             rx_server,
             recover_connection: false,
             recovery_packet: None,
+            servers: servers::ServerChannels::new(),
         }
     }
 
@@ -262,28 +258,25 @@ impl Proxy {
                 channel_id,
                 response,
             } => {
-                // TODO: open the client side to tonnel server before sending the response
-                // Do this in a separate task to avoid blocking the command handling loop
+                // Register a new server, and return the comms channel for it
+                let rx = self.servers.register_server(channel_id).await?;
                 response
                     .send_async(Ok(handler::ServerChannels {
-                        tx: self.tx_server.clone(),
-                        rx: self.rx_server.clone(),
+                        tx: self.rx_server_sender.clone(),
+                        rx,
                     }))
                     .await?;
             }
             handler::Command::ReleaseChannel { channel_id } => {
-                // TODO: implement close the client side CHANNEL connection to tunnel server for this channel
-                unimplemented!();
-            }
-            handler::Command::ChannelClosed { channel_id } => {
-                // TODO: implement 
-                unimplemented!();
+                self.servers.close_server(channel_id);
             }
             handler::Command::ConnectionClosed => {
+                // Stop all servers
+                self.servers.stop_all_servers();
                 log::info!(
                     "Received connection closed command from client, will attempt to reconnect"
                 );
-                // TODO: Close all servers (Send empty messsage to all servers)
+                self.stop.trigger(); // Stop current server, which will in turn exit run loop
             }
             handler::Command::ChannelError {
                 packet,
@@ -297,12 +290,15 @@ impl Proxy {
                     message,
                     self.recovery_packet
                 );
-                // Stop current server, which will trigger the reconnection logic in the next launch_server
+                // TODO: Maybe a wait before relaunching?
                 self.launch_server(ctrl_tx.clone()).await?;
             }
-            handler::Command::ClientClose => {}
+            handler::Command::ClientClose => {
+                self.stop.trigger();
+            }
             handler::Command::ClientError { message } => {
-                eprintln!("Client error: {}", message);
+                log::error!("Client error: {}", message);
+                self.stop.trigger();
             }
         }
         Ok(())

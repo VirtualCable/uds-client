@@ -50,10 +50,6 @@ pub enum Command {
     ReleaseChannel {
         channel_id: u16,
     },
-    // From client to proxy, signals that channel is closed (either by client or server)
-    ChannelClosed {
-        channel_id: u16,
-    },
     // From client to proxy, signals ordered eof of connection to tunnel
     ConnectionClosed,
     // From client to proxy, signals that an error occurred on the channel, so it can be closed and cleaned up by proxy
@@ -105,13 +101,6 @@ impl Handler {
             .send_async(Command::ReleaseChannel { channel_id })
             .await
             .context("Failed to send release channel command")
-    }
-
-    pub async fn channel_closed(&self, channel_id: u16) -> Result<()> {
-        self.ctrl_tx
-            .send_async(Command::ChannelClosed { channel_id })
-            .await
-            .context("Failed to send channel closed command")
     }
 
     pub async fn connection_closed(&self) -> Result<()> {
