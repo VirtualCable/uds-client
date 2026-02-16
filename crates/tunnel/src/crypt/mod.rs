@@ -49,6 +49,7 @@ pub struct Crypt {
     seq: u64,
 }
 
+
 impl Crypt {
     pub fn new(key: &types::SharedSecret, seq: u64) -> Self {
         log::debug!("Creating Crypt with initial seq: {}", seq);

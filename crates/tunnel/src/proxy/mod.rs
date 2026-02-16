@@ -80,6 +80,7 @@ impl Proxy {
         ticket: Ticket,
         shared_secret: SharedSecret,
         initial_timeout: Duration,
+        stop: Trigger,
     ) -> Self {
         // Client side channels
         let (tx, tx_receiver) = payload_with_channel_pair();
@@ -89,7 +90,7 @@ impl Proxy {
             tunnel_server: tunnel_server.to_string(),
             ticket,
             shared_secret,
-            stop: Trigger::new(),
+            stop,
             initial_timeout,
             seqs: (0, 0),
             client_tx: tx,

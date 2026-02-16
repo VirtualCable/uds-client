@@ -86,6 +86,7 @@ impl Tunnel {
             self.ticket,
             self.shared_secret,
             self.initial_timeout,
+            self.stop.clone(),
         );
 
         // If fails to connect, wil return error
