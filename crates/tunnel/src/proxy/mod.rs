@@ -135,18 +135,18 @@ impl Proxy {
         // Split the stream into reader and writer for easier handling on the next steps
         let (mut reader, mut writer) = stream.into_split();
 
-        handshake.write(&mut writer).await?;
+        handshake.write(&mut writer).await.context("Failed to send handshake")?;
 
         // Send the encrypted ticket now to channel 0
         outbound_crypt
             .write(&self.stop, &mut writer, 0, self.ticket.as_ref())
-            .await?;
+            .await.context("Failed to send handshake ticket")?;
 
         // Read the response, should be the "reconnect" ticket, just in case some connection error
         let mut buffer = PacketBuffer::new();
         let (reconnect_ticket, channel_id) = inbound_crypt
             .read(&self.stop, &mut reader, &mut buffer)
-            .await?;
+            .await.context("Failed to read handshake response")?;
 
         // Channel id should be 0 for handshake response, if not, something went wrong
         if channel_id != 0 {
@@ -204,7 +204,14 @@ impl Proxy {
         self.launch_server(ctrl_tx.clone()).await?;
 
         // Launch the main proxy task
-        tokio::spawn(self.run_task(ctrl_tx.clone(), ctrl_rx));
+        tokio::spawn({
+            let ctrl_tx = ctrl_tx.clone();
+            async move {
+                if let Err(e) = self.run_task(ctrl_tx, ctrl_rx).await {
+                    log::error!("Proxy run error: {:?}", e);
+                }
+            }
+        });
 
         Ok(handler::Handler::new(ctrl_tx))
     }
