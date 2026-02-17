@@ -42,7 +42,7 @@ use shared::log;
 
 use crate::consts;
 
-use super::ticket::Ticket;
+use super::ticket::BrokerTicket;
 
 pub mod types;
 
@@ -174,10 +174,10 @@ impl BrokerApi for UdsBrokerApi {
 
         // Extract real script info from Ticket
         response
-            .json::<types::BrokerResponse<Ticket>>()
+            .json::<types::BrokerResponse<BrokerTicket>>()
             .await?
             .into_result()?
-            .recover_data_from_json(ticket.as_bytes(), &self.private_key)
+            .recover_data_from_json(ticket, &self.private_key)
             .map(|json_value| {
                 serde_json::from_value::<types::Script>(json_value).map_err(|e| types::Error {
                     message: format!("Failed to parse script from ticket data: {}", e),

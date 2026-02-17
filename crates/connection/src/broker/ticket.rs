@@ -8,22 +8,22 @@ use aes_gcm::{
 };
 use base64::{Engine as _, engine::general_purpose};
 
-use crypt::{
-    config::derive_tunnel_material,
-    kem::{CipherText, PrivateKey, decapsulate},
-};
 use crypt::consts::{CIPHERTEXT_SIZE, PRIVATE_KEY_SIZE};
+use crypt::{
+    kem::{CipherText, PrivateKey, decapsulate},
+    secrets::derive_tunnel_material,
+};
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
-pub struct Ticket {
+pub struct BrokerTicket {
     pub algorithm: String,
     pub ciphertext: String,
     pub data: String,
 }
 
-impl Ticket {
+impl BrokerTicket {
     pub fn new(algorithm: &str, ciphertext: &str, data: &str) -> Self {
-        Ticket {
+        BrokerTicket {
             algorithm: algorithm.to_string(),
             ciphertext: ciphertext.to_string(),
             data: data.to_string(),
@@ -32,7 +32,7 @@ impl Ticket {
 
     pub fn recover_data_from_json(
         &self,
-        ticket_id: &[u8],
+        ticket_id: &str,
         kem_private_key: &[u8; PRIVATE_KEY_SIZE],
     ) -> Result<serde_json::Value> {
         let kem_private_key = PrivateKey::from(kem_private_key);
@@ -54,7 +54,7 @@ impl Ticket {
             .map_err(|e| anyhow::format_err!("Failed to decode base64 data: {}", e))?;
 
         // Derive tunnel material
-        let material = derive_tunnel_material(&shared_secret, ticket_id)?;
+        let material = derive_tunnel_material(&shared_secret, &ticket_id.as_bytes().try_into()?)?;
 
         let cipher = Aes256Gcm::new(material.key_payload.as_ref().into());
         let nonce: &Nonce<typenum::U12> = Nonce::from_slice(material.nonce_payload.as_ref());

@@ -1,7 +1,7 @@
 use anyhow::Result;
 use base64::{Engine as _, engine::general_purpose};
 
-use super::ticket::Ticket;
+use super::ticket::BrokerTicket;
 
 use crypt::consts::PRIVATE_KEY_SIZE;
 
@@ -79,10 +79,10 @@ fn get_private_key_bytes() -> Result<[u8; PRIVATE_KEY_SIZE]> {
 
 #[test]
 fn test_recover_invalid_data_from_json() {
-    let ticket = Ticket::new("AES-256-GCM", "", "");
+    let ticket = BrokerTicket::new("AES-256-GCM", "", "");
 
     let result = ticket.recover_data_from_json(
-        TICKET_ID_TESTING.as_bytes(),
+        TICKET_ID_TESTING,
         &get_private_key_bytes().unwrap(),
     );
     assert!(result.is_err());
@@ -90,10 +90,10 @@ fn test_recover_invalid_data_from_json() {
 
 #[test]
 fn test_recover_valid_data_from_json() {
-    let ticket: Ticket = serde_json::from_str(TEST_TICKET_JSON).unwrap();
+    let ticket: BrokerTicket = serde_json::from_str(TEST_TICKET_JSON).unwrap();
 
     let result = ticket.recover_data_from_json(
-        TICKET_ID_TESTING.as_bytes(),
+        TICKET_ID_TESTING,
         &get_private_key_bytes().unwrap(),
     );
     assert!(

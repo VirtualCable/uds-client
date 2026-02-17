@@ -6,4 +6,5 @@ pub mod kem;
 pub mod consts;
 pub mod types;
 
-pub mod config;
+pub mod secrets;
+pub mod tunnel;
