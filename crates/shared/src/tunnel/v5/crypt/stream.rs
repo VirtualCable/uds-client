@@ -32,7 +32,7 @@
 use anyhow::Result;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use shared::{log, system::trigger::Trigger};
+use crate::{log, system::trigger::Trigger};
 
 use super::{
     Crypt, build_header, consts::CRYPT_PACKET_TIMEOUT_SECS, consts::HEADER_LENGTH, parse_header,
@@ -148,7 +148,6 @@ impl Crypt {
 mod tests {
     use super::super::types::SharedSecret;
     use super::*;
-    use shared::log;
 
     #[tokio::test]
     async fn test_read_write_roundtrip() {

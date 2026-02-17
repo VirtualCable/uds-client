@@ -26,10 +26,12 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-use crate::{
+use super::super::{
     crypt::{Crypt, types::SharedSecret},
     proxy::Command,
 };
+
+use crate::log;
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 use super::*;
@@ -49,7 +51,7 @@ struct TestContext {
 }
 
 fn create_client() -> TestContext {
-    shared::log::setup_logging("debug", shared::log::LogType::Test);
+    log::setup_logging("debug", log::LogType::Test);
 
     let (client, local) = tokio::io::duplex(1024);
     let (client_tx, payload_rx) = flume::bounded(10);

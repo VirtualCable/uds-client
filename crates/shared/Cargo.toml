@@ -7,16 +7,18 @@ authors = ["Adolfo Gómez <dkmaster@dkmon.com>"]
 license = "BSD-3-Clause"
 
 [dependencies]
-
 # Logging
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-log = { workspace = true }
 
+# Utility
 anyhow = { workspace = true }
 chrono = { workspace = true }
 directories-next = { workspace = true }
 hostname = { workspace = true }
+num_enum = { workspace = true }
+
 
 # Encoding/Decoding
 base64 = { workspace = true }
@@ -31,6 +33,15 @@ rand = { workspace = true }
 # SSL/TLS
 rustls = { workspace = true }
 rustls-native-certs = { workspace = true }
+
+# Encryption
+aes-gcm = { workspace = true }
+hkdf = { workspace = true }
+sha2 = { workspace = true }
+
+# channels and internal communication
+flume = { workspace = true }
+
 
 # non blocking TLS streams
 tokio-rustls = { workspace = true }

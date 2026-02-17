@@ -31,7 +31,7 @@
 
 use anyhow::Result;
 
-use shared::utils::hex_to_bytes;
+use crate::utils::hex_to_bytes;
 
 use super::consts;
 

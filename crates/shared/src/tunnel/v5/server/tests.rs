@@ -28,7 +28,8 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
-use crate::{protocol::Payload, proxy::Command};
+use super::super::{protocol::Payload, proxy::Command};
+use crate::log;
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 use super::*;
@@ -46,7 +47,7 @@ struct TestContext {
 }
 
 fn create_server(channel_id: u16) -> TestContext {
-    shared::log::setup_logging("debug", shared::log::LogType::Test);
+    log::setup_logging("debug", log::LogType::Test);
 
     let (client, local) = tokio::io::duplex(1024);
     let (client_tx, payload_rx) = flume::bounded(10);
@@ -337,7 +338,7 @@ async fn write_error_stops_server() {
         }
     }
 
-    shared::log::setup_logging("debug", shared::log::LogType::Test);
+    log::setup_logging("debug", log::LogType::Test);
 
     let (client_tx, _payload_rx) = flume::bounded(10);
     let (payload_tx, client_rx) = flume::bounded(10);

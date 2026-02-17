@@ -31,7 +31,7 @@
 use anyhow::Result;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use shared::{log, system::trigger::Trigger};
+use crate::{log, system::trigger::Trigger};
 
 use super::{
     protocol::{PayloadReceiver, PayloadWithChannel, PayloadWithChannelSender},

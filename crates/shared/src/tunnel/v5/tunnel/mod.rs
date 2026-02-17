@@ -47,11 +47,9 @@ use std::time::Duration;
 
 use anyhow::Result;
 
-use shared::{log, system::trigger::Trigger};
+use crate::{log, system::trigger::Trigger};
 
-use crate::crypt::types::SharedSecret;
-
-use super::{protocol::ticket::Ticket, proxy::Proxy};
+use super::{protocol::ticket::Ticket, proxy::Proxy, crypt::types::SharedSecret};
 
 pub struct Tunnel {
     ticket: Ticket,

@@ -33,7 +33,7 @@ use anyhow::Result;
 
 use aes_gcm::{AeadInPlace, Aes256Gcm, Nonce, aead::KeyInit};
 
-use shared::log;
+use crate::log;
 
 use super::protocol::Command;
 

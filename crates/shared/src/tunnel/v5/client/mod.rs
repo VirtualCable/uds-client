@@ -32,7 +32,7 @@
 use anyhow::{Context, Result};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use shared::{log, system::trigger::Trigger};
+use crate::{log, system::trigger::Trigger};
 
 use super::{
     crypt::{Crypt, consts::CRYPT_PACKET_SIZE, types::PacketBuffer},

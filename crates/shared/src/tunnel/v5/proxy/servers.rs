@@ -30,7 +30,7 @@
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 use anyhow::Result;
 
-use shared::{log, system::trigger::Trigger};
+use crate::{log, system::trigger::Trigger};
 
 use super::super::protocol;
 
@@ -123,7 +123,7 @@ impl ServerChannels {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::PayloadWithChannel;
+    use super::super::super::protocol::PayloadWithChannel;
 
     #[tokio::test]
     async fn test_register_and_communication() {

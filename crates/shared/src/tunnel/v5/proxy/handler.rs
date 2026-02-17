@@ -32,9 +32,7 @@ use anyhow::{Context, Result};
 
 use flume::Sender;
 
-use crate::protocol::{PayloadReceiver, PayloadWithChannelSender};
-
-use super::super::protocol::PayloadWithChannel;
+use super::super::protocol::{PayloadReceiver, PayloadWithChannel, PayloadWithChannelSender};
 
 pub struct ServerChannels {
     pub tx: PayloadWithChannelSender,

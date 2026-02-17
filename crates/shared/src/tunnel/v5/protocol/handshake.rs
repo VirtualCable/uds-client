@@ -100,7 +100,7 @@ impl Handshake {
 mod tests {
     use super::*;
 
-    use shared::log;
+    use crate::log;
 
     use super::super::consts::TICKET_LENGTH;
 

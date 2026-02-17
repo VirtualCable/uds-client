@@ -122,7 +122,7 @@ async fn start_tunel_fn(
             params.keep_listening_after_timeout,
             params.enable_ipv6
         );
-        tunnel::TunnelConnectInfo {
+        tunnel::v4::TunnelConnectInfo {
             addr: params.addr,
             port: params.port,
             ticket: params.ticket,
@@ -135,7 +135,7 @@ async fn start_tunel_fn(
         }
     };
 
-    let port = tunnel::start_tunnel(tunnel_info)
+    let port = tunnel::v4::start_tunnel(tunnel_info)
         .await
         .map(JsValue::from)
         .map_err(|e| JsError::from_native(JsNativeError::error().with_message(format!("{}", e))))?;

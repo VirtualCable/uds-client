@@ -33,7 +33,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 
-use shared::{log, system::trigger::Trigger};
+use crate::{log, system::trigger::Trigger};
 
 use super::{
     client::TunnelClient,

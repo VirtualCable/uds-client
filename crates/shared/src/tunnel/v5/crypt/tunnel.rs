@@ -33,7 +33,7 @@ use anyhow::Result;
 use hkdf::Hkdf;
 use sha2::Sha256;
 
-use shared::log;
+use crate::log;
 
 use super::super::protocol::ticket;
 

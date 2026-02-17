@@ -30,13 +30,15 @@
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 use std::time::Duration;
 
-use tokio::{io::AsyncWriteExt, io::AsyncReadExt, net::TcpListener};
+use tokio::{io::AsyncReadExt, io::AsyncWriteExt, net::TcpListener};
 
-use shared::log;
+use crate::log;
 
-use crate::{
+use super::super::{
     crypt::types::SharedSecret,
-    protocol::{consts::HANDSHAKE_V2_SIGNATURE, ticket::Ticket},
+    protocol::{
+        consts::HANDSHAKE_V2_SIGNATURE, payload_pair, payload_with_channel_pair, ticket::Ticket,
+    },
     proxy::handler::ServerChannels,
 };
 
@@ -90,7 +92,6 @@ async fn remote_server_dispatcher(
         stop.trigger();
         return;
     }
-
 
     loop {
         tokio::select! {
@@ -285,10 +286,10 @@ async fn test_handler_request_channel() {
                 } => {
                     assert_eq!(channel_id, 42);
                     // Create dummy channels to return
-                    let (tx, _rx) = crate::protocol::payload_with_channel_pair();
-                    let (_tx2, rx) = crate::protocol::payload_pair();
+                    let (tx, _rx) = payload_with_channel_pair();
+                    let (_tx2, rx) = payload_pair();
 
-                    let channels = crate::proxy::handler::ServerChannels { tx, rx };
+                    let channels = ServerChannels { tx, rx };
                     let _ = response.send_async(Ok(channels)).await;
                 }
                 _ => panic!("Unexpected command"),

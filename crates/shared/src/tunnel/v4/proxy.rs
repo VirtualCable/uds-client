@@ -29,7 +29,7 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 use crate::system::trigger::Trigger;
-use crate::tunnel::consts;
+use super::consts;
 use anyhow::Result;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf, split},
