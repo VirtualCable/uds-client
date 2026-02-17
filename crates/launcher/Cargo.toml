@@ -8,7 +8,8 @@ shared = { path = "../shared" }
 js = { path = "../js" }
 gui = { path = "../gui" }
 rdp = { path = "../rdp/rdp" }
-
+crypt = { path = "../crypt" }
+connection = { path = "../connection" }
 
 anyhow = { workspace = true }
 

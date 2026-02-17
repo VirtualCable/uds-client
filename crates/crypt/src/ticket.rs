@@ -9,7 +9,8 @@ use aes_gcm::{
 };
 use base64::{Engine as _, engine::general_purpose};
 
-use super::kem::{CIPHERTEXT_SIZE, CipherText, PrivateKey, PRIVATE_KEY_SIZE, decapsulate};
+use super::kem::{CipherText, PrivateKey, decapsulate};
+use crate::consts::{CIPHERTEXT_SIZE, PRIVATE_KEY_SIZE};
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct TunnelMaterial {
@@ -19,7 +20,10 @@ pub struct TunnelMaterial {
     pub nonce_payload: [u8; 12],
 }
 
-pub(crate) fn derive_tunnel_material(shared_secret: &[u8], ticket_id: &[u8]) -> Result<TunnelMaterial> {
+pub(crate) fn derive_tunnel_material(
+    shared_secret: &[u8],
+    ticket_id: &[u8],
+) -> Result<TunnelMaterial> {
     if ticket_id.len() < 48 {
         anyhow::bail!("ticket_id must be at least 48 bytes");
     }

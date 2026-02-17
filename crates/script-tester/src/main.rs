@@ -35,7 +35,8 @@ use base64::engine::{Engine as _, general_purpose::STANDARD};
 use bzip2::write::BzEncoder;
 use crossbeam::channel::{Receiver, Sender, bounded};
 
-use shared::{broker::api::types, log, system::trigger::Trigger};
+use shared::{log, system::trigger::Trigger};
+use connection::broker::api::types;
 
 // Get script and json with params from args
 // The signature file is the script file + mldsa65.sig

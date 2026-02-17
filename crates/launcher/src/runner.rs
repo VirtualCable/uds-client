@@ -34,8 +34,9 @@ use anyhow::Result;
 use crossbeam::channel::Sender;
 use tokio::sync::oneshot;
 
+use connection::{broker::api, consts, tasks};
 use gui::window::types::GuiMessage;
-use shared::{appdata, broker::api, consts, log, tasks};
+use shared::{appdata, log};
 
 async fn approve_host(
     tx: &Sender<GuiMessage>,
@@ -167,7 +168,8 @@ pub async fn run(
         // Retry after some time, trigger returns true if triggered
         if stop
             .wait_timeout_async(std::time::Duration::from_secs(8))
-            .await.is_ok()
+            .await
+            .is_ok()
         {
             log::info!("Stopping runner.");
             return Ok(());
@@ -175,7 +177,7 @@ pub async fn run(
     }
 
     // All done, send hide message if NOT internal RDP is running
-    if shared::tasks::is_internal_rdp_running() {
+    if tasks::is_internal_rdp_running() {
         log::debug!("Internal RDP is running.");
     } else {
         log::debug!("Hiding GUI.");

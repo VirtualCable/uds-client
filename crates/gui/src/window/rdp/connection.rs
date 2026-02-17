@@ -178,9 +178,9 @@ impl AppWindow {
         std::thread::spawn(move || {
             // Note: This may already be marked as launched from external RDP launcher
             // But ensure it is marked here as well (to allow using from other gui launchers as test app)
-            shared::tasks::mark_internal_rdp_as_running();
+            connection::tasks::mark_internal_rdp_as_running();
             let res = rdp.run();
-            shared::tasks::mark_internal_rdp_as_not_running();
+            connection::tasks::mark_internal_rdp_as_not_running();
             log::debug!("RDP thread exiting...");
             if let Err(e) = res {
                 log::debug!("RDP thread ended with error: {}", e);

@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 shared = { path = "../shared" }
+connection = { path = "../connection" }
 rdp = { path = "../rdp/rdp" }
 
 anyhow = { workspace = true }

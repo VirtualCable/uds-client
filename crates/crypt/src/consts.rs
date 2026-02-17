@@ -28,8 +28,8 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
-pub mod appdata;
-pub mod log;
-pub mod system;
-pub mod tls;
-pub mod utils;
+
+pub const TICKET_LENGTH: usize = 48;
+pub const PRIVATE_KEY_SIZE: usize = 2400;
+pub const PUBLIC_KEY_SIZE: usize = 1184;
+pub const CIPHERTEXT_SIZE: usize = 1088;

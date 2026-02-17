@@ -1,7 +1,7 @@
 use anyhow::Result;
 use base64::{Engine as _, engine::general_purpose};
 
-use crate::{Ticket, PRIVATE_KEY_SIZE};
+use crate::{Ticket, consts::PRIVATE_KEY_SIZE};
 
 const PRIVATE_KEY_768_TESTING: &str = "TzpPr8sQk1BBjmEFpTqCqdhTNfGdTpK37GBFaQWnigW8AZqMzrlSxRa+grYDdjJ1JiaiuSkpptCtIKsf\
     6QiD6HRJrAPNCJyxbmihz3KS0IOmjzUx4BYh/Ap/nYbE/0qWZFG0KdGKtSKWnOoQFCph0vOLQKnN8HGq\

@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 rdp = { path = "../rdp/rdp" }
 shared = { path = "../shared" }
+connection = { path = "../connection" }
 gui = { path = "../gui" }
 
 # JavaScript engine

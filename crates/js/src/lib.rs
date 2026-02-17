@@ -36,10 +36,9 @@ use boa_engine::{
     module::{MapModuleLoader, SyntheticModuleInitializer},
 };
 
-use shared::{
-    broker::api::types::{Script, ScriptType},
-    log,
-};
+use connection::broker::api::types::{Script, ScriptType};
+
+use shared::log;
 
 pub mod gui;
 

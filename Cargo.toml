@@ -12,6 +12,7 @@ members = [
     "crates/gui-tester",
     "crates/js",
     "crates/audio",
+    "crates/connection",
 ]
 resolver = "3"
 

@@ -31,7 +31,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use crossbeam::channel::{Receiver, Sender, bounded};
 
-use shared::{consts, log, system::trigger::Trigger};
+use shared::{log, system::trigger::Trigger};
 
 mod about;
 mod asyncthread;
@@ -60,7 +60,7 @@ fn collect_arguments() -> Option<(String, String, String)> {
     let host_ticket_and_scrambler = &args[1]["udssv2://".len()..];
     match host_ticket_and_scrambler.split_once('/') {
         Some((host, rest)) => match rest.split_once('/') {
-            Some((ticket, scrambler)) if ticket.len() == consts::TICKET_LENGTH => {
+            Some((ticket, scrambler)) if ticket.len() == crypt::consts::TICKET_LENGTH => {
                 Some((host.to_string(), ticket.to_string(), scrambler.to_string()))
             }
             _ => None,

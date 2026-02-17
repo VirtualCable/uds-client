@@ -38,7 +38,8 @@ use boa_engine::{
     value::TryFromJs,
 };
 
-use shared::{log, tasks, tunnel};
+use connection::{tasks, TunnelMaterial};
+use shared::log;
 
 fn add_early_unlinkable_file_fn(
     _: &JsValue,
@@ -78,9 +79,9 @@ struct CryptoParams {
     pub key_receive: Vec<u8>,
 }
 
-impl From<CryptoParams> for tunnel::TunnelMaterial {
+impl From<CryptoParams> for TunnelMaterial {
     fn from(cp: CryptoParams) -> Self {
-        tunnel::TunnelMaterial {
+        TunnelMaterial {
             key_payload: [0; 32], // Not used in tunnel
             key_send: cp.key_send.try_into().unwrap_or([0; 32]),
             key_receive: cp.key_receive.try_into().unwrap_or([0; 32]),
@@ -122,7 +123,7 @@ async fn start_tunel_fn(
             params.keep_listening_after_timeout,
             params.enable_ipv6
         );
-        tunnel::v4::TunnelConnectInfo {
+        connection::v4::TunnelConnectInfo {
             addr: params.addr,
             port: params.port,
             ticket: params.ticket,
@@ -135,7 +136,7 @@ async fn start_tunel_fn(
         }
     };
 
-    let port = tunnel::v4::start_tunnel(tunnel_info)
+    let port = connection::v4::start_tunnel(tunnel_info)
         .await
         .map(JsValue::from)
         .map_err(|e| JsError::from_native(JsNativeError::error().with_message(format!("{}", e))))?;

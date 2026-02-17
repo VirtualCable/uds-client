@@ -137,7 +137,7 @@ fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
     send_message(GuiMessage::ConnectRdp(settings));
     // Launcher needs to know that RDP client is running
     // so it doesn't close the GUI immediately
-    shared::tasks::mark_internal_rdp_as_running();
+    connection::tasks::mark_internal_rdp_as_running();
 
     Ok(JsValue::undefined())
 }
@@ -258,11 +258,8 @@ mod tests {
                     assert!(!settings.verify_cert);
                     assert!(!settings.use_nla);
                     match settings.screen_size {
-                        ScreenSize::Fixed(w, h) => {
-                            assert_eq!(w, 1024);
-                            assert_eq!(h, 768);
-                        }
-                        _ => panic!("Expected fixed screen size"),
+                        ScreenSize::Full => {}
+                        _ => panic!("Expected full screen size, got {:?}", settings.screen_size),
                     }
                     assert_eq!(settings.drives_to_redirect, vec!["all"]);
                     assert!(settings.clipboard_redirection);

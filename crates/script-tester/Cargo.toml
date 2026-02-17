@@ -8,6 +8,7 @@ shared = { path = "../shared" }
 js = { path = "../js" }
 rdp = { path = "../rdp/rdp" }
 gui = { path = "../gui" }
+connection = { path = "../connection" }
 
 serde = { workspace = true }
 serde_json = { workspace = true }
