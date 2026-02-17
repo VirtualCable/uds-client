@@ -34,8 +34,9 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use shared::{log, system::trigger::Trigger};
 
+use crypt::tunnel::{Crypt, consts::CRYPT_PACKET_SIZE, types::PacketBuffer};
+
 use super::{
-    crypt::{Crypt, consts::CRYPT_PACKET_SIZE, types::PacketBuffer},
     protocol::{PayloadWithChannel, PayloadWithChannelReceiver, PayloadWithChannelSender},
     proxy::Handler,
 };

@@ -49,7 +49,9 @@ use anyhow::Result;
 
 use shared::{log, system::trigger::Trigger};
 
-use super::{protocol::ticket::Ticket, proxy::Proxy, crypt::types::SharedSecret};
+use crypt::types::{SharedSecret, Ticket};
+
+use super::proxy::Proxy;
 
 pub struct Tunnel {
     ticket: Ticket,

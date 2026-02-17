@@ -6,7 +6,6 @@ use anyhow::Result;
 mod command;
 pub mod consts;
 pub mod handshake;
-pub mod ticket;
 
 pub use command::Command;
 

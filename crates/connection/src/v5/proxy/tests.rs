@@ -34,11 +34,14 @@ use tokio::{io::AsyncReadExt, io::AsyncWriteExt, net::TcpListener};
 
 use shared::log;
 
+use crypt::{
+    secrets::get_tunnel_crypts,
+    tunnel::types::PacketBuffer,
+    types::{SharedSecret, Ticket},
+};
+
 use super::super::{
-    crypt::types::SharedSecret,
-    protocol::{
-        consts::HANDSHAKE_V2_SIGNATURE, payload_pair, payload_with_channel_pair, ticket::Ticket,
-    },
+    protocol::{consts::HANDSHAKE_V2_SIGNATURE, payload_pair, payload_with_channel_pair},
     proxy::handler::ServerChannels,
 };
 

@@ -39,19 +39,7 @@ mod proxy;
 use crate::consts::MAX_STARTUP_TIME_MS;
 use shared::log;
 
-use super::registry;
-
-pub struct TunnelConnectInfo {
-    pub addr: String,
-    pub port: u16,
-    pub ticket: String,
-    pub local_port: Option<u16>, // It None, a random port will be used
-    pub check_certificate: bool, // whether to check server certificate
-    pub startup_time_ms: u64,    // Timeout for listening
-    pub keep_listening_after_timeout: bool, // whether to keep listening after timeout
-    pub enable_ipv6: bool,       // whether to enable ipv6 (local and remote)
-    pub params: Option<super::CryptoConfig>, // Optional tunnel material (for future use)
-}
+use crate::{registry, types::TunnelConnectInfo};
 
 // On new releases, the min_listening_ms is the time the tunnel will stay alive waiting for initial connections
 // on 4.0 and before, was the time that keeps the tunnel allowing new connnections (to disallow new connections after timeout)
@@ -149,8 +137,6 @@ pub async fn start_tunnel(info: TunnelConnectInfo) -> Result<u16> {
 
     Ok(actual_port)
 }
-
-pub use registry::{is_any_tunnel_active, log_running_tunnels};
 
 #[cfg(test)]
 mod test_utils;

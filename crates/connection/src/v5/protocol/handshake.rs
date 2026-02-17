@@ -33,7 +33,8 @@ use anyhow::Result;
 use num_enum::{FromPrimitive, IntoPrimitive};
 use tokio::io::AsyncWriteExt;
 
-use super::{consts::HANDSHAKE_V2_SIGNATURE, ticket::Ticket};
+use super::consts::HANDSHAKE_V2_SIGNATURE;
+use crypt::types::Ticket;
 
 // Handshake commands, starting from 0
 #[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, IntoPrimitive)]

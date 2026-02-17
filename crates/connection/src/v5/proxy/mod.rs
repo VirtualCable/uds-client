@@ -35,13 +35,17 @@ use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 
 use shared::{log, system::trigger::Trigger};
 
+use crypt::{
+    secrets::get_tunnel_crypts,
+    tunnel::types::PacketBuffer,
+    types::{SharedSecret, Ticket},
+};
+
 use super::{
     client::TunnelClient,
-    crypt::types::SharedSecret,
-    crypt::{tunnel::get_tunnel_crypts, types::PacketBuffer},
     protocol::{
         PayloadWithChannel, PayloadWithChannelReceiver, PayloadWithChannelSender,
-        handshake::Handshake, payload_with_channel_pair, ticket::Ticket,
+        handshake::Handshake, payload_with_channel_pair,
     },
 };
 
@@ -136,18 +140,23 @@ impl Proxy {
         // Split the stream into reader and writer for easier handling on the next steps
         let (mut reader, mut writer) = stream.into_split();
 
-        handshake.write(&mut writer).await.context("Failed to send handshake")?;
+        handshake
+            .write(&mut writer)
+            .await
+            .context("Failed to send handshake")?;
 
         // Send the encrypted ticket now to channel 0
         outbound_crypt
             .write(&self.stop, &mut writer, 0, self.ticket.as_ref())
-            .await.context("Failed to send handshake ticket")?;
+            .await
+            .context("Failed to send handshake ticket")?;
 
         // Read the response, should be the "reconnect" ticket, just in case some connection error
         let mut buffer = PacketBuffer::new();
         let (reconnect_ticket, channel_id) = inbound_crypt
             .read(&self.stop, &mut reader, &mut buffer)
-            .await.context("Failed to read handshake response")?;
+            .await
+            .context("Failed to read handshake response")?;
 
         // Channel id should be 0 for handshake response, if not, something went wrong
         if channel_id != 0 {
@@ -164,7 +173,10 @@ impl Proxy {
                 .try_into()
                 .context("Invalid ticket format in handshake response")?,
         );
-        log::debug!("Received handshake response, reconnect ticket: {:?}", self.ticket);
+        log::debug!(
+            "Received handshake response, reconnect ticket: {:?}",
+            self.ticket
+        );
 
         // Create the server and run it in a separate task
         Ok(TunnelClient::new(

@@ -38,7 +38,7 @@ use boa_engine::{
     value::TryFromJs,
 };
 
-use connection::{CryptoConfig, tasks};
+use connection::{CryptoConfig, tasks, types::TunnelConnectInfo};
 use shared::log;
 
 fn add_early_unlinkable_file_fn(
@@ -123,7 +123,7 @@ async fn start_tunel_fn(
             params.keep_listening_after_timeout,
             params.enable_ipv6
         );
-        connection::v4::TunnelConnectInfo {
+        TunnelConnectInfo {
             addr: params.addr,
             port: params.port,
             ticket: params.ticket,
