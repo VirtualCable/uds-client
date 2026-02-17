@@ -7,4 +7,4 @@ pub mod registry;
 pub mod tasks;
 
 // Re-export TunnelMaterial from crypt crate
-pub use crypt::TunnelMaterial;
+pub use crypt::CryptoConfig;

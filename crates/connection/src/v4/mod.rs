@@ -50,7 +50,7 @@ pub struct TunnelConnectInfo {
     pub startup_time_ms: u64,    // Timeout for listening
     pub keep_listening_after_timeout: bool, // whether to keep listening after timeout
     pub enable_ipv6: bool,       // whether to enable ipv6 (local and remote)
-    pub params: Option<super::TunnelMaterial>, // Optional tunnel material (for future use)
+    pub params: Option<super::CryptoConfig>, // Optional tunnel material (for future use)
 }
 
 // On new releases, the min_listening_ms is the time the tunnel will stay alive waiting for initial connections

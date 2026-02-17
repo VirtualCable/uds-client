@@ -39,7 +39,7 @@ use bzip2::read::BzDecoder;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crypt::TunnelMaterial;
+use crypt::CryptoConfig;
 
 use shared::log;
 
@@ -204,7 +204,7 @@ pub struct Script {
     pub signature_algorithm: String, // Optional signature algorithm
     pub params: String, // from codecs.encode(codecs.encode(json.dumps(self.parameters).encode(), 'bz2'), 'base64').decode()
     pub log: Log,
-    pub crypto_params: Option<TunnelMaterial>,  // provided by the broker for cryptographic operations
+    pub crypto_params: Option<CryptoConfig>,  // provided by the broker for cryptographic operations
 }
 
 impl Script {

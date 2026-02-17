@@ -4,12 +4,17 @@ version = "5.0.0"
 edition = "2024"
 
 [dependencies]
+shared = { path = "../shared" }
+
 # Cryptography libraries
 libcrux-ml-dsa = { workspace = true }
 libcrux-ml-kem = { workspace = true }
 hkdf = { workspace = true }
 sha2 = { workspace = true }
 aes-gcm = { workspace = true }
+
+# Tokio
+tokio = { workspace = true }
 
 # Randomness
 rand = { workspace = true }

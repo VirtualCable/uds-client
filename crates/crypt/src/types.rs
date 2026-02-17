@@ -29,13 +29,35 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
-pub const MAX_PACKET_SIZE: usize = 4096; // Hard limit for packet size. Anythig abobe this will be rejected.
-pub const HEADER_LENGTH: usize = 8 + 2; // counter (8 bytes) + length (2 bytes)
-pub const TAG_LENGTH: usize = 16; // AES-GCM tag length
-// IPv6 minimum MTU is 1280 bytes, minus IP (40 bytes) and UDP (8 bytes, future) headers - leaves 1232 bytes for payload
-// We use 1200 + HEADER_LENGTH + TAG_LENGTH = 1226 bytes to have some margin
-pub const CRYPT_PACKET_SIZE: usize = 1200; // This is our preferred packet size for encryption/decryption
+use anyhow::Result;
 
-// Max time once a crypt packet is started before receive it completely, to avoid hanging connections
-// Its long enough to allow for slow connections, but short enough to avoid a malformed packet to keep the connection hanging indefinitely
-pub const CRYPT_PACKET_TIMEOUT_SECS: u64 = 5;
+use shared::utils::hex_to_bytes;
+
+// Hard type for shared secret
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SharedSecret([u8; 32]);
+
+/// This code block is implementing functionality for the `SharedSecret` struct in Rust. Here's a
+/// breakdown of what each part is doing:
+impl SharedSecret {
+    pub fn new(secret: [u8; 32]) -> Self {
+        SharedSecret(secret)
+    }
+
+    pub fn from_hex(hex_str: &str) -> Result<Self> {
+        let bytes = hex_to_bytes::<32>(hex_str)?;
+        Ok(SharedSecret(bytes))
+    }
+}
+
+impl AsRef<[u8; 32]> for SharedSecret {
+    fn as_ref(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
+
+impl From<[u8; 32]> for SharedSecret {
+    fn from(secret: [u8; 32]) -> Self {
+        SharedSecret(secret)
+    }
+}

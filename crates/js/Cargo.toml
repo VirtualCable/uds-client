@@ -8,6 +8,7 @@ rdp = { path = "../rdp/rdp" }
 shared = { path = "../shared" }
 connection = { path = "../connection" }
 gui = { path = "../gui" }
+crypt = { path = "../crypt" }
 
 # JavaScript engine
 boa_engine = { workspace = true }

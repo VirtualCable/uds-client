@@ -38,7 +38,6 @@ async-trait = { workspace = true }
 windows = { workspace = true }
 widestring = { workspace = true }
 
-
 [dev-dependencies]
 rcgen = { workspace = true }
 serial_test = { workspace = true }

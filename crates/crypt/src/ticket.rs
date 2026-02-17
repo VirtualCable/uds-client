@@ -10,26 +10,29 @@ use aes_gcm::{
 use base64::{Engine as _, engine::general_purpose};
 
 use super::kem::{CipherText, PrivateKey, decapsulate};
-use crate::consts::{CIPHERTEXT_SIZE, PRIVATE_KEY_SIZE};
+use crate::{
+    consts::{CIPHERTEXT_SIZE, PRIVATE_KEY_SIZE},
+    types::SharedSecret,
+};
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
-pub struct TunnelMaterial {
-    pub key_payload: [u8; 32],
-    pub key_send: [u8; 32],
-    pub key_receive: [u8; 32],
+pub struct CryptoConfig {
+    pub key_payload: SharedSecret,
+    pub key_send: SharedSecret,
+    pub key_receive: SharedSecret,
     pub nonce_payload: [u8; 12],
 }
 
 pub(crate) fn derive_tunnel_material(
-    shared_secret: &[u8],
+    shared_secret: &SharedSecret,
     ticket_id: &[u8],
-) -> Result<TunnelMaterial> {
+) -> Result<CryptoConfig> {
     if ticket_id.len() < 48 {
         anyhow::bail!("ticket_id must be at least 48 bytes");
     }
 
     // HKDF-Extract + Expand with SHA-256
-    let hk = Hkdf::<Sha256>::new(Some(ticket_id), shared_secret);
+    let hk = Hkdf::<Sha256>::new(Some(ticket_id), shared_secret.as_ref());
 
     let mut okm = [0u8; 108];
     hk.expand(b"openuds-ticket-crypt", &mut okm)
@@ -45,10 +48,10 @@ pub(crate) fn derive_tunnel_material(
     key_receive.copy_from_slice(&okm[64..96]);
     nonce_payload.copy_from_slice(&okm[96..108]);
 
-    Ok(TunnelMaterial {
-        key_payload,
-        key_send,
-        key_receive,
+    Ok(CryptoConfig {
+        key_payload: key_payload.into(),
+        key_send: key_send.into(),
+        key_receive: key_receive.into(),
         nonce_payload,
     })
 }
@@ -86,7 +89,7 @@ impl Ticket {
         let kem_ciphertext = CipherText::from(&kem_ciphertext_bytes);
         // Note, the opoeration will always succeed, even for invalid ciphertexts
         // As long as the sizes are correct (that will bee for sure)
-        let shared_secret = decapsulate(&kem_private_key, &kem_ciphertext);
+        let shared_secret = decapsulate(&kem_private_key, &kem_ciphertext).into();
 
         let data = general_purpose::STANDARD
             .decode(&self.data)

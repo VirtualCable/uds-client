@@ -38,7 +38,7 @@ use boa_engine::{
     value::TryFromJs,
 };
 
-use connection::{tasks, TunnelMaterial};
+use connection::{CryptoConfig, tasks};
 use shared::log;
 
 fn add_early_unlinkable_file_fn(
@@ -79,12 +79,12 @@ struct CryptoParams {
     pub key_receive: Vec<u8>,
 }
 
-impl From<CryptoParams> for TunnelMaterial {
+impl From<CryptoParams> for CryptoConfig {
     fn from(cp: CryptoParams) -> Self {
-        TunnelMaterial {
-            key_payload: [0; 32], // Not used in tunnel
-            key_send: cp.key_send.try_into().unwrap_or([0; 32]),
-            key_receive: cp.key_receive.try_into().unwrap_or([0; 32]),
+        CryptoConfig {
+            key_payload: crypt::types::SharedSecret::default(), // Not used in tunnel
+            key_send: cp.key_send.try_into().unwrap_or([0; 32]).into(),
+            key_receive: cp.key_receive.try_into().unwrap_or([0; 32]).into(),
             nonce_payload: [0; 12], // Not used in tunnel
         }
     }
