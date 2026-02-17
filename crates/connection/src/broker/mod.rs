@@ -30,3 +30,7 @@
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
 pub mod api;
+pub mod ticket;
+
+#[cfg(test)]
+pub mod tests;

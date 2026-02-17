@@ -35,13 +35,14 @@ use base64::{Engine as _, engine::general_purpose};
 use reqwest::{Client, ClientBuilder};
 
 use crypt::{
-    Ticket,
     consts::{PRIVATE_KEY_SIZE, PUBLIC_KEY_SIZE},
-    generate_key_pair,
+    kem::generate_key_pair,
 };
 use shared::log;
 
 use crate::consts;
+
+use super::ticket::Ticket;
 
 pub mod types;
 

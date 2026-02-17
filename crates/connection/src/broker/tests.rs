@@ -1,7 +1,9 @@
 use anyhow::Result;
 use base64::{Engine as _, engine::general_purpose};
 
-use crate::{Ticket, consts::PRIVATE_KEY_SIZE};
+use super::ticket::Ticket;
+
+use crypt::consts::PRIVATE_KEY_SIZE;
 
 const PRIVATE_KEY_768_TESTING: &str = "TzpPr8sQk1BBjmEFpTqCqdhTNfGdTpK37GBFaQWnigW8AZqMzrlSxRa+grYDdjJ1JiaiuSkpptCtIKsf\
     6QiD6HRJrAPNCJyxbmihz3KS0IOmjzUx4BYh/Ap/nYbE/0qWZFG0KdGKtSKWnOoQFCph0vOLQKnN8HGq\
@@ -79,8 +81,10 @@ fn get_private_key_bytes() -> Result<[u8; PRIVATE_KEY_SIZE]> {
 fn test_recover_invalid_data_from_json() {
     let ticket = Ticket::new("AES-256-GCM", "", "");
 
-    let result =
-        ticket.recover_data_from_json(TICKET_ID_TESTING.as_bytes(), &get_private_key_bytes().unwrap());
+    let result = ticket.recover_data_from_json(
+        TICKET_ID_TESTING.as_bytes(),
+        &get_private_key_bytes().unwrap(),
+    );
     assert!(result.is_err());
 }
 
@@ -88,8 +92,10 @@ fn test_recover_invalid_data_from_json() {
 fn test_recover_valid_data_from_json() {
     let ticket: Ticket = serde_json::from_str(TEST_TICKET_JSON).unwrap();
 
-    let result =
-        ticket.recover_data_from_json(TICKET_ID_TESTING.as_bytes(), &get_private_key_bytes().unwrap());
+    let result = ticket.recover_data_from_json(
+        TICKET_ID_TESTING.as_bytes(),
+        &get_private_key_bytes().unwrap(),
+    );
     assert!(
         result.is_ok(),
         "Failed to recover data from JSON ticket: {:?}",
@@ -100,7 +106,9 @@ fn test_recover_valid_data_from_json() {
     let json_value = result.unwrap();
     println!("Recovered JSON value: {}", json_value);
     // Get object "crypto_params"
-    let crypto_params = json_value.get("crypto_params").expect("Missing crypto_params field");
+    let crypto_params = json_value
+        .get("crypto_params")
+        .expect("Missing crypto_params field");
     assert!(crypto_params.is_object(), "crypto_params is not an object");
     assert!(crypto_params.get("key_send").is_some());
     assert!(crypto_params.get("key_receive").is_some());

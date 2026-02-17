@@ -39,7 +39,7 @@ use bzip2::read::BzDecoder;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crypt::CryptoConfig;
+use crypt::config::CryptoConfig;
 
 use shared::log;
 
