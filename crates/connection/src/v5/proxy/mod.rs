@@ -50,7 +50,7 @@ use super::{
 mod handler;
 mod servers;
 
-pub use handler::{Command, Handler};
+pub use handler::{Command, Handler, ServerChannels};
 
 pub struct Proxy {
     tunnel_server: String, // Host:port of tunnel server to connect to

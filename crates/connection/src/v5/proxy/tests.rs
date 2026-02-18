@@ -28,167 +28,19 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+use super::super::tests::helpers::*;
+use super::*;
+
 use std::time::Duration;
 
-use tokio::{io::AsyncReadExt, io::AsyncWriteExt, net::TcpListener};
+use tokio::{io::AsyncWriteExt, net::TcpListener};
 
 use shared::log;
 
-use crypt::{
-    secrets::{CryptoKeys, derive_tunnel_material, get_tunnel_crypts},
-    tunnel::types::PacketBuffer,
-    types::{SharedSecret, Ticket},
-};
-
 use super::super::{
-    protocol::{consts::HANDSHAKE_V2_SIGNATURE, payload_pair, payload_with_channel_pair},
+    protocol::{payload_pair, payload_with_channel_pair},
     proxy::handler::ServerChannels,
 };
-
-use super::*;
-
-// Helper to create dummy ticket, ensure always the same
-fn dummy_ticket() -> Ticket {
-    Ticket::new([b'x'; 48])
-}
-
-fn dummy_shared_secret() -> SharedSecret {
-    SharedSecret::new([0u8; 32])
-}
-
-// Helper to create dummy shared secret
-fn dummy_crypt_info() -> CryptoKeys {
-    derive_tunnel_material(&dummy_shared_secret(), &dummy_ticket()).unwrap()
-}
-
-struct RemoteServer {
-    addr: String,
-    stop: Trigger,
-    rx: PayloadWithChannelReceiver,
-    tx: PayloadWithChannelSender,
-}
-
-async fn remote_server_dispatcher(
-    stop: Trigger,
-    mut socket: tokio::net::TcpStream,
-    rx: PayloadWithChannelReceiver,
-    tx: PayloadWithChannelSender,
-) {
-    let (mut crypt_output, mut crypt_input) =
-        get_tunnel_crypts(&dummy_crypt_info(), (0, 0)).unwrap();
-
-    let ticket = dummy_ticket();
-    let mut buf = PacketBuffer::new();
-    // Read handshake, but do not check it, just skip for tests
-    // Do not check real data received, that has it specific test elsewhere
-    {
-        let handshake_buf = &mut [0u8; HANDSHAKE_V2_SIGNATURE.len() + 1 + 48]; // Handshake header + cmd + ticket
-        socket.read_exact(handshake_buf).await.unwrap();
-        // Now read encripted ticket again, but do not check it, just skip for tests
-        crypt_input
-            .read(&stop, &mut socket, &mut buf)
-            .await
-            .unwrap();
-    }
-    if let Err(e) = {
-        crypt_output
-            .write(&stop, &mut socket, 0, ticket.as_ref())
-            .await
-    } {
-        log::error!("Error writing to socket: {:?}", e);
-        stop.trigger();
-        return;
-    }
-
-    loop {
-        tokio::select! {
-            _ = stop.wait_async() => {
-                log::debug!("Stop signal received, shutting down remote server dispatcher");
-                return;
-            }
-            data = crypt_input.read(&stop, &mut socket, &mut buf) => {
-                log::debug!("Data received: {:?}", data);
-                // Decrypt data
-                let (data, channel_id) = match data {
-                    Ok((data, channel_id)) => (data, channel_id),
-                    Err(e) => {
-                        log::error!("Error reading from socket: {:?}", e);
-                        stop.trigger();
-                        return;
-                    }
-                };
-                // Send data back, same as received and to tx
-                if let Err(e) = tx.send_async(PayloadWithChannel::new(channel_id, data)).await {
-                    log::error!("Error sending to channel: {:?}", e);
-                    stop.trigger();
-                    return;
-                }
-            }
-            channel_data = rx.recv_async() => {
-                log::debug!("Data received from channel: {:?}", channel_data);
-                match channel_data {
-                    Ok(data) => {
-                        log::debug!("Data received from channel: {:?}", data);
-                        crypt_output.write(&stop, &mut socket, data.channel_id, &data.payload).await.unwrap_or_else(|e| {
-                            log::error!("Error writing to socket: {:?}", e);
-                            stop.trigger();
-                        });
-                    },
-                    Err(e) => {
-                        log::error!("Error receiving from channel: {:?}", e);
-                        stop.trigger();
-                        return;
-                    }
-                }
-            }
-        }
-    }
-}
-
-async fn dummy_remote_server() -> RemoteServer {
-    let stop = Trigger::new();
-
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap().to_string();
-    let (tx, server_rx) = flume::unbounded();
-    let (server_tx, rx) = flume::unbounded();
-
-    tokio::spawn({
-        let stop = stop.clone();
-        async move {
-            tokio::select! {
-
-                _ = stop.wait_async() => {
-                    log::debug!("Stop signal received, shutting down dummy remote server");
-                }
-                accepted = listener.accept() => {
-                    match accepted {
-                        Ok((socket, _)) => {
-                            log::debug!("Client connected to dummy remote server");
-                            socket.set_nodelay(true).unwrap_or_else(|e| {
-                                log::error!("Error setting nodelay on socket: {:?}", e);
-                            });
-                            remote_server_dispatcher(stop, socket, server_rx, server_tx).await;
-                        }
-                        Err(e) => {
-                            log::error!("Error accepting connection: {:?}", e);
-                            stop.trigger();
-                        }
-                    }
-                }
-            }
-        }
-    });
-
-    log::debug!("Dummy remote server listening on {}", address);
-
-    RemoteServer {
-        addr: address,
-        stop,
-        rx,
-        tx,
-    }
-}
 
 #[tokio::test]
 async fn test_stop_signal() -> Result<()> {
@@ -197,7 +49,7 @@ async fn test_stop_signal() -> Result<()> {
     let remote_server = dummy_remote_server().await;
     let stop = Trigger::new();
     let proxy = Proxy::new(
-        &remote_server.addr,
+        &remote_server.listen_address(),
         dummy_ticket(),
         dummy_crypt_info(),
         Duration::from_millis(100),
@@ -338,7 +190,7 @@ async fn test_connect() -> Result<()> {
     let remote_server = dummy_remote_server().await;
     let stop = Trigger::new();
     let proxy = Proxy::new(
-        &remote_server.addr,
+        &remote_server.listen_address(),
         dummy_ticket(),
         dummy_crypt_info(),
         Duration::from_millis(100),
@@ -359,7 +211,7 @@ async fn test_recv_data() -> Result<()> {
     log::debug!("Creating proxy");
     let remote_server = dummy_remote_server().await;
     let proxy = Proxy::new(
-        &remote_server.addr,
+        &remote_server.listen_address(),
         dummy_ticket(),
         dummy_crypt_info(),
         Duration::from_millis(100),
@@ -400,7 +252,7 @@ async fn test_send_data() -> Result<()> {
     log::debug!("Creating proxy");
     let remote_server = dummy_remote_server().await;
     let proxy = Proxy::new(
-        &remote_server.addr,
+        &remote_server.listen_address(),
         dummy_ticket(),
         dummy_crypt_info(),
         Duration::from_millis(100),
