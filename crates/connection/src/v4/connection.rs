@@ -31,6 +31,7 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use crypt::types::Ticket;
 use rustls::{
     pki_types::ServerName,
     {ClientConfig, RootCertStore},
@@ -148,14 +149,14 @@ where
     .context("CMD_TEST timed out")?
 }
 
-pub async fn send_open_cmd<R, W>(reader: &mut R, writer: &mut W, ticket: &str) -> Result<()>
+pub async fn send_open_cmd<R, W>(reader: &mut R, writer: &mut W, ticket: &Ticket) -> Result<()>
 where
     R: AsyncReadExt + Unpin,
     W: AsyncWriteExt + Unpin,
 {
     // Convert ticket to bytes and send OPEN command with timeout
 
-    let cmd_open = [consts::CMD_OPEN, ticket.as_bytes()].concat();
+    let cmd_open = [consts::CMD_OPEN, ticket.as_ref()].concat();
     timeout(
         consts::CMD_TIMEOUT_SECS,
         send_cmd(reader, writer, &cmd_open),

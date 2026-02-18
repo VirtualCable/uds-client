@@ -8,4 +8,4 @@ pub mod tasks;
 pub mod types;
 
 // Re-export CryptoConfig from crypt crate
-pub use crypt::secrets::CryptoConfig;
+pub use crypt::secrets::CryptoKeys;

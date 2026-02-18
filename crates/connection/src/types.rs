@@ -29,14 +29,16 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
+use crypt::types::Ticket;
+
 pub struct TunnelConnectInfo {
     pub addr: String,
     pub port: u16,
-    pub ticket: String,
-    pub local_port: Option<u16>, // It None, a random port will be used
-    pub check_certificate: bool, // whether to check server certificate
-    pub startup_time_ms: u64,    // Timeout for listening
+    pub ticket: Ticket,
+    pub local_port: Option<u16>, // If None, a random port will be used
+    pub check_certificate: bool, // whether to check server certificate, v4.0
+    pub startup_time_ms: u64,    // Timeout for listening, in milliseconds
     pub keep_listening_after_timeout: bool, // whether to keep listening after timeout
     pub enable_ipv6: bool,       // whether to enable ipv6 (local and remote)
-    pub params: Option<super::CryptoConfig>, // Optional tunnel material (for future use)
+    pub crypt: Option<super::CryptoKeys>, // cryptographic keys for the connection. v5.0
 }

@@ -7,8 +7,8 @@ use shared::log;
 
 use crate::{types::{SharedSecret, Ticket}, tunnel::Crypt};
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
-pub struct CryptoConfig {
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy)]
+pub struct CryptoKeys {
     pub key_payload: SharedSecret,
     pub key_send: SharedSecret,
     pub key_receive: SharedSecret,
@@ -18,7 +18,7 @@ pub struct CryptoConfig {
 pub fn derive_tunnel_material(
     shared_secret: &SharedSecret,
     ticket_id: &Ticket,
-) -> Result<CryptoConfig> {
+) -> Result<CryptoKeys> {
     // HKDF-Extract + Expand with SHA-256
     let hk = Hkdf::<Sha256>::new(Some(ticket_id.as_ref()), shared_secret.as_ref());
 
@@ -36,7 +36,7 @@ pub fn derive_tunnel_material(
     key_receive.copy_from_slice(&okm[64..96]);
     nonce_payload.copy_from_slice(&okm[96..108]);
 
-    Ok(CryptoConfig {
+    Ok(CryptoKeys {
         key_payload: key_payload.into(),
         key_send: key_send.into(),
         key_receive: key_receive.into(),
@@ -48,23 +48,20 @@ pub fn derive_tunnel_material(
 /// inbound: for reading from the tunnel (decrypting)
 /// outbound: for writing to the tunnel (encrypting)
 /// # Arguments
-/// * `shared_secret` - Shared secret used for deriving the keys
-/// * `ticket` - Ticket used for deriving the keys
+/// * `keys` - Derived cryptographic keys
 /// * `seqs` - Initial sequence numbers for (inbound, outbound) crypts
 pub fn get_tunnel_crypts(
-    shared_secret: &SharedSecret,
-    ticket: &Ticket,
+    keys: &CryptoKeys,
     seqs: (u64, u64),
 ) -> Result<(Crypt, Crypt)> {
-    let material = derive_tunnel_material(shared_secret, ticket)?;
     log::debug!(
         "Derived tunnel material: key_receive={:?}, key_send={:?}",
-        material.key_receive,
-        material.key_send
+        keys.key_receive,
+        keys.key_send
     );
 
-    let inbound = Crypt::new(&material.key_receive, seqs.0);
-    let outbound = Crypt::new(&material.key_send, seqs.1);
+    let inbound = Crypt::new(&keys.key_receive, seqs.0);
+    let outbound = Crypt::new(&keys.key_send, seqs.1);
 
     Ok((inbound, outbound))
 }
@@ -102,7 +99,9 @@ mod tests {
         let shared_secret = SharedSecret::new([1u8; 32]);
         let ticket: Ticket = [2u8; 48].into();
 
-        let (inbound, outbound) = get_tunnel_crypts(&shared_secret, &ticket, (0, 0)).unwrap();
+        let crypto_keys = derive_tunnel_material(&shared_secret, &ticket).unwrap();
+
+        let (inbound, outbound) = get_tunnel_crypts(&crypto_keys, (0, 0)).unwrap();
 
         assert_eq!(inbound.current_seq(), 0);
         assert_eq!(outbound.current_seq(), 0);

@@ -35,7 +35,7 @@ use tokio::{io::AsyncReadExt, io::AsyncWriteExt, net::TcpListener};
 use shared::log;
 
 use crypt::{
-    secrets::get_tunnel_crypts,
+    secrets::{CryptoKeys, derive_tunnel_material, get_tunnel_crypts},
     tunnel::types::PacketBuffer,
     types::{SharedSecret, Ticket},
 };
@@ -52,9 +52,13 @@ fn dummy_ticket() -> Ticket {
     Ticket::new([b'x'; 48])
 }
 
-// Helper to create dummy shared secret
 fn dummy_shared_secret() -> SharedSecret {
     SharedSecret::new([0u8; 32])
+}
+
+// Helper to create dummy shared secret
+fn dummy_crypt_info() -> CryptoKeys {
+    derive_tunnel_material(&dummy_shared_secret(), &dummy_ticket()).unwrap()
 }
 
 struct RemoteServer {
@@ -71,7 +75,7 @@ async fn remote_server_dispatcher(
     tx: PayloadWithChannelSender,
 ) {
     let (mut crypt_output, mut crypt_input) =
-        get_tunnel_crypts(&dummy_shared_secret(), &dummy_ticket(), (0, 0)).unwrap();
+        get_tunnel_crypts(&dummy_crypt_info(), (0, 0)).unwrap();
 
     let ticket = dummy_ticket();
     let mut buf = PacketBuffer::new();
@@ -195,7 +199,7 @@ async fn test_stop_signal() -> Result<()> {
     let proxy = Proxy::new(
         &remote_server.addr,
         dummy_ticket(),
-        dummy_shared_secret(),
+        dummy_crypt_info(),
         Duration::from_millis(100),
         stop.clone(),
     );
@@ -234,7 +238,7 @@ async fn test_proxy_connection_fail() {
     let proxy = Proxy::new(
         &addr.to_string(),
         dummy_ticket(),
-        dummy_shared_secret(),
+        dummy_crypt_info(),
         Duration::from_millis(100),
         Trigger::new(),
     );
@@ -261,7 +265,7 @@ async fn test_proxy_handshake_fail_garbage() {
     let proxy = Proxy::new(
         &addr.to_string(),
         dummy_ticket(),
-        dummy_shared_secret(),
+        dummy_crypt_info(),
         Duration::from_millis(100),
         Trigger::new(),
     );
@@ -336,7 +340,7 @@ async fn test_connect() -> Result<()> {
     let proxy = Proxy::new(
         &remote_server.addr,
         dummy_ticket(),
-        dummy_shared_secret(),
+        dummy_crypt_info(),
         Duration::from_millis(100),
         stop.clone(),
     );
@@ -357,7 +361,7 @@ async fn test_recv_data() -> Result<()> {
     let proxy = Proxy::new(
         &remote_server.addr,
         dummy_ticket(),
-        dummy_shared_secret(),
+        dummy_crypt_info(),
         Duration::from_millis(100),
         remote_server.stop.clone(),
     );
@@ -398,7 +402,7 @@ async fn test_send_data() -> Result<()> {
     let proxy = Proxy::new(
         &remote_server.addr,
         dummy_ticket(),
-        dummy_shared_secret(),
+        dummy_crypt_info(),
         Duration::from_millis(100),
         remote_server.stop.clone(),
     );

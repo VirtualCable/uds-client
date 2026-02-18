@@ -65,7 +65,7 @@ impl BrokerTicket {
             .map_err(|_| anyhow::format_err!("Failed to parse JSON from decrypted data"))?;
 
         // Create a crypto_params field, insert the values and add to json_value
-        json_value["crypto_params"] = serde_json::to_value(&material)?;
+        json_value["crypto_params"] = serde_json::to_value(material)?;
 
         Ok(json_value)
     }

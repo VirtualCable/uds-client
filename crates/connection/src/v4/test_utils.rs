@@ -31,11 +31,11 @@
 use std::sync::Arc;
 
 use anyhow::Result;
+use crypt::types::Ticket;
 use rcgen::generate_simple_self_signed;
 use rustls::ServerConfig;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 
-use rand::{distr::Alphanumeric, prelude::*, rng};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf, split},
     net::{TcpListener, TcpStream},
@@ -294,7 +294,7 @@ pub async fn create_runner(port: u16) -> Result<(JoinHandle<()>, JoinHandle<()>,
         startup_time_ms: 10000,
         keep_listening_after_timeout: false,
         enable_ipv6: false,
-        params: None,
+        crypt: None,
     };
     let listener = super::connection::create_listener(info.local_port, info.enable_ipv6)
         .await
@@ -308,10 +308,6 @@ pub async fn create_runner(port: u16) -> Result<(JoinHandle<()>, JoinHandle<()>,
     Ok((server_handle, runner_handle, listen_port, trigger))
 }
 
-pub fn create_ticket() -> String {
-    rng()
-        .sample_iter(&Alphanumeric)
-        .take(consts::TICKET_LENGTH)
-        .map(char::from)
-        .collect::<String>()
+pub fn create_ticket() -> Ticket {
+    Ticket::new_random()
 }

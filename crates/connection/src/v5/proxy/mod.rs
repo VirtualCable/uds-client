@@ -36,9 +36,7 @@ use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use shared::{log, system::trigger::Trigger};
 
 use crypt::{
-    secrets::get_tunnel_crypts,
-    tunnel::types::PacketBuffer,
-    types::{SharedSecret, Ticket},
+    secrets::CryptoKeys, secrets::get_tunnel_crypts, tunnel::types::PacketBuffer, types::Ticket,
 };
 
 use super::{
@@ -57,7 +55,7 @@ pub use handler::{Command, Handler};
 pub struct Proxy {
     tunnel_server: String, // Host:port of tunnel server to connect to
     ticket: Ticket,
-    shared_secret: SharedSecret,
+    crypt_info: CryptoKeys,
     stop: Trigger,
     initial_timeout: std::time::Duration,
 
@@ -82,7 +80,7 @@ impl Proxy {
     pub fn new(
         tunnel_server: &str,
         ticket: Ticket,
-        shared_secret: SharedSecret,
+        crypt_info: CryptoKeys,
         initial_timeout: Duration,
         stop: Trigger,
     ) -> Self {
@@ -93,7 +91,7 @@ impl Proxy {
         Self {
             tunnel_server: tunnel_server.to_string(),
             ticket,
-            shared_secret,
+            crypt_info,
             stop,
             initial_timeout,
             seqs: (0, 0),
@@ -124,7 +122,7 @@ impl Proxy {
 
         // Create the crypt pair
         let (mut inbound_crypt, mut outbound_crypt) =
-            get_tunnel_crypts(&self.shared_secret, &self.ticket, self.seqs)?;
+            get_tunnel_crypts(&self.crypt_info, self.seqs)?;
 
         // Send open tunnel command with the ticket and shared secret
         let handshake = if self.recover_connection {

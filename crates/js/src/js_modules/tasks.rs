@@ -38,7 +38,7 @@ use boa_engine::{
     value::TryFromJs,
 };
 
-use connection::{CryptoConfig, tasks, types::TunnelConnectInfo};
+use connection::{CryptoKeys, tasks, types::TunnelConnectInfo};
 use shared::log;
 
 fn add_early_unlinkable_file_fn(
@@ -79,9 +79,9 @@ struct CryptoParams {
     pub key_receive: Vec<u8>,
 }
 
-impl From<CryptoParams> for CryptoConfig {
+impl From<CryptoParams> for CryptoKeys {
     fn from(cp: CryptoParams) -> Self {
-        CryptoConfig {
+        CryptoKeys {
             key_payload: crypt::types::SharedSecret::default(), // Not used in tunnel
             key_send: cp.key_send.try_into().unwrap_or([0; 32]).into(),
             key_receive: cp.key_receive.try_into().unwrap_or([0; 32]).into(),
@@ -126,13 +126,18 @@ async fn start_tunel_fn(
         TunnelConnectInfo {
             addr: params.addr,
             port: params.port,
-            ticket: params.ticket,
+            ticket: params.ticket.as_bytes().try_into().map_err(|_| {
+                JsError::from_native(
+                    JsNativeError::error()
+                        .with_message("Invalid ticket length, must be 32 bytes".to_string()),
+                )
+            })?,
             check_certificate: params.check_certificate.unwrap_or(true),
             local_port: params.local_port,
             startup_time_ms: params.startup_time_ms.unwrap_or(0),
             keep_listening_after_timeout: params.keep_listening_after_timeout.unwrap_or(false),
             enable_ipv6: params.enable_ipv6.unwrap_or(false),
-            params: params.crypto_params.map(|cp| cp.into()),
+            crypt: params.crypto_params.map(|cp| cp.into()),
         }
     };
 
