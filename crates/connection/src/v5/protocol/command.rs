@@ -33,7 +33,7 @@
 use anyhow::Result;
 use num_enum::{FromPrimitive, IntoPrimitive};
 
-use super::PayloadWithChannel;
+use super::{PayloadWithChannel, consts::MAX_ERROR_MSG_LENGTH};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, IntoPrimitive)]
 #[repr(u8)]
@@ -120,14 +120,18 @@ impl Command {
                     anyhow::bail!("ChannelError command data too short");
                 }
                 let channel_id = u16::from_be_bytes([data[1], data[2]]);
-                let message = String::from_utf8_lossy(&data[3..]).to_string();
+                let message =
+                    String::from_utf8_lossy(&data[3..3 + MAX_ERROR_MSG_LENGTH.min(data.len() - 3)])
+                        .to_string();
                 Ok(Command::ChannelError {
                     channel_id,
                     message,
                 })
             }
             CommandType::ConnectionError => {
-                let message = String::from_utf8_lossy(&data[1..]).to_string();
+                let message =
+                    String::from_utf8_lossy(&data[1..1 + MAX_ERROR_MSG_LENGTH.min(data.len() - 1)])
+                        .to_string();
                 Ok(Command::ConnectionError { message })
             }
             CommandType::Nop => Ok(Command::Nop),
@@ -160,11 +164,11 @@ impl Command {
             } => {
                 data.push(CommandType::ChannelError.into());
                 data.extend_from_slice(&channel_id.to_be_bytes());
-                data.extend_from_slice(message.as_bytes());
+                data.extend_from_slice(message.as_bytes()[..MAX_ERROR_MSG_LENGTH.min(message.len())].as_ref());
             }
             Command::ConnectionError { message } => {
                 data.push(CommandType::ConnectionError.into());
-                data.extend_from_slice(message.as_bytes());
+                data.extend_from_slice(message.as_bytes()[..MAX_ERROR_MSG_LENGTH.min(message.len())].as_ref());
             }
             Command::Nop => {
                 data.push(CommandType::Nop.into());

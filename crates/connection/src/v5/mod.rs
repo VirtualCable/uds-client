@@ -57,7 +57,7 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
                     channels.tx.clone(),
                     channels.rx.clone(),
                     trigger.clone(),
-                    proxy
+                    proxy.clone(),
                 );
 
                 log::debug!("Tunnel connection established, starting proxying");
@@ -71,6 +71,7 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
                             log::error!("Tunnel server error: {:?}", e);
                         }
                         active_connections.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+                        proxy.release_channel(1).await.ok();
                         log::debug!("Tunnel connection closed, active connections: {}", active_connections.load(std::sync::atomic::Ordering::Relaxed));
                         trigger.trigger();  // Ensure our proxy is stopped
                     }
@@ -89,6 +90,37 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
 
     Ok(())
 }
+
+pub async fn start_tunnel(info: TunnelConnectInfo) -> Result<u16> {
+    // This works this way:
+    // 0. Connect to remote server and upgrade to TLS, test connection and close initial connection. (for early failure detection)
+    // 1. Listen to local port (info.local_port or random)
+    // 2. On connection, connect to remote server and upgrade to TLS
+    // 3. Open
+    // 3. Start proxying data between local port and TLS connection
+
+    log::debug!("Creating local listener");
+    // Open listener here to get the actual port, but move the listener into the tunnel runner
+    let listener = crate::utils::create_listener(info.local_port, info.enable_ipv6).await?;
+    let actual_port = listener.local_addr()?.port();
+
+    log::info!(
+        "Tunnel listening on port {}, forwarding to {}:{}",
+        actual_port,
+        info.addr,
+        info.port
+    );
+    tokio::spawn({
+        async move {
+            if let Err(e) = tunnel_runner(info, listener).await {
+                log::error!("Tunnel error: {e}");
+            }
+        }
+    });
+
+    Ok(actual_port)
+}
+
 
 #[cfg(test)]
 mod tests;

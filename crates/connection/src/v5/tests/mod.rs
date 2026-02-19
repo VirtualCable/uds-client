@@ -29,6 +29,8 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
+use tokio::{net::TcpStream, io::AsyncWriteExt};
+
 // Share helpers with v5 tests
 #[cfg(test)]
 pub mod helpers;
@@ -47,18 +49,17 @@ async fn wait_any_tunnel(active: bool) -> Result<()> {
     Err(anyhow::anyhow!("No tunnel became active"))
 }
 
-#[tokio::test]
-async fn test_tunnel_stops() -> Result<()> {
+async fn setup_test() -> Result<(RemoteServer, TunnelConnectInfo, TcpListener)> {
     log::setup_logging("debug", log::LogType::Test);
 
-    log::debug!("Creating proxy");
     let remote_server = dummy_remote_server().await;
+    let listener = TcpListener::bind("127.0.0.1:0").await?;
 
     let info = TunnelConnectInfo {
-        addr: remote_server.listen_host,
+        addr: remote_server.listen_host.clone(),
         port: remote_server.listen_port,
         ticket: dummy_ticket(),
-        local_port: None,
+        local_port: listener.local_addr()?.port().into(),
         check_certificate: false,
         startup_time_ms: 100,
         keep_listening_after_timeout: false,
@@ -66,7 +67,12 @@ async fn test_tunnel_stops() -> Result<()> {
         crypt: Some(dummy_crypt_info()),
     };
 
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    Ok((remote_server, info, listener))
+}
+
+#[tokio::test]
+async fn test_tunnel_stops() -> Result<()> {
+    let (remote_server, info, listener) = setup_test().await?;
 
     tokio::spawn({
         async move {
@@ -81,9 +87,43 @@ async fn test_tunnel_stops() -> Result<()> {
     registry::stop_tunnels();
 
     wait_any_tunnel(false).await?;
- 
+
     // Stop remote testing server
     remote_server.stop.trigger();
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_tunnel_sends_data_to_remote_connection() -> Result<()> {
+    let (remote_server, info, listener) = setup_test().await?;
+
+    let port = info.local_port.unwrap();
+
+    tokio::spawn({
+        async move {
+            if let Err(e) = tunnel_runner(info, listener).await {
+                log::error!("Tunnel runner error: {:?}", e);
+            }
+        }
+    });
+
+    // Connect to the tunnel and send some data
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).await?;
+    log::debug!("Connected to tunnel");
+    stream.write_all(b"Hello, tunnel!").await?;
+
+    wait_any_tunnel(true).await?;
+
+    // Data should reach the remote server
+    let data = remote_server.rx.recv_async().await?;
+    log::debug!("Data received by remote server: {:?}", data);
+    assert_eq!(data.payload.as_ref(), b"Hello, tunnel!");
+
+    // Stop remote testing server
+    remote_server.stop.trigger();
+
+    wait_any_tunnel(false).await?;
 
     Ok(())
 }

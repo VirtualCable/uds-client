@@ -116,7 +116,13 @@ where
                 result = self.rx.recv_async() => {
                     // Error receiving from proxy, stop the server as the proxy connection is losy without notification
                     // Note: This may trigger stop for stopping the full tunnel processes group
-                    let payload = result?;
+                    let payload = match result {
+                        Ok(payload) => payload,
+                        Err(_) => {
+                            log::debug!("Proxy stopped. Exiting tunnel server.");
+                            return Ok(());  // Just exit, no error, as this means the proxy is not running, so we simply exit
+                        }
+                    };
                     // Write to socket
                     self.writer.write_all(&payload).await?;
                 }

@@ -31,8 +31,6 @@
 #![allow(dead_code)]
 use std::time::Duration;
 pub const BUFFER_SIZE: usize = 16 * 1024; // Max buffer length
-pub const LISTEN_ADDRESS: &str = "127.0.0.1";
-pub const LISTEN_ADDRESS_V6: &str = "[::1]";
 pub const RESPONSE_OK: &[u8] = b"OK";
 
 pub const TICKET_LENGTH: usize = 48;

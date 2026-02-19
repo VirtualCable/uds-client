@@ -118,7 +118,7 @@ pub async fn start_tunnel(info: TunnelConnectInfo) -> Result<u16> {
 
     log::debug!("Creating local listener");
     // Open listener here to get the actual port, but move the listener into the tunnel runner
-    let listener = connection::create_listener(info.local_port, info.enable_ipv6).await?;
+    let listener = crate::utils::create_listener(info.local_port, info.enable_ipv6).await?;
     let actual_port = listener.local_addr()?.port();
 
     log::info!(
@@ -138,7 +138,5 @@ pub async fn start_tunnel(info: TunnelConnectInfo) -> Result<u16> {
     Ok(actual_port)
 }
 
-#[cfg(test)]
-mod test_utils;
 #[cfg(test)]
 mod tests;

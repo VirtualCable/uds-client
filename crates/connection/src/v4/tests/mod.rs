@@ -30,11 +30,14 @@
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use super::{
-    connection::{connect_and_upgrade, send_open_cmd, send_test_cmd},
-    test_utils::{connect, create_runner, create_ticket},
-};
 use shared::log;
+
+mod helpers;
+
+use super::connection::{connect_and_upgrade, send_open_cmd, send_test_cmd};
+
+use helpers::{connect, create_runner, create_ticket};
+
 
 // use super::{consts, proxy};
 

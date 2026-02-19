@@ -104,7 +104,18 @@ where
                         self.send_data(&packet.context("Failed to receive packet from proxy")?).await?;
                     }
                     packet = self.crypt_inbound.read(&self.stop, &mut self.reader, &mut buffer) => {
-                        let (decrypted_data, channel) = packet.context("Failed to read packet from tunnel server")?;
+                        let (decrypted_data, channel) = match packet {
+                            Ok((data, channel)) => (data, channel),
+                            Err(e) => {
+                                // This can be an "internal" error (like decryption failure) or an "external" one (like connection closed). In both cases we log it and stop the client, but only in the first case we notify the proxy with a ChannelError command, as in the second case the connection is already closed and the proxy will be notified by the connection closure.
+                                self.proxy_ctrl
+                                    .packet_error()
+                                    .await
+                                    .ok();
+                                log::error!("Failed to read packet from tunnel server: {:?}", e);
+                                break;
+                            }
+                        };
                         // if decrypted_data is empty, it means the connection was closed
                         if decrypted_data.is_empty() && !self.stop.is_triggered() {
                             log::info!("Tunnel server closed the connection");
@@ -115,12 +126,12 @@ where
                             break;
                         }
                         // Send to proxy
-                        if let Err(e) = self.tx.send_async(super::protocol::PayloadWithChannel {
+                        if self.tx.send_async(super::protocol::PayloadWithChannel {
                             channel_id: channel,
                             payload: decrypted_data.into(),
-                        }).await {
-                            // This is an "internal" error, as it means the proxy is not processing commands, so we just log it and stop the client
-                            log::error!("Failed to send packet to proxy: {:?}", e);
+                        }).await.is_err() {
+                            // This means the proxy is not running, so we simply exit
+                            log::debug!("Proxy stopped. Exiting tunnel client.: {:?}", decrypted_data);
                             break;
                         }
                     }

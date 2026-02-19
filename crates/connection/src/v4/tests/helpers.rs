@@ -43,7 +43,7 @@ use tokio::{
 };
 use tokio_rustls::{TlsAcceptor, client, server};
 
-use super::{TunnelConnectInfo, consts, tunnel_runner};
+use super::super::{TunnelConnectInfo, connection, consts, tunnel_runner};
 use shared::{log, system::trigger::Trigger};
 
 /// Build an in-memory self-signed TLS ServerConfig suitable for tests.
@@ -264,7 +264,7 @@ pub async fn connect(
         server,
         port
     );
-    let (reader, writer) = super::connection::connect_and_upgrade(server, port, false)
+    let (reader, writer) = connection::connect_and_upgrade(server, port, false)
         .await
         .expect("Failed to connect and upgrade to TLS");
 
@@ -296,7 +296,7 @@ pub async fn create_runner(port: u16) -> Result<(JoinHandle<()>, JoinHandle<()>,
         enable_ipv6: false,
         crypt: None,
     };
-    let listener = super::connection::create_listener(info.local_port, info.enable_ipv6)
+    let listener = crate::utils::create_listener(info.local_port, info.enable_ipv6)
         .await
         .unwrap();
     let listen_port = listener.local_addr()?.port();

@@ -190,7 +190,7 @@ impl Proxy {
     }
 
     // Launchs (or relaunchs) the tunnel server, returns a handler to send commands to the server
-    async fn launch_server(&mut self, ctrl_tx: flume::Sender<handler::Command>) -> Result<()> {
+    async fn launch_client(&mut self, ctrl_tx: flume::Sender<handler::Command>) -> Result<()> {
         let server = self.connect(&ctrl_tx).await?;
         let recovery_packet = self.recovery_packet.take();
         tokio::spawn(async move {
@@ -213,7 +213,7 @@ impl Proxy {
         let (ctrl_tx, ctrl_rx) = Handler::new_command_channel();
 
         // Launch server or return an error
-        self.launch_server(ctrl_tx.clone()).await?;
+        self.launch_client(ctrl_tx.clone()).await?;
 
         // Launch the main proxy task
         tokio::spawn({
@@ -321,7 +321,12 @@ impl Proxy {
                     self.recovery_packet
                 );
                 // TODO: Maybe a wait before relaunching?
-                self.launch_server(ctrl_tx.clone()).await?;
+                self.launch_client(ctrl_tx.clone()).await?;
+            }
+            handler::Command::PacketError => {
+                log::error!("Packet error, will attempt to reconnect")
+                // Close server and relaunch a new one
+                
             }
             handler::Command::ClientClose => {
                 self.stop.trigger();

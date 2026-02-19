@@ -28,21 +28,28 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
-pub const UDS_CLIENT_VERSION: &str = "5.0.0";
 
-// User-Agent string for HTTP requests, depends on OS
-// to allow UDS to identify the client platform
-#[cfg(target_os = "windows")]
-pub const UDS_CLIENT_AGENT: &str = "UDS-Client/5.0.0 (Windows)";
-#[cfg(target_os = "linux")]
-pub const UDS_CLIENT_AGENT: &str = "UDS-Client/5.0.0 (Linux)";
-#[cfg(target_os = "macos")]
-pub const UDS_CLIENT_AGENT: &str = "UDS-Client/5.0.0 (MacOS)";
+use anyhow::{Context, Result};
+use shared::log;
 
-pub const URL_TEMPLATE: &str = "https://{host}/uds/rest/client";
+pub async fn create_listener(
+    local_port: Option<u16>,
+    enable_ipv6: bool,
+) -> Result<tokio::net::TcpListener> {
+    let addr = format!(
+        "{}:{}",
+        if enable_ipv6 {
+            crate::consts::LISTEN_ADDRESS_V6
+        } else {
+            crate::consts::LISTEN_ADDRESS
+        },
+        local_port.unwrap_or(0)
+    );
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
+        .context("Failed to create TCP listener")?;
 
-pub const TICKET_LENGTH: usize = 48;
-pub const MAX_STARTUP_TIME_MS: u64 = 120_000; // 2 minutes
+    log::debug!("TCP listener created on {}", addr);
 
-pub const LISTEN_ADDRESS: &str = "127.0.0.1";
-pub const LISTEN_ADDRESS_V6: &str = "[::1]";
+    Ok(listener)
+}

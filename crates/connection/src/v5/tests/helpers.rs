@@ -31,10 +31,9 @@
 #[cfg(test)]
 pub use test_helpers::*;
 
-
 #[cfg(test)]
 mod test_helpers {
-    use tokio::{io::AsyncReadExt, net::TcpListener};
+    use tokio::io::AsyncReadExt;
 
     use shared::{log, system::trigger::Trigger};
 
@@ -119,7 +118,14 @@ mod test_helpers {
                     log::debug!("Data received: {:?}", data);
                     // Decrypt data
                     let (data, channel_id) = match data {
-                        Ok((data, channel_id)) => (data, channel_id),
+                        Ok((data, channel_id)) => {
+                            if data.is_empty() {
+                                log::info!("Client closed the connection");
+                                stop.trigger();
+                                return;
+                            }
+                            (data, channel_id)
+                        },
                         Err(e) => {
                             log::error!("Error reading from socket: {:?}", e);
                             stop.trigger();
@@ -157,7 +163,7 @@ mod test_helpers {
     pub async fn dummy_remote_server() -> RemoteServer {
         let stop = Trigger::new();
 
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let listener = crate::utils::create_listener(None, false).await.unwrap();
         // Adress without port, to be used in handshake
         let address = listener.local_addr().unwrap().ip().to_string();
         let port = listener.local_addr().unwrap().port();
@@ -202,4 +208,3 @@ mod test_helpers {
         }
     }
 }
-
