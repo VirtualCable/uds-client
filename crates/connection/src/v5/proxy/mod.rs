@@ -117,6 +117,8 @@ impl Proxy {
         .await?
         .context("Failed to connect to tunnel server")?;
 
+        log::debug!("Connected to tunnel server at {}", self.tunnel_server);
+
         // Try to disable Nagle's algorithm for better performance in our case
         stream.set_nodelay(true).ok();
 
@@ -138,11 +140,13 @@ impl Proxy {
         // Split the stream into reader and writer for easier handling on the next steps
         let (mut reader, mut writer) = stream.into_split();
 
+        log::debug!("Sending handshake to tunnel server");
         handshake
             .write(&mut writer)
             .await
             .context("Failed to send handshake")?;
 
+        log::debug!("Sending handshake ticket to tunnel server");
         // Send the encrypted ticket now to channel 0
         outbound_crypt
             .write(&self.stop, &mut writer, 0, self.ticket.as_ref())
@@ -150,6 +154,7 @@ impl Proxy {
             .context("Failed to send handshake ticket")?;
 
         // Read the response, should be the "reconnect" ticket, just in case some connection error
+        log::debug!("Waiting for handshake response from tunnel server");
         let mut buffer = PacketBuffer::new();
         let (reconnect_ticket, channel_id) = inbound_crypt
             .read(&self.stop, &mut reader, &mut buffer)

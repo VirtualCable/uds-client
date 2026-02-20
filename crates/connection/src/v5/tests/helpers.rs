@@ -140,26 +140,32 @@ mod test_helpers {
         tokio::spawn({
             let stop = stop.clone();
             async move {
-                tokio::select! {
-
-                    _ = stop.wait_async() => {
-                        log::debug!("Stop signal received, shutting down dummy remote server");
-                    }
-                    accepted = listener.accept() => {
-                        match accepted {
-                            Ok((socket, _)) => {
-                                log::debug!("Client connected to dummy remote server");
-                                socket.set_nodelay(true).unwrap_or_else(|e| {
-                                    log::error!("Error setting nodelay on socket: {:?}", e);
-                                });
-                                remote_server_dispatcher(stop, socket, server_rx, server_tx).await.unwrap_or_else(|e| {
-                                    log::error!("Error in remote server dispatcher: {:?}", e);
-                                });
-                                log::debug!("Client disconnected from dummy remote server");
-                            }
-                            Err(e) => {
-                                log::error!("Error accepting connection: {:?}", e);
-                                stop.trigger();
+                loop {
+                    tokio::select! {
+                        _ = stop.wait_async() => {
+                            log::debug!("Stop signal received, shutting down dummy remote server");
+                        }
+                        accepted = listener.accept() => {
+                            log::debug!("**** Incoming connection to dummy remote server");
+                            match accepted {
+                                Ok((socket, _)) => {
+                                    tokio::spawn({
+                                        let stop = stop.clone();
+                                        let server_rx = server_rx.clone();
+                                        let server_tx = server_tx.clone();
+                                        async move {
+                                            log::debug!("Client connected to dummy remote server");
+                                            if let Err(e) = remote_server_dispatcher(stop, socket, server_rx, server_tx).await {
+                                                log::error!("Error in remote server dispatcher: {:?}", e);
+                                            }
+                                            log::debug!("Client disconnected from dummy remote server");
+                                        }
+                                    });
+                                }
+                                Err(e) => {
+                                    log::error!("Error accepting connection: {:?}", e);
+                                    stop.trigger();
+                                }
                             }
                         }
                     }
