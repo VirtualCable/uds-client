@@ -28,11 +28,13 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 #[cfg(test)]
 pub use test_helpers::*;
 
 #[cfg(test)]
 mod test_helpers {
+    use anyhow::Result;
     use tokio::io::AsyncReadExt;
 
     use shared::{log, system::trigger::Trigger};
@@ -81,7 +83,7 @@ mod test_helpers {
         mut socket: tokio::net::TcpStream,
         rx: PayloadWithChannelReceiver,
         tx: PayloadWithChannelSender,
-    ) {
+    ) -> Result<()> {
         let (mut crypt_output, mut crypt_input) =
             get_tunnel_crypts(&dummy_crypt_info(), (0, 0)).unwrap();
 
@@ -91,70 +93,35 @@ mod test_helpers {
         // Do not check real data received, that has it specific test elsewhere
         {
             let handshake_buf = &mut [0u8; HANDSHAKE_V2_SIGNATURE.len() + 1 + 48]; // Handshake header + cmd + ticket
-            socket.read_exact(handshake_buf).await.unwrap();
+            socket.read_exact(handshake_buf).await?;
             // Now read encripted ticket again, but do not check it, just skip for tests
-            crypt_input
-                .read(&stop, &mut socket, &mut buf)
-                .await
-                .unwrap();
+            crypt_input.read(&stop, &mut socket, &mut buf).await?;
         }
-        if let Err(e) = {
-            crypt_output
-                .write(&stop, &mut socket, 0, ticket.as_ref())
-                .await
-        } {
-            log::error!("Error writing to socket: {:?}", e);
-            stop.trigger();
-            return;
-        }
+        crypt_output
+            .write(&stop, &mut socket, 0, ticket.as_ref())
+            .await?;
 
         loop {
             tokio::select! {
                 _ = stop.wait_async() => {
                     log::debug!("Stop signal received, shutting down remote server dispatcher");
-                    return;
+                    return Ok(());
                 }
                 data = crypt_input.read(&stop, &mut socket, &mut buf) => {
                     log::debug!("Data received: {:?}", data);
                     // Decrypt data
-                    let (data, channel_id) = match data {
-                        Ok((data, channel_id)) => {
-                            if data.is_empty() {
-                                log::info!("Client closed the connection");
-                                stop.trigger();
-                                return;
-                            }
-                            (data, channel_id)
-                        },
-                        Err(e) => {
-                            log::error!("Error reading from socket: {:?}", e);
-                            stop.trigger();
-                            return;
-                        }
-                    };
-                    // Send data back, same as received and to tx
-                    if let Err(e) = tx.send_async(PayloadWithChannel::new(channel_id, data)).await {
-                        log::error!("Error sending to channel: {:?}", e);
-                        stop.trigger();
-                        return;
+                    let (data, channel_id) = data?;
+                    if data.is_empty() {
+                        log::info!("Client closed the connection");
+                        return Ok(());
                     }
+                    // Send data back, same as received and to tx
+                    tx.send_async(PayloadWithChannel::new(channel_id, data)).await?;
                 }
                 channel_data = rx.recv_async() => {
                     log::debug!("Data received from channel: {:?}", channel_data);
-                    match channel_data {
-                        Ok(data) => {
-                            log::debug!("Data received from channel: {:?}", data);
-                            crypt_output.write(&stop, &mut socket, data.channel_id, &data.payload).await.unwrap_or_else(|e| {
-                                log::error!("Error writing to socket: {:?}", e);
-                                stop.trigger();
-                            });
-                        },
-                        Err(e) => {
-                            log::error!("Error receiving from channel: {:?}", e);
-                            stop.trigger();
-                            return;
-                        }
-                    }
+                    let data = channel_data?;
+                    crypt_output.write(&stop, &mut socket, data.channel_id, &data.payload).await?;
                 }
             }
         }
@@ -185,7 +152,10 @@ mod test_helpers {
                                 socket.set_nodelay(true).unwrap_or_else(|e| {
                                     log::error!("Error setting nodelay on socket: {:?}", e);
                                 });
-                                remote_server_dispatcher(stop, socket, server_rx, server_tx).await;
+                                remote_server_dispatcher(stop, socket, server_rx, server_tx).await.unwrap_or_else(|e| {
+                                    log::error!("Error in remote server dispatcher: {:?}", e);
+                                });
+                                log::debug!("Client disconnected from dummy remote server");
                             }
                             Err(e) => {
                                 log::error!("Error accepting connection: {:?}", e);

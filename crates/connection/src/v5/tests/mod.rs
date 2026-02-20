@@ -29,7 +29,7 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
-use tokio::{net::TcpStream, io::AsyncWriteExt};
+use tokio::{io::AsyncWriteExt, net::TcpStream};
 
 // Share helpers with v5 tests
 #[cfg(test)]
@@ -46,7 +46,8 @@ async fn wait_any_tunnel(active: bool) -> Result<()> {
         }
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
-    Err(anyhow::anyhow!("No tunnel became active"))
+    log::error!("Timeout waiting for tunnel to become {}", if active { "active" } else { "inactive" });
+    Err(anyhow::anyhow!("Timeout waiting for tunnel to become {}", if active { "active" } else { "inactive" }))
 }
 
 async fn setup_test() -> Result<(RemoteServer, TunnelConnectInfo, TcpListener)> {
@@ -95,7 +96,7 @@ async fn test_tunnel_stops() -> Result<()> {
 }
 
 #[tokio::test]
-async fn test_tunnel_sends_data_to_remote_connection() -> Result<()> {
+async fn test_tunnel_sends_data_to_remote_and_closes_connection() -> Result<()> {
     let (remote_server, info, listener) = setup_test().await?;
 
     let port = info.local_port.unwrap();
@@ -113,17 +114,24 @@ async fn test_tunnel_sends_data_to_remote_connection() -> Result<()> {
     log::debug!("Connected to tunnel");
     stream.write_all(b"Hello, tunnel!").await?;
 
-    wait_any_tunnel(true).await?;
+    // Data should reach the remote server
+    let data = remote_server.rx.recv_async().await?;
+    log::debug!("Data received by remote server: {:?}", data);
+    assert_eq!(data.payload.as_ref(), b"Hello, tunnel!");
+
+    // Close and open a new one to test that tunnel is still active
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).await?;
+    log::debug!("Connected to tunnel");
+    stream.write_all(b"Hello, tunnel!").await?;
 
     // Data should reach the remote server
     let data = remote_server.rx.recv_async().await?;
     log::debug!("Data received by remote server: {:?}", data);
     assert_eq!(data.payload.as_ref(), b"Hello, tunnel!");
 
-    // Stop remote testing server
-    remote_server.stop.trigger();
 
-    wait_any_tunnel(false).await?;
+    // Ensure remote is finished
+    remote_server.stop.trigger();
 
     Ok(())
 }

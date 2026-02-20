@@ -101,7 +101,15 @@ where
                         break;
                     }
                     packet = self.rx.recv_async() => {
-                        self.send_data(&packet.context("Failed to receive packet from proxy")?).await?;
+                        let packet = match packet {
+                            Ok(p) => p,
+                            Err(e) => {
+                                // This means the proxy is not running, so we simply exit
+                                log::debug!("Proxy stopped. Exiting tunnel client.: {:?}", e.to_string());
+                                break;
+                            }
+                        };
+                        self.send_data(&packet).await?;
                     }
                     packet = self.crypt_inbound.read(&self.stop, &mut self.reader, &mut buffer) => {
                         let (decrypted_data, channel) = match packet {
@@ -116,6 +124,7 @@ where
                                 break;
                             }
                         };
+                        log::debug!("Received packet from tunnel server: channel_id={}, payload_size={}", channel, decrypted_data.len());
                         // if decrypted_data is empty, it means the connection was closed
                         if decrypted_data.is_empty() && !self.stop.is_triggered() {
                             log::info!("Tunnel server closed the connection");

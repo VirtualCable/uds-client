@@ -35,7 +35,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use shared::{log, system::trigger::Trigger};
 
 use super::{
-    Crypt, build_header, consts::CRYPT_PACKET_TIMEOUT_SECS, consts::HEADER_LENGTH, parse_header,
+    Crypt, build_header, consts::HEADER_LENGTH, parse_header,
     types::PacketBuffer,
 };
 
@@ -47,8 +47,6 @@ impl Crypt {
         length: usize,
         disallow_eof: bool,
     ) -> Result<usize> {
-        let timeout = std::time::Duration::from_secs(CRYPT_PACKET_TIMEOUT_SECS);
-
         let mut read = 0;
 
         while read < length {
@@ -72,10 +70,6 @@ impl Crypt {
                         }
                     }
                 }
-                _ = tokio::time::sleep(timeout) => {
-                    return Err(anyhow::anyhow!("read timed out after {:?} seconds", timeout.as_secs()));
-                }
-
             };
             read += n;
         }
@@ -146,8 +140,8 @@ impl Crypt {
 
 #[cfg(test)]
 mod tests {
-    use crate::types::SharedSecret;
     use super::*;
+    use crate::types::SharedSecret;
 
     #[tokio::test]
     async fn test_read_write_roundtrip() {

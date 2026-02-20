@@ -2,7 +2,7 @@ use anyhow::{Ok, Result};
 use std::time::Duration;
 use tokio::net::TcpListener;
 
-use shared::log;
+use shared::{log, system::trigger::Trigger};
 
 use crate::{consts::MAX_STARTUP_TIME_MS, registry, types::TunnelConnectInfo};
 
@@ -38,12 +38,13 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
                 // We will wait for client to end for cleanup
                 // Currently, as only one channel is being used
                 // this will be enough
+                let stop_proxy = Trigger::new();
                 let proxy = proxy::Proxy::new(
                     &format!("{}:{}", info.addr, info.port),
                     info.ticket,
                     crypt_info,
                     std::time::Duration::from_millis(info.startup_time_ms.min(MAX_STARTUP_TIME_MS)),
-                    trigger.clone(),
+                    stop_proxy.clone(),
                 ).run().await?;
 
                 let (reader, writer) = client_stream.into_split();
@@ -56,24 +57,24 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
                     1,
                     channels.tx.clone(),
                     channels.rx.clone(),
-                    trigger.clone(),
+                    stop_proxy.clone(),
                     proxy.clone(),
                 );
 
                 log::debug!("Tunnel connection established, starting proxying");
                 // Start proxying in a new task
                 tokio::spawn({
-                    let trigger = trigger.clone();
                     let active_connections = active_connections.clone();
                     async move {
                         active_connections.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        log::debug!("Spawning tunnel server task, active connections: {}", active_connections.load(std::sync::atomic::Ordering::Relaxed));
                         if let Err(e) = server.run().await {
                             log::error!("Tunnel server error: {:?}", e);
                         }
                         active_connections.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
                         proxy.release_channel(1).await.ok();
                         log::debug!("Tunnel connection closed, active connections: {}", active_connections.load(std::sync::atomic::Ordering::Relaxed));
-                        trigger.trigger();  // Ensure our proxy is stopped
+                        stop_proxy.trigger();  // Ensure our proxy is stopped
                     }
                 });
             }

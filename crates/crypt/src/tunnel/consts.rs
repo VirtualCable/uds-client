@@ -38,4 +38,4 @@ pub const CRYPT_PACKET_SIZE: usize = 1200; // This is our preferred packet size 
 
 // Max time once a crypt packet is started before receive it completely, to avoid hanging connections
 // Its long enough to allow for slow connections, but short enough to avoid a malformed packet to keep the connection hanging indefinitely
-pub const CRYPT_PACKET_TIMEOUT_SECS: u64 = 5;
+pub const CRYPT_HANDSHAKE_TIMEOUT_SECS: u64 = 5;
