@@ -1,6 +1,9 @@
 use anyhow::{Ok, Result};
 use std::time::Duration;
-use tokio::net::TcpListener;
+use {
+    tokio::io::{AsyncReadExt, AsyncWriteExt},
+    tokio::net::TcpListener,
+};
 
 use shared::{log, system::trigger::Trigger};
 
@@ -10,6 +13,8 @@ pub mod client;
 pub mod protocol;
 pub mod proxy;
 pub mod server;
+
+use protocol::consts::HANDSHAKE_TEST_RESPONSE;
 
 pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Result<()> {
     log::debug!(
@@ -92,6 +97,25 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
     Ok(())
 }
 
+pub async fn check_tunnel(info: &TunnelConnectInfo) -> Result<()> {
+    let remote_server_addr = format!("{}:{}", info.addr, info.port);
+    let mut stream = tokio::net::TcpStream::connect(&remote_server_addr).await?;
+    // Send Test Handshake
+    let data = protocol::handshake::Handshake::Test.to_bytes();
+    stream.write_all(&data).await?;
+    // Read response, should be OK
+    let mut buf = [0u8; 2];
+    stream.read_exact(&mut buf).await?;
+    if buf != *HANDSHAKE_TEST_RESPONSE {
+        anyhow::bail!(
+            "Unexpected handshake test response: {:?}, expected: {:?}",
+            buf,
+            HANDSHAKE_TEST_RESPONSE
+        );
+    }
+    Ok(())
+}
+
 pub async fn start_tunnel(info: TunnelConnectInfo) -> Result<u16> {
     // This works this way:
     // 0. Connect to remote server and upgrade to TLS, test connection and close initial connection. (for early failure detection)
@@ -121,7 +145,6 @@ pub async fn start_tunnel(info: TunnelConnectInfo) -> Result<u16> {
 
     Ok(actual_port)
 }
-
 
 #[cfg(test)]
 mod tests;

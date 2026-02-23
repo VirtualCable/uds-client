@@ -50,7 +50,7 @@ async fn wait_any_tunnel(active: bool) -> Result<()> {
     Err(anyhow::anyhow!("Timeout waiting for tunnel to become {}", if active { "active" } else { "inactive" }))
 }
 
-async fn setup_test() -> Result<(RemoteServer, TunnelConnectInfo, TcpListener)> {
+async fn setup_test(startup_time_ms: u64) -> Result<(RemoteServer, TunnelConnectInfo, TcpListener)> {
     log::setup_logging("debug", log::LogType::Test);
 
     let remote_server = dummy_remote_server().await;
@@ -62,7 +62,7 @@ async fn setup_test() -> Result<(RemoteServer, TunnelConnectInfo, TcpListener)> 
         ticket: dummy_ticket(),
         local_port: listener.local_addr()?.port().into(),
         check_certificate: false,
-        startup_time_ms: 100,
+        startup_time_ms,
         keep_listening_after_timeout: false,
         enable_ipv6: false,
         crypt: Some(dummy_crypt_info()),
@@ -73,7 +73,7 @@ async fn setup_test() -> Result<(RemoteServer, TunnelConnectInfo, TcpListener)> 
 
 #[tokio::test]
 async fn test_tunnel_stops() -> Result<()> {
-    let (remote_server, info, listener) = setup_test().await?;
+    let (remote_server, info, listener) = setup_test(1000).await?;
 
     tokio::spawn({
         async move {
@@ -97,7 +97,7 @@ async fn test_tunnel_stops() -> Result<()> {
 
 #[tokio::test]
 async fn test_tunnel_sends_data_to_remote_and_closes_connection() -> Result<()> {
-    let (remote_server, info, listener) = setup_test().await?;
+    let (remote_server, info, listener) = setup_test(100).await?;
 
     let port = info.local_port.unwrap();
 
@@ -119,10 +119,47 @@ async fn test_tunnel_sends_data_to_remote_and_closes_connection() -> Result<()> 
     log::debug!("Data received by remote server: {:?}", data);
     assert_eq!(data.payload.as_ref(), b"Hello, tunnel!");
 
-    // Close and open a new one to test that tunnel is still active
+    // Close and wait a bit, so the listener gets closes
+    drop(stream);
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+    let stream = TcpStream::connect(("12127.0.0.1", port)).await;
+    assert!(stream.is_err(), "Tunnel should be closed, but connection succeeded");
+
+    // Ensure remote is finished
+    remote_server.stop.trigger();
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_tunnel_closes_after_startup_timeout() -> Result<()> {
+    let (remote_server, info, listener) = setup_test(100).await?;
+
+    let port = info.local_port.unwrap();
+
+    tokio::spawn({
+        async move {
+            if let Err(e) = tunnel_runner(info, listener).await {
+                log::error!("Tunnel runner error: {:?}", e);
+            }
+        }
+    });
+
+    // Connect to the tunnel and send some data
     let mut stream = TcpStream::connect(("127.0.0.1", port)).await?;
     log::debug!("Connected to tunnel");
     stream.write_all(b"Hello, tunnel!").await?;
+
+    // Data should reach the remote server
+    let data = remote_server.rx.recv_async().await?;
+    log::debug!("Data received by remote server: {:?}", data);
+    assert_eq!(data.payload.as_ref(), b"Hello, tunnel!");
+
+    // Open another connection to ensure tunnel is still active
+    let mut stream2 = TcpStream::connect(("127.0.0.1", port)).await?;
+    log::debug!("Connected to tunnel");
+    stream2.write_all(b"Hello, tunnel!").await?;
 
     // Data should reach the remote server
     let data = remote_server.rx.recv_async().await?;

@@ -141,7 +141,7 @@ async fn start_tunel_fn(
         }
     };
 
-    let port = connection::v4::start_tunnel(tunnel_info)
+    let port = connection::start_tunnel(tunnel_info)
         .await
         .map(JsValue::from)
         .map_err(|e| JsError::from_native(JsNativeError::error().with_message(format!("{}", e))))?;

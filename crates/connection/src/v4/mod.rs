@@ -98,6 +98,15 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
     Ok(())
 }
 
+pub async fn check_tunnel(info: &TunnelConnectInfo) -> Result<()> {
+    let (mut reader, mut writer) =
+        connection::connect_and_upgrade(&info.addr, info.port, info.check_certificate).await?;
+
+    // Test to ensure connection is valid
+    connection::send_test_cmd(&mut reader, &mut writer).await?;
+    Ok(())
+}
+
 pub async fn start_tunnel(info: TunnelConnectInfo) -> Result<u16> {
     // This works this way:
     // 0. Connect to remote server and upgrade to TLS, test connection and close initial connection. (for early failure detection)
@@ -105,16 +114,6 @@ pub async fn start_tunnel(info: TunnelConnectInfo) -> Result<u16> {
     // 2. On connection, connect to remote server and upgrade to TLS
     // 3. Open
     // 3. Start proxying data between local port and TLS connection
-
-    log::debug!("Sending initial test connection to tunnel server");
-    {
-        let (mut reader, mut writer) =
-            connection::connect_and_upgrade(&info.addr, info.port, info.check_certificate).await?;
-
-        // Test to ensure connection is valid
-        connection::send_test_cmd(&mut reader, &mut writer).await?;
-    }
-    log::debug!("Initial test connection successful");
 
     log::debug!("Creating local listener");
     // Open listener here to get the actual port, but move the listener into the tunnel runner
