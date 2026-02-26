@@ -55,11 +55,11 @@ mod test_helpers {
         Ticket::new([b'x'; 48])
     }
 
+    // Helper to create dummy shared secret
     pub fn dummy_shared_secret() -> SharedSecret {
         SharedSecret::new([0u8; 32])
     }
 
-    // Helper to create dummy shared secret
     pub fn dummy_crypt_info() -> CryptoKeys {
         derive_tunnel_material(&dummy_shared_secret(), &dummy_ticket()).unwrap()
     }

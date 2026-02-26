@@ -393,11 +393,7 @@ Starts a tunnel connection.
   - `local_port` (number, optional): The local port to bind to.
   - `keep_listening_after_timeout` (boolean, optional): Whether to keep listening after timeout (default: false).
   - `enable_ipv6` (boolean, optional): Whether to enable IPv6 (default: false).
-  - `crypto_params` (object, optional): Optional cryptographic material for the tunnel. If provided, it must be an object with the following fields:
-    - `key_send` (Uint8Array | array of numbers): 32-byte key used to encrypt outgoing data.
-    - `key_receive` (Uint8Array | array of numbers): 32-byte key used to decrypt incoming data.
-    - `nonce_send` (Uint8Array | array of numbers): 12-byte nonce used for outgoing packets.
-    - `nonce_receive` (Uint8Array | array of numbers): 12-byte nonce used for incoming packets.
+  - `shared_secret` (vec, optional): Optional shared secret for cryptographic operations, provided as an array of bytes or Uint8Array (32 bytes).
 
 **Returns:** object - An object containing the assigned port: `{port: number}`.
 
@@ -421,22 +417,17 @@ const tunnel = await Tasks.startTunnel({
 });
 console.log("Tunnel port:", tunnel.port);
 
-// Start tunnel with explicit crypto parameters (Uint8Array or array of bytes)
-const crypto = {
-    key_send: new Uint8Array(32),       // fill with 32 bytes
-    key_receive: new Uint8Array(32),    // fill with 32 bytes
-    nonce_send: new Uint8Array(12),     // fill with 12 bytes
-    nonce_receive: new Uint8Array(12),  // fill with 12 bytes
-};
+// Start tunnel with explicit shared secret (Uint8Array or array of bytes)
+const shared_secret = new Uint8Array(32); // fill with 32 bytes
 const tunnelWithCrypto = await Tasks.startTunnel({
     addr: "example.com",
     port: 443,
     ticket: "ticket123",
     startup_time_ms: 5000,
     check_certificate: true,
-    crypto_params: crypto
+    shared_secret: shared_secret
 });
-console.log("Tunnel port (with crypto):", tunnelWithCrypto.port);
+console.log("Tunnel port (with shared secret):", tunnelWithCrypto.port);
 ```
 ### Examples
 
@@ -536,5 +527,5 @@ RDP.start({
 | Tasks   | addEarlyUnlinkableFile   | file_path: string | Adds file for early cleanup |
 | Tasks   | addLateUnlinkableFile    | file_path: string | Adds file for late cleanup |
 | Tasks   | addWaitableApp           | task_handle: number | Adds waitable application |
-| Tasks   | startTunnel (async)      | params: { addr: string, port: number, ticket: string, startup_time_ms?: number, check_certificate?: boolean, local_port?: number, keep_listening_after_timeout?: boolean, enable_ipv6?: boolean, crypto_params?: object } | Starts tunnel connection |
+| Tasks   | startTunnel (async)      | params: { addr: string, port: number, ticket: string, startup_time_ms?: number, check_certificate?: boolean, local_port?: number, keep_listening_after_timeout?: boolean, enable_ipv6?: boolean, shared_secret?: Uint8Array | number[] } | Starts tunnel connection |
 | RDP     | start            | settings: object | Starts RDP connection |

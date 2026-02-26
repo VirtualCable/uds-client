@@ -19,6 +19,13 @@ pub fn derive_tunnel_material(
     shared_secret: &SharedSecret,
     ticket_id: &Ticket,
 ) -> Result<CryptoKeys> {
+    // Note: Ticket for data scripted fro script is DIFFERENT from the one used for tunnel
+    // Do not mix them up :).
+    log::debug!(
+        "Deriving tunnel material with shared_secret: {:?} and ticket_id: {:?}",
+        shared_secret,
+        ticket_id
+    );
     // HKDF-Extract + Expand with SHA-256
     let hk = Hkdf::<Sha256>::new(Some(ticket_id.as_ref()), shared_secret.as_ref());
 

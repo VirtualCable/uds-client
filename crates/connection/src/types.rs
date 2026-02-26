@@ -29,7 +29,7 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
-use crypt::types::Ticket;
+use crypt::types::{SharedSecret, Ticket};
 
 pub struct TunnelConnectInfo {
     pub addr: String,
@@ -40,5 +40,5 @@ pub struct TunnelConnectInfo {
     pub startup_time_ms: u64,    // Timeout for listening, in milliseconds
     pub keep_listening_after_timeout: bool, // whether to keep listening after timeout
     pub enable_ipv6: bool,       // whether to enable ipv6 (local and remote)
-    pub crypt: Option<super::CryptoKeys>, // cryptographic keys for the connection. v5.0
+    pub shared_secret: Option<SharedSecret>, // cryptographic keys for the connection. v5.0
 }

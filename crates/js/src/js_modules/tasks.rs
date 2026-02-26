@@ -38,7 +38,7 @@ use boa_engine::{
     value::TryFromJs,
 };
 
-use connection::{CryptoKeys, tasks, types::TunnelConnectInfo};
+use connection::{tasks, types::TunnelConnectInfo};
 use shared::log;
 
 fn add_early_unlinkable_file_fn(
@@ -73,23 +73,6 @@ fn add_waitable_app_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsRe
     Ok(JsValue::undefined())
 }
 
-#[derive(TryFromJs)]
-struct CryptoParams {
-    pub key_send: Vec<u8>,
-    pub key_receive: Vec<u8>,
-}
-
-impl From<CryptoParams> for CryptoKeys {
-    fn from(cp: CryptoParams) -> Self {
-        CryptoKeys {
-            key_payload: crypt::types::SharedSecret::default(), // Not used in tunnel
-            key_send: cp.key_send.try_into().unwrap_or([0; 32]).into(),
-            key_receive: cp.key_receive.try_into().unwrap_or([0; 32]).into(),
-            nonce_payload: [0; 12], // Not used in tunnel
-        }
-    }
-}
-
 // Struct for tunnel start parameters
 #[derive(TryFromJs, Default)]
 struct TunnelParams {
@@ -101,7 +84,7 @@ struct TunnelParams {
     local_port: Option<u16>,
     keep_listening_after_timeout: Option<bool>,
     enable_ipv6: Option<bool>,
-    crypto_params: Option<CryptoParams>,
+    shared_secret: Option<Vec<u8>>,
 }
 
 async fn start_tunel_fn(
@@ -113,7 +96,7 @@ async fn start_tunel_fn(
         let mut ctx_borrow = ctx.borrow_mut();
         let params = extract_js_args!(args, &mut *ctx_borrow, TunnelParams);
         log::debug!(
-            "Starting tunnel to {}:{} with ticket {}, check_certificate: {:?}, listen_timeout_ms: {:?}, local_port: {:?}, keep_listening_after_timeout: {:?}, enable_ipv6: {:?}",
+            "Starting tunnel to {}:{} with ticket {}, check_certificate: {:?}, listen_timeout_ms: {:?}, local_port: {:?}, keep_listening_after_timeout: {:?}, enable_ipv6: {:?}, shared_secret: {:?}",
             params.addr,
             params.port,
             params.ticket,
@@ -121,7 +104,8 @@ async fn start_tunel_fn(
             params.startup_time_ms,
             params.local_port,
             params.keep_listening_after_timeout,
-            params.enable_ipv6
+            params.enable_ipv6,
+            params.shared_secret,
         );
         TunnelConnectInfo {
             addr: params.addr,
@@ -137,7 +121,17 @@ async fn start_tunel_fn(
             startup_time_ms: params.startup_time_ms.unwrap_or(0),
             keep_listening_after_timeout: params.keep_listening_after_timeout.unwrap_or(false),
             enable_ipv6: params.enable_ipv6.unwrap_or(false),
-            crypt: params.crypto_params.map(|cp| cp.into()),
+            shared_secret: params.shared_secret.as_ref().map(|s| {
+                s.as_slice()
+                    .try_into()
+                    .map_err(|_| {
+                        JsError::from_native(
+                            JsNativeError::error().with_message(
+                                "Invalid shared secret length".to_string(),
+                            ),
+                        )
+                    })
+            }).transpose()?,
         }
     };
 

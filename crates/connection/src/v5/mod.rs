@@ -1,4 +1,5 @@
 use anyhow::{Ok, Result};
+use crypt::secrets::derive_tunnel_material;
 use std::time::Duration;
 use {
     tokio::io::{AsyncReadExt, AsyncWriteExt},
@@ -25,9 +26,12 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
     let (_id, trigger, active_connections) = registry::register_tunnel(Some(
         Duration::from_millis(info.startup_time_ms.min(MAX_STARTUP_TIME_MS)),
     ));
-    let crypt_info = info.crypt.ok_or(anyhow::format_err!(
-        "TunnelConnectInfo must include crypt material"
+    let shared_secret = info.shared_secret.ok_or(anyhow::format_err!(
+        "TunnelConnectInfo must include shared secret"
     ))?;
+
+    // Derive tunnel material for decryption of data
+    let crypt_info = derive_tunnel_material(&shared_secret, &info.ticket)?;
 
     loop {
         // Accept incoming connection until triggered to stop.

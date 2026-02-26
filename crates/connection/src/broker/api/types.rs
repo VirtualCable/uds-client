@@ -36,10 +36,9 @@ use anyhow::Result;
 
 use base64::engine::{Engine as _, general_purpose::STANDARD};
 use bzip2::read::BzDecoder;
+use crypt::types::SharedSecret;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-
-use crypt::secrets::CryptoKeys;
 
 use shared::log;
 
@@ -204,7 +203,7 @@ pub struct Script {
     pub signature_algorithm: String, // Optional signature algorithm
     pub params: String, // from codecs.encode(codecs.encode(json.dumps(self.parameters).encode(), 'bz2'), 'base64').decode()
     pub log: Log,
-    pub crypto_params: Option<CryptoKeys>,  // provided by the broker for cryptographic operations
+    pub shared_secret: Option<SharedSecret>,  // provided by the broker for cryptographic operations
 }
 
 impl Script {
@@ -341,7 +340,7 @@ pub fn get_test_script() -> Script {
             level: "debug".to_string(),
             ticket: Some("dummy_ticket".to_string()),
         },
-        crypto_params: None,
+        shared_secret: None,
     }
 }
 

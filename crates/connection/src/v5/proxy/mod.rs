@@ -48,6 +48,7 @@ use super::{
 };
 
 mod handler;
+mod open_response;
 mod servers;
 
 pub use handler::{Command, Handler, ServerChannels};
@@ -156,10 +157,19 @@ impl Proxy {
         // Read the response, should be the "reconnect" ticket, just in case some connection error
         log::debug!("Waiting for handshake response from tunnel server");
         let mut buffer = PacketBuffer::new();
-        let (reconnect_ticket, channel_id) = inbound_crypt
+        let (response, channel_id) = inbound_crypt
             .read(&self.stop, &mut reader, &mut buffer)
             .await
             .context("Failed to read handshake response")?;
+
+        let open_response = open_response::OpenResponse::try_from(response)
+            .context("Failed to parse handshake response")?;
+
+        log::debug!(
+            "Received handshake response from tunnel server, channel_id: {}, open_response: {:?}",
+            channel_id,
+            open_response
+        );
 
         // Channel id should be 0 for handshake response, if not, something went wrong
         if channel_id != 0 {
@@ -169,13 +179,15 @@ impl Proxy {
             ));
         }
 
+        log::debug!(
+            "Received handshake response from tunnel server, reconnect ticket: {:?}",
+            open_response
+        );
+
         // Store reconnect ticket for future use.
         // This is different from original, and different for every conection
-        self.ticket = Ticket::new(
-            reconnect_ticket
-                .try_into()
-                .context("Invalid ticket format in handshake response")?,
-        );
+        self.ticket = open_response.session_id;
+
         log::debug!(
             "Received handshake response, reconnect ticket: {:?}",
             self.ticket
@@ -331,7 +343,6 @@ impl Proxy {
             handler::Command::PacketError => {
                 log::error!("Packet error, will attempt to reconnect")
                 // Close server and relaunch a new one
-                
             }
             handler::Command::ClientClose => {
                 self.stop.trigger();

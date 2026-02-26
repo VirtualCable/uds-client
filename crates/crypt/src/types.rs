@@ -65,6 +65,19 @@ impl From<[u8; 32]> for SharedSecret {
     }
 }
 
+impl TryFrom<&[u8]> for SharedSecret {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &[u8]) -> Result<SharedSecret> {
+        if value.len() != 32 {
+            return Err(anyhow::anyhow!("Invalid shared secret length"));
+        }
+        let mut secret = [0u8; 32];
+        secret.copy_from_slice(value);
+        Ok(SharedSecret(secret))
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Ticket([u8; TICKET_LENGTH]);
 

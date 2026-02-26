@@ -8,6 +8,7 @@ use aes_gcm::{
 };
 use base64::{Engine as _, engine::general_purpose};
 
+use shared::log;
 use crypt::consts::{CIPHERTEXT_SIZE, PRIVATE_KEY_SIZE};
 use crypt::{
     kem::{CipherText, PrivateKey, decapsulate},
@@ -46,14 +47,20 @@ impl BrokerTicket {
 
         let kem_ciphertext = CipherText::from(&kem_ciphertext_bytes);
         // Note, the opoeration will always succeed, even for invalid ciphertexts
-        // As long as the sizes are correct (that will bee for sure)
+        // As long as the sizes are correct (that will be for sure)
         let shared_secret = decapsulate(&kem_private_key, &kem_ciphertext).into();
+
+        log::debug!(
+            "Recovered shared secret: {:?}, ticket_id: {:?}",
+            shared_secret,
+            ticket_id
+        );
 
         let data = general_purpose::STANDARD
             .decode(&self.data)
             .map_err(|e| anyhow::format_err!("Failed to decode base64 data: {}", e))?;
 
-        // Derive tunnel material
+        // Derive tunnel material for decryption of data
         let material = derive_tunnel_material(&shared_secret, &ticket_id.as_bytes().try_into()?)?;
 
         let cipher = Aes256Gcm::new(material.key_payload.as_ref().into());
@@ -64,8 +71,14 @@ impl BrokerTicket {
         let mut json_value: serde_json::Value = serde_json::from_slice(&plaintext)
             .map_err(|_| anyhow::format_err!("Failed to parse JSON from decrypted data"))?;
 
-        // Create a crypto_params field, insert the values and add to json_value
-        json_value["crypto_params"] = serde_json::to_value(material)?;
+        // Create a shared_secret field, insert the values and add to json_value
+        json_value["shared_secret"] = serde_json::to_value(shared_secret)?;
+
+        log::debug!(
+            "Recovered data from ticket: {:?}, ticket_id: {:?}",
+            json_value,
+            ticket_id
+        );
 
         Ok(json_value)
     }

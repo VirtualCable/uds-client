@@ -65,7 +65,7 @@ async fn setup_test(startup_time_ms: u64) -> Result<(RemoteServer, TunnelConnect
         startup_time_ms,
         keep_listening_after_timeout: false,
         enable_ipv6: false,
-        crypt: Some(dummy_crypt_info()),
+        shared_secret: Some(dummy_shared_secret()),
     };
 
     Ok((remote_server, info, listener))

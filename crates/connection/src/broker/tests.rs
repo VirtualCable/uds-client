@@ -3,7 +3,7 @@ use base64::{Engine as _, engine::general_purpose};
 
 use super::ticket::BrokerTicket;
 
-use crypt::consts::PRIVATE_KEY_SIZE;
+use crypt::{consts::PRIVATE_KEY_SIZE, types::SharedSecret};
 
 const PRIVATE_KEY_768_TESTING: &str = "TzpPr8sQk1BBjmEFpTqCqdhTNfGdTpK37GBFaQWnigW8AZqMzrlSxRa+grYDdjJ1JiaiuSkpptCtIKsf\
     6QiD6HRJrAPNCJyxbmihz3KS0IOmjzUx4BYh/Ap/nYbE/0qWZFG0KdGKtSKWnOoQFCph0vOLQKnN8HGq\
@@ -105,13 +105,10 @@ fn test_recover_valid_data_from_json() {
     // Test material fields are present
     let json_value = result.unwrap();
     println!("Recovered JSON value: {}", json_value);
-    // Get object "crypto_params"
-    let crypto_params = json_value
-        .get("crypto_params")
-        .expect("Missing crypto_params field");
-    assert!(crypto_params.is_object(), "crypto_params is not an object");
-    assert!(crypto_params.get("key_send").is_some());
-    assert!(crypto_params.get("key_receive").is_some());
+    // Get object "shared_secret"
+    let _shared_secret: SharedSecret = serde_json::from_value(json_value
+        .get("shared_secret")
+        .expect("Missing shared_secret field").clone()).expect("Not a valid shared secret");
 
     assert_eq!(
         json_value.get("script").unwrap(),

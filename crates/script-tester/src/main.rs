@@ -86,7 +86,7 @@ async fn get_script_and_params() -> Result<types::Script> {
             level: "info".to_string(),
             ticket: None,
         },
-        crypto_params: None,
+        shared_secret: None,
     })
 }
 
