@@ -29,12 +29,12 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
-use anyhow::{Context, Result};
+use anyhow::{Result};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use shared::{log, system::trigger::Trigger};
 
-use crypt::tunnel::{Crypt, consts::CRYPT_PACKET_SIZE, types::PacketBuffer};
+use crypt::tunnel::{Crypt, types::PacketBuffer};
 
 use super::{
     protocol::{PayloadWithChannel, PayloadWithChannelReceiver, PayloadWithChannelSender},
@@ -150,43 +150,12 @@ where
         Ok(())
     }
 
+    // TODO: Packet splitting must be done in server, not here
+    // so the client can reconnect to server
     async fn send_data(&mut self, data: &PayloadWithChannel) -> Result<()> {
-        let mut offset = 0;
-
-        let payload = data.payload.as_ref();
-        // Divide data into CRYPT_PACKET_SIZE chunks and send them
-        while offset < payload.len() {
-            log::debug!(
-                "Sending packet chunk to tunnel server: channel_id={}, offset={}, chunk_size={}",
-                data.channel_id,
-                offset,
-                (payload.len() - offset).min(CRYPT_PACKET_SIZE),
-            );
-            let end = (offset + CRYPT_PACKET_SIZE).min(payload.len());
-            let chunk = &payload[offset..end];
-            if let Err(e) = self
-                .crypt_outbound
-                .write(&self.stop, &mut self.writer, data.channel_id, chunk)
-                .await
-            {
-                self.proxy_ctrl
-                    .channel_error(
-                        Some(data.clone()),
-                        (
-                            self.crypt_inbound.current_seq(),
-                            self.crypt_outbound.current_seq(),
-                        ),
-                        format!("Failed to write packet chunk to tunnel server: {:?}", e),
-                    )
-                    .await
-                    .ok();
-                log::error!("Failed to write packet chunk to tunnel server: {:?}", e);
-                return Err(e).context("Failed to write packet chunk to tunnel server");
-            }
-            offset = end;
-        }
-
-        Ok(())
+        self.crypt_outbound
+            .write(&self.stop, &mut self.writer, data.channel_id, &data.payload)
+            .await
     }
 }
 

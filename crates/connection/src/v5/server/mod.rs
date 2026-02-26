@@ -29,6 +29,7 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 use anyhow::Result;
+use crypt::tunnel::consts::CRYPT_PACKET_SIZE;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use shared::{log, system::trigger::Trigger};
@@ -99,9 +100,9 @@ where
                         Ok(n) => {
                             // Send to proxy, if error, no proxy so no notification of release channel
                             // Note: This may trigger stop for stopping the full tunnel processes group
-                            if let Err(e) = self.tx.send_async(PayloadWithChannel::new(self.channel_id, &buffer[..n])).await {
+                            if let Err(e) = self.send_data(&PayloadWithChannel::new(self.channel_id, &buffer[..n])).await {
                                 log::error!("Failed to send data to proxy: {:?}", e);
-                                return Err(e.into());
+                                return Err(e);
                             }
                         }
                         Err(e) => {
@@ -133,6 +134,23 @@ where
                 }
             }
         }
+        Ok(())
+    }
+
+    async fn send_data(&mut self, data: &PayloadWithChannel) -> Result<()> {
+        let mut offset = 0;
+
+        let payload = data.payload.as_ref();
+        // Divide data into CRYPT_PACKET_SIZE chunks and send them
+        while offset < payload.len() {
+            let end = (offset + CRYPT_PACKET_SIZE).min(payload.len());
+            let chunk = &payload[offset..end];
+            self.tx
+                .send_async(PayloadWithChannel::new(data.channel_id, chunk))
+                .await?;
+            offset = end;
+        }
+
         Ok(())
     }
 }
