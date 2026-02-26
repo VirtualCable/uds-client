@@ -101,8 +101,8 @@ impl ServerChannels {
                 msg.channel_id
             ));
         }
-        if let Some(client) = &self.server_senders[(msg.channel_id - 1) as usize] {
-            client.sender.send_async(msg.payload).await?;
+        if let Some(server) = &self.server_senders[(msg.channel_id - 1) as usize] {
+            server.sender.send_async(msg.payload).await?;
         }
         // If no client, just drop the message
         Ok(())

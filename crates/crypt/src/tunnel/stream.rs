@@ -90,7 +90,6 @@ impl Crypt {
             // Connection closed
             return Ok((&buffer.as_slice_mut()[..0], 0)); // Empty vector indicates closed connection, ensures has 'a lifetime
         }
-        // Check valid header and get payload length
         let (seq, length) = parse_header(&header_buffer[..HEADER_LENGTH])?;
         // Read the encrypted payload + tag
         if Self::read_stream(stop, reader, buffer.stream_slice(), length as usize, true).await? == 0

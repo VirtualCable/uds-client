@@ -309,6 +309,10 @@ impl Proxy {
                 response,
             } => {
                 // Register a new server, and return the comms channel for it
+                self.client_tx
+                    .send_async(super::protocol::Command::OpenChannel { channel_id }.to_message())
+                    .await
+                    .context("Failed to send open channel command to client")?;
                 let (tx, rx) = self.servers.register_server(channel_id).await?;
                 response
                     .send_async(Ok(handler::ServerChannels { tx, rx }))
