@@ -126,9 +126,12 @@ impl Crypt {
                 log::debug!("Outbound stream stopped while writing");
                 Ok(())  // Indicate end of processing
             }
-            result = async {
-                writer.write_all(&header_buffer).await?;
-                writer.write_all(encrypted_packet).await?;
+            result = async {    
+                // Compose a single buffer to write header + encrypted data in one go
+                let mut write_buffer = Vec::with_capacity(header_buffer.len() + encrypted_packet.len());
+                write_buffer.extend_from_slice(&header_buffer);
+                write_buffer.extend_from_slice(encrypted_packet);
+                writer.write_all(&write_buffer).await?;
                 Ok(())
             } => {
                 result

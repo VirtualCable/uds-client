@@ -29,7 +29,7 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
-use anyhow::{Result};
+use anyhow::Result;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use shared::{log, system::trigger::Trigger};
@@ -40,6 +40,153 @@ use super::{
     protocol::{PayloadWithChannel, PayloadWithChannelReceiver, PayloadWithChannelSender},
     proxy::Handler,
 };
+
+pub struct TunnelClientInboundStream<R>
+where
+    R: AsyncReadExt + Unpin + 'static,
+{
+    reader: R,
+
+    tx: PayloadWithChannelSender,
+
+    crypt_inbound: Crypt,
+
+    stop: Trigger,
+    proxy_ctrl: Handler,
+}
+
+impl<R> TunnelClientInboundStream<R>
+where
+    R: AsyncReadExt + Unpin + 'static,
+{
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        reader: R,
+        tx: PayloadWithChannelSender,
+        crypt_inbound: Crypt,
+        stop: Trigger,
+        proxy_ctrl: Handler,
+    ) -> Self {
+        Self {
+            reader,
+            tx,
+            crypt_inbound,
+            stop,
+            proxy_ctrl,
+        }
+    }
+
+    pub async fn run(mut self) -> Result<()> {
+        let mut buffer = PacketBuffer::new();
+        loop {
+            tokio::select! {
+                       _ = self.stop.wait_async() => {
+                           // The only exit point that does not notifies
+                           break;
+                       }
+                       // Note: read of crypt_inbound is not cancel safe, but
+                       // in case of stop (the only other branch), we don't mind as long as it finishes.
+                       packet = self.crypt_inbound.read(&self.stop, &mut self.reader, &mut buffer) => {
+                           match packet {
+                               Ok((decrypted_data, channel)) => {
+                                   if decrypted_data.is_empty() && !self.stop.is_triggered() {
+                                       log::info!("Tunnel server closed connection");
+                                       let _ = self.proxy_ctrl.connection_closed().await;
+                                       break;
+                                   }
+
+                                   let payload = PayloadWithChannel {
+                                       channel_id: channel,
+                                       payload: decrypted_data.into(),
+                                   };
+
+                                   if self.tx.send_async(payload).await.is_err() {
+                                       log::debug!("Proxy channel closed → exiting inbound");
+                                       break;
+                                   }
+                               }
+                               Err(e) => {
+                                   log::error!("Inbound crypt read failed: {:?}", e);
+                                   let _ = self.proxy_ctrl.packet_error().await;
+                                   break;
+                               }
+                           }
+                   }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+pub struct TunnelClientOutboundStream<W>
+where
+    W: AsyncWriteExt + Unpin + 'static,
+{
+    writer: W,
+
+    rx: PayloadWithChannelReceiver,
+
+    crypt_outbound: Crypt,
+
+    stop: Trigger,
+}
+
+impl<W> TunnelClientOutboundStream<W>
+where
+    W: AsyncWriteExt + Unpin + 'static,
+{
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        writer: W,
+        rx: PayloadWithChannelReceiver,
+        crypt_outbound: Crypt,
+        stop: Trigger,
+    ) -> Self {
+        Self {
+            writer,
+            rx,
+            crypt_outbound,
+            stop,
+        }
+    }
+
+    pub async fn run(mut self, initial_packet: Option<PayloadWithChannel>) -> Result<()> {
+        if let Some(packet) = initial_packet {
+            // We have an initial packet, process it first
+            log::debug!("Processing initial recovery packet before entering main loop");
+            self.send_data(&packet).await?;
+        }
+        loop {
+            tokio::select! {
+                    _ = self.stop.wait_async() => {
+                        // The only exit point that does not notifies
+                        break;
+                    }
+                    packet = self.rx.recv_async() => {
+                        let packet = match packet {
+                            Ok(p) => p,
+                            Err(e) => {
+                                // This means the proxy is not running, so we simply exit
+                                log::debug!("Proxy stopped. Exiting tunnel client.: {:?}", e.to_string());
+                                break;
+                            }
+                        };
+                        self.send_data(&packet).await?;
+                    }
+            }
+        }
+
+        Ok(())
+    }
+
+    // so the client can reconnect to server
+    async fn send_data(&mut self, data: &PayloadWithChannel) -> Result<()> {
+        self.crypt_outbound
+            .write(&self.stop, &mut self.writer, data.channel_id, &data.payload)
+            .await
+    }
+}
 
 pub struct TunnelClient<R, W>
 where
@@ -87,75 +234,26 @@ where
         }
     }
 
-    pub async fn run(mut self, initial_packet: Option<PayloadWithChannel>) -> Result<()> {
-        let mut buffer = PacketBuffer::new();
-        if let Some(packet) = initial_packet {
-            // We have an initial packet, process it first
-            log::debug!("Processing initial recovery packet before entering main loop");
-            self.send_data(&packet).await?;
-        }
-        loop {
-            tokio::select! {
-                    _ = self.stop.wait_async() => {
-                        // The only exit point that does not notifies
-                        break;
-                    }
-                    packet = self.rx.recv_async() => {
-                        let packet = match packet {
-                            Ok(p) => p,
-                            Err(e) => {
-                                // This means the proxy is not running, so we simply exit
-                                log::debug!("Proxy stopped. Exiting tunnel client.: {:?}", e.to_string());
-                                break;
-                            }
-                        };
-                        self.send_data(&packet).await?;
-                    }
-                    packet = self.crypt_inbound.read(&self.stop, &mut self.reader, &mut buffer) => {
-                        let (decrypted_data, channel) = match packet {
-                            Ok((data, channel)) => (data, channel),
-                            Err(e) => {
-                                // This can be an "internal" error (like decryption failure) or an "external" one (like connection closed). In both cases we log it and stop the client, but only in the first case we notify the proxy with a ChannelError command, as in the second case the connection is already closed and the proxy will be notified by the connection closure.
-                                self.proxy_ctrl
-                                    .packet_error()
-                                    .await
-                                    .ok();
-                                log::error!("Failed to read packet from tunnel server: {:?}", e);
-                                break;
-                            }
-                        };
-                        log::debug!("Received packet from tunnel server: channel_id={}, payload_size={}", channel, decrypted_data.len());
-                        // if decrypted_data is empty, it means the connection was closed
-                        if decrypted_data.is_empty() && !self.stop.is_triggered() {
-                            log::info!("Tunnel server closed the connection");
-                            self.proxy_ctrl
-                                .connection_closed()
-                                .await
-                                .ok(); // Notify proxy of connection closure correctly
-                            break;
-                        }
-                        // Send to proxy
-                        if self.tx.send_async(super::protocol::PayloadWithChannel {
-                            channel_id: channel,
-                            payload: decrypted_data.into(),
-                        }).await.is_err() {
-                            // This means the proxy is not running, so we simply exit
-                            log::debug!("Proxy stopped. Exiting tunnel client.: {:?}", decrypted_data);
-                            break;
-                        }
-                    }
-            }
-        }
+    pub async fn run(self, initial_packet: Option<PayloadWithChannel>) -> Result<()> {
+        let inbound = TunnelClientInboundStream::new(
+            self.reader,
+            self.tx,
+            self.crypt_inbound,
+            self.stop.clone(),
+            self.proxy_ctrl,
+        );
+        let outbound = TunnelClientOutboundStream::new(
+            self.writer,
+            self.rx,
+            self.crypt_outbound,
+            self.stop.clone(),
+        );
+
+        tokio::try_join!(inbound.run(), outbound.run(initial_packet))?;
+
+        log::info!("Tunnel client stopped");
 
         Ok(())
-    }
-
-    // TODO: Packet splitting must be done in server, not here
-    // so the client can reconnect to server
-    async fn send_data(&mut self, data: &PayloadWithChannel) -> Result<()> {
-        self.crypt_outbound
-            .write(&self.stop, &mut self.writer, data.channel_id, &data.payload)
-            .await
     }
 }
 
