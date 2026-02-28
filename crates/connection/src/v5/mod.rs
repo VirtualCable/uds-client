@@ -6,7 +6,7 @@ use {
     tokio::net::TcpListener,
 };
 
-use shared::{log, system::trigger::Trigger};
+use shared::log;
 
 use crate::{consts::MAX_STARTUP_TIME_MS, registry, types::TunnelConnectInfo};
 
@@ -23,7 +23,7 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
         info.startup_time_ms,
         MAX_STARTUP_TIME_MS
     );
-    let (_id, trigger, active_connections) = registry::register_tunnel(Some(
+    let (_id, registered_trigger, active_connections) = registry::register_tunnel(Some(
         Duration::from_millis(info.startup_time_ms.min(MAX_STARTUP_TIME_MS)),
     ));
     let shared_secret = info.shared_secret.ok_or(anyhow::format_err!(
@@ -47,13 +47,12 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
                 // We will wait for client to end for cleanup
                 // Currently, as only one channel is being used
                 // this will be enough
-                let stop_proxy = Trigger::new();
                 let proxy = proxy::Proxy::new(
                     &format!("{}:{}", info.addr, info.port),
                     info.ticket,
                     crypt_info,
                     std::time::Duration::from_millis(info.startup_time_ms.min(MAX_STARTUP_TIME_MS)),
-                    stop_proxy.clone(),
+                    registered_trigger.clone(),
                 ).run().await?;
 
                 let (reader, writer) = client_stream.into_split();
@@ -66,7 +65,7 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
                     1,
                     channels.tx.clone(),
                     channels.rx.clone(),
-                    stop_proxy.clone(),
+                    registered_trigger.clone(),
                     proxy.clone(),
                 );
 
@@ -74,20 +73,22 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
                 // Start proxying in a new task
                 tokio::spawn({
                     let active_connections = active_connections.clone();
+                    let registered_trigger = registered_trigger.clone();
                     async move {
                         active_connections.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         log::debug!("Spawning tunnel server task, active connections: {}", active_connections.load(std::sync::atomic::Ordering::Relaxed));
                         if let Err(e) = server.run().await {
-                            log::error!("Tunnel server error: {:?}", e);
+                            log::error!("Tunnel server error: {:?}", e.to_string());
                         }
                         active_connections.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
                         proxy.release_channel(1).await.ok();
                         log::debug!("Tunnel connection closed, active connections: {}", active_connections.load(std::sync::atomic::Ordering::Relaxed));
-                        stop_proxy.trigger();  // Ensure our proxy is stopped
+                        // Ensure our proxy is stopped
+                        registered_trigger.trigger();
                     }
                 });
             }
-            _ = trigger.wait_async() => {
+            _ = registered_trigger.wait_async() => {
                 log::info!("Tunnel runner triggered to stop accepting new connections.");
                 break;
             }
@@ -96,7 +97,7 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
 
     log::debug!("Tunnel runner exiting");
     // Ensure our trigger is set
-    trigger.trigger();
+    registered_trigger.trigger();
 
     Ok(())
 }

@@ -74,8 +74,10 @@ pub(super) fn register_tunnel(
     tokio::spawn({
         let trigger = trigger.clone();
         let active_connections = active_connections.clone();
+        log::debug!("Registered tunnel {}, minimum lifetime {} seconds", id, minimum_lifetime.as_secs());
         async move {
             trigger.wait_timeout_async(minimum_lifetime).await.ok();
+            log::debug!("Minimum lifetime elapsed for tunnel {}, checking active connections", id);
             loop {
                 // If already triggered, async_wait_timeout will return immediately
                 if trigger.wait_timeout_async(Duration::from_secs(1)).await.is_ok()

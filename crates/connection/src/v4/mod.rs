@@ -45,7 +45,7 @@ use crate::{registry, types::TunnelConnectInfo};
 // on 4.0 and before, was the time that keeps the tunnel allowing new connnections (to disallow new connections after timeout)
 // We hard limit this to max MAX_STARTUP_TIME_MS milliseconds to avoid very long living tunnels without connections, even in case of misconfiguration
 pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Result<()> {
-    let (_id, trigger, active_connections) = registry::register_tunnel(Some(
+    let (_id, registered_trigger, active_connections) = registry::register_tunnel(Some(
         Duration::from_millis(info.startup_time_ms.min(MAX_STARTUP_TIME_MS)),
     ));
 
@@ -68,7 +68,7 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
                 log::debug!("Tunnel connection established, starting proxying");
                 // Start proxying in a new task
                 tokio::spawn({
-                    let trigger = trigger.clone();
+                    let registered_trigger = registered_trigger.clone();
                     let active_connections = active_connections.clone();
                     async move {
                         active_connections.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -76,7 +76,7 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
                             reader,
                             writer,
                             client_stream,
-                            trigger,
+                            registered_trigger,
                         ).await {
                             log::error!("Proxy error: {e}");
                         }
@@ -84,7 +84,7 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
                     }
                 });
             }
-            _ = trigger.wait_async() => {
+            _ = registered_trigger.wait_async() => {
                 log::info!("Tunnel runner triggered to stop accepting new connections.");
                 break;
             }
@@ -93,7 +93,7 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
 
     log::debug!("Tunnel runner exiting");
     // Ensure our trigger is set
-    trigger.trigger();
+    registered_trigger.trigger();
 
     Ok(())
 }

@@ -84,8 +84,8 @@ cpal = "0.17.2"
 open = "5.3"
 
 # Post-quantum cryptography
-libcrux-ml-dsa = "0.0.6"
-libcrux-ml-kem = "0.0.6"
+libcrux-ml-dsa = "0.0.7"
+libcrux-ml-kem = "0.0.7"
 
 # key derivation
 hkdf = "0.12"
@@ -134,6 +134,6 @@ windows = { version = "0.62.2", features = [
 widestring = { version = "1.2" }
 
 # MacOS
-objc2 = "0.6.3"
+objc2 = "0.6.4"
 objc2-foundation = "0.3.2"
 objc2-app-kit = "0.3.2"

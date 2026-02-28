@@ -42,7 +42,7 @@ pub const UDS_CLIENT_AGENT: &str = "UDS-Client/5.0.0 (MacOS)";
 pub const URL_TEMPLATE: &str = "https://{host}/uds/rest/client";
 
 pub const TICKET_LENGTH: usize = 48;
-pub const MAX_STARTUP_TIME_MS: u64 = 120_000; // 2 minutes
+pub const MAX_STARTUP_TIME_MS: u64 = 1_000; // 2 minutes
 
 pub const LISTEN_ADDRESS: &str = "127.0.0.1";
 pub const LISTEN_ADDRESS_V6: &str = "[::1]";

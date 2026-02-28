@@ -64,6 +64,7 @@ pub fn remove_waitable_app(task_handle: u32) {
 
 // Wait for all registered apps to finish
 pub async fn wait_all_apps(stop: Trigger) {
+    log::debug!("Waiting for all apps to finish");
     loop {
         let all_done = {
             let tasks = WAITABLE_APPS.lock().unwrap();
@@ -80,6 +81,7 @@ pub async fn wait_all_apps(stop: Trigger) {
 }
 
 pub async fn wait_all_tunnels(stop: Trigger) {
+    log::debug!("Waiting for all tunnels to finish");
     loop {
         if !is_any_tunnel_active()
             || stop
@@ -127,6 +129,7 @@ pub fn add_early_unlinkable_file(file_path: String) {
 }
 
 pub fn unlink_early_files() {
+    log::debug!("Unlinking early files");
     let files = EARLY_UNLINKABLE_FILES.lock().unwrap().clone();
     for file in files {
         let res = std::fs::remove_file(&file);
@@ -143,6 +146,7 @@ pub fn add_late_unlinkable_file(file_path: String) {
 }
 
 pub fn unlink_late_files() {
+    log::debug!("Unlinking late files");
     let files = LATE_UNLINKABLE_FILES.lock().unwrap().clone();
     for file in files {
         let res = std::fs::remove_file(&file);

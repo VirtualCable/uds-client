@@ -8,12 +8,12 @@ use aes_gcm::{
 };
 use base64::{Engine as _, engine::general_purpose};
 
-use shared::log;
 use crypt::consts::{CIPHERTEXT_SIZE, PRIVATE_KEY_SIZE};
 use crypt::{
     kem::{CipherText, PrivateKey, decapsulate},
     secrets::derive_tunnel_material,
 };
+use shared::log;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct BrokerTicket {
@@ -73,12 +73,6 @@ impl BrokerTicket {
 
         // Create a shared_secret field, insert the values and add to json_value
         json_value["shared_secret"] = serde_json::to_value(shared_secret)?;
-
-        log::debug!(
-            "Recovered data from ticket: {:?}, ticket_id: {:?}",
-            json_value,
-            ticket_id
-        );
 
         Ok(json_value)
     }

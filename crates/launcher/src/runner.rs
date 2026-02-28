@@ -139,6 +139,7 @@ pub async fn run(
     }
 
     loop {
+        log::debug!("Attempting to get script from broker.");
         match api.get_script(ticket, scrambler).await {
             Ok(script) => {
                 // Check signature
@@ -150,6 +151,7 @@ pub async fn run(
                 break;
             }
             Err(e) => {
+                log::debug!("Error getting script from broker: {:?}", e);
                 // Here we can only get an access denied error or a retryable error
                 // because tls errors and other network errors must have been
                 // raised before
@@ -165,7 +167,7 @@ pub async fn run(
                 }
             }
         }
-        // Retry after some time, trigger returns true if triggered
+        // Retry after some time
         if stop
             .wait_timeout_async(std::time::Duration::from_secs(8))
             .await
@@ -176,12 +178,13 @@ pub async fn run(
         }
     }
 
+    log::debug!("Script obtained and executed successfully.");
     // All done, send hide message if NOT internal RDP is running
     if tasks::is_internal_rdp_running() {
         log::debug!("Internal RDP is running.");
     } else {
         log::debug!("Hiding GUI.");
-        tx.send(GuiMessage::Hide).ok();
+        // tx.send(GuiMessage::Hide).ok();
     }
 
     // Execute the tasks in background, and wait with cleanup

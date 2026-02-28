@@ -95,11 +95,12 @@ fn main() {
         Receiver<gui::window::types::GuiMessage>,
     ) = bounded(32);
 
-    // Launch async thread with tokio runtime
-    asyncthread::run(messages_tx.clone(), stop.clone(), host, ticket, scrambler);
-
     js::gui::set_sender(messages_tx.clone());
 
+    // Launch async thread with tokio runtime
+    asyncthread::run(messages_tx, stop.clone(), host, ticket, scrambler);
+
+    // Run the GUI, this will block until the GUI is closed
     gui::run_gui(intl::get_catalog().clone(), None, messages_rx, stop.clone()).unwrap();
 
     // Gui closed, wait for app to finish also
