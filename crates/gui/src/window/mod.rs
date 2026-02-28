@@ -34,7 +34,6 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
-use anyhow::Result;
 use crossbeam::channel::Receiver;
 use eframe::egui;
 
@@ -46,6 +45,7 @@ mod rdp;
 mod msgw_error;
 mod msgw_warning;
 mod msgw_yesno;
+mod state_invisible;
 mod testing;
 
 pub mod types;
@@ -118,6 +118,7 @@ impl AppWindow {
 
         // Set window size and position
         ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+        self.set_visible(ctx, true);
         ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(decorations));
         ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(size));
         ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
@@ -139,7 +140,11 @@ impl AppWindow {
         self.app_state = new_state;
     }
 
-    pub fn restore_previous_state(&mut self, ctx: &eframe::egui::Context, frame: &mut eframe::Frame) {
+    pub fn restore_previous_state(
+        &mut self,
+        ctx: &eframe::egui::Context,
+        frame: &mut eframe::Frame,
+    ) {
         self.processing_events.store(false, Ordering::Relaxed); // Stop processing rdp raw events on event loop
         self.app_state = self.prev_app_state.clone();
         self.prev_app_state = types::AppState::default();
@@ -154,15 +159,8 @@ impl AppWindow {
         };
     }
 
-    pub fn enter_invisible(
-        &mut self,
-        ctx: &eframe::egui::Context,
-        _frame: &mut eframe::Frame,
-    ) -> Result<()> {
-        self.set_app_state(types::AppState::Invisible);
-
-        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
-        Ok(())
+    pub fn set_visible(&mut self, ctx: &eframe::egui::Context, visible: bool) {
+        ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(!visible));
     }
 }
 
@@ -238,7 +236,9 @@ impl eframe::App for AppWindow {
             types::AppState::ClientProgress(client_state) => {
                 self.update_progress(ctx, frame, client_state)
             }
-            types::AppState::Invisible => {} // Nothing to do
+            types::AppState::Invisible => {
+                self.update_invisible(ctx, frame);
+            }
             types::AppState::YesNo(message, resp_tx) => {
                 self.update_yesno(ctx, frame, &message, resp_tx)
             }
