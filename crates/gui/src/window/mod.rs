@@ -117,7 +117,7 @@ impl AppWindow {
         let y_coord = (screen_size.1 as f32 - size.y) / 2.0;
 
         // Set window size and position
-        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+        // ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
         self.set_visible(ctx, true);
         ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(decorations));
         ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(size));
