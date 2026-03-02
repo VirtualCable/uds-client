@@ -66,6 +66,8 @@ impl AppWindow {
             [screen_size.width() as f32, screen_size.height() as f32],
             true,
         );
+        // Focus
+        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
         self.set_app_state(AppState::RdpConnecting(RdpConnectingState {
             settings,
             start: Instant::now(),
