@@ -48,8 +48,8 @@ use super::{
 };
 
 mod handler;
-mod open_response;
 mod servers;
+pub mod open_response;
 
 pub use handler::{Command, Handler, ServerChannels};
 

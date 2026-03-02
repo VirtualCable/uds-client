@@ -71,6 +71,7 @@ async fn setup_test(startup_time_ms: u64) -> Result<(RemoteServer, TunnelConnect
     Ok((remote_server, info, listener))
 }
 
+#[serial_test::serial(v5)]
 #[tokio::test]
 async fn test_tunnel_stops() -> Result<()> {
     let (remote_server, info, listener) = setup_test(1000).await?;
@@ -95,6 +96,7 @@ async fn test_tunnel_stops() -> Result<()> {
     Ok(())
 }
 
+#[serial_test::serial(v5)]
 #[tokio::test]
 async fn test_tunnel_sends_data_to_remote_and_closes_connection() -> Result<()> {
     let (remote_server, info, listener) = setup_test(100).await?;
@@ -132,6 +134,7 @@ async fn test_tunnel_sends_data_to_remote_and_closes_connection() -> Result<()> 
     Ok(())
 }
 
+#[serial_test::serial(v5)]
 #[tokio::test]
 async fn test_tunnel_closes_after_startup_timeout() -> Result<()> {
     let (remote_server, info, listener) = setup_test(100).await?;

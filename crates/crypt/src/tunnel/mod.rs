@@ -48,7 +48,6 @@ pub struct Crypt {
     seq: u64,
 }
 
-
 impl Crypt {
     pub fn new(key: &SharedSecret, seq: u64) -> Self {
         log::debug!("Creating Crypt with initial seq: {}", seq);
@@ -81,30 +80,43 @@ impl Crypt {
     ///
     /// Note: length is the length of the plaintext data to encrypt.
     ///       also, the real data is written into buffer[2..], so first 2 bytes are free for channel id
-    pub fn encrypt<'a>(
+    pub fn encrypt(
         &mut self,
-        channel: u16,
+        channel_id: u16,
         len: usize,
-        buffer: &'a mut types::PacketBuffer,
-    ) -> Result<&'a [u8]> {
-        let len = len + 2; // +2 for channel bytes, buffer alreasy has space for it in the beginning
-        buffer.ensure_capacity(len + consts::TAG_LENGTH)?;
+        buffer: &mut types::PacketBuffer,
+    ) -> Result<usize> {
+        types::PacketBuffer::ensure_capacity(len + consts::TAG_LENGTH)?;
 
-        // Get the slice to encrypt
-        let buffer = buffer.stream_slice();
-        buffer[0..2].copy_from_slice(&channel.to_be_bytes());
+        // Set the channel id in the buffer (first 2 bytes of the data part, after header)
+        buffer.set_channel_id(channel_id);
+
+        let data_with_channel_length = types::PacketBuffer::calc_data_with_channel_len(len)?;
 
         let seq = self.next_seq();
+        buffer.set_seq(seq);
+        buffer.set_length(data_with_channel_length + consts::TAG_LENGTH)?; // Write header with seq and length of encrypted data
+
         let mut nonce = [0; 12];
         nonce[..8].copy_from_slice(&seq.to_be_bytes());
         let aad = &seq.to_be_bytes();
 
+        // Get pointer to data part of the buffer, where encryption will happen
+        let data = buffer.data_with_channel_mut();
+        // Calculate the length of the data + channel part, which is what will be encrypted and tagged
+
         let tag = self
             .cipher
-            .encrypt_in_place_detached(Nonce::from_slice(&nonce), aad, &mut buffer[..len])
+            .encrypt_in_place_detached(
+                Nonce::from_slice(&nonce),
+                aad,
+                &mut data[..data_with_channel_length],
+            )
             .map_err(|e| anyhow::anyhow!("encryption failure: {:?}", e))?;
-        buffer[len..len + 16].copy_from_slice(&tag);
-        Ok(&buffer[..len + 16])
+        data[data_with_channel_length..data_with_channel_length + consts::TAG_LENGTH]
+            .copy_from_slice(&tag);
+        // Returns the FULL length of the encrypted packet (header + data + channel + tag)
+        Ok(data_with_channel_length + consts::TAG_LENGTH)
     }
 
     /// Decrypts the given ciphertext using AES-GCM with a nonce derived from the provided seq.
@@ -112,35 +124,33 @@ impl Crypt {
     /// zeros. The seq value is also used as associated data (AAD) to ensure integrity.
     /// Returns the decrypted plaintext on success, and the channel (first 2 bytes, little-endian u16).
     /// Note: length is the length on encrpypted data WITH the tag (so, as readed from the stream).
-    pub fn decrypt<'a>(
-        &mut self,
-        seq: u64,
-        length: u16,
-        buffer: &'a mut types::PacketBuffer,
-    ) -> Result<(&'a [u8], u16)> {
-        if seq < self.seq {
+    pub fn decrypt(&mut self, buffer: &mut types::PacketBuffer) -> Result<()> {
+        let seq = buffer.seq()?;
+        if seq < self.current_seq() {
             return Err(anyhow::anyhow!(
                 "replay attack detected: seq {} is less than current seq {}",
                 seq,
-                self.seq
+                self.current_seq()
             ));
         }
-        if length < (consts::TAG_LENGTH + 2) as u16 {
+
+        let length = buffer.length()?;
+        if length < (consts::TAG_LENGTH + 2) {
             return Err(anyhow::anyhow!(
                 "decryption failure: ciphertext too short: {} bytes",
                 length
             ));
         }
 
-        let len = (length as usize) - consts::TAG_LENGTH;
-        let buffer = buffer.stream_slice();
+        let len = length - consts::TAG_LENGTH;
+        let chan_data_buffer = buffer.data_with_channel_mut();
 
         let mut nonce = [0; 12];
         nonce[..8].copy_from_slice(&seq.to_be_bytes());
         let aad = &seq.to_be_bytes();
 
         // Split ciphertext and tag
-        let (ciphertext, rest) = buffer.split_at_mut(len);
+        let (ciphertext, rest) = chan_data_buffer.split_at_mut(len);
         let tag = &rest[..16];
 
         self.cipher
@@ -149,14 +159,10 @@ impl Crypt {
 
         self.seq = seq + 1; // Update to last used seq + 1, so no replays are possible
 
-        // First two bytes are channel
-        let channel = u16::from_be_bytes(ciphertext[..2].try_into().map_err(|e| {
-            anyhow::anyhow!(
-                "decryption failure: failed to extract channel from decrypted data: {:?}",
-                e
-            )
-        })?);
-        Ok((&buffer[2..len], channel))
+        // Fix data length to remove ending tag, so only channel + data is left
+        buffer.set_length(len)?;
+
+        Ok(())
     }
 }
 
@@ -195,6 +201,8 @@ pub fn build_header(seq: u64, length: u16, buffer: &mut [u8]) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use crate::types::SharedSecret;
+
     use super::*;
     fn assert_send<T: Send>() {}
     fn assert_sync<T: Sync>() {}
@@ -214,29 +222,16 @@ mod tests {
 
         let mut buf = types::PacketBuffer::new();
         let plaintext = b"16 length text!!";
-        buf.store(plaintext).unwrap();
+        buf.set_data(plaintext).unwrap();
 
-        let ciphertext = crypt.encrypt(1, plaintext.len(), &mut buf).unwrap();
+        // Packet buffer will contain the header + the crypted data + tag
+        crypt.encrypt(1, plaintext.len(), &mut buf).unwrap();
 
-        // Now decrypt
-        let seq = crypt.current_seq();
-        let length = ciphertext.len() as u16; // Note: ciphertext includes channel + tag
+        let mut buf2 = buf.clone(); // copy the buffer
+        crypt.decrypt(&mut buf2).unwrap();
 
-        let mut buf2 = types::PacketBuffer::from(ciphertext);
-        let (decrypted, channel) = crypt.decrypt(seq, length, &mut buf2).unwrap();
-
-        assert_eq!(decrypted, plaintext);
-        assert_eq!(channel, 1);
-    }
-
-    #[test]
-    fn test_parse_build_header() {
-        let mut buf = [0u8; 10];
-        build_header(0x9922334455667788, 0x00AA, &mut buf).unwrap();
-
-        let (seq, len) = parse_header(&buf).unwrap();
-        assert_eq!(seq, 0x9922334455667788);
-        assert_eq!(len, 0x00AA);
+        assert_eq!(buf2.data(), plaintext);
+        assert_eq!(buf2.channel_id(), 1);
     }
 
     #[test]
@@ -256,25 +251,29 @@ mod tests {
         let mut crypt = Crypt::new(&key, 0);
 
         let mut buf = types::PacketBuffer::new();
-        buf.store(b"abc").unwrap();
+        buf.set_data(b"abc").unwrap();
 
-        let ciphertext = crypt.encrypt(2, 3, &mut buf).unwrap();
-        let seq = crypt.current_seq();
+        crypt.encrypt(2, 3, &mut buf).unwrap();
+        assert_eq!(buf.seq().unwrap(), crypt.current_seq());
+        assert_eq!(
+            buf.length().unwrap(),
+            types::PacketBuffer::calc_data_with_channel_len(3).unwrap() + consts::TAG_LENGTH
+        );
 
-        let mut buf2 = types::PacketBuffer::from(ciphertext);
+        let mut buf2 = buf.clone(); // clone the buffer
 
         // First decrypt should work
-        crypt
-            .decrypt(seq, ciphertext.len() as u16, &mut buf2)
-            .unwrap();
+        crypt.decrypt(&mut buf2).unwrap();
 
         // Second decrypt with the same seq should fail
-        let mut buf3 = types::PacketBuffer::from(ciphertext);
-        let result = crypt
-            .decrypt(seq, ciphertext.len() as u16, &mut buf3)
-            .unwrap_err();
+        let mut buf3 = buf.clone(); // clone the original buffer again
+        let result = crypt.decrypt(&mut buf3).unwrap_err();
 
-        assert!(result.to_string().contains("replay attack detected"), "{}", result);
+        assert!(
+            result.to_string().contains("replay attack detected"),
+            "{}",
+            result
+        );
     }
 
     #[test]
@@ -285,18 +284,18 @@ mod tests {
         let mut crypt = Crypt::new(&key, 0);
 
         let mut buf = types::PacketBuffer::new();
-        buf.store(b"hola").unwrap();
+        buf.set_data(b"hola").unwrap();
 
-        let ciphertext = crypt.encrypt(3, 4, &mut buf).unwrap();
-        let seq = crypt.current_seq();
+        let length = crypt.encrypt(3, 4, &mut buf).unwrap();
+        assert_eq!(buf.seq().unwrap(), crypt.current_seq());
+        assert_eq!(buf.length().unwrap(), length); // Length of encrypted data + tag
 
-        let mut corrupted = ciphertext.to_vec();
-        corrupted[ciphertext.len() - 1] ^= 0xFF; // flip bit
+        let mut corrupted = buf.clone();
+        // flip some bits at the end of the tag ("data" length = channel (2 bytes) + data (4 bytes) = 6 + tag (16 bytes) = 22 bytes)
+        let data_len = length - 2; // data points to data, not channel id, but length includes channel id length
+        corrupted.data_mut()[data_len - 1] ^= 0xFF; // flip bit in the tag
 
-        let mut buf2 = types::PacketBuffer::from(&corrupted[..]);
-        let err = crypt
-            .decrypt(seq, corrupted.len() as u16, &mut buf2)
-            .unwrap_err();
+        let err = crypt.decrypt(&mut corrupted).unwrap_err();
 
         assert!(err.to_string().contains("decryption failure"), "{}", err);
     }
@@ -307,17 +306,14 @@ mod tests {
         let mut crypt = Crypt::new(&key, 0);
 
         let mut buf = types::PacketBuffer::new();
-        buf.store(b"hola").unwrap();
+        buf.set_data(b"hola").unwrap();
 
-        let ciphertext = crypt.encrypt(3, 4, &mut buf).unwrap();
-        let seq = crypt.current_seq();
+        crypt.encrypt(3, 4, &mut buf).unwrap();
 
-        let truncated = ciphertext[..ciphertext.len() - 5].to_vec();
+        let mut truncated = buf.clone();
+        truncated.set_length(buf.length().unwrap() - 5).unwrap(); // Set length to 2, which is less than the required 2 (channel) + 16 (tag)
 
-        let mut buf2 = types::PacketBuffer::from(&truncated[..]);
-        let err = crypt
-            .decrypt(seq, truncated.len() as u16, &mut buf2)
-            .unwrap_err();
+        let err = crypt.decrypt(&mut truncated).unwrap_err();
 
         assert!(
             err.to_string().contains("ciphertext too short"),
@@ -327,46 +323,21 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_header() {
-        let mut buf = [0u8; 10];
-        build_header(123, 456, &mut buf).unwrap();
-
-        let (seq, len) = parse_header(&buf).unwrap();
-        assert_eq!(seq, 123);
-        assert_eq!(len, 456);
-    }
-
-    #[test]
-    fn test_parse_header_invalid_size() {
-        let buf = [0u8; 5];
-        assert!(parse_header(&buf).is_err());
-    }
-
-    #[test]
-    fn test_build_header() {
-        let mut buf = [0u8; 10];
-        build_header(0x1122334455667788, 0x99AA, &mut buf).unwrap();
-
-        assert_eq!(&buf[0..8], &0x1122334455667788u64.to_be_bytes());
-        assert_eq!(&buf[8..10], &0x99AAu16.to_be_bytes());
-    }
-
-    #[test]
     fn test_encrypt_does_not_overwrite_extra_bytes() {
         let key = SharedSecret::new([9u8; 32]);
         let mut crypt = Crypt::new(&key, 0);
 
         let mut buf = types::PacketBuffer::new();
-        buf.stream_slice().fill(0xAF); // Fill with known pattern
+        buf.full_buffer_mut().fill(0xAF); // Fill with known pattern
 
-        let before = buf.stream_slice().to_vec();
+        let before = buf.data_with_channel().to_vec();
 
         // Channel 32, 4 bytes of data
         let _ = crypt.encrypt(32, 5, &mut buf).unwrap();
 
-        let after = buf.stream_slice();
+        let after = buf.data_with_channel();
 
-        // Just first 5 +  2 + 16 bytes can be changed (data + channel + tag)
+        // Just first 5 +  2 + 16 bytes can be changed (channel + data + tag)
         assert_eq!(&before[23..], &after[23..]);
     }
     #[test]
@@ -375,12 +346,14 @@ mod tests {
         let mut crypt = Crypt::new(&key, 0);
 
         let mut buf1 = types::PacketBuffer::new();
-        buf1.store(b"a").unwrap();
-        let c1 = crypt.encrypt(1, 1, &mut buf1).unwrap().to_vec();
+        buf1.set_data(b"a").unwrap();
+        crypt.encrypt(1, 1, &mut buf1).unwrap();
+        let c1 = buf1.buffer().unwrap().to_vec();
 
         let mut buf2 = types::PacketBuffer::new();
-        buf2.store(b"a").unwrap();
-        let c2 = crypt.encrypt(1, 1, &mut buf2).unwrap().to_vec();
+        buf2.set_data(b"a").unwrap();
+        crypt.encrypt(1, 1, &mut buf2).unwrap();
+        let c2 = buf2.buffer().unwrap().to_vec();
         assert_ne!(c1, c2);
     }
 }

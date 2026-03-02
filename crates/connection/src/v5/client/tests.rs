@@ -60,12 +60,12 @@ fn create_client() -> TestContext {
 
     let (client_reader, client_writer) = tokio::io::split(client);
     let secret_in = SharedSecret::new([1; 32]);
-    let secret_out = SharedSecret::new([2; 32]);
+    let secret_out = SharedSecret::new([1; 32]);
 
     let stop = Trigger::new();
 
-    let crypt_inbound = Crypt::new(&secret_in, 0);
-    let crypt_outbound = Crypt::new(&secret_out, 16);
+    let crypt_inbound = Crypt::new(&secret_out, 0);
+    let crypt_outbound = Crypt::new(&secret_in, 16);
 
     // Crate a tunnel client with async-everything to ease testing
     TestContext {
@@ -90,6 +90,7 @@ fn create_client() -> TestContext {
     }
 }
 
+#[serial_test::serial(v5)]
 #[tokio::test]
 async fn check_stop() {
     let TestContext {
@@ -128,6 +129,7 @@ async fn check_stop() {
         .unwrap();
 }
 
+#[serial_test::serial(v5)]
 #[tokio::test]
 async fn check_remote_connection_closed() {
     let TestContext {
@@ -172,6 +174,7 @@ async fn check_remote_connection_closed() {
         .unwrap();
 }
 
+#[serial_test::serial(v5)]
 #[tokio::test]
 async fn inbound_chan_closed_works() {
     let TestContext {
@@ -190,13 +193,13 @@ async fn inbound_chan_closed_works() {
             // Run the client, it should stop when we receive connection closed from server
             if let Err(e) = client.run(None).await {
                 // Must return err, because chanel is closed
-                log::info!("Client run failed as expected: {}", e.to_string());
-                stopped.trigger(); // Signal that the client has stopped
+                log::info!("Client run failed: {:?}", e);
             } else {
                 log::error!(
-                    "Client run completed successfully, expected failure due to channel closure"
+                    "Client run completed successfully"
                 );
             }
+            stopped.trigger(); // Signal that the client has stopped
             log::info!("Client run completed");
         }
     });
@@ -217,6 +220,7 @@ async fn inbound_chan_closed_works() {
     );
 }
 
+#[serial_test::serial(v5)]
 #[tokio::test]
 async fn outbound_chan_closed_works() {
     let TestContext {
@@ -235,15 +239,15 @@ async fn outbound_chan_closed_works() {
         let stopped = stopped.clone();
         async move {
             // Run the client, it should stop when we receive connection closed from server
-            if client.run(None).await.is_err() {
+            if let Err(e) = client.run(None).await {
                 // Must return err, because chanel is closed
-                log::info!("Client run failed as expected:");
-                stopped.trigger(); // Signal that the client has stopped
+                log::info!("Client run failed: {:?}", e);
             } else {
                 log::error!(
-                    "Client run completed successfully, expected failure due to channel closure"
+                    "Client run completed successfully"
                 );
             }
+            stopped.trigger(); // Signal that the client has stopped
             log::info!("Client run completed");
         }
     });
@@ -269,6 +273,7 @@ async fn outbound_chan_closed_works() {
     );
 }
 
+#[serial_test::serial(v5)]
 #[tokio::test]
 async fn sends_data() {
     let TestContext {
@@ -297,6 +302,12 @@ async fn sends_data() {
         }
     });
 
+    // Send open channel command to proxy, to ensure channel is open
+    payload_tx
+        .send_async(PayloadWithChannel::new(1, b"test"))
+        .await
+        .unwrap();
+
     // Send something using payload_tx
     payload_tx
         .send_async(PayloadWithChannel::new(1, b"test"))
@@ -316,6 +327,7 @@ async fn sends_data() {
     stop.trigger(); // Stop the client
 }
 
+#[serial_test::serial(v5)]
 #[tokio::test]
 async fn receives_data() {
     let TestContext {

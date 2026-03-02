@@ -31,7 +31,7 @@ impl OpenResponse {
 
     pub fn from_slice(data: &[u8]) -> Result<Self> {
         if data.len() != TICKET_LENGTH + 2 + RESERVED_LENGTH {
-            anyhow::bail!("Invalid OpenResponse length");
+            anyhow::bail!("Invalid OpenResponse length: expected {}, got {}", TICKET_LENGTH + 2 + RESERVED_LENGTH, data.len());
         }
         let session_id = Ticket::try_from(&data[0..TICKET_LENGTH])?;
         let channel_count = u16::from_be_bytes(

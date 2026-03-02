@@ -124,7 +124,6 @@ async fn handle_client(mut tcp: TcpStream, acceptor: TlsAcceptor, trigger: Trigg
     // Note: TlsAcceptor wraps the creation of ServerConnection and async handshake
     let tls_stream: server::TlsStream<TcpStream> = acceptor.accept(tcp).await?;
 
-    // Step 3: command loop over TLS
     let (mut tls_reader, mut tls_writer) = split(tls_stream);
     let mut buf = vec![0u8; consts::BUFFER_SIZE];
 
@@ -185,6 +184,7 @@ async fn handle_client(mut tcp: TcpStream, acceptor: TlsAcceptor, trigger: Trigg
             }
             _ = trigger.wait_async() => {
                 // External cancellation: orderly shutdown
+                log::debug!("Client handler triggered to stop");
                 let _ = tls_writer.shutdown().await;
                 break;
             }
@@ -225,6 +225,8 @@ pub async fn run_test_server(port: u16, trigger: Trigger) -> Result<()> {
             }
             _ = trigger.wait_async() => {
                 log::info!("Test server stopped by trigger");
+                // Wait a bit to give some time any running connection to stop gracefully
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                 break;
             }
         }
@@ -301,6 +303,7 @@ pub async fn create_runner(port: u16) -> Result<(JoinHandle<()>, JoinHandle<()>,
         .unwrap();
     let listen_port = listener.local_addr()?.port();
     let runner_handle = tokio::spawn(async move {
+        log::debug!("Starting tunnel runner on port {}", listen_port);
         tunnel_runner(info, listener).await.unwrap();
     });
     // Shuld be running now, wait a moment

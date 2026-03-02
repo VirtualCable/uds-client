@@ -45,9 +45,12 @@ mod test_helpers {
         types::{SharedSecret, Ticket},
     };
 
-    use super::super::protocol::{
-        PayloadWithChannel, PayloadWithChannelReceiver, PayloadWithChannelSender,
-        consts::HANDSHAKE_V2_SIGNATURE,
+    use super::super::{
+        protocol::{
+            PayloadWithChannel, PayloadWithChannelReceiver, PayloadWithChannelSender,
+            consts::HANDSHAKE_V2_SIGNATURE,
+        },
+        proxy::open_response::OpenResponse,
     };
 
     // Helper to create dummy ticket, ensure always the same
@@ -97,8 +100,10 @@ mod test_helpers {
             // Now read encripted ticket again, but do not check it, just skip for tests
             crypt_input.read(&stop, &mut socket, &mut buf).await?;
         }
+        // Send OpenResponse, with same ticket, but do not check it, just skip for tests
+        let open_response = OpenResponse::new(ticket, 1).as_vec();
         crypt_output
-            .write(&stop, &mut socket, 0, ticket.as_ref())
+            .write(&stop, &mut socket, 0, &open_response)
             .await?;
 
         loop {
@@ -114,6 +119,10 @@ mod test_helpers {
                     if data.is_empty() {
                         log::info!("Client closed the connection");
                         return Ok(());
+                    }
+                    if channel_id == 0 {
+                        log::info!("Received data on channel 0, ignoring: {:?}", data);
+                        continue;
                     }
                     // Send data back, same as received and to tx
                     tx.send_async(PayloadWithChannel::new(channel_id, data)).await?;

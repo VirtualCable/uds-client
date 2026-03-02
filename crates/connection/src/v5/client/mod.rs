@@ -114,7 +114,8 @@ where
                    }
             }
         }
-
+        // Ensure stopped is triggered, so outbound can exit if it's waiting for it
+        self.stop.trigger();
         Ok(())
     }
 }
@@ -176,7 +177,8 @@ where
                     }
             }
         }
-
+        // Tunnel should be set so other sides can exit if they are waiting for it
+        self.stop.trigger();
         Ok(())
     }
 
