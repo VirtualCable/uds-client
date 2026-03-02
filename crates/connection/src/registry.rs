@@ -74,13 +74,23 @@ pub(super) fn register_tunnel(
     tokio::spawn({
         let trigger = trigger.clone();
         let active_connections = active_connections.clone();
-        log::debug!("Registered tunnel {}, minimum lifetime {} seconds", id, minimum_lifetime.as_secs());
+        log::debug!(
+            "Registered tunnel {}, minimum lifetime {} seconds",
+            id,
+            minimum_lifetime.as_secs()
+        );
         async move {
             trigger.wait_timeout_async(minimum_lifetime).await.ok();
-            log::debug!("Minimum lifetime elapsed for tunnel {}, checking active connections", id);
+            log::debug!(
+                "Minimum lifetime elapsed for tunnel {}, checking active connections",
+                id
+            );
             loop {
                 // If already triggered, async_wait_timeout will return immediately
-                if trigger.wait_timeout_async(Duration::from_secs(1)).await.is_ok()
+                if trigger
+                    .wait_timeout_async(Duration::from_secs(1))
+                    .await
+                    .is_ok()
                     || active_connections.load(std::sync::atomic::Ordering::Relaxed) == 0
                 {
                     if !trigger.is_triggered() {
@@ -93,7 +103,10 @@ pub(super) fn register_tunnel(
                     break;
                 }
                 // Soft poll every second to check active connections
-                trigger.wait_timeout_async(Duration::from_secs(1)).await.ok();
+                trigger
+                    .wait_timeout_async(Duration::from_secs(1))
+                    .await
+                    .ok();
             }
         }
     });
@@ -122,9 +135,18 @@ pub fn stop_tunnels() {
 }
 
 #[allow(dead_code)]
-pub fn log_running_tunnels() {
+pub fn log_running_tunnels() -> String {
+    let mut res = String::new();
     let infos = TUNNEL_INFOS.lock().unwrap();
     for (id, info) in infos.iter() {
+        res += &format!(
+            "Tunnel {}: started at {:?}, can_be_stopped {}, active connections {}\n",
+            id,
+            info.started_at,
+            info.can_be_stopped(),
+            info.active_connections
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
         log::debug!(
             "Tunnel {}: started at {:?}, can_be_stopped {}, active connections {}",
             id,
@@ -134,4 +156,5 @@ pub fn log_running_tunnels() {
                 .load(std::sync::atomic::Ordering::Relaxed)
         );
     }
+    res
 }

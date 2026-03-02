@@ -107,7 +107,8 @@ where
                         }
                         Err(e) => {
                             log::error!("Failed to read from socket: {:?}", e);
-                            self.proxy_ctrl.release_channel(self.channel_id).await?;
+                            // Notify to procy, if it can be notified
+                            let _ = self.proxy_ctrl.release_channel(self.channel_id).await;
                             return Err(e.into());
                         }
                     }

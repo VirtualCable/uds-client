@@ -192,9 +192,9 @@ async fn inbound_chan_closed_works() {
             // Wait a bit to let the server start
             if let Err(e) = server.run().await {
                 log::info!("Server got error as expected: {:?}", e.to_string());
-                stopped.trigger(); // Signal that the server has stopped
             } else {
                 log::error!("Server run completed successfully");
+                stopped.trigger();
             }
         }
     });
