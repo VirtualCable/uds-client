@@ -164,11 +164,15 @@ impl Command {
             } => {
                 data.push(CommandType::ChannelError.into());
                 data.extend_from_slice(&channel_id.to_be_bytes());
-                data.extend_from_slice(message.as_bytes()[..MAX_ERROR_MSG_LENGTH.min(message.len())].as_ref());
+                data.extend_from_slice(
+                    message.as_bytes()[..MAX_ERROR_MSG_LENGTH.min(message.len())].as_ref(),
+                );
             }
             Command::ConnectionError { message } => {
                 data.push(CommandType::ConnectionError.into());
-                data.extend_from_slice(message.as_bytes()[..MAX_ERROR_MSG_LENGTH.min(message.len())].as_ref());
+                data.extend_from_slice(
+                    message.as_bytes()[..MAX_ERROR_MSG_LENGTH.min(message.len())].as_ref(),
+                );
             }
             Command::Nop => {
                 data.push(CommandType::Nop.into());
@@ -188,6 +192,23 @@ impl Command {
                 | Command::ConnectionError { .. }
                 | Command::ChannelError { .. }
         )
+    }
+}
+
+impl From<Command> for PayloadWithChannel {
+    fn from(cmd: Command) -> Self {
+        cmd.to_message()
+    }
+}
+
+impl TryFrom<PayloadWithChannel> for Command {
+    type Error = anyhow::Error;
+
+    fn try_from(value: PayloadWithChannel) -> Result<Self, Self::Error> {
+        if value.channel_id != 0 {
+            anyhow::bail!("Commands must be on channel 0");
+        }
+        Command::from_slice(&value.payload)
     }
 }
 

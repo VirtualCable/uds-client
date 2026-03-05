@@ -42,14 +42,14 @@ use crypt::{
 use super::{
     client::TunnelClient,
     protocol::{
-        PayloadWithChannel, PayloadWithChannelReceiver, PayloadWithChannelSender,
-        handshake::Handshake, payload_with_channel_pair,
+        Command as ProtoCommand, PayloadWithChannel, PayloadWithChannelReceiver,
+        PayloadWithChannelSender, handshake::Handshake, payload_with_channel_pair,
     },
 };
 
 mod handler;
-mod servers;
 pub mod open_response;
+mod servers;
 
 pub use handler::{Command, Handler, ServerChannels};
 
@@ -73,6 +73,8 @@ pub struct Proxy {
 
     recover_connection: bool,
     recovery_packet: Option<PayloadWithChannel>,
+
+    client_correctly_closed: bool,
 
     servers: servers::ServerChannels,
 }
@@ -102,6 +104,7 @@ impl Proxy {
             client_rx_sender: rx_sender,
             recover_connection: false,
             recovery_packet: None,
+            client_correctly_closed: false,
             servers: servers::ServerChannels::new(),
         }
     }
@@ -210,19 +213,7 @@ impl Proxy {
     async fn launch_client(&mut self, ctrl_tx: flume::Sender<handler::Command>) -> Result<()> {
         let server = self.connect(&ctrl_tx).await?;
         let recovery_packet = self.recovery_packet.take();
-        tokio::spawn(async move {
-            if let Err(e) = server.run(recovery_packet).await {
-                log::warn!("Tunnel server error: {:?}", e);
-                ctrl_tx
-                    .send_async(handler::Command::ClientError {
-                        message: format!("{:?}", e),
-                    })
-                    .await
-                    .ok();
-            } else {
-                ctrl_tx.send_async(handler::Command::ClientClose).await.ok();
-            }
-        });
+        tokio::spawn(server.run(recovery_packet));
         Ok(())
     }
 
@@ -263,7 +254,7 @@ impl Proxy {
                 cmd = ctrl_rx.recv_async() => {
                     match cmd {
                         Ok(cmd) => {
-                            if let Err(e) = self.handle_command(cmd, &ctrl_tx).await {
+                            if let Err(e) = self.handle_ctrl_command(cmd, &ctrl_tx).await {
                                 log::error!("Error handling command: {:?}", e);
                                 break;
                             }
@@ -289,6 +280,22 @@ impl Proxy {
                 }
                 msg = self.client_rx.recv_async() => {
                     let msg = msg.context("Failed to receive message from channel")?;
+                    // Channel 0 messages are command messages, process them
+                    if msg.channel_id == 0 {
+                        match ProtoCommand::try_from(msg) {
+                            Ok(cmd) => {
+                                if let Err(e) = self.handle_proto_command(cmd).await {
+                                    log::error!("Error handling command: {:?}", e);
+                                    break;
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("Failed to parse command from channel 0: {:?}", e);
+                                break;
+                            }
+                        }
+                        continue;
+                    }
                     if let Err(e) = self.servers.send_to_channel(msg).await {
                         log::error!("Error sending message to server: {:?}", e);
                     }
@@ -298,7 +305,28 @@ impl Proxy {
         Ok(())
     }
 
-    async fn handle_command(
+    async fn handle_proto_command(&mut self, cmd: ProtoCommand) -> Result<()> {
+        match cmd {
+            ProtoCommand::Close => {
+                log::debug!("Received close command from channel 0, will attempt to reconnect");
+                // Try also to send back the close command
+                let _ = self.client_tx.send_async(ProtoCommand::Close.into()).await;
+
+                // Stop all servers
+                self.servers.stop_all_servers();
+
+                // Flag we have been correctly closed by client, so we don't try to reconnect, just stop the proxy
+                self.client_correctly_closed = true;
+            }
+            _ => {
+                log::debug!("Received command from channel 0: {:?}", cmd);
+                // For now, we just log the command, but we could handle some more commands here if needed
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_ctrl_command(
         &mut self,
         cmd: handler::Command,
         ctrl_tx: &flume::Sender<handler::Command>,
@@ -321,39 +349,24 @@ impl Proxy {
             handler::Command::ReleaseChannel { channel_id } => {
                 self.servers.close_server(channel_id);
             }
-            handler::Command::ConnectionClosed => {
-                // Stop all servers
-                self.servers.stop_all_servers();
-                log::info!(
-                    "Received connection closed command from client, will attempt to reconnect"
-                );
-                self.stop.trigger(); // Stop current server, which will in turn exit run loop
-            }
-            handler::Command::ChannelError {
+            handler::Command::ClientResult {
                 packet,
                 message,
                 sequence,
             } => {
-                self.recovery_packet = packet;
-                self.seqs = sequence;
-                log::error!(
-                    "Channel error: {}, packet for recovery: {:?}",
-                    message,
-                    self.recovery_packet
-                );
-                // TODO: Maybe a wait before relaunching?
-                self.launch_client(ctrl_tx.clone()).await?;
-            }
-            handler::Command::PacketError => {
-                log::error!("Packet error, will attempt to reconnect")
-                // Close server and relaunch a new one
-            }
-            handler::Command::ClientClose => {
-                self.stop.trigger();
-            }
-            handler::Command::ClientError { message } => {
-                log::error!("Client error: {}", message);
-                self.stop.trigger();
+                // If we received the close command from remote, we should not try to reconnect, just stop the proxy
+                // If we stopped the server, stopped also will be set, do not try to reconnect in that case either
+                if self.stop.is_triggered() || !self.client_correctly_closed {
+                    self.recovery_packet = packet;
+                    self.seqs = sequence;
+                    log::error!(
+                        "Channel error: {}, packet for recovery: {:?}",
+                        message,
+                        self.recovery_packet
+                    );
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                    self.launch_client(ctrl_tx.clone()).await?;
+                }
             }
         }
         Ok(())

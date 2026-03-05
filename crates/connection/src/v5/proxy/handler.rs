@@ -48,19 +48,11 @@ pub enum Command {
     ReleaseChannel {
         channel_id: u16,
     },
-    // From client to proxy, signals ordered eof of connection to tunnel
-    ConnectionClosed,
     // From client to proxy, signals that an error occurred on the channel, so it can be closed and cleaned up by proxy
     // Sends the packet that could not be sent, so we can resent it if the error is recoverable (e.g. temporary network issue)
-    ChannelError {
+    ClientResult {
         packet: Option<PayloadWithChannel>,
         sequence: (u64, u64), // For next crypt recreation
-        message: String,
-    },
-    PacketError,
-    // Used internally by proxy to signal server close or error, not sent by handler
-    ClientClose,
-    ClientError {
         message: String,
     },
 }
@@ -103,34 +95,20 @@ impl Handler {
             .context("Failed to send release channel command")
     }
 
-    pub async fn connection_closed(&self) -> Result<()> {
-        self.ctrl_tx
-            .send_async(Command::ConnectionClosed)
-            .await
-            .context("Failed to send connection closed command")
-    }
-
-    pub async fn channel_error(
+    pub async fn client_result(
         &self,
         packet: Option<PayloadWithChannel>,
         sequence: (u64, u64),
         message: String,
     ) -> Result<()> {
         self.ctrl_tx
-            .send_async(Command::ChannelError {
+            .send_async(Command::ClientResult {
                 packet,
                 sequence,
                 message,
             })
             .await
-            .context("Failed to send channel error command")
-    }
-
-    pub async fn packet_error(&self) -> Result<()> {
-        self.ctrl_tx
-            .send_async(Command::PacketError)
-            .await
-            .context("Failed to send packet error command")
+            .context("Failed to send client result command")
     }
 
     pub fn new_command_channel() -> (flume::Sender<Command>, flume::Receiver<Command>) {

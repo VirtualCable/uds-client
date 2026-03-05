@@ -90,7 +90,7 @@ impl ServerChannels {
     /// Closes the server for the given stream_channel_id
     pub fn close_server(&mut self, stream_channel_id: u16) {
         if self.server_senders.len() >= stream_channel_id as usize {
-            self.server_senders[(stream_channel_id - 1) as usize] = None;
+            self.server_senders[(stream_channel_id - 1) as usize].take();
         }
     }
 

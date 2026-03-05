@@ -109,7 +109,7 @@ async fn check_stop() {
         let stopped = stopped.clone();
         async move {
             // Run the client, it should stop when we send the stop signal
-            client.run(None).await.unwrap();
+            client.run(None).await;
             stopped.trigger(); // Signal that the client has stopped
         }
     });
@@ -147,11 +147,7 @@ async fn check_remote_connection_closed() {
         let stopped = stopped.clone();
         async move {
             // Run the client, it should stop when we receive connection closed from server
-            if let Err(e) = client.run(None).await {
-                log::error!("Client run failed: {:?}", e);
-            } else {
-                log::info!("Client run completed successfully");
-            }
+            client.run(None).await;
             log::info!("Client run completed");
             stopped.trigger(); // Signal that the client has stopped
         }
@@ -160,12 +156,12 @@ async fn check_remote_connection_closed() {
     // Close the local end, which simulates the server closing the connection
     drop(local);
 
-    // We should receive a ConnectionClosed command in the proxy
+    // We should receive a ClientResult command in the proxy
     match ctrl_rx.recv_async().await.unwrap() {
-        Command::ConnectionClosed => {
+        Command::ClientResult { .. } => {
             // Expected, do nothing
         }
-        other => panic!("Expected ConnectionClosed command, got {:?}", other),
+        other => panic!("Expected ClientResult command, got {:?}", other),
     }
 
     stopped
@@ -191,14 +187,8 @@ async fn inbound_chan_closed_works() {
         let stopped = stopped.clone();
         async move {
             // Run the client, it should stop when we receive connection closed from server
-            if let Err(e) = client.run(None).await {
-                // Must return err, because chanel is closed
-                log::info!("Client run failed: {:?}", e);
-            } else {
-                log::error!(
-                    "Client run completed successfully"
-                );
-            }
+            client.run(None).await;
+
             stopped.trigger(); // Signal that the client has stopped
             log::info!("Client run completed");
         }
@@ -213,10 +203,19 @@ async fn inbound_chan_closed_works() {
         .await
         .unwrap();
 
-    // No message on ctrl_rx, ensure
+    let message = ctrl_rx.try_recv();
+    // Should have received a ClientResult command with no packet, sequence (0, 0) and a message about the client stopped only.
     assert!(
-        ctrl_rx.try_recv().is_err(),
-        "Expected no commands to be sent to proxy after channel closure"
+        matches!(
+            message,
+            Ok(Command::ClientResult {
+                packet: None,
+                sequence: (0, 0),
+                ..
+            })
+        ),
+        "Expected no commands to be sent to proxy after channel closure: got {:?}",
+        message
     );
 }
 
@@ -239,14 +238,7 @@ async fn outbound_chan_closed_works() {
         let stopped = stopped.clone();
         async move {
             // Run the client, it should stop when we receive connection closed from server
-            if let Err(e) = client.run(None).await {
-                // Must return err, because chanel is closed
-                log::info!("Client run failed: {:?}", e);
-            } else {
-                log::error!(
-                    "Client run completed successfully"
-                );
-            }
+            client.run(None).await;
             stopped.trigger(); // Signal that the client has stopped
             log::info!("Client run completed");
         }
@@ -266,10 +258,19 @@ async fn outbound_chan_closed_works() {
         .await
         .unwrap();
 
-    // No message on ctrl_rx, ensure
+    let message = ctrl_rx.try_recv();
+    // Should have received a ClientResult command with no packet, sequence (0, 0) and a message about the client stopped only.
     assert!(
-        ctrl_rx.try_recv().is_err(),
-        "Expected no commands to be sent to proxy after channel closure"
+        matches!(
+            message,
+            Ok(Command::ClientResult {
+                packet: None,
+                sequence: (0, 0),
+                ..
+            })
+        ),
+        "Expected no commands to be sent to proxy after channel closure: got {:?}",
+        message
     );
 }
 
@@ -292,11 +293,7 @@ async fn sends_data() {
         let stop = stop.clone();
         async move {
             // Run the client, it should stop when we receive connection closed from server
-            if let Err(e) = client.run(None).await {
-                log::error!("Client run failed: {:?}", e);
-            } else {
-                log::info!("Client run completed successfully");
-            }
+            client.run(None).await;
             log::info!("Client run completed");
             stop.trigger(); // Signal that the client has stopped
         }
@@ -347,11 +344,7 @@ async fn receives_data() {
         let stop = stop.clone();
         async move {
             // Run the client, it should stop when we receive connection closed from server
-            if let Err(e) = client.run(None).await {
-                log::error!("Client run failed: {:?}", e);
-            } else {
-                log::info!("Client run completed successfully");
-            }
+            client.run(None).await;
             log::info!("Client run completed");
             stop.trigger(); // Signal that the client has stopped
         }

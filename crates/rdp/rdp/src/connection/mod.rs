@@ -431,9 +431,9 @@ impl Rdp {
                     log::debug!("Reconnected successfully");
                 } else {
                     tx.send(RdpMessage::Error(
-                        "freerdp_check_event_handles failed".to_string(),
+                        "Disconnected (could not reconnect)".to_string(),
                     ))?;
-                    return Err(anyhow::anyhow!("freerdp_check_event_handles failed"));
+                    return Err(anyhow::anyhow!("Disconnected (could not reconnect)"));
                 }
             }
         }

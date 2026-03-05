@@ -41,18 +41,19 @@ use super::{
     proxy::Handler,
 };
 
+struct ClientError {
+    packet: Option<PayloadWithChannel>,
+    message: String,
+}
+
 pub struct TunnelClientInboundStream<R>
 where
     R: AsyncReadExt + Unpin + 'static,
 {
     reader: R,
-
     tx: PayloadWithChannelSender,
-
     crypt_inbound: Crypt,
-
     stop: Trigger,
-    proxy_ctrl: Handler,
 }
 
 impl<R> TunnelClientInboundStream<R>
@@ -65,18 +66,16 @@ where
         tx: PayloadWithChannelSender,
         crypt_inbound: Crypt,
         stop: Trigger,
-        proxy_ctrl: Handler,
     ) -> Self {
         Self {
             reader,
             tx,
             crypt_inbound,
             stop,
-            proxy_ctrl,
         }
     }
 
-    pub async fn run(mut self) -> Result<()> {
+    async fn run(&mut self) -> Result<(), ClientError> {
         let mut buffer = PacketBuffer::new();
         loop {
             tokio::select! {
@@ -91,7 +90,6 @@ where
                                Ok((decrypted_data, channel)) => {
                                    if decrypted_data.is_empty() && !self.stop.is_triggered() {
                                        log::info!("Tunnel server closed connection");
-                                       let _ = self.proxy_ctrl.connection_closed().await;
                                        break;
                                    }
 
@@ -101,21 +99,21 @@ where
                                    };
 
                                    if self.tx.send_async(payload).await.is_err() {
-                                       log::debug!("Proxy channel closed → exiting inbound");
+                                       log::debug!("Proxy channel closed. Exiting inbound");
                                        break;
                                    }
                                }
                                Err(e) => {
                                    log::error!("Inbound crypt read failed: {:?}", e);
-                                   let _ = self.proxy_ctrl.packet_error().await;
                                    break;
                                }
                            }
                    }
             }
         }
-        // Ensure stopped is triggered, so outbound can exit if it's waiting for it
+        // Stop the other tunnel client side (for try_join! to finish)
         self.stop.trigger();
+
         Ok(())
     }
 }
@@ -125,11 +123,8 @@ where
     W: AsyncWriteExt + Unpin + 'static,
 {
     writer: W,
-
     rx: PayloadWithChannelReceiver,
-
     crypt_outbound: Crypt,
-
     stop: Trigger,
 }
 
@@ -152,7 +147,7 @@ where
         }
     }
 
-    pub async fn run(mut self, initial_packet: Option<PayloadWithChannel>) -> Result<()> {
+    async fn run(&mut self, initial_packet: Option<PayloadWithChannel>) -> Result<(), ClientError> {
         if let Some(packet) = initial_packet {
             // We have an initial packet, process it first
             log::debug!("Processing initial recovery packet before entering main loop");
@@ -173,7 +168,8 @@ where
                                 break;
                             }
                         };
-                        self.send_data(&packet).await?;
+                        // Note that failed packet is raised with the error
+                        self.send_data(&packet).await?
                     }
             }
         }
@@ -183,11 +179,31 @@ where
     }
 
     // so the client can reconnect to server
-    async fn send_data(&mut self, data: &PayloadWithChannel) -> Result<()> {
+    async fn send_data(&mut self, data: &PayloadWithChannel) -> Result<(), ClientError> {
         self.crypt_outbound
             .write(&self.stop, &mut self.writer, data.channel_id, &data.payload)
             .await
+            .map_err(|e| ClientError {
+                packet: Some(data.clone()),
+                message: format!("Outbound crypt write failed: {:?}", e),
+            })
     }
+}
+
+async fn global_to_local_stop(
+    global_stop: Trigger,
+    local_stop: Trigger,
+) -> Result<(), ClientError> {
+    // This is a placeholder for any global to local stop signal handling if needed in the future
+    tokio::select! {
+        _ = global_stop.wait_async() => {
+            local_stop.trigger();
+        }
+        _ = local_stop.wait_async() => {
+            // Local stop triggered, just return
+        }
+    }
+    Ok(())
 }
 
 pub struct TunnelClient<R, W>
@@ -236,26 +252,51 @@ where
         }
     }
 
-    pub async fn run(self, initial_packet: Option<PayloadWithChannel>) -> Result<()> {
-        let inbound = TunnelClientInboundStream::new(
+    pub async fn run(self, initial_packet: Option<PayloadWithChannel>) {
+        let local_stop = Trigger::new();
+
+        let mut inbound = TunnelClientInboundStream::new(
             self.reader,
             self.tx,
             self.crypt_inbound,
-            self.stop.clone(),
-            self.proxy_ctrl,
+            local_stop.clone(),
         );
-        let outbound = TunnelClientOutboundStream::new(
+        let mut outbound = TunnelClientOutboundStream::new(
             self.writer,
             self.rx,
             self.crypt_outbound,
-            self.stop.clone(),
+            local_stop.clone(),
         );
 
-        tokio::try_join!(inbound.run(), outbound.run(initial_packet))?;
+        if let Err(e) = tokio::try_join!(
+            inbound.run(),
+            outbound.run(initial_packet),
+            global_to_local_stop(self.stop, local_stop)
+        ) {
+            log::error!("Tunnel client error: {:?}", e.message);
+            if let Err(e) = self
+                .proxy_ctrl
+                .client_result(
+                    e.packet,
+                    (
+                        inbound.crypt_inbound.current_seq(),
+                        outbound.crypt_outbound.current_seq(),
+                    ),
+                    e.message.clone(),
+                )
+                .await
+            {
+                log::error!("Failed to send client result: {:?}", e);
+            }
+        } else if let Err(e) = self
+            .proxy_ctrl
+            .client_result(None, (0, 0), "Tunnel client stopped".to_string())
+            .await
+        {
+            log::error!("Failed to send client result: {:?}", e);
+        }
 
         log::info!("Tunnel client stopped");
-
-        Ok(())
     }
 }
 
