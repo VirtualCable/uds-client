@@ -393,7 +393,7 @@ Starts a tunnel connection.
   - `local_port` (number, optional): The local port to bind to.
   - `keep_listening_after_timeout` (boolean, optional): Whether to keep listening after timeout (default: false).
   - `enable_ipv6` (boolean, optional): Whether to enable IPv6 (default: false).
-  - `shared_secret` (vec, optional): Optional shared secret for cryptographic operations, provided as an array of bytes or Uint8Array (32 bytes).
+  - `shared_secret` (Uint8Array | number[], optional): Optional shared secret for cryptographic operations, provided as an array of 32 bytes or a `Uint8Array`.
 
 **Returns:** object - An object containing the assigned port: `{port: number}`.
 
@@ -407,7 +407,7 @@ Tasks.addLateUnlinkableFile("temp2.txt");
 // Add waitable app
 Tasks.addWaitableApp(12345);
 
-// Start tunnel without crypto params (object form)
+// Start tunnel without shared secret (object form)
 const tunnel = await Tasks.startTunnel({
     addr: "example.com",
     port: 443,
@@ -428,20 +428,6 @@ const tunnelWithCrypto = await Tasks.startTunnel({
     shared_secret: shared_secret
 });
 console.log("Tunnel port (with shared secret):", tunnelWithCrypto.port);
-```
-### Examples
-
-```javascript
-// Add files for cleanup
-Tasks.addEarlyUnlinkableFile("temp1.txt");
-Tasks.addLateUnlinkableFile("temp2.txt");
-
-// Add waitable app
-Tasks.addWaitableApp(12345);
-
-// Start tunnel
-const tunnel = await Tasks.startTunnel("example.com", 443, "ticket123", 5000, true);
-console.log("Tunnel port:", tunnel.port);
 ```
 
 ## RDP Module
