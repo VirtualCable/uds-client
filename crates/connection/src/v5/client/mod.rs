@@ -37,7 +37,7 @@ use shared::{log, system::trigger::Trigger};
 use crypt::tunnel::{Crypt, types::PacketBuffer};
 
 use super::{
-    protocol::{PayloadWithChannel, PayloadWithChannelReceiver, PayloadWithChannelSender},
+    protocol::{Command, PayloadWithChannel, PayloadWithChannelReceiver, PayloadWithChannelSender},
     proxy::Handler,
 };
 
@@ -169,7 +169,17 @@ where
                             }
                         };
                         // Note that failed packet is raised with the error
-                        self.send_data(&packet).await?
+                        self.send_data(&packet).await?;
+
+                        if packet.channel_id == 0 {
+                            #[cfg(debug_assertions)]
+                            log::debug!("Received packet for channel 0: {:?}", Command::try_from(packet.clone()));
+                            // Note: If we receive a close command, stop
+                            if let Ok(msg) = Command::try_from(packet.clone()) && let Command::Close = msg {
+                                log::debug!("Received close command, stopping tunnel client");
+                                break;
+                            }
+                        }
                     }
             }
         }

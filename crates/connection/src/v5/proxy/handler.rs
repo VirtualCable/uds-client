@@ -32,7 +32,10 @@ use anyhow::{Context, Result};
 
 use flume::Sender;
 
-use super::super::protocol::{PayloadReceiver, PayloadWithChannel, PayloadWithChannelSender};
+use super::super::{
+    log,
+    protocol::{PayloadReceiver, PayloadWithChannel, PayloadWithChannelSender},
+};
 
 pub struct ServerChannels {
     pub tx: PayloadWithChannelSender,
@@ -68,6 +71,7 @@ impl Handler {
     }
 
     pub async fn request_channel(&self, channel_id: u16) -> Result<ServerChannels> {
+        log::debug!("Requesting channel {}", channel_id);
         let (response_tx, response_rx) = flume::bounded(1);
         self.ctrl_tx
             .send_async(Command::RequestChannel {
@@ -89,6 +93,7 @@ impl Handler {
     }
 
     pub async fn release_channel(&self, channel_id: u16) -> Result<()> {
+        log::debug!("Releasing channel {}", channel_id);
         self.ctrl_tx
             .send_async(Command::ReleaseChannel { channel_id })
             .await

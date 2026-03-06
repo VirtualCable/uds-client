@@ -347,7 +347,22 @@ impl Proxy {
                     .await?;
             }
             handler::Command::ReleaseChannel { channel_id } => {
+                log::debug!("Processing command release channel {}", channel_id);
                 self.servers.close_server(channel_id);
+                self.client_tx
+                    .send_async(super::protocol::Command::CloseChannel { channel_id }.to_message())
+                    .await
+                    .context("Failed to send close channel command to client")?;
+                // If no server remains (all are closed), send also the Close command to client, so it can cleanup and close all
+                if self.servers.is_empty() {
+                    log::debug!("No more active channels, sending close command to client");
+                    self.client_tx
+                        .send_async(super::protocol::Command::Close.into())
+                        .await
+                        .context("Failed to send close command to client")?;
+                    // Flag we have been correctly closed by client, so we don't try to reconnect, just stop the proxy
+                    self.client_correctly_closed = true; 
+                }
             }
             handler::Command::ClientResult {
                 packet,
@@ -359,8 +374,8 @@ impl Proxy {
                 if self.stop.is_triggered() || !self.client_correctly_closed {
                     self.recovery_packet = packet;
                     self.seqs = sequence;
-                    log::error!(
-                        "Channel error: {}, packet for recovery: {:?}",
+                    log::debug!(
+                        "Client Result: {}, packet for recovery: {:?}",
                         message,
                         self.recovery_packet
                     );

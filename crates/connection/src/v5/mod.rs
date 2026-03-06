@@ -79,7 +79,12 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
                         log::debug!("Spawning tunnel server task, active connections: {}", active_connections.load(std::sync::atomic::Ordering::Relaxed));
                         if let Err(e) = server.run().await {
                             log::error!("Tunnel server error: {:?}", e.to_string());
+                        } else {
+                            log::debug!("Tunnel server exited normally");
+                            // Delay a bit to conclude proxy, client, etc..
+                            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                         }
+                        log::debug!("Tunnel server task ended, active connections: {}", active_connections.load(std::sync::atomic::Ordering::Relaxed));
                         active_connections.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
                         proxy.release_channel(1).await.ok();
                         log::debug!("Tunnel connection closed, active connections: {}", active_connections.load(std::sync::atomic::Ordering::Relaxed));

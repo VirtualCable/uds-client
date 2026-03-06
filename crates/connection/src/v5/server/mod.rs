@@ -94,6 +94,7 @@ where
                     match result {
                         Ok(0) => {
                             // EOF, stop the server
+                            log::debug!("Client closed the connection, stopping tunnel server");
                             self.proxy_ctrl.release_channel(self.channel_id).await?;
                             break;
                         }
@@ -101,15 +102,21 @@ where
                             // Send to proxy, if error, no proxy so no notification of release channel
                             // Note: This may trigger stop for stopping the full tunnel processes group
                             if let Err(e) = self.send_data(&PayloadWithChannel::new(self.channel_id, &buffer[..n])).await {
+                                 // Try to release channel, but ignore error, as we are already in error state
+                                let _ = self.proxy_ctrl.release_channel(self.channel_id).await;
                                 log::error!("Failed to send data to proxy: {:?}", e);
                                 return Err(e);
                             }
                         }
                         Err(e) => {
-                            log::error!("Failed to read from socket: {:?}", e);
-                            // Notify to procy, if it can be notified
+                            // May be normal. RDP client (mstsc) may close the connection without notice, so we just log and exit,
+                            // no error, as this means the client is not running, so we simply exit
+                            // Try to release channel, but ignore error, as we are already in error state
                             let _ = self.proxy_ctrl.release_channel(self.channel_id).await;
-                            return Err(e.into());
+                            #[cfg(debug_assertions)]
+                            log::debug!("Stopping tunnel server due to local error: {:?}", e);
+
+                            break;
                         }
                     }
                 }
@@ -135,6 +142,7 @@ where
                 }
             }
         }
+        log::debug!("Tunnel server stopped");
         Ok(())
     }
 

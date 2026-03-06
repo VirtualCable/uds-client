@@ -6,18 +6,25 @@ use crypt::types::Ticket;
 
 const RESERVED_LENGTH: usize = 6;
 
+// Important Note:
+// inbound is inbound for REMOTE tunnel (so, our outbound), 
+//and outbound is outbound for REMOTE tunnel (so, our inbound)
 #[derive(Debug)]
 pub struct OpenResponse {
     pub session_id: Ticket,
     pub channel_count: u16,
+    pub inbound_seq: u64,
+    pub outbound_seq: u64,
     _reserved: [u8; RESERVED_LENGTH], // For future use, 0 right now
 }
 
 impl OpenResponse {
-    pub fn new(session_id: Ticket, channel_count: u16) -> Self {
+    pub fn new(session_id: Ticket, channel_count: u16, inbound_seq: u64, outbound_seq: u64) -> Self {
         OpenResponse {
             session_id,
             channel_count,
+            inbound_seq,
+            outbound_seq,
             _reserved: [0u8; RESERVED_LENGTH],
         }
     }
@@ -25,13 +32,15 @@ impl OpenResponse {
     pub fn as_vec(&self) -> Vec<u8> {
         let mut vec = self.session_id.as_ref().to_vec();
         vec.extend_from_slice(&self.channel_count.to_be_bytes());
+        vec.extend_from_slice(&self.inbound_seq.to_be_bytes());
+        vec.extend_from_slice(&self.outbound_seq.to_be_bytes());
         vec.extend_from_slice(&self._reserved);
         vec
     }
 
     pub fn from_slice(data: &[u8]) -> Result<Self> {
-        if data.len() != TICKET_LENGTH + 2 + RESERVED_LENGTH {
-            anyhow::bail!("Invalid OpenResponse length: expected {}, got {}", TICKET_LENGTH + 2 + RESERVED_LENGTH, data.len());
+        if data.len() != TICKET_LENGTH + 2 + 8 + 8 + RESERVED_LENGTH {
+            anyhow::bail!("Invalid OpenResponse length: expected {}, got {}", TICKET_LENGTH + 2 + 8 + 8 + RESERVED_LENGTH, data.len());
         }
         let session_id = Ticket::try_from(&data[0..TICKET_LENGTH])?;
         let channel_count = u16::from_be_bytes(
@@ -39,10 +48,20 @@ impl OpenResponse {
                 .try_into()
                 .map_err(|_| anyhow::anyhow!("Failed to parse channel count"))?,
         );
+        let inbound_seq = u64::from_be_bytes(
+            data[TICKET_LENGTH + 2..TICKET_LENGTH + 2 + 8]
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("Failed to parse inbound sequence"))?,
+        );
+        let outbound_seq = u64::from_be_bytes(
+            data[TICKET_LENGTH + 2 + 8..TICKET_LENGTH + 2 + 8 + 8]
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("Failed to parse outbound sequence"))?,
+        );
         //
         // let mut reserved = [0u8; RESERVED_LENGTH];
         // reserved.copy_from_slice(&data[TICKET_LENGTH + 2..]);
-        Ok(OpenResponse::new(session_id, channel_count))
+        Ok(OpenResponse::new(session_id, channel_count, inbound_seq, outbound_seq))
     }
 }
 
@@ -62,11 +81,13 @@ mod tests {
     fn test_open_response_serialization() {
         let session_id = Ticket::new([1u8; TICKET_LENGTH]);
         let channel_count = 1;
-        let open_response = OpenResponse::new(session_id, channel_count);
+        let open_response = OpenResponse::new(session_id, channel_count, 1, 2);
         let vec = open_response.as_vec();
         let parsed = OpenResponse::try_from(vec.as_slice()).expect("Failed to parse OpenResponse");
         assert_eq!(parsed.session_id, session_id);
         assert_eq!(parsed.channel_count, channel_count);
+        assert_eq!(parsed.inbound_seq, 1);
+        assert_eq!(parsed.outbound_seq, 2);
     }
 
     #[test]
@@ -81,6 +102,8 @@ mod tests {
         let session_id = Ticket::new([1u8; TICKET_LENGTH]);
         let mut vec = session_id.as_ref().to_vec();
         vec.extend_from_slice(&[0xFF, 0xFF]); // Invalid channel count (65535)
+        vec.extend_from_slice(&[0u8; 8]); // Inbound seq
+        vec.extend_from_slice(&[0u8; 8]); // Outbound seq
         vec.extend_from_slice(&[0u8; RESERVED_LENGTH]);
         let result = OpenResponse::try_from(vec.as_slice());
         assert!(result.is_ok()); // Channel count is valid, just large

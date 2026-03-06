@@ -114,6 +114,10 @@ impl ServerChannels {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.server_senders.iter().all(|s| s.is_none())
+    }
+
     pub async fn recv(&self) -> Result<protocol::PayloadWithChannel> {
         let msg = self.receiver.recv_async().await?;
         Ok(msg)
@@ -122,8 +126,8 @@ impl ServerChannels {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::super::protocol::PayloadWithChannel;
+    use super::*;
 
     #[tokio::test]
     async fn test_register_and_communication() {
