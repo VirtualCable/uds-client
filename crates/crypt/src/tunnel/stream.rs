@@ -56,6 +56,7 @@ impl Crypt {
                 result
             }
         }? == 0 { // EOF, fine, return empty data (end of stream, no error)
+            log::debug!("EOF on crypted stream");
             return Ok((&buffer.data()[..0], 0));
         }
         self.decrypt(buffer)?;
@@ -77,7 +78,7 @@ impl Crypt {
         let length = data.len();
         self.encrypt(channel, length, &mut buffer)?;
 
-        tokio::select! {
+        let result = tokio::select! {
             _ = stop.wait_async() => {
                 log::debug!("Outbound stream stopped while writing");
                 Ok(())  // Indicate end of processing
@@ -85,7 +86,9 @@ impl Crypt {
             result = buffer.write(writer) => {
                 result.map(|_| ())  // Convert to Result<()>
             }
-        }
+        };
+        log::debug!("WRI: seq {}, length {}, channel {}", self.seq, data.len(), channel);
+        result
     }
 }
 

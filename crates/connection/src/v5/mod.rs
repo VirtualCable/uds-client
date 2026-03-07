@@ -73,7 +73,7 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
                 // Start proxying in a new task
                 tokio::spawn({
                     let active_connections = active_connections.clone();
-                    let registered_trigger = registered_trigger.clone();
+                    // let registered_trigger = registered_trigger.clone();
                     async move {
                         active_connections.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         log::debug!("Spawning tunnel server task, active connections: {}", active_connections.load(std::sync::atomic::Ordering::Relaxed));
@@ -86,10 +86,10 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
                         }
                         log::debug!("Tunnel server task ended, active connections: {}", active_connections.load(std::sync::atomic::Ordering::Relaxed));
                         active_connections.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
-                        proxy.release_channel(1).await.ok();
+                        // proxy.release_channel(1).await.ok();
                         log::debug!("Tunnel connection closed, active connections: {}", active_connections.load(std::sync::atomic::Ordering::Relaxed));
                         // Ensure our proxy is stopped
-                        registered_trigger.trigger();
+                        // registered_trigger.trigger();
                     }
                 });
             }

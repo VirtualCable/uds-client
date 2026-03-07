@@ -115,6 +115,12 @@ impl Crypt {
             .map_err(|e| anyhow::anyhow!("encryption failure: {:?}", e))?;
         data[data_with_channel_length..data_with_channel_length + consts::TAG_LENGTH]
             .copy_from_slice(&tag);
+        log::debug!(
+            "ENC: seq {}, length {}, channel {}",
+            seq,
+            len,
+            channel_id,
+        );
         // Returns the FULL length of the encrypted packet (header + data + channel + tag)
         Ok(data_with_channel_length + consts::TAG_LENGTH)
     }
@@ -162,6 +168,12 @@ impl Crypt {
         // Fix data length to remove ending tag, so only channel + data is left
         buffer.set_length(len)?;
 
+        log::debug!(
+            "DEC: seq {}, length {}, channel {}",
+            seq,
+            len,
+            buffer.channel_id(),
+        );
         Ok(())
     }
 }

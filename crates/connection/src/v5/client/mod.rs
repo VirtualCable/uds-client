@@ -155,6 +155,7 @@ where
         }
         loop {
             tokio::select! {
+                    biased;  // Prefer stop over receiving, and avoid using randomness of select
                     _ = self.stop.wait_async() => {
                         // The only exit point that does not notifies
                         break;
@@ -300,7 +301,14 @@ where
             }
         } else if let Err(e) = self
             .proxy_ctrl
-            .client_result(None, (0, 0), "Tunnel client stopped".to_string())
+            .client_result(
+                None,
+                (
+                    inbound.crypt_inbound.current_seq(),
+                    outbound.crypt_outbound.current_seq(),
+                ),
+                "Tunnel client stopped".to_string(),
+            )
             .await
         {
             log::error!("Failed to send client result: {:?}", e);

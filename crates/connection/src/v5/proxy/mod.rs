@@ -134,6 +134,7 @@ impl Proxy {
         let handshake = if self.recover_connection {
             Handshake::Recover {
                 ticket: self.ticket,
+                seqs: self.seqs,
             }
         } else {
             self.recover_connection = true; // Next time we will try to recover the connection
@@ -375,9 +376,10 @@ impl Proxy {
                     self.recovery_packet = packet;
                     self.seqs = sequence;
                     log::debug!(
-                        "Client Result: {}, packet for recovery: {:?}",
+                        "Client Result: {}, packet for recovery: {:?}, seqs: {:?}",
                         message,
-                        self.recovery_packet
+                        self.recovery_packet,
+                        self.seqs
                     );
                     tokio::time::sleep(Duration::from_millis(500)).await;
                     self.launch_client(ctrl_tx.clone()).await?;

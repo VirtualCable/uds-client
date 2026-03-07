@@ -60,7 +60,7 @@ pub enum HandshakeCommand {
 pub enum Handshake {
     Test,
     Open { ticket: Ticket },
-    Recover { ticket: Ticket },
+    Recover { ticket: Ticket, seqs: (u64, u64) },
 }
 
 impl From<&Handshake> for Vec<u8> {
@@ -73,10 +73,12 @@ impl From<&Handshake> for Vec<u8> {
                 buf.extend_from_slice(ticket.as_ref());
                 buf
             }
-            Handshake::Recover { ticket } => {
+            Handshake::Recover { ticket, seqs: (seq_inbound, seq_outbound) } => {
                 let mut buf = Vec::new();
                 buf.push(HandshakeCommand::Recover.into());
                 buf.extend_from_slice(ticket.as_ref());
+                buf.extend_from_slice(&seq_inbound.to_be_bytes());
+                buf.extend_from_slice(&seq_outbound.to_be_bytes());
                 buf
             }
         }
@@ -127,7 +129,9 @@ mod tests {
     fn test_handshake_recover_to_bytes() {
         log::setup_logging("debug", log::LogType::Test);
         let ticket = Ticket::new_random();
-        let handshake = Handshake::Recover { ticket };
+        let seq_inbound = 123;
+        let seq_outbound = 456;
+        let handshake = Handshake::Recover { ticket, seqs: (seq_inbound, seq_outbound) };
         let bytes = handshake.to_bytes();
         assert!(bytes.starts_with(HANDSHAKE_V2_SIGNATURE));
         assert_eq!(
@@ -137,9 +141,9 @@ mod tests {
 
         assert_eq!(
             bytes.len(),
-            HANDSHAKE_V2_SIGNATURE.len() + 1 + TICKET_LENGTH
+            HANDSHAKE_V2_SIGNATURE.len() + 1 + TICKET_LENGTH + 8 + 8
         );
-        assert_eq!(&bytes[HANDSHAKE_V2_SIGNATURE.len() + 1..], ticket.as_ref());
+        assert_eq!(&bytes[HANDSHAKE_V2_SIGNATURE.len() + 1..HANDSHAKE_V2_SIGNATURE.len() + 1 + TICKET_LENGTH], ticket.as_ref());
     }
 
     #[test]
