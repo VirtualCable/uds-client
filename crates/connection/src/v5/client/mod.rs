@@ -66,39 +66,41 @@ where
     }
 
     async fn run(&mut self) -> Result<()> {
+        log::debug!("Starting inbound stream");
         let mut buffer = PacketBuffer::new();
         loop {
             tokio::select! {
-                       _ = self.stop.wait_async() => {
-                           // The only exit point that does not notifies
-                           break;
-                       }
-                       // Note: read of crypt_inbound is not cancel safe, but
-                       // in case of stop (the only other branch), we don't mind as long as it finishes.
-                       packet = self.crypt.read(&self.stop, &mut self.reader, &mut buffer) => {
-                           match packet {
-                               Ok((decrypted_data, channel)) => {
-                                   if decrypted_data.is_empty() && !self.stop.is_triggered() {
-                                       log::info!("Tunnel server closed connection");
-                                       break;
-                                   }
+                biased;  // Prefer stop over receiving, and avoid using randomness of select
+                _ = self.stop.wait_async() => {
+                    // The only exit point that does not notifies
+                    break;
+                }
+                // Note: read of crypt_inbound is not cancel safe, but
+                // in case of stop (the only other branch), we don't mind as long as it finishes.
+                packet = self.crypt.read(&self.stop, &mut self.reader, &mut buffer) => {
+                    match packet {
+                        Ok((decrypted_data, channel)) => {
+                            if decrypted_data.is_empty() && !self.stop.is_triggered() {
+                                log::info!("Tunnel server closed connection");
+                                break;
+                            }
 
-                                   let payload = PayloadWithChannel {
-                                       channel_id: channel,
-                                       payload: decrypted_data.into(),
-                                   };
+                            let payload = PayloadWithChannel {
+                                channel_id: channel,
+                                payload: decrypted_data.into(),
+                            };
 
-                                   if self.tx.send_async(payload).await.is_err() {
-                                       log::debug!("Proxy channel closed. Exiting inbound");
-                                       break;
-                                   }
-                               }
-                               Err(e) => {
-                                   log::error!("Inbound crypt read failed: {:?}", e);
-                                   break;
-                               }
-                           }
-                   }
+                            if self.tx.send_async(payload).await.is_err() {
+                                log::debug!("Proxy channel closed. Exiting inbound");
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("Inbound crypt read failed: {:?}", e);
+                            break;
+                        }
+                    }
+                }
             }
         }
         // Stop the other tunnel client side (for try_join! to finish)
@@ -135,15 +137,26 @@ where
     pub async fn recover_buffer(&mut self, recovery_buffer: &RecoveryBuffer) -> Result<()> {
         log::debug!("Resending unsent packet for session in client outbound stream");
         // Send all unsent packets
-        while let Some(unsent_packet) = recovery_buffer.get().take_unsent_packet() {
+        while let Some((unsent_packet, old_seq)) = recovery_buffer.get().take_unsent_packet() {
             // We can block here because we are already in the connection task, and we want to ensure the unsent packet is sent before processing new packets
             // If we fail to send, we will retry on next connection, so it's not critical to send it on this connection
+            log::debug!(
+                "Resend old seq {} len {}: {:?}..{:?}",
+                old_seq,
+                unsent_packet.len(),
+                unsent_packet.payload.as_ref()[..std::cmp::min(8, unsent_packet.payload.len())]
+                    .to_vec(),
+                unsent_packet.payload.as_ref()[unsent_packet.payload.len().saturating_sub(8)..]
+                    .to_vec(),
+            );
             self.send_data(&unsent_packet).await?;
         }
+        log::debug!("Finished resending unsent packets for session in client outbound stream");
         Ok(())
     }
 
     async fn run(&mut self, recovery_buffer: RecoveryBuffer) -> Result<()> {
+        log::debug!("Starting outbound stream, attempting to recover buffer if needed");
         self.recover_buffer(&recovery_buffer).await?;
         loop {
             tokio::select! {
@@ -161,7 +174,7 @@ where
                                 break;
                             }
                         };
-                        // Note that failed packet is raised with the error
+                        // Store on recovery buffer before sending, so if we fail to send, we can retry on recovery
                         let data = recovery_buffer.get().push(self.crypt.current_seq() + 1, packet)?;
                         self.send_data(data).await?;
 
@@ -250,6 +263,7 @@ where
     }
 
     pub async fn run(self, recovery_buffer: RecoveryBuffer) {
+        log::debug!("Starting tunnel client");
         let local_stop = Trigger::new();
 
         let mut inbound = TunnelClientInboundStream::new(
@@ -266,8 +280,8 @@ where
         );
 
         let err_msg = if let Err(e) = tokio::try_join!(
-            inbound.run(),
             outbound.run(recovery_buffer),
+            inbound.run(),
             global_to_local_stop(self.stop, local_stop)
         ) {
             log::error!("Tunnel client error: {:?}", e.to_string());

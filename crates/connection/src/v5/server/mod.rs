@@ -26,8 +26,8 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 use anyhow::Result;
 use crypt::tunnel::consts::CRYPT_PACKET_SIZE;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -89,6 +89,10 @@ where
         let mut buffer = [0u8; 16384];
         loop {
             tokio::select! {
+                // Stop signal
+                _ = self.stop.wait_async() => {
+                    break;
+                }
                 // Read from socket
                 result = self.reader.read(&mut buffer) => {
                     match result {
@@ -134,11 +138,6 @@ where
                     };
                     // Write to socket
                     self.writer.write_all(&payload).await?;
-                }
-
-                // Stop signal
-                _ = self.stop.wait_async() => {
-                    break;
                 }
             }
         }

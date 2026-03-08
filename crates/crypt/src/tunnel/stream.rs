@@ -87,7 +87,6 @@ impl Crypt {
                 result.map(|_| ())  // Convert to Result<()>
             }
         };
-        log::debug!("WRI: seq {}, length {}, channel {}", self.seq, data.len(), channel);
         result
     }
 }

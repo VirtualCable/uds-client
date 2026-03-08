@@ -74,10 +74,6 @@ impl RecoveryBuffer {
     pub fn get(&self) -> &mut RecoverySendBuffer {
         unsafe { &mut *self.0.get() }
     }
-
-    pub fn is_locked(&self) -> bool {
-        Rc::strong_count(&self.0) > 1
-    }
 }
 
 pub struct Proxy {
@@ -88,7 +84,7 @@ pub struct Proxy {
     initial_timeout: std::time::Duration,
 
     // We need to keep track of the seqs for crypt
-    // for conneciton recovery
+    // for connection recovery
     seqs: (u64, u64),
 
     // Channels for comms with the client side (the one that will connect to the tunnel server)
@@ -213,7 +209,7 @@ impl Proxy {
 
         log::debug!(
             "Received handshake response from tunnel server, reconnect ticket: {:?}",
-            open_response
+            open_response.session_id
         );
 
         // Store reconnect ticket for future use.
@@ -222,11 +218,21 @@ impl Proxy {
         // Skip, if recovery, the the already processed packets (note that pre increment we must stop on PREV SEQ)
         // inbound = other side inbound, not our
         if self.recover_connection {
-            self.recovery_buffer
-                .get()
+            let recovery_buffer = self.recovery_buffer.get();
+            log::debug!(
+                "Attempting to recover connection, skipping packets until seq {:?} from {:?}",
+                open_response.inbound_seq,
+                recovery_buffer,
+            );
+            recovery_buffer
                 .skip(open_response.inbound_seq - 1)
                 .context("Failed to skip packets in recovery buffer")?;
+            log::debug!(
+                "Finished skipping packets for recovery, remaining buffer: {:?}",
+                recovery_buffer,
+            );
         } else {
+            // Next one will be a recovery connection
             self.recover_connection = true; // Next time we will try to recover the connection
         }
 
@@ -235,7 +241,6 @@ impl Proxy {
             self.ticket
         );
 
-        // Create the server and run it in a separate task
         Ok(TunnelClient::new(
             reader,
             writer,
@@ -248,17 +253,17 @@ impl Proxy {
         ))
     }
 
-    // Launchs (or relaunchs) the tunnel server, returns a handler to send commands to the server
+    // Launches (or relaunches) the tunnel client, returns a handler to send commands to the client
     async fn launch_client(&mut self, ctrl_tx: flume::Sender<handler::Command>) -> Result<()> {
-        let server = self.connect(&ctrl_tx).await?;
-        tokio::spawn(server.run(self.recovery_buffer.clone()));
+        let client = self.connect(&ctrl_tx).await?;
+        tokio::spawn(client.run(self.recovery_buffer.clone()));
         Ok(())
     }
 
     pub async fn run(mut self) -> Result<Handler> {
         let (ctrl_tx, ctrl_rx) = Handler::new_command_channel();
 
-        // Launch server or return an error
+        // Launch client or return an error
         self.launch_client(ctrl_tx.clone()).await?;
 
         // Launch the main proxy task
@@ -283,6 +288,7 @@ impl Proxy {
         // Main loop to handle tunnel communication, moves self into the async task
         loop {
             tokio::select! {
+                biased;
                 // Check for stop signal
                 _ = self.stop.wait_async() => {
                     break;
