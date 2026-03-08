@@ -9,6 +9,7 @@ shared = { path = "../shared" }
 
 # Utility
 anyhow = { workspace = true }
+thiserror = { workspace = true }
 chrono = { workspace = true }
 directories-next = { workspace = true }
 hostname = { workspace = true }

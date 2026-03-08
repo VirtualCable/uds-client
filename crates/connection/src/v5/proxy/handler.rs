@@ -34,7 +34,7 @@ use flume::Sender;
 
 use super::super::{
     log,
-    protocol::{PayloadReceiver, PayloadWithChannel, PayloadWithChannelSender},
+    protocol::{PayloadReceiver, PayloadWithChannelSender},
 };
 
 pub struct ServerChannels {
@@ -54,7 +54,6 @@ pub enum Command {
     // From client to proxy, signals that an error occurred on the channel, so it can be closed and cleaned up by proxy
     // Sends the packet that could not be sent, so we can resent it if the error is recoverable (e.g. temporary network issue)
     ClientResult {
-        packet: Option<PayloadWithChannel>,
         sequence: (u64, u64), // For next crypt recreation
         message: String,
     },
@@ -102,13 +101,11 @@ impl Handler {
 
     pub async fn client_result(
         &self,
-        packet: Option<PayloadWithChannel>,
         sequence: (u64, u64),
         message: String,
     ) -> Result<()> {
         self.ctrl_tx
             .send_async(Command::ClientResult {
-                packet,
                 sequence,
                 message,
             })

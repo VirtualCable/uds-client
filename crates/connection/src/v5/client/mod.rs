@@ -38,13 +38,8 @@ use crypt::tunnel::{Crypt, types::PacketBuffer};
 
 use super::{
     protocol::{Command, PayloadWithChannel, PayloadWithChannelReceiver, PayloadWithChannelSender},
-    proxy::Handler,
+    proxy::{Handler, RecoveryBuffer},
 };
-
-struct ClientError {
-    packet: Option<PayloadWithChannel>,
-    message: String,
-}
 
 pub struct TunnelClientInboundStream<R>
 where
@@ -52,7 +47,7 @@ where
 {
     reader: R,
     tx: PayloadWithChannelSender,
-    crypt_inbound: Crypt,
+    crypt: Crypt,
     stop: Trigger,
 }
 
@@ -61,21 +56,16 @@ where
     R: AsyncReadExt + Unpin + 'static,
 {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        reader: R,
-        tx: PayloadWithChannelSender,
-        crypt_inbound: Crypt,
-        stop: Trigger,
-    ) -> Self {
+    pub fn new(reader: R, tx: PayloadWithChannelSender, crypt: Crypt, stop: Trigger) -> Self {
         Self {
             reader,
             tx,
-            crypt_inbound,
+            crypt,
             stop,
         }
     }
 
-    async fn run(&mut self) -> Result<(), ClientError> {
+    async fn run(&mut self) -> Result<()> {
         let mut buffer = PacketBuffer::new();
         loop {
             tokio::select! {
@@ -85,7 +75,7 @@ where
                        }
                        // Note: read of crypt_inbound is not cancel safe, but
                        // in case of stop (the only other branch), we don't mind as long as it finishes.
-                       packet = self.crypt_inbound.read(&self.stop, &mut self.reader, &mut buffer) => {
+                       packet = self.crypt.read(&self.stop, &mut self.reader, &mut buffer) => {
                            match packet {
                                Ok((decrypted_data, channel)) => {
                                    if decrypted_data.is_empty() && !self.stop.is_triggered() {
@@ -124,7 +114,7 @@ where
 {
     writer: W,
     rx: PayloadWithChannelReceiver,
-    crypt_outbound: Crypt,
+    crypt: Crypt,
     stop: Trigger,
 }
 
@@ -133,26 +123,28 @@ where
     W: AsyncWriteExt + Unpin + 'static,
 {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        writer: W,
-        rx: PayloadWithChannelReceiver,
-        crypt_outbound: Crypt,
-        stop: Trigger,
-    ) -> Self {
+    pub fn new(writer: W, rx: PayloadWithChannelReceiver, crypt: Crypt, stop: Trigger) -> Self {
         Self {
             writer,
             rx,
-            crypt_outbound,
+            crypt,
             stop,
         }
     }
 
-    async fn run(&mut self, initial_packet: Option<PayloadWithChannel>) -> Result<(), ClientError> {
-        if let Some(packet) = initial_packet {
-            // We have an initial packet, process it first
-            log::debug!("Processing initial recovery packet before entering main loop");
-            self.send_data(&packet).await?;
+    pub async fn recover_buffer(&mut self, recovery_buffer: &RecoveryBuffer) -> Result<()> {
+        log::debug!("Resending unsent packet for session in client outbound stream");
+        // Send all unsent packets
+        while let Some(unsent_packet) = recovery_buffer.get().take_unsent_packet() {
+            // We can block here because we are already in the connection task, and we want to ensure the unsent packet is sent before processing new packets
+            // If we fail to send, we will retry on next connection, so it's not critical to send it on this connection
+            self.send_data(&unsent_packet).await?;
         }
+        Ok(())
+    }
+
+    async fn run(&mut self, recovery_buffer: RecoveryBuffer) -> Result<()> {
+        self.recover_buffer(&recovery_buffer).await?;
         loop {
             tokio::select! {
                     biased;  // Prefer stop over receiving, and avoid using randomness of select
@@ -170,13 +162,14 @@ where
                             }
                         };
                         // Note that failed packet is raised with the error
-                        self.send_data(&packet).await?;
+                        let data = recovery_buffer.get().push(self.crypt.current_seq() + 1, packet)?;
+                        self.send_data(data).await?;
 
-                        if packet.channel_id == 0 {
+                        if data.channel_id == 0 {
                             #[cfg(debug_assertions)]
-                            log::debug!("Received packet for channel 0: {:?}", Command::try_from(packet.clone()));
+                            log::debug!("Received packet for channel 0: {:?}", Command::try_from(data.clone()));
                             // Note: If we receive a close command, stop
-                            if let Ok(msg) = Command::try_from(packet.clone()) && let Command::Close = msg {
+                            if let Ok(msg) = Command::try_from(data.clone()) && let Command::Close = msg {
                                 log::debug!("Received close command, stopping tunnel client");
                                 break;
                             }
@@ -190,21 +183,14 @@ where
     }
 
     // so the client can reconnect to server
-    async fn send_data(&mut self, data: &PayloadWithChannel) -> Result<(), ClientError> {
-        self.crypt_outbound
+    async fn send_data(&mut self, data: &PayloadWithChannel) -> Result<()> {
+        self.crypt
             .write(&self.stop, &mut self.writer, data.channel_id, &data.payload)
             .await
-            .map_err(|e| ClientError {
-                packet: Some(data.clone()),
-                message: format!("Outbound crypt write failed: {:?}", e),
-            })
     }
 }
 
-async fn global_to_local_stop(
-    global_stop: Trigger,
-    local_stop: Trigger,
-) -> Result<(), ClientError> {
+async fn global_to_local_stop(global_stop: Trigger, local_stop: Trigger) -> Result<()> {
     // This is a placeholder for any global to local stop signal handling if needed in the future
     tokio::select! {
         _ = global_stop.wait_async() => {
@@ -263,7 +249,7 @@ where
         }
     }
 
-    pub async fn run(self, initial_packet: Option<PayloadWithChannel>) {
+    pub async fn run(self, recovery_buffer: RecoveryBuffer) {
         let local_stop = Trigger::new();
 
         let mut inbound = TunnelClientInboundStream::new(
@@ -279,35 +265,22 @@ where
             local_stop.clone(),
         );
 
-        if let Err(e) = tokio::try_join!(
+        let err_msg = if let Err(e) = tokio::try_join!(
             inbound.run(),
-            outbound.run(initial_packet),
+            outbound.run(recovery_buffer),
             global_to_local_stop(self.stop, local_stop)
         ) {
-            log::error!("Tunnel client error: {:?}", e.message);
-            if let Err(e) = self
-                .proxy_ctrl
-                .client_result(
-                    e.packet,
-                    (
-                        inbound.crypt_inbound.current_seq(),
-                        outbound.crypt_outbound.current_seq(),
-                    ),
-                    e.message.clone(),
-                )
-                .await
-            {
-                log::error!("Failed to send client result: {:?}", e);
-            }
-        } else if let Err(e) = self
+            log::error!("Tunnel client error: {:?}", e.to_string());
+            Some(e.to_string())
+        } else {
+            None
+        };
+
+        if let Err(e) = self
             .proxy_ctrl
             .client_result(
-                None,
-                (
-                    inbound.crypt_inbound.current_seq(),
-                    outbound.crypt_outbound.current_seq(),
-                ),
-                "Tunnel client stopped".to_string(),
+                (inbound.crypt.current_seq(), outbound.crypt.current_seq()),
+                err_msg.unwrap_or_default(),
             )
             .await
         {

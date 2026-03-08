@@ -29,7 +29,7 @@
 
 use crypt::{tunnel::Crypt, types::SharedSecret};
 
-use super::super::proxy::Command;
+use super::super::{proxy::Command, proxy::RecoveryBuffer};
 
 use shared::log;
 
@@ -48,6 +48,10 @@ struct TestContext {
     crypt_inbound: Crypt,
     crypt_outbound: Crypt,
     stop: Trigger,
+}
+
+fn create_recovery_buffer() -> RecoveryBuffer {
+    RecoveryBuffer::new(16 * 1024)
 }
 
 fn create_client() -> TestContext {
@@ -109,7 +113,7 @@ async fn check_stop() {
         let stopped = stopped.clone();
         async move {
             // Run the client, it should stop when we send the stop signal
-            client.run(None).await;
+            client.run(create_recovery_buffer()).await;
             stopped.trigger(); // Signal that the client has stopped
         }
     });
@@ -147,7 +151,7 @@ async fn check_remote_connection_closed() {
         let stopped = stopped.clone();
         async move {
             // Run the client, it should stop when we receive connection closed from server
-            client.run(None).await;
+            client.run(create_recovery_buffer()).await;
             log::info!("Client run completed");
             stopped.trigger(); // Signal that the client has stopped
         }
@@ -187,7 +191,7 @@ async fn inbound_chan_closed_works() {
         let stopped = stopped.clone();
         async move {
             // Run the client, it should stop when we receive connection closed from server
-            client.run(None).await;
+            client.run(create_recovery_buffer()).await;
 
             stopped.trigger(); // Signal that the client has stopped
             log::info!("Client run completed");
@@ -209,12 +213,10 @@ async fn inbound_chan_closed_works() {
         matches!(
             message,
             Ok(Command::ClientResult {
-                packet: None,
-                sequence: (0, 0),
                 ..
             })
         ),
-        "Expected no commands to be sent to proxy after channel closure: got {:?}",
+        "Expected ClientResult, got {:?}",
         message
     );
 }
@@ -238,7 +240,7 @@ async fn outbound_chan_closed_works() {
         let stopped = stopped.clone();
         async move {
             // Run the client, it should stop when we receive connection closed from server
-            client.run(None).await;
+            client.run(create_recovery_buffer()).await;
             stopped.trigger(); // Signal that the client has stopped
             log::info!("Client run completed");
         }
@@ -264,12 +266,10 @@ async fn outbound_chan_closed_works() {
         matches!(
             message,
             Ok(Command::ClientResult {
-                packet: None,
-                sequence: (0, 0),
                 ..
             })
         ),
-        "Expected no commands to be sent to proxy after channel closure: got {:?}",
+        "Expected ClientResult, got {:?}",
         message
     );
 }
@@ -293,7 +293,7 @@ async fn sends_data() {
         let stop = stop.clone();
         async move {
             // Run the client, it should stop when we receive connection closed from server
-            client.run(None).await;
+            client.run(create_recovery_buffer()).await;
             log::info!("Client run completed");
             stop.trigger(); // Signal that the client has stopped
         }
@@ -344,7 +344,7 @@ async fn receives_data() {
         let stop = stop.clone();
         async move {
             // Run the client, it should stop when we receive connection closed from server
-            client.run(None).await;
+            client.run(create_recovery_buffer()).await;
             log::info!("Client run completed");
             stop.trigger(); // Signal that the client has stopped
         }

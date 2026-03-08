@@ -26,7 +26,6 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 use super::super::tests::helpers::*;
 use super::*;
@@ -38,7 +37,7 @@ use tokio::{io::AsyncWriteExt, net::TcpListener};
 use shared::log;
 
 use super::super::{
-    protocol::{payload_pair, payload_with_channel_pair},
+    protocol::{PayloadWithChannel, payload_pair, payload_with_channel_pair},
     proxy::handler::ServerChannels,
 };
 

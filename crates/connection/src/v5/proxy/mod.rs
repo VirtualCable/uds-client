@@ -28,7 +28,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
-use std::time::Duration;
+use std::{cell::UnsafeCell, rc::Rc, sync::atomic::AtomicUsize, time::Duration};
 
 use anyhow::{Context, Result};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
@@ -42,16 +42,43 @@ use crypt::{
 use super::{
     client::TunnelClient,
     protocol::{
-        Command as ProtoCommand, PayloadWithChannel, PayloadWithChannelReceiver,
-        PayloadWithChannelSender, handshake::Handshake, payload_with_channel_pair,
+        Command as ProtoCommand, PayloadWithChannelReceiver, PayloadWithChannelSender,
+        handshake::Handshake, payload_with_channel_pair,
     },
 };
 
+mod buffer;
 mod handler;
 pub mod open_response;
 mod servers;
 
-pub use handler::{Command, Handler, ServerChannels};
+pub use {
+    buffer::{RecoveryError, RecoverySendBuffer},
+    handler::{Command, Handler, ServerChannels},
+};
+
+pub static RECOVERY_BUFFER_SIZE: AtomicUsize = AtomicUsize::new(64 * 1024); // Default to 64 KB, can be configured at runtime
+
+#[derive(Debug, Clone)]
+pub struct RecoveryBuffer(Rc<UnsafeCell<RecoverySendBuffer>>);
+
+unsafe impl Send for RecoveryBuffer {}
+unsafe impl Sync for RecoveryBuffer {}
+
+impl RecoveryBuffer {
+    pub fn new(max_bytes: usize) -> Self {
+        Self(Rc::new(UnsafeCell::new(RecoverySendBuffer::new(max_bytes))))
+    }
+
+    #[allow(clippy::mut_from_ref)]
+    pub fn get(&self) -> &mut RecoverySendBuffer {
+        unsafe { &mut *self.0.get() }
+    }
+
+    pub fn is_locked(&self) -> bool {
+        Rc::strong_count(&self.0) > 1
+    }
+}
 
 pub struct Proxy {
     tunnel_server: String, // Host:port of tunnel server to connect to
@@ -72,7 +99,7 @@ pub struct Proxy {
     client_rx: PayloadWithChannelReceiver,      // For receiving messages from the client side
 
     recover_connection: bool,
-    recovery_packet: Option<PayloadWithChannel>,
+    recovery_buffer: RecoveryBuffer,
 
     client_correctly_closed: bool,
 
@@ -103,7 +130,9 @@ impl Proxy {
             client_rx: rx,
             client_rx_sender: rx_sender,
             recover_connection: false,
-            recovery_packet: None,
+            recovery_buffer: RecoveryBuffer::new(
+                RECOVERY_BUFFER_SIZE.load(std::sync::atomic::Ordering::Relaxed),
+            ),
             client_correctly_closed: false,
             servers: servers::ServerChannels::new(),
         }
@@ -137,7 +166,6 @@ impl Proxy {
                 seqs: self.seqs,
             }
         } else {
-            self.recover_connection = true; // Next time we will try to recover the connection
             Handshake::Open {
                 ticket: self.ticket,
             }
@@ -191,6 +219,16 @@ impl Proxy {
         // Store reconnect ticket for future use.
         // This is different from original, and different for every conection
         self.ticket = open_response.session_id;
+        // Skip, if recovery, the the already processed packets (note that pre increment we must stop on PREV SEQ)
+        // inbound = other side inbound, not our
+        if self.recover_connection {
+            self.recovery_buffer
+                .get()
+                .skip(open_response.inbound_seq - 1)
+                .context("Failed to skip packets in recovery buffer")?;
+        } else {
+            self.recover_connection = true; // Next time we will try to recover the connection
+        }
 
         log::debug!(
             "Received handshake response, reconnect ticket: {:?}",
@@ -213,8 +251,7 @@ impl Proxy {
     // Launchs (or relaunchs) the tunnel server, returns a handler to send commands to the server
     async fn launch_client(&mut self, ctrl_tx: flume::Sender<handler::Command>) -> Result<()> {
         let server = self.connect(&ctrl_tx).await?;
-        let recovery_packet = self.recovery_packet.take();
-        tokio::spawn(server.run(recovery_packet));
+        tokio::spawn(server.run(self.recovery_buffer.clone()));
         Ok(())
     }
 
@@ -362,25 +399,22 @@ impl Proxy {
                         .await
                         .context("Failed to send close command to client")?;
                     // Flag we have been correctly closed by client, so we don't try to reconnect, just stop the proxy
-                    self.client_correctly_closed = true; 
+                    self.client_correctly_closed = true;
                 }
             }
-            handler::Command::ClientResult {
-                packet,
-                message,
-                sequence,
-            } => {
+            handler::Command::ClientResult { message, sequence } => {
                 // If we received the close command from remote, we should not try to reconnect, just stop the proxy
                 // If we stopped the server, stopped also will be set, do not try to reconnect in that case either
                 if self.stop.is_triggered() || !self.client_correctly_closed {
-                    self.recovery_packet = packet;
                     self.seqs = sequence;
                     log::debug!(
                         "Client Result: {}, packet for recovery: {:?}, seqs: {:?}",
                         message,
-                        self.recovery_packet,
-                        self.seqs
+                        self.recovery_buffer,
+                        self.seqs,
                     );
+                    // Give a bit of time, this is a network error
+                    // so if something ephemeral happened, it should be resolved by the time we try to reconnect
                     tokio::time::sleep(Duration::from_millis(500)).await;
                     self.launch_client(ctrl_tx.clone()).await?;
                 }

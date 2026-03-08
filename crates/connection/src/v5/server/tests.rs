@@ -258,7 +258,14 @@ async fn outbound_chan_closed_works() {
         .await
         .unwrap();
 
-    // No message on ctrl_rx, ensure
+    // Should have relsease channel and close
+    let result = ctrl_rx.try_recv();
+    assert!(
+        matches!(result, Ok(Command::ReleaseChannel { channel_id }) if channel_id == 1),
+        "Expected ReleaseChannel command or no command, got {:?}",
+        result
+    );
+    // And close also as no more server are running
     let result = ctrl_rx.try_recv();
     assert!(
         result.is_err(),

@@ -104,7 +104,7 @@ where
                             if let Err(e) = self.send_data(&PayloadWithChannel::new(self.channel_id, &buffer[..n])).await {
                                  // Try to release channel, but ignore error, as we are already in error state
                                 let _ = self.proxy_ctrl.release_channel(self.channel_id).await;
-                                log::error!("Failed to send data to proxy: {:?}", e);
+                                log::debug!("Failed to send data to proxy: {:?}", e.to_string());
                                 return Err(e);
                             }
                         }
@@ -114,7 +114,7 @@ where
                             // Try to release channel, but ignore error, as we are already in error state
                             let _ = self.proxy_ctrl.release_channel(self.channel_id).await;
                             #[cfg(debug_assertions)]
-                            log::debug!("Stopping tunnel server due to local error: {:?}", e);
+                            log::debug!("Stopping tunnel server due to local error: {:?}", e.to_string());
 
                             break;
                         }
