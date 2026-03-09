@@ -40,7 +40,7 @@ use std::{
 };
 
 use anyhow::Result;
-use crossbeam::channel::{Receiver, Sender, bounded};
+use flume::{Receiver, Sender, bounded};
 use eframe::{egui, glow};
 
 use crate::{log, logo::load_logo};
@@ -52,10 +52,7 @@ use rdp::{
     sys::{rdpGdi, rdpInput},
 };
 
-use crate::window::{
-    AppWindow,
-    types::{AppState, HotKey},
-};
+use crate::window::{AppWindow, types::AppState};
 
 const FRAMES_IN_FLIGHT: usize = 128;
 
@@ -63,7 +60,7 @@ const FRAMES_IN_FLIGHT: usize = 128;
 // because states are cloned when switching app states
 #[derive(Clone)]
 pub struct RdpConnectionState {
-    pub update_rx: crossbeam::channel::Receiver<RdpMessage>,
+    pub update_rx: Receiver<RdpMessage>,
     pub gdi: *mut rdpGdi,
     pub gdi_lock: Arc<RwLock<()>>,
     pub input: *mut rdpInput,
@@ -282,21 +279,6 @@ impl AppWindow {
 
         // Fps if enabled, last so it goes on top
         rdp_state.fps.borrow().show(ctx);
-    }
-
-    fn handle_hotkeys(&mut self, ctx: &egui::Context, rdp_state: &mut RdpConnectionState) -> bool {
-        match HotKey::from_input(ctx) {
-            HotKey::ToggleFullScreen => {
-                self.toggle_fullscreen(ctx, rdp_state);
-                true
-            }
-            HotKey::Skip => true,
-            HotKey::ToggleFPS => {
-                rdp_state.fps.borrow_mut().toggle();
-                true
-            }
-            HotKey::None => false,
-        }
     }
 
     fn handle_screen_resize(

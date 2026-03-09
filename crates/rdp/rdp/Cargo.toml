@@ -10,7 +10,7 @@ audio = { path = "../../audio" }
 
 anyhow = { workspace = true }
 
-crossbeam = { workspace = true }
+flume = { workspace = true }
 
 # Security dependencies
 zeroize = { workspace = true }

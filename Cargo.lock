@@ -573,7 +573,7 @@ name = "audio"
 version = "5.0.0"
 dependencies = [
  "cpal",
- "crossbeam",
+ "flume",
  "shared",
 ]
 
@@ -1388,28 +1388,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crossbeam"
-version = "0.8.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1137cd7e7fc0fb5d3c5a8678be38ec56e819125d8d7907411fe24ccb943faca8"
-dependencies = [
- "crossbeam-channel",
- "crossbeam-deque",
- "crossbeam-epoch",
- "crossbeam-queue",
- "crossbeam-utils",
-]
-
-[[package]]
-name = "crossbeam-channel"
-version = "0.5.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82b8f8f868b36967f9606790d1903570de9ceaf870a7bf9fbbd3016d636a2cb2"
-dependencies = [
- "crossbeam-utils",
-]
-
-[[package]]
 name = "crossbeam-deque"
 version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1424,15 +1402,6 @@ name = "crossbeam-epoch"
 version = "0.9.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b82ac4a3c2ca9c3460964f020e1402edd5753411d7737aa39c3714ad1b5420e"
-dependencies = [
- "crossbeam-utils",
-]
-
-[[package]]
-name = "crossbeam-queue"
-version = "0.3.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f58bbc28f91df819d0aa2a2c00cd19754769c2fad90579b3592b1c9ba7a3115"
 dependencies = [
  "crossbeam-utils",
 ]
@@ -2510,8 +2479,8 @@ version = "5.0.0"
 dependencies = [
  "anyhow",
  "connection",
- "crossbeam",
  "eframe",
+ "flume",
  "gettext",
  "image",
  "open",
@@ -2527,7 +2496,7 @@ name = "gui-tester"
 version = "5.0.0"
 dependencies = [
  "anyhow",
- "crossbeam",
+ "flume",
  "gettext",
  "gui",
  "shared",
@@ -3119,8 +3088,8 @@ dependencies = [
  "base64",
  "boa_engine",
  "connection",
- "crossbeam",
  "crypt",
+ "flume",
  "futures",
  "gui",
  "is_executable",
@@ -3168,9 +3137,9 @@ dependencies = [
  "anyhow",
  "builder",
  "connection",
- "crossbeam",
  "crypt",
  "eframe",
+ "flume",
  "gettext",
  "gui",
  "image",
@@ -3211,9 +3180,9 @@ checksum = "2c4a545a15244c7d945065b5d392b2d2d7f21526fba56ce51467b06ed445e8f7"
 
 [[package]]
 name = "libc"
-version = "0.2.182"
+version = "0.2.183"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6800badb6cb2082ffd7b6a67e6125bb39f18782f793520caee8cb8846be06112"
+checksum = "b5b646652bf6661599e1da8901b3b9522896f01e736bad5f723fe7a3a27f899d"
 
 [[package]]
 name = "libcrux-intrinsics"
@@ -4843,7 +4812,7 @@ dependencies = [
  "anyhow",
  "audio",
  "clipboard-rs",
- "crossbeam",
+ "flume",
  "freerdp-sys",
  "glob",
  "shared",
@@ -5225,7 +5194,7 @@ dependencies = [
  "base64",
  "bzip2",
  "connection",
- "crossbeam",
+ "flume",
  "gettext",
  "gui",
  "js",
@@ -5907,9 +5876,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.49.0"
+version = "1.50.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72a2903cd7736441aac9df9d7688bd0ce48edccaadf181c3b90be801e81d3d86"
+checksum = "27ad5e34374e03cfffefc301becb44e9dc3c17584f414349ebe29ed26661822d"
 dependencies = [
  "bytes",
  "libc",
@@ -7309,9 +7278,9 @@ checksum = "d6bbff5f0aada427a1e5a6da5f1f98158182f26556f345ac9e04d36d0ebed650"
 
 [[package]]
 name = "winit"
-version = "0.30.12"
+version = "0.30.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c66d4b9ed69c4009f6321f762d6e61ad8a2389cd431b97cb1e146812e9e6c732"
+checksum = "a6755fa58a9f8350bd1e472d4c3fcc25f824ec358933bba33306d0b63df5978d"
 dependencies = [
  "ahash",
  "android-activity",

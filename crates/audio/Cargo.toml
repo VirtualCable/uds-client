@@ -7,4 +7,4 @@ edition = "2024"
 shared = { path = "../shared" }
 
 cpal = { workspace = true }
-crossbeam = { workspace = true }
+flume = { workspace = true }

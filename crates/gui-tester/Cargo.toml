@@ -4,10 +4,10 @@ version = "5.0.0"
 edition = "2024"
 
 [dependencies]
-anyhow = "1.0"
-
 shared = { path = "../shared" }
 gui = { path = "../gui" }
 
-gettext = "0.4.0"
-crossbeam = "0.8"
+anyhow = { workspace = true }
+
+gettext = { workspace = true }
+flume = { workspace = true }

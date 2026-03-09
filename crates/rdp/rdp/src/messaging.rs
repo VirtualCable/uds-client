@@ -28,7 +28,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
-use crossbeam::channel;
+use flume;
 
 use crate::geom::Rect;
 
@@ -42,4 +42,4 @@ pub enum RdpMessage {
     SetCursorIcon(Vec<u8>, u32, u32, u32, u32), // x, y, (of pointer "pointer") width, height
 }
 
-pub type Sender = channel::Sender<RdpMessage>;
+pub type Sender = flume::Sender<RdpMessage>;

@@ -31,7 +31,6 @@ num_enum = "0.7.5"
 rand = "0.10.0"
 
 # Concurrency channels and utilities
-crossbeam = "0.8.4"
 flume = { version = "0.12.0", features = ["async"] }
 
 
@@ -41,7 +40,7 @@ rustls-native-certs = "0.8.3"
 
 # async & async TLS
 tokio-rustls = "0.26.4"
-tokio = { version = "1.49.0", features = [
+tokio = { version = "1.50.0", features = [
     "net",
     "io-util",
     "rt",
@@ -76,7 +75,7 @@ sys-locale = "0.3.2"
 # Graphics/UI
 eframe = { version = "0.33.2", features = ["glow"] }
 image = { version = "0.25.8", features = ["png"] }
-winit = { version = "0.30.12" }
+winit = { version = "0.30.13" }
 
 # Sound
 cpal = "0.17.2"
@@ -119,7 +118,7 @@ winres = "0.1.12"
 glob = "0.3.3"
 
 # Linux/macos
-libc = "0.2.181"
+libc = "0.2.183"
 
 # Windows
 windows = { version = "0.62.2", features = [

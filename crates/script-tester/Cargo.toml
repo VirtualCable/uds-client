@@ -19,5 +19,5 @@ anyhow = { workspace = true }
 base64 = { workspace = true }
 bzip2 = { workspace = true }
 
-crossbeam = { workspace = true }
+flume = { workspace = true }
 gettext = { workspace = true }

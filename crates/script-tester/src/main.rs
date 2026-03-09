@@ -33,7 +33,7 @@ use std::io::Write;
 use anyhow::Result;
 use base64::engine::{Engine as _, general_purpose::STANDARD};
 use bzip2::write::BzEncoder;
-use crossbeam::channel::{Receiver, Sender, bounded};
+use flume::{Receiver, Sender, bounded};
 
 use shared::{log, system::trigger::Trigger};
 use connection::broker::api::types;

@@ -31,7 +31,7 @@
 use std::sync::{Arc, RwLock};
 
 use anyhow::Result;
-use crossbeam::channel::Sender;
+use flume::Sender;
 use tokio::sync::oneshot;
 
 use connection::{broker::api, consts, tasks};

@@ -28,7 +28,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
-use crossbeam::channel::Sender;
+use flume::Sender;
 use std::{
     sync::{LazyLock, Mutex},
 };

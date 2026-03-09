@@ -10,7 +10,7 @@ rdp = { path = "../rdp/rdp" }
 
 anyhow = { workspace = true }
 
-crossbeam = { workspace = true }
+flume = { workspace = true }
 tokio = { workspace = true }
 
 eframe = { workspace = true }

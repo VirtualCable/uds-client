@@ -28,7 +28,7 @@ gettext = { workspace = true }
 rust-embed = { workspace = true }
 sys-locale = { workspace = true }
 
-crossbeam = { workspace = true }
+flume = { workspace = true }
 
 [build-dependencies]
 builder = { path = "../builder" }

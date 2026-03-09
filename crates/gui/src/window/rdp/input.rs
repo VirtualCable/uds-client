@@ -31,7 +31,7 @@
 use eframe::egui;
 
 use super::consts;
-use crate::keymap;
+use crate::{keymap, window::{rdp::connection::RdpConnectionState, types::HotKey}};
 use shared::log;
 
 use crate::window::AppWindow;
@@ -52,8 +52,6 @@ use rdp::sys::{
     freerdp_input_send_mouse_event,
     rdpInput,
 };
-
-
 
 impl AppWindow {
     fn handle_mouse(
@@ -187,5 +185,20 @@ impl AppWindow {
             // Handle keyboard input
             self.handle_keyboard(ctx, rdp_input, input_state);
         });
+    }
+
+    pub(super) fn handle_hotkeys(&mut self, ctx: &egui::Context, rdp_state: &mut RdpConnectionState) -> bool {
+        match HotKey::from_input(ctx) {
+            HotKey::ToggleFullScreen => {
+                self.toggle_fullscreen(ctx, rdp_state);
+                true
+            }
+            HotKey::Skip => true,
+            HotKey::ToggleFPS => {
+                rdp_state.fps.borrow_mut().toggle();
+                true
+            }
+            HotKey::None => false,
+        }
     }
 }

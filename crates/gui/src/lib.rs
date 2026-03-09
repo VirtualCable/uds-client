@@ -34,7 +34,7 @@ use std::sync::{
 };
 
 use anyhow::Result;
-use crossbeam::channel::{Receiver, Sender, bounded};
+use flume::{Receiver, Sender, bounded};
 use eframe::{EframeWinitApplication, UserEvent, egui};
 use winit::{
     application::ApplicationHandler,

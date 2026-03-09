@@ -29,7 +29,7 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
-use crossbeam::channel::{Sender, unbounded};
+use flume::{Sender, unbounded};
 use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -216,7 +216,7 @@ impl AudioHandle {
         None
     }
 
-    pub fn play(&self, data: Vec<u8>) -> Result<(), crossbeam::channel::SendError<AudioCommand>> {
+    pub fn play(&self, data: Vec<u8>) -> Result<(), flume::SendError<AudioCommand>> {
         self.tx.send(AudioCommand::Play(data))
     }
 }

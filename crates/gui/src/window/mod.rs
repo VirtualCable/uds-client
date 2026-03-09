@@ -34,7 +34,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
-use crossbeam::channel::Receiver;
+use flume::Receiver;
 use eframe::egui;
 
 use shared::{log, system::trigger::Trigger};

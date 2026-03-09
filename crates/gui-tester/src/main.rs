@@ -29,7 +29,7 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-use crossbeam::channel::{Receiver, Sender, bounded};
+use flume::{Receiver, Sender, bounded};
 
 use shared::{log, system::trigger::Trigger};
 

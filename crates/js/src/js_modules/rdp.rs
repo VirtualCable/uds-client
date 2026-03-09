@@ -159,7 +159,7 @@ mod tests {
     use super::*;
     use crate::{create_context, exec_script};
     use anyhow::Result;
-    use crossbeam::channel::{Receiver, Sender, bounded};
+    use flume::{Receiver, Sender, bounded};
     use shared::log;
 
     #[tokio::test]
