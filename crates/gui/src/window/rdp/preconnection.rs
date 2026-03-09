@@ -61,6 +61,8 @@ impl AppWindow {
         // Will be resized later for fullscreen or for fixed size
         // if screen size is fullscreen, start with a simple screen for windowd of 1024x768
         let screen_size = settings.screen_size;
+
+        self.set_visible(ctx, true);
         self.resize_and_center(
             ctx,
             [screen_size.width() as f32, screen_size.height() as f32],

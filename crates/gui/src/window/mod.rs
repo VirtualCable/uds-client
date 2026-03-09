@@ -118,7 +118,6 @@ impl AppWindow {
 
         // Set window size and position
         // ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
-        self.set_visible(ctx, true);
         ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(decorations));
         ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(size));
         ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
@@ -160,6 +159,7 @@ impl AppWindow {
     }
 
     pub fn set_visible(&mut self, ctx: &eframe::egui::Context, visible: bool) {
+        log::debug!("Setting window visibility to {}", visible);
         ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(!visible));
     }
 }

@@ -146,7 +146,6 @@ pub async fn run(
                 if script.verify_signature().is_err() {
                     anyhow::bail!(tr!("Script signature verification failed."));
                 }
-                tx.send(GuiMessage::Hide).ok();
                 js::run_script(&script).await?;
                 break;
             }
@@ -183,8 +182,8 @@ pub async fn run(
     if tasks::is_internal_rdp_running() {
         log::debug!("Internal RDP is running.");
     } else {
-        log::debug!("Hiding GUI.");
-        // tx.send(GuiMessage::Hide).ok();
+        log::debug!("No internal RDP is running. Hiding GUI.");
+        tx.send(GuiMessage::Hide).ok();
     }
 
     // Execute the tasks in background, and wait with cleanup
