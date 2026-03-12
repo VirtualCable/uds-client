@@ -36,8 +36,6 @@ use eframe::egui;
 use super::connection::RdpConnectionState;
 use crate::window::AppWindow;
 
-const FRAMES_IN_FLIGHT: usize = 128;
-
 #[derive(Clone)]
 pub struct RdpMouseCursor {
     pub texture: egui::TextureHandle,
