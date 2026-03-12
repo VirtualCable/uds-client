@@ -22,9 +22,9 @@ anyhow = "1.0"
 thiserror = "2.0"
 zeroize = { version = "1.8", features = ["derive"] }
 chrono = { version = "0.4.42" }
-directories-next = "2.0.0"
+directories-next = "2.0"
 hostname = "0.4.2"
-is_executable = "1.0.5"
+is_executable = "1.0"
 num_enum = "0.7.5"
 
 # randomness
@@ -40,7 +40,7 @@ rustls-native-certs = "0.8.3"
 
 # async & async TLS
 tokio-rustls = "0.26.4"
-tokio = { version = "1.50.0", features = [
+tokio = { version = "1.50", features = [
     "net",
     "io-util",
     "rt",
@@ -74,7 +74,7 @@ sys-locale = "0.3.2"
 
 # Graphics/UI
 eframe = { version = "0.33.2", features = ["glow"] }
-image = { version = "0.25.8", features = ["png"] }
+image = { version = "0.25.10", features = ["png"] }
 winit = { version = "0.30.13" }
 
 # Sound
@@ -93,7 +93,7 @@ sha2 = "0.10"
 aes-gcm = "0.10.3"
 
 # regex
-regex = "1.12.3"
+regex = "1.12"
 
 # JavaScript engine
 boa_engine = { version = "0.21.0" }
