@@ -94,9 +94,7 @@ impl Drop for RdpContext {
 }
 
 pub trait OwnerFromCtx<'a> {
-    fn owner(&self) -> Option<&'a mut Rdp>
-    where
-        for<'b> Self: Sized;
+    fn owner(&self) -> Option<&'a mut Rdp>;
 }
 
 impl<'a> OwnerFromCtx<'a> for *mut rdpContext {
