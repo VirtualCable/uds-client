@@ -2,9 +2,8 @@
 name = "mac-launcher"
 version.workspace = true
 edition.workspace = true
-
-authors = ["Adolfo Gómez <dkmaster@dkmon.com>"]
-license = "BSD-3-Clause"
+authors.workspace = true
+license.workspace = true
 
 [dependencies]
 shared = { path = "../shared" }
