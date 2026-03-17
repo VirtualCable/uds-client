@@ -1,26 +1,26 @@
 [package]
 name = "rdp"
-version = "5.0.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
 freerdp-sys = { path = "../freerdp-sys" }
 shared = { path = "../../shared" }
 audio = { path = "../../audio" }
 
-anyhow = { workspace = true }
+anyhow.workspace = true
 
-flume = { workspace = true }
+flume.workspace = true
 
 # Security dependencies
-zeroize = { workspace = true }
+zeroize.workspace = true
 
 # Clipboard dependencies
-clipboard-rs = { workspace = true }
+clipboard-rs.workspace = true
 
 # Windows dependencies
 [target.'cfg(windows)'.dependencies]
-windows = { workspace = true }
+windows.workspace = true
 
 [build-dependencies]
-glob = { workspace = true }
+glob.workspace = true

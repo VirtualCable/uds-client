@@ -1,26 +1,26 @@
 [package]
 name = "crypt"
-version = "5.0.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
 shared = { path = "../shared" }
 
 # Cryptography libraries
-libcrux-ml-dsa = { workspace = true }
-libcrux-ml-kem = { workspace = true }
-hkdf = { workspace = true }
-sha2 = { workspace = true }
-aes-gcm = { workspace = true }
+libcrux-ml-dsa.workspace = true
+libcrux-ml-kem.workspace = true
+hkdf.workspace = true
+sha2.workspace = true
+aes-gcm.workspace = true
 
 # Tokio
-tokio = { workspace = true }
+tokio.workspace = true
 
 # Randomness
-rand = { workspace = true }
+rand.workspace = true
 
-base64 = { workspace = true }
-anyhow = { workspace = true }
+base64.workspace = true
+anyhow.workspace = true
 
-serde = { workspace = true }
-serde_json = { workspace = true }
+serde.workspace = true
+serde_json.workspace = true

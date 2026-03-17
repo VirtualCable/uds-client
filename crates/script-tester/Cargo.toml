@@ -1,7 +1,7 @@
 [package]
 name = "script-tester"
-version = "5.0.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
 shared = { path = "../shared" }
@@ -10,14 +10,14 @@ rdp = { path = "../rdp/rdp" }
 gui = { path = "../gui" }
 connection = { path = "../connection" }
 
-serde = { workspace = true }
-serde_json = { workspace = true }
+serde.workspace = true
+serde_json.workspace = true
 
-tokio = { workspace = true }
-anyhow = { workspace = true }
+tokio.workspace = true
+anyhow.workspace = true
 
-base64 = { workspace = true }
-bzip2 = { workspace = true }
+base64.workspace = true
+bzip2.workspace = true
 
-flume = { workspace = true }
-gettext = { workspace = true }
+flume.workspace = true
+gettext.workspace = true

@@ -1,7 +1,7 @@
 [package]
 name = "js"
-version = "5.0.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
 rdp = { path = "../rdp/rdp" }
@@ -11,26 +11,26 @@ gui = { path = "../gui" }
 crypt = { path = "../crypt" }
 
 # JavaScript engine
-boa_engine = { workspace = true }
+boa_engine.workspace = true
 
 # Serialization
-serde = { workspace = true }
-serde_json = { workspace = true }
+serde.workspace = true
+serde_json.workspace = true
 
-tokio = { workspace = true }
-futures = { workspace = true }
-async-trait = { workspace = true }
-regex = { workspace = true }
+tokio.workspace = true
+futures.workspace = true
+async-trait.workspace = true
+regex.workspace = true
 
-anyhow = { workspace = true }
-rand = { workspace = true }
+anyhow.workspace = true
+rand.workspace = true
 
 # For checking if a file is executable
-is_executable = { workspace = true }
+is_executable.workspace = true
 
 # For connecting to egui
-flume = { workspace = true }
+flume.workspace = true
 
 [dev-dependencies]
-base64 = { workspace = true }
-serial_test = { workspace = true }
+base64.workspace = true
+serial_test.workspace = true

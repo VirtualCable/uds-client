@@ -1,13 +1,13 @@
 [package]
 name = "gui-tester"
-version = "5.0.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
 shared = { path = "../shared" }
 gui = { path = "../gui" }
 
-anyhow = { workspace = true }
+anyhow.workspace = true
 
-gettext = { workspace = true }
-flume = { workspace = true }
+gettext.workspace = true
+flume.workspace = true

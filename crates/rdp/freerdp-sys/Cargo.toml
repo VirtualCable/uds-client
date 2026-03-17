@@ -1,11 +1,11 @@
 [package]
 name = "freerdp-sys"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-libc = { workspace = true }
+libc.workspace = true
 
 [build-dependencies]
-bindgen = { workspace = true }
-cc = { workspace = true }
+bindgen.workspace = true
+cc.workspace = true

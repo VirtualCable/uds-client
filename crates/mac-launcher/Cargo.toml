@@ -1,7 +1,7 @@
 [package]
 name = "mac-launcher"
-version = "5.0.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 
 authors = ["Adolfo Gómez <dkmaster@dkmon.com>"]
 license = "BSD-3-Clause"
@@ -10,6 +10,6 @@ license = "BSD-3-Clause"
 shared = { path = "../shared" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-objc2 = { workspace = true}
-objc2-foundation = { workspace = true}
-objc2-app-kit = { workspace = true}
+objc2.workspace = true
+objc2-foundation.workspace = true
+objc2-app-kit.workspace = true
