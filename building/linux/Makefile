@@ -16,6 +16,7 @@ OUTPUTDIR := builders/$(DISTRO)/output
 
 # Install targets
 APPSDIR := $(DESTDIR)/usr/share/applications
+MIMEDIR := $(DESTDIR)/usr/share/mime/packages
 OWNDIR := $(DESTDIR)/usr/share/udslauncher
 
 # all rule is install-udslauncher
@@ -49,6 +50,8 @@ install-udslauncher: $(OUTPUTDIR)/launcher
 
 	# Install desktop entries
 	cp desktop/udslauncher.desktop $(APPSDIR)/
+	# And mime
+	cp mime/udslauncher.xml $(MIMEDIR)/
 
 	# Permissions
 	chmod 755 $(OWNDIR)/launcher

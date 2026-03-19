@@ -1,3 +1,47 @@
-#!/bin/sh -e
+#!/bin/sh
+set -e
+
+update-mime-database /usr/share/mime || true
+update-desktop-database /usr/share/applications || true
+gtk-update-icon-cache -f -q /usr/share/icons/hicolor 2>/dev/null || true
+
+MIME_FILE="/etc/xdg/mimeapps.list"
+SECTION="[Default Applications]"
+LINE="x-scheme-handler/udssv2=udslauncher.desktop"
+
+mkdir -p /etc/xdg
+
+if [ ! -f "$MIME_FILE" ]; then
+    echo "$SECTION" > "$MIME_FILE"
+    echo "$LINE" >> "$MIME_FILE"
+    echo "Created $MIME_FILE with default for udssv2"
+    exit 0
+fi
+
+if grep -q "^$LINE\$" "$MIME_FILE"; then
+    echo "Line already present in $MIME_FILE"
+    exit 0
+fi
+
+if grep -q "^$SECTION" "$MIME_FILE"; then
+    if grep -q "^x-scheme-handler/udssv2=" "$MIME_FILE"; then
+        sed -i "/^x-scheme-handler\/udssv2=/c\\$LINE" "$MIME_FILE"
+        echo "Updated existing udssv2 entry in $MIME_FILE"
+    else
+        awk -v section="$SECTION" -v line="$LINE" '
+            $0 == section {p=1; print; next}
+            p && $0 ~ /^\[/ {p=0}
+            p {print line; p=0; next}
+            {print}
+            END {if (p) print line}
+        ' "$MIME_FILE" > "$MIME_FILE.tmp" && mv "$MIME_FILE.tmp" "$MIME_FILE"
+        echo "Added udssv2 to existing [Default Applications] section"
+    fi
+else
+    echo "" >> "$MIME_FILE"
+    echo "$SECTION" >> "$MIME_FILE"
+    echo "$LINE" >> "$MIME_FILE"
+    echo "Added new [Default Applications] section with udssv2"
+fi
 
 exit 0

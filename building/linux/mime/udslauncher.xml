@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+    <mime-type type="x-scheme-handler/udssv2">
+        <comment>UDS VDI Launcher</comment>
+        <icon name="udslauncher" />
+        <glob pattern="udssv2:*" />
+    </mime-type>
+</mime-info>
