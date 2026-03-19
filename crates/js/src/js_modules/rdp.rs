@@ -92,7 +92,6 @@ impl RdpSettings {
 
 fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let rdp_settings = extract_js_args!(args, ctx, RdpSettings);
-    shared::log::debug!("RDP settings from JS: {:?}", rdp_settings);
     if !rdp_settings.is_valid() {
         return Err(JsError::from_native(
             JsNativeError::error().with_message("Invalid RDP settings: 'server' is required"),
