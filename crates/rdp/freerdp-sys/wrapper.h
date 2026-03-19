@@ -43,6 +43,7 @@
 // Channels
 #include <freerdp/channels/disp.h>
 #include <freerdp/channels/cliprdr.h>
+#include <freerdp/channels/rail.h>
 
 #include <winpr/synch.h>
 #include <winpr/wtypes.h>
