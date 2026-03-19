@@ -112,7 +112,7 @@ where
                                 return Err(e);
                             }
                         }
-                        Err(e) => {
+                        Err(_) => {
                             // May be normal. RDP client (mstsc) may close the connection without notice, so we just log and exit,
                             // no error, as this means the client is not running, so we simply exit
                             // Try to release channel, but ignore error, as we are already in error state
