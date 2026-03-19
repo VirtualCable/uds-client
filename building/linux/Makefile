@@ -38,7 +38,7 @@ endif
 
 # === Common installation logic ===
 install-udslauncher: $(OUTPUTDIR)/launcher
-	mkdir -p $(APPSDIR) $(OWNDIR)
+	mkdir -p $(APPSDIR) $(OWNDIR) $(MIMEDIR)
 
 	# Install main binary
 	cp $(OUTPUTDIR)/launcher $(OWNDIR)/
