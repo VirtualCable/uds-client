@@ -164,7 +164,10 @@ pub fn setup_logging(level: &str, log_type: LogType) {
             "UDSLAUNCHER_{}_LOG_LEVEL",
             log_type.to_string().to_uppercase()
         ),
-        format!("UDSLAUNCHER_{}_LOG_PATH", log_type.to_string().to_uppercase()),
+        format!(
+            "UDSLAUNCHER_{}_LOG_PATH",
+            log_type.to_string().to_uppercase()
+        ),
         format!(
             "UDSLAUNCHER_{}_LOG_USE_DATETIME",
             log_type.to_string().to_uppercase()
@@ -267,6 +270,12 @@ pub fn set_log_level(level: &str) {
     }
 }
 
+pub fn get_log_level() -> Option<String> {
+    RELOAD_HANDLE
+        .get()
+        .map(|handle| handle.with_current(|f| f.to_string()).unwrap_or_default())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -314,7 +323,7 @@ mod tests {
         let temp_dir = std::env::temp_dir();
         unsafe { std::env::set_var("UDSCLIENT_TESTS_LOG_PATH", &temp_dir) }
         setup_logging("debug", LogType::Test);
-        let log_file = temp_dir.join("udsactor-tests.log");
+        let log_file = temp_dir.join("udslauncher-tests.log");
         // Write enough logs to exceed 16MB
         for i in 0..20000 {
             info!("Log entry number: {} - {}", i, "A".repeat(1024)); // Each entry ~1KB
@@ -322,7 +331,7 @@ mod tests {
         // Check if log file exists
         assert!(log_file.exists());
         // Check if rotated file exists
-        let rotated_file = temp_dir.join("udsactor-tests.log.1");
+        let rotated_file = temp_dir.join("udslauncher-tests.log.1");
         assert!(rotated_file.exists()); // Rotated file should exist
         // Check if log file has been rotated
         let meta = fs::metadata(&log_file).unwrap();

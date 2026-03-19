@@ -35,8 +35,8 @@ use base64::engine::{Engine as _, general_purpose::STANDARD};
 use bzip2::write::BzEncoder;
 use flume::{Receiver, Sender, bounded};
 
-use shared::{log, system::trigger::Trigger};
 use connection::broker::api::types;
+use shared::{log, system::trigger::Trigger};
 
 // Get script and json with params from args
 // The signature file is the script file + mldsa65.sig
@@ -113,8 +113,12 @@ fn run_script() {
 }
 
 fn main() -> Result<()> {
-    log::setup_logging("debug", log::LogType::Test);
-    rdp::wlog::setup_freerdp_logger(rdp::wlog::WLogLevel::Info);
+    log::setup_logging("info", log::LogType::Test);
+    if log::get_log_level().unwrap_or_default() == "debug" {
+        rdp::wlog::setup_freerdp_logger(rdp::wlog::WLogLevel::Debug);
+    } else {
+        rdp::wlog::setup_freerdp_logger(rdp::wlog::WLogLevel::Info);
+    }
     shared::tls::init_tls(None); // Initialize root certs and tls related stuff
 
     println!(
