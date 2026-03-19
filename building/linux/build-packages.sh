@@ -26,13 +26,15 @@ for debian_version in 12 13; do
     
     # Build the deb package, disable fakeroot beceuse on docker it takes a lot of time
     docker run --rm \
-    -u ${UID_HOST}:${GID_HOST} \
+    -e USER_ID=${UID_HOST} \
+    -e GROUP_ID=${GID_HOST} \
     -e IN_DOCKER=1 \
     -e DISTRO=Debian${debian_version} \
     -v ${CRATE_ROOT}:/crate \
     -w /crate/building/linux \
     $docker_image \
-    dpkg-buildpackage -b -us -uc -rfakeroot
+    dpkg-buildpackage -b -us -uc; \
+    chown ${UID_HOST}:${GID_HOST} /crate/building/udslauncher_*
     
     # Move to ../bin/debian${debian_version}
     outdir="${TOP}/../bin/debian${debian_version}"
