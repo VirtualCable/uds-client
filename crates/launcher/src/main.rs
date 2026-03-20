@@ -73,7 +73,7 @@ fn main() {
     #[cfg(debug_assertions)]
     {
         log::setup_logging("debug", log::LogType::Launcher);
-        rdp::wlog::setup_freerdp_logger(rdp::wlog::WLogLevel::Info);
+        rdp::wlog::setup_freerdp_logger(rdp::wlog::WLogLevel::Debug);
     }
     #[cfg(not(debug_assertions))]
     {
