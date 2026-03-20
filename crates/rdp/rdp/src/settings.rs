@@ -26,14 +26,14 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+//
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
-#![allow(unused_assignments)]
+use std::fmt;
 use zeroize::Zeroize;
 
 use super::geom::ScreenSize;
 
-#[derive(Zeroize, Debug, Clone)]
+#[derive(Zeroize, Clone)]
 pub struct RdpSettings {
     #[zeroize(skip)]
     pub server: String,
@@ -77,7 +77,7 @@ impl Default for RdpSettings {
             password: "".to_string(),
             domain: "".to_string(),
             verify_cert: false,
-            use_nla: true,  // Defaults to true for better security, but can be disabled if needed
+            use_nla: true, // Defaults to true for better security, but can be disabled if needed
             screen_size: ScreenSize::Fixed(1024, 768),
             clipboard_redirection: true,
             audio_redirection: true,
@@ -87,5 +87,34 @@ impl Default for RdpSettings {
             sound_latency_threshold: None,
             best_experience: true,
         }
+    }
+}
+
+// Debug without printing the password
+impl fmt::Debug for RdpSettings {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RdpSettings")
+            .field("server", &self.server)
+            .field("port", &self.port)
+            .field("user", &self.user)
+            .field("domain", &self.domain)
+            .field("password", &{
+                if self.password.is_empty() {
+                    "\"\"".to_string()
+                } else {
+                    "\"****\"".to_string()
+                }
+            })
+            .field("verify_cert", &self.verify_cert)
+            .field("use_nla", &self.use_nla)
+            .field("screen_size", &self.screen_size)
+            .field("clipboard_redirection", &self.clipboard_redirection)
+            .field("audio_redirection", &self.audio_redirection)
+            .field("microphone_redirection", &self.microphone_redirection)
+            .field("printer_redirection", &self.printer_redirection)
+            .field("drives_to_redirect", &self.drives_to_redirect)
+            .field("sound_latency_threshold", &self.sound_latency_threshold)
+            .field("best_experience", &self.best_experience)
+            .finish()
     }
 }

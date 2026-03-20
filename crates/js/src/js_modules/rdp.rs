@@ -38,6 +38,7 @@ use boa_engine::{
 };
 
 use rdp::{geom::ScreenSize, settings};
+use shared::log;
 
 use crate::gui::{GuiMessage, send_message};
 
@@ -111,27 +112,39 @@ fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
         ScreenSize::Full
     };
 
+    let defs = rdp::settings::RdpSettings::default();
+
     // Generate Settings from our rdp_settings (defaults match `rdp::settings::RdpSettings` defaults)
     let settings = settings::RdpSettings {
         server: rdp_settings.server,
-        port: rdp_settings.port.unwrap_or(3389),
-        user: rdp_settings.user.unwrap_or_default(),
-        password: rdp_settings.password.unwrap_or_default(),
-        domain: rdp_settings.domain.unwrap_or_default(),
+        port: rdp_settings.port.unwrap_or(defs.port),
+        user: rdp_settings.user.unwrap_or(defs.user),
+        password: rdp_settings.password.unwrap_or(defs.password),
+        domain: rdp_settings.domain.unwrap_or(defs.domain),
         // Default to false to match the core RDP settings defaults
-        verify_cert: rdp_settings.verify_cert.unwrap_or(false),
-        use_nla: rdp_settings.use_nla.unwrap_or(false),
+        verify_cert: rdp_settings.verify_cert.unwrap_or(defs.verify_cert),
+        use_nla: rdp_settings.use_nla.unwrap_or(defs.use_nla),
         screen_size,
-        clipboard_redirection: rdp_settings.clipboard_redirection.unwrap_or(true),
-        audio_redirection: rdp_settings.audio_redirection.unwrap_or(true),
-        microphone_redirection: rdp_settings.microphone_redirection.unwrap_or(false),
-        printer_redirection: rdp_settings.printer_redirection.unwrap_or(false),
+        clipboard_redirection: rdp_settings
+            .clipboard_redirection
+            .unwrap_or(defs.clipboard_redirection),
+        audio_redirection: rdp_settings
+            .audio_redirection
+            .unwrap_or(defs.audio_redirection),
+        microphone_redirection: rdp_settings
+            .microphone_redirection
+            .unwrap_or(defs.microphone_redirection),
+        printer_redirection: rdp_settings
+            .printer_redirection
+            .unwrap_or(defs.printer_redirection),
         drives_to_redirect: rdp_settings
             .drives_to_redirect
-            .unwrap_or_else(|| vec!["all".to_string()]),
+            .unwrap_or_else(|| defs.drives_to_redirect.clone()),
         sound_latency_threshold: rdp_settings.sound_latency_threshold,
-        best_experience: rdp_settings.best_experience.unwrap_or(true),
+        best_experience: rdp_settings.best_experience.unwrap_or(defs.best_experience),
     };
+
+    log::debug!("Starting RDP with settings: {:?}", settings);
 
     send_message(GuiMessage::ConnectRdp(settings));
     // Launcher needs to know that RDP client is running
