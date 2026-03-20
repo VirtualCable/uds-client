@@ -112,13 +112,13 @@ where
                                 return Err(e);
                             }
                         }
-                        Err(_) => {
+                        Err(_e) => {
                             // May be normal. RDP client (mstsc) may close the connection without notice, so we just log and exit,
                             // no error, as this means the client is not running, so we simply exit
                             // Try to release channel, but ignore error, as we are already in error state
                             let _ = self.proxy_ctrl.release_channel(self.channel_id).await;
                             #[cfg(debug_assertions)]
-                            log::debug!("Stopping tunnel server due to local error: {:?}", e.to_string());
+                            log::debug!("Stopping tunnel server due to local error: {:?}", _e.to_string());
 
                             break;
                         }

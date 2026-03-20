@@ -343,8 +343,18 @@ impl Rdp {
             if let Some(instance) = self.instance {
                 if freerdp_connect(instance.as_mut_ptr()) == 0 {
                     let code = freerdp_get_last_error(instance.context); // Allow panic if context is null
+                    // Get error string
+                    let error_str = freerdp_get_last_error_string(code);
+                    let error_str = if error_str.is_null() {
+                        "Unknown error".to_string()
+                    } else {
+                        std::ffi::CStr::from_ptr(error_str)
+                            .to_string_lossy()
+                            .into_owned()
+                    };
                     return Err(anyhow::anyhow!(
-                        "Failed to connect to RDP server: 0x{:x}",
+                        "{} : {:08X}",
+                        error_str,
                         code
                     ));
                 }

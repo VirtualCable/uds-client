@@ -77,7 +77,7 @@ impl Default for RdpSettings {
             password: "".to_string(),
             domain: "".to_string(),
             verify_cert: false,
-            use_nla: false,
+            use_nla: true,  // Defaults to true for better security, but can be disabled if needed
             screen_size: ScreenSize::Fixed(1024, 768),
             clipboard_redirection: true,
             audio_redirection: true,
