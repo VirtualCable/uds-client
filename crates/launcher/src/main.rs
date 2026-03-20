@@ -71,9 +71,16 @@ fn collect_arguments() -> Option<(String, String, String)> {
 
 fn main() {
     #[cfg(debug_assertions)]
-    log::setup_logging("debug", log::LogType::Launcher);
+    {
+        log::setup_logging("debug", log::LogType::Launcher);
+        rdp::wlog::setup_freerdp_logger(rdp::wlog::WLogLevel::Info);
+    }
     #[cfg(not(debug_assertions))]
-    log::setup_logging("info", log::LogType::Launcher);
+    {
+        log::setup_logging("info", log::LogType::Launcher);
+        rdp::wlog::setup_freerdp_logger(rdp::wlog::WLogLevel::Error);
+    }
+
     // Setup tls, with default secure ciphers
     shared::tls::init_tls(None);
     let (host, ticket, scrambler) = collect_arguments().unwrap_or_else(|| {
