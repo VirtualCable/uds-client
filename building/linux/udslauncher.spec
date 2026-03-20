@@ -42,3 +42,4 @@ cp -a %{DESTDIR}/* %{buildroot}/
 %files
 /usr/share/udslauncher
 /usr/share/applications/udslauncher.desktop
+/usr/share/mime/packages/udslauncher.xml
