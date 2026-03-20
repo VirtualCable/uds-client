@@ -84,7 +84,8 @@ fn find_executable_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsRes
 pub fn launch_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let (app_path, app_args) = extract_js_args!(args, ctx, String, Vec<String>);
 
-    log::debug!(
+    // trace because app_args can contain sensitive info, so we want to avoid logging it in debug level, but still have it in trace for debugging purposes
+    log::trace!(
         "Executing application: {} with args: {:?}",
         app_path,
         app_args
