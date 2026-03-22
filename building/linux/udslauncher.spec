@@ -24,7 +24,10 @@ Launcher for UDS Broker.
 # Nothing
 
 %post
-/usr/bin/update-desktop-database
+/usr/bin/update-mime-database /usr/share/mime || true
+/usr/bin/update-desktop-database /usr/share/applications || true
+/usr/bin/gtk-update-icon-cache -f -q /usr/share/icons/hicolor 2>/dev/null || true
+
 if [ ! -d /media ]; then
     mkdir -m 755 /media
     echo "/media created for compatibility"

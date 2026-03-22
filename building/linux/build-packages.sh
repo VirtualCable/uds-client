@@ -34,7 +34,7 @@ for debian_version in 12 13; do
     -w /crate/building/linux \
     $docker_image \
     dpkg-buildpackage -b -us -uc; \
-    chown ${UID_HOST}:${GID_HOST} /crate/building/udslauncher_*
+    chown ${UID_HOST}:${GID_HOST} /crate/building/linux/udslauncher_*
     
     # Move to ../bin/debian${debian_version}
     outdir="${TOP}/../bin/debian${debian_version}"
