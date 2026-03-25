@@ -274,20 +274,18 @@ impl Rdp {
                 )
                 .unwrap();
 
-                let all_drives = self
-                    .config
-                    .settings
-                    .drives_to_redirect
-                    .iter()
-                    .any(|s| s.as_str() == "all");
                 let len_drives = self.config.settings.drives_to_redirect.len();
-                freerdp_settings_set_bool(
-                    settings,
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_RedirectDrives,
-                    (len_drives != 0) as BOOL,
-                );
-                if !all_drives {
-                    // Remove "all" and, if any rameaining, use FreeRDP_RedirectDrives
+                if len_drives > 0 {
+                    log::debug!(
+                        "Enabling drive redirection for: {}",
+                        self.config.settings.drives_to_redirect.join(", ")
+                    );
+                    freerdp_settings_set_bool(
+                        settings,
+                        FreeRDP_Settings_Keys_Bool_FreeRDP_RedirectDrives,
+                        true.into(),
+                    );
+
                     freerdp_settings_set_string(
                         settings,
                         FreeRDP_Settings_Keys_String_FreeRDP_DrivesToRedirect,
@@ -352,11 +350,7 @@ impl Rdp {
                             .to_string_lossy()
                             .into_owned()
                     };
-                    return Err(anyhow::anyhow!(
-                        "{} : {:08X}",
-                        error_str,
-                        code
-                    ));
+                    return Err(anyhow::anyhow!("{} : {:08X}", error_str, code));
                 }
                 log::debug!("Connected to RDP server successfully.");
             } else {
