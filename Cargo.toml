@@ -91,7 +91,7 @@ cpal = "0.17.2"
 open = "5.3"
 
 # Post-quantum cryptography
-libcrux-ml-dsa = "0.0.7"
+libcrux-ml-dsa = "0.0.8"
 libcrux-ml-kem = "0.0.7"
 
 # key derivation
