@@ -29,68 +29,47 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 #![allow(dead_code)]
-use std::sync::atomic::Ordering;
+use std::sync::{atomic::Ordering, Arc, RwLock};
 
 use shared::log;
 
-use eframe::{
-    egui,
-    glow::{self, HasContext, PixelUnpackData},
-};
+use eframe::egui;
+
+use rdp::sys::rdpGdi;
 
 use super::connection::RdpConnectionState;
 use crate::window::AppWindow;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Screen {
     texture: egui::TextureId,
-    native_texture: glow::Texture,
+    texture_handle: egui::TextureHandle,
     size: egui::Vec2,
     use_rgba: bool,
+    scratch: Vec<u8>,
 }
 
 impl Screen {
-    pub fn new(frame: &mut eframe::Frame, size: egui::Vec2, use_rgba: bool) -> Self {
-        let gl = frame.gl().unwrap();
-        let native_texture = unsafe { gl.create_texture().unwrap() };
+    pub fn new(ctx: &egui::Context, _frame: &mut eframe::Frame, size: egui::Vec2, use_rgba: bool) -> Self {
+        let size_ux = [size.x as usize, size.y as usize];
+        let image = egui::ColorImage::new(
+            size_ux,
+            vec![egui::Color32::TRANSPARENT; size_ux[0] * size_ux[1]],
+        );
+        let texture_handle = ctx.load_texture("rdp_screen", image, egui::TextureOptions::LINEAR);
+        let texture_id = texture_handle.id();
 
-        unsafe {
-            gl.bind_texture(glow::TEXTURE_2D, Some(native_texture));
-            gl.tex_image_2d(
-                glow::TEXTURE_2D,
-                0,
-                if use_rgba { glow::RGBA } else { glow::BGRA } as i32,
-                size.x as i32,
-                size.y as i32,
-                0,
-                if use_rgba { glow::RGBA } else { glow::BGRA },
-                glow::UNSIGNED_BYTE,
-                PixelUnpackData::Slice(None),
-            );
-            gl.tex_parameter_i32(
-                glow::TEXTURE_2D,
-                glow::TEXTURE_MIN_FILTER,
-                glow::LINEAR as i32,
-            );
-            gl.tex_parameter_i32(
-                glow::TEXTURE_2D,
-                glow::TEXTURE_MAG_FILTER,
-                glow::LINEAR as i32,
-            );
-        }
-
-        // TextureId is for egui to identify the texture
-        // native is for our operations
-        Screen {
-            texture: frame.register_native_glow_texture(native_texture),
-            native_texture,
+        Self {
+            texture: texture_id,
+            texture_handle,
             size,
             use_rgba,
+            scratch: Vec::with_capacity((size_ux[0] * size_ux[1] * 4).max(1024)),
         }
     }
 
+
     pub fn supports_bgra(_frame: &mut eframe::Frame) -> bool {
-        // All except macOS support BGRA natively
         #[cfg(target_os = "macos")]
         {
             false
@@ -101,34 +80,33 @@ impl Screen {
         }
     }
 
-    /// Update only the changed rects in a separate thread
     pub fn update_screen_texture(
-        &self,
-        gl: &glow::Context,
-        rects: Vec<rdp::geom::Rect>,
-        rdp_state: RdpConnectionState,
+        &mut self,
+        rects: &[rdp::geom::Rect],
+        gdi: *mut rdpGdi,
+        gdi_lock: &Arc<RwLock<()>>,
     ) {
-        // If already updating, or no rects, skip
         if rects.is_empty() {
             return;
         }
-        let _gdi_guard = rdp_state.gdi_lock.read().unwrap();
 
-        let (stride_bytes, fb_height) = unsafe {
+        let _gdi_guard = gdi_lock.read().unwrap();
+
+        let (stride_bytes, fb_height, fb_width) = unsafe {
             (
-                (*rdp_state.gdi).stride as usize,
-                (*rdp_state.gdi).height as usize,
+                (*gdi).stride as usize,
+                (*gdi).height as usize,
+                (*gdi).width as usize,
             )
         };
+
         let framebuffer = unsafe {
             std::slice::from_raw_parts(
-                (*rdp_state.gdi).primary_buffer as *const u8,
+                (*gdi).primary_buffer as *const u8,
                 stride_bytes * fb_height,
             )
         };
-        let stride_pixels = stride_bytes / 4;
 
-        // Fold all rects into one union rect to minimize updates
         let unique_rect = rects.iter().fold(None, |acc: Option<rdp::geom::Rect>, r| {
             if let Some(acc_rect) = acc {
                 Some(acc_rect.union(r))
@@ -137,86 +115,80 @@ impl Screen {
             }
         });
 
-        if let Some(rect) = unique_rect {
-            unsafe {
-                gl.bind_texture(glow::TEXTURE_2D, Some(self.native()));
+        let rect = if let Some(r) = unique_rect { r } else { return };
 
-                gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, stride_pixels as i32);
-                gl.pixel_store_i32(glow::UNPACK_SKIP_PIXELS, rect.x as i32);
-                gl.pixel_store_i32(glow::UNPACK_SKIP_ROWS, rect.y as i32);
+        let safe_x = rect.x.min(fb_width as u32) as usize;
+        let safe_y = rect.y.min(fb_height as u32) as usize;
+        let safe_w = rect
+            .w
+            .min((fb_width as u32).saturating_sub(safe_x as u32));
+        let safe_h = rect
+            .h
+            .min((fb_height as u32).saturating_sub(safe_y as u32));
 
-                // Upload only the changed rect using texSubImage2D and desired format
-                gl.tex_sub_image_2d(
-                    glow::TEXTURE_2D,
-                    0, // mip level
-                    rect.x as i32,
-                    rect.y as i32,
-                    rect.w as i32,
-                    rect.h as i32,
-                    if self.use_rgba {
-                        glow::RGBA
-                    } else {
-                        glow::BGRA
-                    }, // source format
-                    glow::UNSIGNED_BYTE,
-                    PixelUnpackData::Slice(Some(framebuffer)),
-                );
+        if safe_w == 0 || safe_h == 0 {
+            return;
+        }
 
-                // Reset pixel store parameters
-                gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, 0);
-                gl.pixel_store_i32(glow::UNPACK_SKIP_PIXELS, 0);
-                gl.pixel_store_i32(glow::UNPACK_SKIP_ROWS, 0);
+        let needed = (safe_w * safe_h * 4) as usize;
+        self.scratch.clear();
+        self.scratch.reserve(needed);
+
+        if self.use_rgba {
+            for row in 0..safe_h {
+                for col in 0..safe_w {
+                    let px = safe_x + col as usize;
+                    let py = safe_y + row as usize;
+                    let idx = py * stride_bytes + px * 4;
+                    self.scratch.push(framebuffer[idx]);
+                    self.scratch.push(framebuffer[idx + 1]);
+                    self.scratch.push(framebuffer[idx + 2]);
+                    self.scratch.push(framebuffer[idx + 3]);
+                }
+            }
+        } else {
+            for row in 0..safe_h {
+                for col in 0..safe_w {
+                    let px = safe_x + col as usize;
+                    let py = safe_y + row as usize;
+                    let idx = py * stride_bytes + px * 4;
+                    self.scratch.push(framebuffer[idx + 2]);
+                    self.scratch.push(framebuffer[idx + 1]);
+                    self.scratch.push(framebuffer[idx]);
+                    self.scratch.push(framebuffer[idx + 3]);
+                }
             }
         }
+
+        let image = egui::ColorImage::from_rgba_premultiplied(
+            [safe_w as usize, safe_h as usize],
+            &self.scratch,
+        );
+
+        self.texture_handle.set_partial(
+            [safe_x, safe_y],
+            image,
+            egui::TextureOptions::LINEAR,
+        );
     }
 
-    pub fn resize_screen_texture(&mut self, gl: &glow::Context, new_size: egui::Vec2) {
-        unsafe {
-            gl.bind_texture(glow::TEXTURE_2D, Some(self.native_texture));
-            gl.tex_image_2d(
-                glow::TEXTURE_2D,
-                0,
-                if self.use_rgba {
-                    glow::RGBA
-                } else {
-                    glow::BGRA
-                } as i32,
-                new_size.x as i32,
-                new_size.y as i32,
-                0,
-                if self.use_rgba {
-                    glow::RGBA
-                } else {
-                    glow::BGRA
-                },
-                glow::UNSIGNED_BYTE,
-                PixelUnpackData::Slice(None), // Empty content
-            );
-            gl.tex_parameter_i32(
-                glow::TEXTURE_2D,
-                glow::TEXTURE_MIN_FILTER,
-                glow::LINEAR as i32,
-            );
-            gl.tex_parameter_i32(
-                glow::TEXTURE_2D,
-                glow::TEXTURE_MAG_FILTER,
-                glow::LINEAR as i32,
-            );
-            // Note: On egui, this resize will produce an error on disabling SRGB framebuffer
-            // but this only ocurrs on first frame, after that, the framebuffer is again fine
-            // This is harmless, we will loose a frame, but nothing more.
+    pub fn resize_screen_texture(&mut self, new_size: egui::Vec2) {
+        if self.size == new_size {
+            return;
         }
 
-        // Update the stored size
         self.size = new_size;
+        let image = egui::ColorImage::new(
+            [new_size.x as usize, new_size.y as usize],
+            vec![egui::Color32::TRANSPARENT; (new_size.x as usize) * (new_size.y as usize)],
+        );
+
+        self.texture_handle
+            .set(image, egui::TextureOptions::LINEAR);
     }
 
     pub fn texture_id(&self) -> egui::TextureId {
         self.texture
-    }
-
-    pub fn native(&self) -> glow::Texture {
-        self.native_texture
     }
 
     pub fn size(&self) -> egui::Vec2 {

@@ -159,7 +159,7 @@ pub fn run_gui(
             .with_icon(logo::load_icon())
             .with_resizable(false),
         centered: true,
-        renderer: eframe::Renderer::Glow,
+        renderer: eframe::Renderer::Wgpu,
         ..Default::default()
     };
 

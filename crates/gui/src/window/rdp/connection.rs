@@ -41,7 +41,7 @@ use std::{
 
 use anyhow::Result;
 use flume::{Receiver, Sender, bounded};
-use eframe::{egui, glow};
+use eframe::egui;
 
 use crate::{log, logo::load_logo};
 
@@ -158,7 +158,7 @@ impl AppWindow {
             input,
             channels: rdp.channels().clone(),
             gdi_lock,
-            screen: super::graphics::Screen::new(frame, texture_size, use_rgba),
+            screen: super::graphics::Screen::new(ctx, frame, texture_size, use_rgba),
             cursor: Rc::new(RefCell::new(super::mouse::RdpMouseCursor {
                 texture: cursor,
                 x: 0,
@@ -193,7 +193,7 @@ impl AppWindow {
     pub fn update_rdp_connection(
         &mut self,
         ui: &mut egui::Ui,
-        frame: &mut eframe::Frame,
+        _frame: &mut eframe::Frame,
         mut rdp_state: RdpConnectionState,
     ) {
         // Calculate relation between gdi size and egui content size
@@ -212,9 +212,7 @@ impl AppWindow {
         let input = rdp_state.input;
         self.handle_input(ui.ctx(), input, scale);
 
-        let gl = frame.gl().unwrap();
-
-        self.handle_screen_resize(gl, ui.ctx().content_rect().size(), &mut rdp_state);
+        self.handle_screen_resize(ui.ctx().content_rect().size(), &mut rdp_state);
 
         egui::CentralPanel::default()
             .frame(egui::Frame::default().inner_margin(0.0))
@@ -258,14 +256,15 @@ impl AppWindow {
                         }
                     }
                 }
-                let screen = rdp_state.screen.clone();
-                screen.update_screen_texture(gl, rects_to_update, rdp_state.clone());
+                rdp_state
+                    .screen
+                    .update_screen_texture(&rects_to_update, rdp_state.gdi, &rdp_state.gdi_lock);
                 log::trace!("RDP update processing took {:?}", start.elapsed());
                 // Show the texture on 0,0, full size
                 let size = ui.available_size();
                 ui.add_sized(
                     size,
-                    egui::Image::new(egui::load::SizedTexture::new(screen.texture_id(), size)),
+                    egui::Image::new(egui::load::SizedTexture::new(rdp_state.screen.texture_id(), size)),
                 );
 
                 log::trace!("RDP frame rendered took {:?}", start.elapsed());
@@ -283,7 +282,6 @@ impl AppWindow {
 
     fn handle_screen_resize(
         &mut self,
-        gl: &glow::Context,
         current_size: egui::Vec2,
         rdp_state: &mut RdpConnectionState,
     ) {
@@ -330,8 +328,9 @@ impl AppWindow {
                     100, // in percent
                     100, // in percent
                 );
-                let mut screen = rdp_state.screen.clone();
-                screen.resize_screen_texture(gl, current_size);
+                rdp_state
+                    .screen
+                    .resize_screen_texture(current_size);
             }
         }
     }

@@ -80,7 +80,7 @@ rust-embed = "8.9.0"
 sys-locale = "0.3.2"
 
 # Graphics/UI
-eframe = { version = "0.34.1", features = ["glow"] }
+eframe = { version = "0.34.1", features = ["glow", "wgpu"] }
 image = { version = "0.25.10", features = ["png"] }
 winit = { version = "0.30.13" }
 
