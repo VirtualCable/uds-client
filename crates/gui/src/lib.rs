@@ -148,6 +148,7 @@ pub fn run_gui(
     initial_state: Option<window::types::AppState>,
     messages_rx: Receiver<window::types::GuiMessage>,
     stop: Trigger,
+    fps_limit: Option<u32>,
 ) -> Result<()> {
     let (keys_tx, keys_rx) = bounded::<RawKey>(1024);
     let processing_events = Arc::new(AtomicBool::new(false));
@@ -181,6 +182,7 @@ pub fn run_gui(
                     catalog,
                     initial_state,
                     cc,
+                    fps_limit,
                 )))
             }),
             &event_loop,

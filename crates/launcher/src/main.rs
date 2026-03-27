@@ -107,8 +107,11 @@ fn main() {
     // Launch async thread with tokio runtime
     asyncthread::run(messages_tx, stop.clone(), host, ticket, scrambler);
 
+    // Read app data, which may contain overrides for proxy and ssl settings, and fps limit
+    let app_data = shared::appdata::AppData::load();
+
     // Run the GUI, this will block until the GUI is closed
-    gui::run_gui(intl::get_catalog().clone(), None, messages_rx, stop.clone()).unwrap();
+    gui::run_gui(intl::get_catalog().clone(), None, messages_rx, stop.clone(), app_data.fps_limit).unwrap();
 
     // Gui closed, wait for app to finish also
     stop.wait();

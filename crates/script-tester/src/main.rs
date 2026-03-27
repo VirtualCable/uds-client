@@ -143,11 +143,14 @@ fn main() -> Result<()> {
     // Run the script on a thread
     std::thread::spawn(run_script);
 
+    let app_data = shared::appdata::AppData::load();
+
     gui::run_gui(
         fake_catalog,
         Some(gui::window::types::AppState::Test),
         messages_rx,
         stop_trigger.clone(),
+        app_data.fps_limit,
     )
     .unwrap();
 

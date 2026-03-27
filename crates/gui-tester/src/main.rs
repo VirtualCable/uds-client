@@ -48,6 +48,7 @@ fn main() {
         Some(gui::window::types::AppState::Test),
         messages_rx,
         stop_trigger.clone(),
+        None,
     )
     .unwrap();
 

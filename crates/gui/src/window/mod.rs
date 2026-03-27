@@ -34,8 +34,8 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
-use flume::Receiver;
 use eframe::egui;
+use flume::Receiver;
 
 use shared::{log, system::trigger::Trigger};
 
@@ -63,10 +63,12 @@ pub(super) struct AppWindow {
     pub gui_messages_rx: Receiver<types::GuiMessage>,
     pub stop: Trigger,                   // For stopping any ongoing operations
     pub screen_size: Option<(u32, u32)>, // Cached screen size
+    pub fps_limit: Option<u32>,          // FPS limit for RDP connection, if any
     pub catalog: gettext::Catalog,       // For translations
 }
 
 impl AppWindow {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         processing_events: Arc<AtomicBool>,
         events: Receiver<crate::RawKey>,
@@ -75,6 +77,7 @@ impl AppWindow {
         catalog: gettext::Catalog,
         initial_state: Option<types::AppState>,
         cc: &eframe::CreationContext<'_>,
+        fps_limit: Option<u32>,
     ) -> Self {
         processing_events.store(false, Ordering::Relaxed); // Initially not processing events
         let texture = cc.egui_ctx.load_texture(
@@ -91,6 +94,7 @@ impl AppWindow {
             processing_events,
             stop,
             screen_size: None,
+            fps_limit,
             catalog,
         }
     }
@@ -139,11 +143,7 @@ impl AppWindow {
         self.app_state = new_state;
     }
 
-    pub fn restore_previous_state(
-        &mut self,
-        ui: &mut egui::Ui,
-        frame: &mut eframe::Frame,
-    ) {
+    pub fn restore_previous_state(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         self.processing_events.store(false, Ordering::Relaxed); // Stop processing rdp raw events on event loop
         self.app_state = self.prev_app_state.clone();
         self.prev_app_state = types::AppState::default();
@@ -160,7 +160,8 @@ impl AppWindow {
 
     pub fn set_visible(&mut self, ui: &mut egui::Ui, visible: bool) {
         log::debug!("Setting window visibility to {}", visible);
-        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Minimized(!visible));
+        ui.ctx()
+            .send_viewport_cmd(egui::ViewportCommand::Minimized(!visible));
     }
 }
 
@@ -249,7 +250,9 @@ impl eframe::App for AppWindow {
         }
         let frame_duration = frame_start.elapsed();
         // ctx.request_repaint(); // Repaint asap
-        let remaining = std::time::Duration::from_millis(16).saturating_sub(frame_duration);
-        ui.ctx().request_repaint_after(remaining); // Aim for ~60 FPS
+        let fps_limit = self.fps_limit.unwrap_or(60);
+        let frame_time = std::time::Duration::from_secs_f32(1.0 / fps_limit as f32);
+        let remaining = frame_time.saturating_sub(frame_duration);
+        ui.ctx().request_repaint_after(remaining); // Aim for consistent FPS, but allow sleeping if we're ahead of schedule
     }
 }
