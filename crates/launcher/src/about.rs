@@ -66,18 +66,17 @@ impl Default for About {
 }
 
 impl eframe::App for About {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Load texture the first time
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         if self.texture.is_none() {
             let img = crate::logo::load_logo();
-            self.texture = Some(ctx.load_texture("logo", img, egui::TextureOptions::LINEAR));
+            self.texture = Some(ui.ctx().load_texture("logo", img, egui::TextureOptions::LINEAR));
         }
 
-        ctx.request_repaint_after(std::time::Duration::from_millis(50));
+        ui.ctx().request_repaint_after(std::time::Duration::from_millis(50));
 
         let elapsed = self.start.elapsed().as_secs_f32();
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
             ui.add_space(30.0);
             ui.horizontal_centered(|ui| {
                 ui.vertical_centered(|ui| {
@@ -97,7 +96,7 @@ impl eframe::App for About {
                     ui.add_space(20.0);
 
                     if ui.add_sized([80.0, 30.0], egui::Button::new("Close")).clicked() {
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
                     }
                 });
             });

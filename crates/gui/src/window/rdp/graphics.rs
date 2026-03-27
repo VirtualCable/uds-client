@@ -242,7 +242,7 @@ impl AppWindow {
         }
     }
 
-    pub(super) fn show_pinbar(&mut self, ctx: &egui::Context, rdp_state: &mut RdpConnectionState) {
+    pub(super) fn show_pinbar(&mut self, ui: &mut egui::Ui, rdp_state: &mut RdpConnectionState) {
         let fullscreen = rdp_state.full_screen.clone();
         if !rdp_state.pinbar_visible.load(Ordering::Relaxed) || !fullscreen.load(Ordering::Relaxed)
         {
@@ -253,7 +253,7 @@ impl AppWindow {
             .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, 0.0)) // Centered at top
             .order(egui::Order::Foreground) // Above all layers
             .constrain(true) // Keep within screen bounds
-            .show(ctx, |ui| {
+            .show(ui.ctx(), |ui| {
                 // Frame with margins so it does not occupy the entire width
                 egui::Frame::popup(ui.style())
                     .inner_margin(egui::Margin {
@@ -270,10 +270,10 @@ impl AppWindow {
                                 egui::Layout::left_to_right(egui::Align::Center),
                                 |ui| {
                                     if ui.button("⬜").clicked() {
-                                        self.toggle_fullscreen(ctx, rdp_state);
+                                        self.toggle_fullscreen(ui.ctx(), rdp_state);
                                     }
                                     if ui.button("🗙").clicked() {
-                                        self.exit(ctx);
+                                        self.exit(ui.ctx());
                                     }
                                 },
                             );

@@ -80,7 +80,7 @@ rust-embed = "8.9.0"
 sys-locale = "0.3.2"
 
 # Graphics/UI
-eframe = { version = "0.33.2", features = ["glow"] }
+eframe = { version = "0.34.0", features = ["glow"] }
 image = { version = "0.25.10", features = ["png"] }
 winit = { version = "0.30.13" }
 
@@ -92,7 +92,7 @@ open = "5.3"
 
 # Post-quantum cryptography
 libcrux-ml-dsa = "0.0.8"
-libcrux-ml-kem = "0.0.7"
+libcrux-ml-kem = "0.0.8"
 
 # key derivation
 hkdf = "0.12"

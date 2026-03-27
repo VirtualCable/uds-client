@@ -99,13 +99,13 @@ impl AppWindow {
 
     pub fn update_progress(
         &mut self,
-        ctx: &egui::Context,
+        ui: &mut egui::Ui,
         _frame: &mut eframe::Frame,
         state: ProgressState,
     ) {
         let elapsed = state.start.elapsed().as_secs_f32();
         let progress = state.progress.load(std::sync::atomic::Ordering::Relaxed) as f32;
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
             ui.add_space(30.0);
             ui.horizontal_centered(|ui| {
                 ui.vertical_centered(|ui| {

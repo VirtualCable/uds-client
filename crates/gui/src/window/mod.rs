@@ -141,7 +141,7 @@ impl AppWindow {
 
     pub fn restore_previous_state(
         &mut self,
-        ctx: &eframe::egui::Context,
+        ui: &mut egui::Ui,
         frame: &mut eframe::Frame,
     ) {
         self.processing_events.store(false, Ordering::Relaxed); // Stop processing rdp raw events on event loop
@@ -150,26 +150,27 @@ impl AppWindow {
         // Call restore if necessary, that is, for testing and client_progress states
         // Other states do not need restoration
         match &self.app_state {
-            types::AppState::Test => self.restore_testing(ctx, frame).ok(),
+            types::AppState::Test => self.restore_testing(ui, frame).ok(),
             types::AppState::ClientProgress(state) => {
-                self.restore_client_progress(ctx, frame, state.clone()).ok()
+                self.restore_client_progress(ui, frame, state.clone()).ok()
             }
             _ => None,
         };
     }
 
-    pub fn set_visible(&mut self, ctx: &eframe::egui::Context, visible: bool) {
+    pub fn set_visible(&mut self, ui: &mut egui::Ui, visible: bool) {
         log::debug!("Setting window visibility to {}", visible);
-        ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(!visible));
+        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Minimized(!visible));
     }
 }
 
 impl eframe::App for AppWindow {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        // fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         // If stop has been triggered, close the window
         if self.stop.is_triggered() {
             log::debug!("Stop triggered, closing window.");
-            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
             return;
         }
         let frame_start = std::time::Instant::now();
@@ -178,29 +179,29 @@ impl eframe::App for AppWindow {
             match msg {
                 types::GuiMessage::Close => {
                     log::debug!("Received close message, closing window.");
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
                     return;
                 }
                 types::GuiMessage::Hide => {
                     log::debug!("Received hide message, hiding window.");
-                    self.enter_invisible(ctx, frame).ok();
+                    self.enter_invisible(ui, frame).ok();
                 }
                 types::GuiMessage::ShowError(msg) => {
                     log::debug!("Received show error message: {}", msg);
-                    self.enter_error(ctx, frame, msg.clone()).ok();
+                    self.enter_error(ui, frame, msg.clone()).ok();
                 }
                 types::GuiMessage::ShowWarning(msg) => {
                     log::debug!("Received show warning message: {}", msg);
-                    self.enter_warning(ctx, frame, msg.clone()).ok();
+                    self.enter_warning(ui, frame, msg.clone()).ok();
                 }
                 types::GuiMessage::ShowYesNo(msg, resp_tx) => {
                     log::debug!("Received show yes/no message: {}", msg);
-                    self.enter_yesno(ctx, frame, msg.clone(), resp_tx).ok();
+                    self.enter_yesno(ui, frame, msg.clone(), resp_tx).ok();
                 }
                 types::GuiMessage::ShowProgress => {
                     log::debug!("Switching to client progress window...");
                     self.enter_client_progress(
-                        ctx,
+                        ui,
                         frame,
                         client_progress::ProgressState::default(),
                     )
@@ -218,7 +219,7 @@ impl eframe::App for AppWindow {
                 }
                 types::GuiMessage::ConnectRdp(settings) => {
                     log::debug!("Received RDP connect message");
-                    self.enter_rdp_preconnection(ctx, frame, settings).ok();
+                    self.enter_rdp_preconnection(ui, frame, settings).ok();
                 }
             }
         }
@@ -228,27 +229,27 @@ impl eframe::App for AppWindow {
         let app_state = self.app_state.clone();
         match app_state {
             types::AppState::RdpConnecting(rdp_state) => {
-                self.update_rdp_preconnection(ctx, frame, rdp_state)
+                self.update_rdp_preconnection(ui, frame, rdp_state)
             }
             types::AppState::RdpConnected(rdp_state) => {
-                self.update_rdp_connection(ctx, frame, rdp_state)
+                self.update_rdp_connection(ui, frame, rdp_state)
             }
             types::AppState::ClientProgress(client_state) => {
-                self.update_progress(ctx, frame, client_state)
+                self.update_progress(ui, frame, client_state)
             }
             types::AppState::Invisible => {
-                self.update_invisible(ctx, frame);
+                self.update_invisible(ui, frame);
             }
             types::AppState::YesNo(message, resp_tx) => {
-                self.update_yesno(ctx, frame, &message, resp_tx)
+                self.update_yesno(ui, frame, &message, resp_tx)
             }
-            types::AppState::Warning(message) => self.update_warning(ctx, frame, &message),
-            types::AppState::Error(message) => self.update_error(ctx, frame, &message),
-            types::AppState::Test => self.update_testing(ctx, frame),
+            types::AppState::Warning(message) => self.update_warning(ui, frame, &message),
+            types::AppState::Error(message) => self.update_error(ui, frame, &message),
+            types::AppState::Test => self.update_testing(ui, frame),
         }
         let frame_duration = frame_start.elapsed();
         // ctx.request_repaint(); // Repaint asap
         let remaining = std::time::Duration::from_millis(16).saturating_sub(frame_duration);
-        ctx.request_repaint_after(remaining); // Aim for ~60 FPS
+        ui.ctx().request_repaint_after(remaining); // Aim for ~60 FPS
     }
 }

@@ -46,35 +46,35 @@ use super::{
 impl AppWindow {
     pub fn enter_yesno(
         &mut self,
-        ctx: &egui::Context,
+        ui: &mut egui::Ui,
         _frame: &mut eframe::Frame,
         message: String,
         resp_tx: Arc<RwLock<Option<oneshot::Sender<bool>>>>,
     ) -> Result<()> {
         let text_height = calculate_text_height(&message, 40);
-        self.resize_and_center(ctx, [320.0, text_height + 48.0], true);
+        self.resize_and_center(ui.ctx(), [320.0, text_height + 48.0], true);
         self.set_app_state(AppState::YesNo(message, resp_tx));
-        ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.gettext("Question")));
+        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Title(self.gettext("Question")));
         Ok(())
     }
 
     pub fn update_yesno(
         &mut self,
-        ctx: &egui::Context,
+        ui: &mut egui::Ui,
         frame: &mut eframe::Frame,
         message: &str,
         resp_tx: Arc<RwLock<Option<oneshot::Sender<bool>>>>,
     ) {
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
             ui.set_width(300.0);
             ui.horizontal_centered(|ui: &mut egui::Ui| {
                 ui.vertical_centered(|ui: &mut egui::Ui| {
                     display_multiline_text(ui, message, self.gettext("Click to open link"));
                 });
             });
-            egui::TopBottomPanel::bottom("warning_button_panel")
+            egui::Panel::bottom("warning_button_panel")
                 .show_separator_line(false)
-                .show(ctx, |ui| {
+                .show_inside(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.columns(2, |columns| {
                             columns[0].with_layout(
@@ -91,7 +91,7 @@ impl AppWindow {
                                         if let Some(tx) = resp_tx.write().unwrap().take() {
                                             let _ = tx.send(true);
                                         }
-                                        self.restore_previous_state(ctx, frame);
+                                        self.restore_previous_state(ui, frame);
                                     }
                                 },
                             );
@@ -109,7 +109,7 @@ impl AppWindow {
                                         if let Some(tx) = resp_tx.write().unwrap().take() {
                                             let _ = tx.send(false);
                                         }
-                                        self.restore_previous_state(ctx, frame);
+                                        self.restore_previous_state(ui, frame);
                                     }
                                 },
                             );

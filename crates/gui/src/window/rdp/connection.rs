@@ -192,33 +192,33 @@ impl AppWindow {
 
     pub fn update_rdp_connection(
         &mut self,
-        ctx: &egui::Context,
+        ui: &mut egui::Ui,
         frame: &mut eframe::Frame,
         mut rdp_state: RdpConnectionState,
     ) {
         // Calculate relation between gdi size and egui content size
         let scale = {
-            let egui_size = ctx.content_rect().size();
+            let egui_size = ui.ctx().content_rect().size();
             let gdi_width = unsafe { (*rdp_state.gdi).width as f32 };
             let gdi_height = unsafe { (*rdp_state.gdi).height as f32 };
             egui::Vec2::new(gdi_width / egui_size.x, gdi_height / egui_size.y)
         };
 
-        if self.handle_hotkeys(ctx, &mut rdp_state) {
+        if self.handle_hotkeys(ui.ctx(), &mut rdp_state) {
             // Hotkey handled, skip input processing this frame
             return;
         }
 
         let input = rdp_state.input;
-        self.handle_input(ctx, input, scale);
+        self.handle_input(ui.ctx(), input, scale);
 
         let gl = frame.gl().unwrap();
 
-        self.handle_screen_resize(gl, ctx.content_rect().size(), &mut rdp_state);
+        self.handle_screen_resize(gl, ui.ctx().content_rect().size(), &mut rdp_state);
 
         egui::CentralPanel::default()
             .frame(egui::Frame::default().inner_margin(0.0))
-            .show(ctx, |ui| {
+            .show_inside(ui, |ui| {
                 // If the size of gdi is not equal to size of content, resize gdi and recreate texture
                 let start = std::time::Instant::now();
                 let mut rects_to_update: Vec<rdp::geom::Rect> = Vec::new();
@@ -231,12 +231,12 @@ impl AppWindow {
                         }
                         RdpMessage::Disconnect => {
                             log::debug!("RDP Disconnected");
-                            self.exit(ctx);
+                            self.exit(ui.ctx());
                             break;
                         }
                         RdpMessage::Error(err) => {
                             log::error!("RDP Error: {}", err);
-                            self.exit(ctx);
+                            self.exit(ui.ctx());
                             break;
                         }
                         RdpMessage::FocusRequired => {
@@ -245,7 +245,7 @@ impl AppWindow {
                         RdpMessage::SetCursorIcon(data, x, y, width, height) => {
                             // log::debug!("Setting cursor icon, size: {width}x{height} on {x}, {y}");
                             self.set_custom_cursor(
-                                ctx,
+                                ui.ctx(),
                                 &mut rdp_state,
                                 &data,
                                 rdp::geom::Rect {
@@ -271,14 +271,14 @@ impl AppWindow {
                 log::trace!("RDP frame rendered took {:?}", start.elapsed());
             });
         // Pinbar at top
-        self.show_pinbar(ctx, &mut rdp_state);
+        self.show_pinbar(ui, &mut rdp_state);
 
         rdp_state.fps.borrow_mut().record_frame();
         // Handle custom cursor
-        self.handle_cursor(ctx, &rdp_state);
+        self.handle_cursor(ui, &rdp_state);
 
         // Fps if enabled, last so it goes on top
-        rdp_state.fps.borrow().show(ctx);
+        rdp_state.fps.borrow().show(ui.ctx());
     }
 
     fn handle_screen_resize(

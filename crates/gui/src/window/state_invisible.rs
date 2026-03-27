@@ -43,29 +43,29 @@ const MESSAGE: &str = "UDS Launcher\nVersion: 5.0.0\nUDS Client Launcher";
 impl AppWindow {
     pub fn enter_invisible(
         &mut self,
-        ctx: &eframe::egui::Context,
+        ui: &mut egui::Ui,
         _frame: &mut eframe::Frame,
     ) -> Result<()> {
         self.set_app_state(AppState::Invisible);
 
-        self.set_visible(ctx, false);
+        self.set_visible(ui, false);
         let text_height = calculate_text_height(MESSAGE, 40);
-        self.resize_and_center(ctx, [320.0, text_height + 48.0], true);
-        ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.gettext("UDS Launcher")));
+        self.resize_and_center(ui.ctx(), [320.0, text_height + 48.0], true);
+        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Title(self.gettext("UDS Launcher")));
         Ok(())
     }
 
-    pub fn update_invisible(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
+    pub fn update_invisible(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
             ui.set_width(300.0);
             ui.horizontal_centered(|ui: &mut egui::Ui| {
                 ui.vertical_centered(|ui: &mut egui::Ui| {
                     display_multiline_text(ui, MESSAGE, self.gettext("Click to open link"));
                 });
             });
-            egui::TopBottomPanel::bottom("button_panel")
+            egui::Panel::bottom("button_panel")
                 .show_separator_line(false)
-                .show(ctx, |ui| {
+                .show_inside(ui, |ui| {
                     ui.horizontal_centered(|ui: &mut egui::Ui| {
                         ui.vertical_centered(|ui: &mut egui::Ui| {
                             ui.add_space(12.0);
