@@ -114,6 +114,7 @@ pub fn show_about_window() {
             .with_title("About UDS Launcher")
             .with_resizable(false),
         centered: true,
+        renderer: eframe::Renderer::Glow,
         ..Default::default()
     };
     let _ = eframe::run_native(

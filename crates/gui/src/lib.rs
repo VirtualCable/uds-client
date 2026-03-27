@@ -34,8 +34,8 @@ use std::sync::{
 };
 
 use anyhow::Result;
-use flume::{Receiver, Sender, bounded};
 use eframe::{EframeWinitApplication, UserEvent, egui};
+use flume::{Receiver, Sender, bounded};
 use winit::{
     application::ApplicationHandler,
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
@@ -44,8 +44,8 @@ use winit::{
 
 use shared::{log, system::trigger::Trigger};
 
-pub mod window;
 pub mod keymap;
+pub mod window;
 
 pub mod about;
 
@@ -159,6 +159,7 @@ pub fn run_gui(
             .with_icon(logo::load_icon())
             .with_resizable(false),
         centered: true,
+        renderer: eframe::Renderer::Glow,
         ..Default::default()
     };
 

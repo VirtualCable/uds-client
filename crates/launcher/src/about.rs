@@ -69,10 +69,14 @@ impl eframe::App for About {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         if self.texture.is_none() {
             let img = crate::logo::load_logo();
-            self.texture = Some(ui.ctx().load_texture("logo", img, egui::TextureOptions::LINEAR));
+            self.texture = Some(
+                ui.ctx()
+                    .load_texture("logo", img, egui::TextureOptions::LINEAR),
+            );
         }
 
-        ui.ctx().request_repaint_after(std::time::Duration::from_millis(50));
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_millis(50));
 
         let elapsed = self.start.elapsed().as_secs_f32();
 
@@ -95,7 +99,10 @@ impl eframe::App for About {
                     ui.separator();
                     ui.add_space(20.0);
 
-                    if ui.add_sized([80.0, 30.0], egui::Button::new("Close")).clicked() {
+                    if ui
+                        .add_sized([80.0, 30.0], egui::Button::new("Close"))
+                        .clicked()
+                    {
                         ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
                     }
                 });
@@ -115,6 +122,7 @@ pub fn show_about_window() {
             .with_title("About UDS Launcher")
             .with_resizable(false),
         centered: true,
+        renderer: eframe::Renderer::Glow,
         ..Default::default()
     };
     let _ = eframe::run_native(
