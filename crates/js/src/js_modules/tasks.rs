@@ -39,7 +39,7 @@ use boa_engine::{
 };
 
 use connection::{tasks, types::TunnelConnectInfo};
-use shared::log;
+use shared::{appdata, log};
 
 fn add_early_unlinkable_file_fn(
     _: &JsValue,
@@ -92,6 +92,7 @@ async fn start_tunel_fn(
     args: &[JsValue],
     ctx: &std::cell::RefCell<&mut Context>,
 ) -> JsResult<JsValue> {
+    let appdata = appdata::AppData::load();
     let tunnel_info = {
         let mut ctx_borrow = ctx.borrow_mut();
         let params = extract_js_args!(args, &mut *ctx_borrow, TunnelParams);
@@ -116,22 +117,25 @@ async fn start_tunel_fn(
                         .with_message("Invalid ticket length, must be 32 bytes".to_string()),
                 )
             })?,
-            check_certificate: params.check_certificate.unwrap_or(true),
+            check_certificate: params
+                .check_certificate
+                .unwrap_or(appdata.verify_ssl.unwrap_or(true)),
             local_port: params.local_port,
             startup_time_ms: params.startup_time_ms.unwrap_or(0),
             keep_listening_after_timeout: params.keep_listening_after_timeout.unwrap_or(false),
             enable_ipv6: params.enable_ipv6.unwrap_or(false),
-            shared_secret: params.shared_secret.as_ref().map(|s| {
-                s.as_slice()
-                    .try_into()
-                    .map_err(|_| {
+            shared_secret: params
+                .shared_secret
+                .as_ref()
+                .map(|s| {
+                    s.as_slice().try_into().map_err(|_| {
                         JsError::from_native(
-                            JsNativeError::error().with_message(
-                                "Invalid shared secret length".to_string(),
-                            ),
+                            JsNativeError::error()
+                                .with_message("Invalid shared secret length".to_string()),
                         )
                     })
-            }).transpose()?,
+                })
+                .transpose()?,
         }
     };
 
