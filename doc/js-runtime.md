@@ -203,7 +203,18 @@ const exists = File.exists(tempPath);
 
 // Get temp directory
 const tempDir = File.getTempDirectory();
+
+// List folder entries
+const entries = File.listFolder(tempDir);
 ```
+
+### listFolder
+
+Lists the names of entries inside a folder.
+
+- `path` (string): Folder path to list.
+
+Returns: `string[]` - array of file and directory names.
 
 ## Logger Module
 
@@ -497,6 +508,7 @@ RDP.start({
 | File    | isDirectory              | path: string | Checks if path is a directory |
 | File    | getTempDirectory         | - | Gets temp directory path |
 | File    | getHomeDirectory         | - | Gets home directory path |
+| File    | listFolder               | path: string | Lists folder entries |
 | Logger  | trace                    | msg: string | Logs trace message |
 | Logger  | debug                    | msg: string | Logs debug message |
 | Logger  | info                     | msg: string | Logs info message |

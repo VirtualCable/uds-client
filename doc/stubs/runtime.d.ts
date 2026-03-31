@@ -19,6 +19,7 @@ declare module "runtime" {
     function isDirectory(path: string): boolean;
     function getTempDirectory(): string;
     function getHomeDirectory(): string;
+    function listFolder(path: string): string[];
   }
 
   export namespace Logger {

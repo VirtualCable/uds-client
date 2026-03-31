@@ -32,6 +32,7 @@ use anyhow::Result;
 use boa_engine::{
     Context, JsResult, JsString, JsValue,
     error::{JsError, JsNativeError},
+    object::builtins::JsArray,
 };
 
 use is_executable::IsExecutable; // Trait for is_executable method
@@ -108,6 +109,24 @@ fn get_home_dir_fn(_: &JsValue, _: &[JsValue], _: &mut Context) -> JsResult<JsVa
     }
 }
 
+fn list_folder_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let path = extract_js_args!(args, ctx, String);
+    match std::fs::read_dir(&path) {
+        Ok(entries) => {
+            let js_entries = entries
+                .filter_map(|entry| entry.ok())
+                .filter_map(|entry| entry.file_name().into_string().ok())
+                .map(|s| JsValue::from(JsString::from(s)))
+                .collect::<Vec<_>>();
+
+            Ok(JsArray::from_iter(js_entries, ctx).into())
+        }
+        Err(e) => Err(JsError::from(
+            JsNativeError::error().with_message(format!("Error listing folder: {}", e)),
+        )),
+    }
+}
+
 pub(super) fn register(ctx: &mut Context) -> Result<()> {
     register_js_module!(
         ctx,
@@ -121,6 +140,7 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
             ("isDirectory", is_directory_fn, 1),
             ("getTempDirectory", get_temp_dir_fn, 0),
             ("getHomeDirectory", get_home_dir_fn, 0),
+            ("listFolder", list_folder_fn, 1),
         ],
         []
     );
@@ -132,8 +152,8 @@ mod tests {
     use boa_engine::js_string;
 
     use super::*;
-    use shared::log;
     use crate::{create_context, exec_script_with_result};
+    use shared::log;
 
     #[tokio::test]
     async fn test_file_module() {
@@ -224,5 +244,20 @@ mod tests {
             .try_js_into(&mut ctx)
             .unwrap();
         assert!(!home_dir.is_empty());
+
+        let list_script = format!(
+            r#"
+            const entries = File.listFolder("{}");
+            entries;
+        "#,
+            temp_dir
+        );
+        let list_result = exec_script_with_result(&mut ctx, &list_script)
+            .await
+            .unwrap();
+
+        // Convertir directamente el JsValue a Vec<String>
+        let entries_vec: Vec<String> = list_result.try_js_into(&mut ctx).unwrap();
+        log::info!("Entries in temp directory: {:?}", entries_vec);
     }
 }
