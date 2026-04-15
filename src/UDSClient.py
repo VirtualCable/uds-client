@@ -168,6 +168,7 @@ class UDSClient(QtWidgets.QMainWindow):
                 '__builtins__': __builtins__,
                 'parent': self,
                 'sp': params,
+                'api': self.api,
             }
             exec(script, vars)
 

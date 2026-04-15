@@ -49,6 +49,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
 from uds import types
+from uds.rest import RestApi
 
 try:
     import psutil
@@ -274,6 +275,12 @@ def is_linux() -> bool:
 def is_windows() -> bool:
     return 'win' in sys.platform
 
+def sign_rdp(rdp_content: str, api: RestApi, ticket: str) -> str:
+    '''
+    Signs the RDP content with the ticket, so it can be verified on server side
+    '''
+    return api.request_rdp_sign(ticket, rdp_content)
+    
 
 # old compat names, to ensure compatibility with old code
 # Will update server scripts to use new names as soon as previos 4.0 versions are not supported anymore
