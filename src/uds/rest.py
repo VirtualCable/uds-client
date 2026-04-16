@@ -80,7 +80,9 @@ class RestApi:
                 '{}={}'.format(k, urllib.parse.quote(str(v).encode('utf8'))) for k, v in params.items()
             )
 
-        return json.loads(RestApi.request_url(self._rest_api_endpoint + path, self._on_invalid_certificate, data=data))
+        return json.loads(
+            RestApi.request_url(self._rest_api_endpoint + path, self._on_invalid_certificate, data=data)
+        )
 
     def process_error(self, data: typing.Any) -> None:
         if 'error' in data:
@@ -171,14 +173,13 @@ class RestApi:
             raise e
 
         self.process_error(data)
-        
-        
+
     def request_rdp_sign(self, ticket: str, rdp_data: str) -> str:
         '''Requests a signature for the RDP data'''
         try:
             data = self.request(
                 '/{}/rdp_signature'.format(ticket),
-                data=json.dumps(rdp_data),
+                data=json.dumps({'rdp': rdp_data}),
                 params={'hostname': tools.gethostname(), 'version': consts.VERSION},
             )
         except Exception as e:
