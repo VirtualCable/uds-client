@@ -49,7 +49,9 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
 from uds import types
-from uds.rest import RestApi
+
+if typing.TYPE_CHECKING:
+    from uds.core.api import RestApi
 
 try:
     import psutil
@@ -275,7 +277,7 @@ def is_linux() -> bool:
 def is_windows() -> bool:
     return 'win' in sys.platform
 
-def sign_rdp(rdp_content: str, api: RestApi, ticket: str) -> str:
+def sign_rdp(rdp_content: str, api: 'RestApi', ticket: str) -> str:
     '''
     Signs the RDP content with the ticket, so it can be verified on server side
     '''
