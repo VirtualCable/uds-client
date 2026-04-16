@@ -178,7 +178,7 @@ class RestApi:
         try:
             data = self.request(
                 '/{}/rdp_signature'.format(ticket),
-                data=json.dumps(rdp_data),
+                data=json.dumps({'rdp': rdp_data}),
                 params={'hostname': tools.gethostname(), 'version': consts.VERSION},
             )
         except Exception as e:
