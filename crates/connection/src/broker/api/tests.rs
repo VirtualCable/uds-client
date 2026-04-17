@@ -222,7 +222,7 @@ async fn test_send_logs() {
         .create_async()
         .await;
     let response = api
-        .send_log("DEBUG This is a test log message".to_string())
+        .send_log(TICKET_ID, "DEBUG This is a test log message")
         .await;
     assert!(response.is_ok(), "Send logs failed: {:?}", response);
 }

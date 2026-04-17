@@ -11,7 +11,7 @@ This document describes the JavaScript modules and functions available in the ru
 | Logger   | Logging functions at different levels | 5 |
 | Process  | Executable finding, process launching, and management | 8 |
 | Tasks    | Task management, cleanup files, and tunnel connections | 4 |
-| RDP      | RDP connection management | 1 |
+| RDP      | RDP connection management | 2 |
 
 ## Utils Module
 
@@ -469,6 +469,16 @@ Starts an RDP connection with the specified settings.
 
 **Returns:** undefined
 
+### sign (async)
+
+Signs an RDP file/string using the broker API and returns the signed content.
+
+**Parameters:**
+- `rdp_string` (string): The raw RDP content to sign.
+- `ticket` (string): The broker ticket used to request the signature.
+
+**Returns:** string - The signed RDP content.
+
 ### Examples
 
 ```javascript
@@ -486,6 +496,9 @@ RDP.start({
     clipboard_redirection: true,
     drives_to_redirect: ["C", "D"]
 });
+
+  // Sign an RDP file/string through the broker
+  const signedRdp = await RDP.sign(rdpContent, ticket);
 ```
 
 ## Complete Function Reference
@@ -526,4 +539,5 @@ RDP.start({
 | Tasks   | addLateUnlinkableFile    | file_path: string | Adds file for late cleanup |
 | Tasks   | addWaitableApp           | task_handle: number | Adds waitable application |
 | Tasks   | startTunnel (async)      | params: { addr: string, port: number, ticket: string, startup_time_ms?: number, check_certificate?: boolean, local_port?: number, keep_listening_after_timeout?: boolean, enable_ipv6?: boolean, shared_secret?: Uint8Array | number[] } | Starts tunnel connection |
-| RDP     | start            | settings: object | Starts RDP connection |
+| RDP     | start                    | settings: object | Starts RDP connection |
+| RDP     | sign (async)             | rdp_string: string, ticket: string | Signs RDP content through the broker API |

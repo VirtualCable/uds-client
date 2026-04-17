@@ -66,5 +66,6 @@ declare module "runtime" {
       drives_to_redirect?: string[];
       sound_latency_threshold?: number;
     }): void;
+    function sign(rdp_string: string, ticket: string): Promise<string>;
   }
 }

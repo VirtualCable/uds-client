@@ -33,6 +33,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose};
 use reqwest::{Client, ClientBuilder};
+use std::sync::OnceLock;
 
 use crypt::{
     consts::{PRIVATE_KEY_SIZE, PUBLIC_KEY_SIZE},
@@ -54,7 +55,8 @@ pub trait BrokerApi: Send + Sync {
         ticket: &str,
         scrambler: &str,
     ) -> Result<types::Script, types::Error>;
-    async fn send_log(&self, log_str: String) -> Result<()>;
+    async fn send_log(&self, ticket: &str, log: &str) -> Result<()>;
+    async fn request_rdp_sign(&self, ticket: &str, rdp: &str) -> Result<String>;
 }
 
 pub struct UdsBrokerApi {
@@ -166,7 +168,7 @@ impl BrokerApi for UdsBrokerApi {
 
         let response = self
             .client
-            .post(format!("{}/{}/ticket", self.broker_url, ticket,))
+            .post(format!("{}/{}/ticket", self.broker_url, ticket))
             .json(&req)
             .headers(self.headers())
             .send()
@@ -187,18 +189,37 @@ impl BrokerApi for UdsBrokerApi {
             })?
     }
 
-    async fn send_log(&self, log_str: String) -> Result<()> {
+    async fn send_log(&self, ticket: &str, log: &str) -> Result<()> {
         log::debug!("Sending log to broker at {}", self.broker_url);
-        let log_data = types::LogUpload { log: &log_str };
+        let log_data = types::LogUpload { log };
         self.client
-            .put(format!("{}/log", self.broker_url))
+            .post(format!("{}/{}/log", self.broker_url, ticket))
             .headers(self.headers())
             .json(&log_data)
             .send()
             .await?;
         Ok(())
     }
+
+    async fn request_rdp_sign(&self, ticket: &str, rdp: &str) -> Result<String> {
+        log::debug!("Sending rdp sign request to broker at {}", self.broker_url);
+        let rdp_sign_data = types::RdpSignRequest { rdp };
+        let response = self.client
+            .put(format!("{}/{}/rdp_sign", self.broker_url, ticket))
+            .headers(self.headers())
+            .json(&rdp_sign_data)
+            .send()
+            .await?;
+        let signed_rdp = response
+            .json::<types::BrokerResponse<String>>()
+            .await?
+            .into_result()?;
+        Ok(signed_rdp)
+    }
 }
+
+// OnceLock to store api instance, so we can use it across the app without passing it around
+static API_INSTANCE: OnceLock<std::sync::Arc<dyn BrokerApi>> = OnceLock::new();
 
 pub fn new_api(
     host: &str,
@@ -206,12 +227,21 @@ pub fn new_api(
     verify_ssl: bool,
     skip_proxy: bool,
 ) -> std::sync::Arc<dyn BrokerApi> {
-    std::sync::Arc::new(UdsBrokerApi::new(
+    let api = std::sync::Arc::new(UdsBrokerApi::new(
         &consts::URL_TEMPLATE.replace("{host}", host),
         timeout,
         verify_ssl,
         skip_proxy,
-    ))
+    ));
+    API_INSTANCE.set(api.clone()).ok();
+    api
+}
+
+pub fn get_api() -> Result<std::sync::Arc<dyn BrokerApi>> {
+    API_INSTANCE
+        .get()
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("Broker API not initialized"))
 }
 
 #[cfg(test)]

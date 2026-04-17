@@ -245,6 +245,12 @@ pub struct LogUpload<'a> {
     pub log: &'a str,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RdpSignRequest<'a> {
+    pub rdp: &'a str,
+}
+
+
 // Test helper to get a sample Script
 #[cfg(test)]
 pub fn get_test_script() -> Script {

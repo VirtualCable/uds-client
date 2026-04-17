@@ -32,11 +32,12 @@
 use anyhow::Result;
 
 use boa_engine::{
-    Context, JsResult, JsValue,
+    Context, JsResult, JsString, JsValue,
     error::{JsError, JsNativeError},
     value::TryFromJs,
 };
 
+use connection::broker;
 use rdp::{geom::ScreenSize, settings};
 use shared::log;
 
@@ -154,14 +155,40 @@ fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
     Ok(JsValue::undefined())
 }
 
+async fn sign_rdp_fn(
+    _: &JsValue,
+    args: &[JsValue],
+    ctx: &std::cell::RefCell<&mut Context>,
+) -> JsResult<JsValue> {
+    let (rdp_string, ticket) = {
+        let mut ctx_borrow = ctx.borrow_mut();
+        extract_js_args!(args, &mut *ctx_borrow, String, String)
+    };
+    let api = broker::api::get_api().map_err(|e| {
+        JsError::from_native(
+            JsNativeError::error().with_message(format!("Failed to get broker API: {}", e)),
+        )
+    })?;
+    let signed_rdp = api
+        .request_rdp_sign(&ticket, &rdp_string)
+        .await
+        .map_err(|e| {
+            JsError::from_native(
+                JsNativeError::error().with_message(format!("Failed to sign RDP string: {}", e)),
+            )
+        })?;
+    Ok(JsValue::from(JsString::from(signed_rdp)))
+}
+
 pub(super) fn register(ctx: &mut Context) -> Result<()> {
+    // Disable format that would make this less readable
     register_js_module!(
         ctx,
         "RDP",
         // Sync functions
-        [("start", start_rdp_fn, 1)],
-        // Async functions, none here
-        [],
+        [("start", start_rdp_fn, 1),],
+        // Async functions
+        [("sign", sign_rdp_fn, 2),],
     );
     Ok(())
 }
@@ -268,7 +295,7 @@ mod tests {
                     assert_eq!(settings.password, "");
                     assert_eq!(settings.domain, "");
                     assert!(!settings.verify_cert);
-                    assert!(!settings.use_nla);
+                    assert!(settings.use_nla);
                     match settings.screen_size {
                         ScreenSize::Full => {}
                         _ => panic!("Expected full screen size, got {:?}", settings.screen_size),
