@@ -51,7 +51,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from uds import types
 
 if typing.TYPE_CHECKING:
-    from uds.core.api import RestApi
+    from .rest import RestApi
 
 try:
     import psutil
