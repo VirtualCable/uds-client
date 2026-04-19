@@ -1,5 +1,15 @@
 #!/bin/bash
 
+. /etc/lsb-release
+
+# If DISTRIB_RELEASE is 8 or later, set FREERDP to freerdp2, using bash operators
+if [[ "$(printf '%s\n' "$DISTRIB_RELEASE" "8" | sort -V | head -n1)" != "$DISTRIB_RELEASE" ]]; then
+  FREERDP=freerdp2
+else
+  FREERDP=freerdp
+fi
+
+
 function clearParams {
   mclient set $REGKEY/address ""
   mclient set $REGKEY/username ""
@@ -13,7 +23,7 @@ function clearParams {
 
 function getRegKey {
   # Get Template_UDS
-  for key in `mclient get root/ConnectionType/freerdp/connections | sed "s/dir //g"`; do
+  for key in `mclient get root/ConnectionType/${FREERDP}/connections | sed "s/dir //g"`; do
     val=`mclient get $key/label | sed "s/value //g"`
     if [ "$val" == "Template_UDS" ]; then
       REGKEY=$key
@@ -27,7 +37,7 @@ function createUDSConnectionTemplate {
 <Profile>
  <ProfileSettings>
   <Name>UDS Template Profile</Name>
-  <RegistryRoot>root/ConnectionType/freerdp/connections/{ff064bd9-047a-45ec-b70f-04ab218186ff}</RegistryRoot>
+  <RegistryRoot>root/ConnectionType/${FREERDP}/connections/{ff064bd9-047a-45ec-b70f-04ab218186ff}</RegistryRoot>
   <Target>
    <Hardware>t420</Hardware>
    <ImageId>T7X62022</ImageId>
