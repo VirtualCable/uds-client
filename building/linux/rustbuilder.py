@@ -9,15 +9,56 @@ import subprocess
 import pathlib
 import typing
 import argparse
+import shutil
 
 # === Type aliases ===
 PathLike = str | pathlib.Path
 
 
-def get_target_path(crate_path: PathLike, debug: bool) -> pathlib.Path:
+def get_target_path(target_root: PathLike, debug: bool) -> pathlib.Path:
     """Get the target path for the build output."""
+    target_root = pathlib.Path(target_root).resolve()
+    return target_root / ("debug" if debug else "release")
+
+
+def get_isolated_target_root(crate_path: PathLike, distro: str) -> pathlib.Path:
+    """Return the per-distro target directory used during Docker builds."""
     crate_path = pathlib.Path(crate_path).resolve()
-    return crate_path / "target" / ("debug" if debug else "release")
+    return crate_path / "target" / "rustbuilder" / distro
+
+
+def remove_target_root(target_root: pathlib.Path, image: str | None = None) -> None:
+    """Remove a target directory, falling back to Docker if permissions prevent local cleanup."""
+    if not target_root.exists():
+        return
+
+    try:
+        shutil.rmtree(target_root)
+        return
+    except PermissionError:
+        if image is None:
+            raise
+
+    subprocess.run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "-v",
+            f"{target_root.parent}:/cleanup",
+            image,
+            "sh",
+            "-c",
+            f"rm -rf /cleanup/{target_root.name}",
+        ],
+        check=True,
+    )
+
+
+def create_target_root(target_root: pathlib.Path, image: str) -> None:
+    """Create a clean target directory for an isolated build."""
+    remove_target_root(target_root, image)
+    target_root.mkdir(parents=True, exist_ok=True)
 
 
 def get_builders() -> list[str]:
@@ -29,6 +70,24 @@ def get_builders() -> list[str]:
 def build_for_distro(distro: str, crate_path: PathLike, debug: bool, extra_docker_cmd: str) -> None:
     """Build the crate for a specific distro using Docker."""
     crate_path = pathlib.Path(crate_path).resolve()
+    image_tag = f"rust-builder-udslauncher:{distro}"
+    target_root = get_isolated_target_root(crate_path, distro)
+
+    try:
+        create_target_root(target_root, image_tag)
+        exec_builder_for_distro(distro, crate_path, debug, extra_docker_cmd, target_root)
+    finally:
+        remove_target_root(target_root, image_tag)
+
+
+def exec_builder_for_distro(
+    distro: str,
+    crate_path: pathlib.Path,
+    debug: bool,
+    extra_docker_cmd: str,
+    target_root: pathlib.Path,
+) -> None:
+    """Execute the Docker-backed build and export artifacts for a distro."""
     build_dir = pathlib.Path("builders") / distro
     output_dir = build_dir / "output"
     image_tag = f"rust-builder-udslauncher:{distro}"
@@ -47,11 +106,8 @@ def build_for_distro(distro: str, crate_path: PathLike, debug: bool, extra_docke
         subprocess.run(["docker", "build", "-t", image_tag, str(build_dir)], check=True)
         stamp.touch()
 
-    # Clean before build, just in case there are leftovers
-    docker_run(crate_path, image_tag, ["cargo", "clean"])
-
     # Build
-    docker_run(crate_path, image_tag, ["cargo", "build"] + ["--release"] if not debug else [])
+    docker_run(crate_path, image_tag, (["cargo", "build", "--release"] if not debug else ["cargo", "build"]), target_root)
 
     # Extra command inside docker
     if extra_docker_cmd:
@@ -63,10 +119,11 @@ def build_for_distro(distro: str, crate_path: PathLike, debug: bool, extra_docke
                 "-c",
                 extra_docker_cmd.replace("[TARGET]", "/crate/target/" + ("debug" if debug else "release")),
             ],
+            target_root,
         )
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    release_dir = get_target_path(crate_path, debug)
+    release_dir = get_target_path(target_root, debug)
 
     # Copy binaries and .so files
     executables = [f for f in release_dir.iterdir() if f.is_file() and os.access(f, os.X_OK)]
@@ -114,9 +171,6 @@ def build_for_distro(distro: str, crate_path: PathLike, debug: bool, extra_docke
             raise RuntimeError(f"Target for symlink does not exist: {target_name}")
         link_name.symlink_to(target_name.name)
 
-    # Final clean
-    docker_run(crate_path, image_tag, ["cargo", "clean"])
-
 
 def docker_image_exists(image: str) -> bool:
     """Check if Docker image exists."""
@@ -126,22 +180,31 @@ def docker_image_exists(image: str) -> bool:
     return result.returncode == 0
 
 
-def docker_run(crate_path: pathlib.Path, image: str, command: list[str]) -> None:
+def docker_run(
+    crate_path: pathlib.Path, image: str, command: list[str], target_root: pathlib.Path | None = None
+) -> None:
     """Run a command inside Docker."""
     uid = os.getuid()
     gid = os.getgid()
 
+    docker_command = [
+        "docker",
+        "run",
+        "--rm",
+        "-e",
+        f"USER_ID={uid}",
+        "-e",
+        f"GROUP_ID={gid}",
+        "-v",
+        f"{crate_path}:/crate",
+    ]
+
+    if target_root is not None:
+        docker_command += ["-v", f"{target_root}:/crate/target"]
+
     subprocess.run(
-        [
-            "docker",
-            "run",
-            "--rm",
-            "-e",
-            f"USER_ID={uid}",
-            "-e",
-            f"GROUP_ID={gid}",
-            "-v",
-            f"{crate_path}:/crate",
+        docker_command
+        + [
             "-w",
             "/crate",
             image,
