@@ -106,8 +106,9 @@ def exec_builder_for_distro(
         subprocess.run(["docker", "build", "-t", image_tag, str(build_dir)], check=True)
         stamp.touch()
 
-    # Build
-    docker_run(crate_path, image_tag, (["cargo", "build", "--release"] if not debug else ["cargo", "build"]), target_root)
+    # Build (skip cargo build for nix-portable since Nix handles it)
+    if distro != "nix-portable":
+        docker_run(crate_path, image_tag, (["cargo", "build", "--release"] if not debug else ["cargo", "build"]), target_root)
 
     # Extra command inside docker
     if extra_docker_cmd:
@@ -195,9 +196,14 @@ def docker_run(
         f"USER_ID={uid}",
         "-e",
         f"GROUP_ID={gid}",
-        "-v",
-        f"{crate_path}:/crate",
     ]
+
+    # Add environment variables from os.environ for PNAME and VERSION if they exist
+    for key in ["PNAME", "VERSION", "TARGET_DIR"]:
+        if key in os.environ:
+            docker_command += ["-e", f"{key}={os.environ[key]}"]
+
+    docker_command += ["-v", f"{crate_path}:/crate"]
 
     if target_root is not None:
         docker_command += ["-v", f"{target_root}:/crate/target"]
@@ -250,10 +256,26 @@ def main() -> None:
         "for f in /usr/local/lib/*.so.*; do ln --force -s \"${f%%.*}.so\" \"$(basename $f)\"; done"
     )
 
+    NIX_SCRIPT: typing.Final[str] = (
+        "TARGET_DIR=[TARGET] /usr/local/bin/build-nix.sh"
+    )
+
     extra_docker_cmd: str = {
         "Debian12": SCRIPT,
         "openSUSE": SCRIPT.replace("/usr/local/lib", "/usr/local/lib64"),
+        "nix-portable": NIX_SCRIPT,
     }.get(distro, "")
+
+    # Set defaults for PNAME and VERSION if not present
+    if "PNAME" not in os.environ:
+        os.environ["PNAME"] = "udslauncher"
+    if "VERSION" not in os.environ:
+        # Try to read version from ../../../VERSION
+        version_file = crate_path.parent.parent / "VERSION"
+        if version_file.exists():
+            os.environ["VERSION"] = version_file.read_text().strip()
+        else:
+            os.environ["VERSION"] = "5.0.0"
 
     build_for_distro(distro, crate_path, debug, extra_docker_cmd)
     print("=== Build completed ===")

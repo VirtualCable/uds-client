@@ -1,7 +1,10 @@
 #!/bin/bash
 
 VERSION=$( [ -f ../../../VERSION ] && cat ../../../VERSION || echo "devel" )
+export VERSION
+
 RELEASE=1
+export PNAME=udslauncher
 
 UID_HOST=$(id -u)
 GID_HOST=$(id -g)
@@ -91,11 +94,23 @@ build_rpm_based() {
     rm -f "${outdir}"/udslauncher-*.rpm
     cp "${TOP}/rpm-${distro_lower}/RPMS/${ARCH}"/udslauncher-*.rpm "${outdir}"/ || return 1
 }
+build_nix_portable() {
+    local docker_image="rust-builder-udslauncher:nix-portable"
+    local outdir="${TOP}/../bin/nix-portable"
+
+    echo "=== Building udslauncher portable bundle using rustbuilder.py for nix-portable ==="
+    cd "${TOP}" || return 1
+    python3 rustbuilder.py "nix-portable" || return 1
+
+    mkdir -p "${outdir}"
+    rm -f "${outdir}"/udslauncher-portable
+    cp "${TOP}/builders/nix-portable/output/udslauncher-portable" "${outdir}/" || return 1
+}
 
 requested_targets=("$@")
 
 if [ ${#requested_targets[@]} -eq 0 ]; then
-    requested_targets=(Debian12 Debian13 Fedora openSUSE)
+    requested_targets=(Debian12 Debian13 Fedora openSUSE nix-portable)
 fi
 
 build_pids=()
@@ -139,8 +154,15 @@ for target in "${requested_targets[@]}"; do
             scheduled_targets+=("opensuse")
             recognized_targets=1
             ;;
+        nix-portable)
+            build_nix_portable &
+            build_pids+=("$!")
+            build_names+=("nix-portable")
+            scheduled_targets+=("nix-portable")
+            recognized_targets=1
+            ;;
         *)
-            echo "Unknown build target: ${target}. Supported values: debian12, debian13, fedora, opensuse." >&2
+            echo "Unknown build target: ${target}. Supported values: debian12, debian13, fedora, opensuse, nix-portable." >&2
             ;;
     esac
 done
