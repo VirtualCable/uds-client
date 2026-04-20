@@ -128,46 +128,6 @@ fn crypt_protect_data_fn(_: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> 
     }
 }
 
-pub(super) async fn sign_rdp(
-    rdp_text: &str,
-    server_url: &str,
-    ticket: &str,
-    verify_ssl: bool,
-) -> Result<String> {
-    let base = server_url.trim_end_matches('/');
-    let url = format!("{}/uds/rest/client/{}/rdp_signature", base, ticket);
-
-    let client = reqwest::ClientBuilder::new()
-        .use_rustls_tls()
-        .danger_accept_invalid_certs(!verify_ssl)
-        .build()
-        .context("Failed to build reqwest client for signRdp")?;
-
-    let body = serde_json::json!({ "rdp": rdp_text });
-    let response = client
-        .post(&url)
-        .json(&body)
-        .send()
-        .await
-        .with_context(|| format!("Failed POST to {}", url))?;
-
-    let json: serde_json::Value = response
-        .json()
-        .await
-        .context("Failed to parse signRdp response as JSON")?;
-
-    if let Some(err) = json.get("error") {
-        let msg = err.get("message").and_then(|m| m.as_str()).unwrap_or("unknown");
-        anyhow::bail!("signRdp broker error: {}", msg);
-    }
-
-    let result = json
-        .get("result")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| anyhow::anyhow!("signRdp response missing 'result'"))?;
-    Ok(result.to_string())
-}
-
 async fn test_server_fn(
     _: &JsValue,
     args: &[JsValue],
@@ -214,11 +174,7 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
             ("readHklm", read_hklm_fn, 2),
         ],
         // Async functions, test server can have some delay
-        [
-            ("testServer", test_server_fn, 3),
-            ("sleep", sleep_fn, 1),
-            ("signRdp", sign_rdp_fn, 4),
-        ],
+        [("testServer", test_server_fn, 3), ("sleep", sleep_fn, 1),],
     );
     Ok(())
 }
