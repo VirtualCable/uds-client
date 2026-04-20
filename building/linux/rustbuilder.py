@@ -91,17 +91,20 @@ def exec_builder_for_distro(
     build_dir = pathlib.Path("builders") / distro
     output_dir = build_dir / "output"
     image_tag = f"rust-builder-udslauncher:{distro}"
-    dockerfile = build_dir / "Dockerfile"
     stamp = build_dir / "build.stamp"
 
     print(f"=== [{distro}{' (debug)' if debug else ''}] ===")
 
     # Build Docker image if needed
-    if (
-        not docker_image_exists(image_tag)
-        or not stamp.exists()
-        or dockerfile.stat().st_mtime > stamp.stat().st_mtime
-    ):
+    needs_rebuild = not docker_image_exists(image_tag) or not stamp.exists()
+    if not needs_rebuild:
+        for item in build_dir.iterdir():
+            if item.is_file() and item.name != "build.stamp" and item.name != "output":
+                if item.stat().st_mtime > stamp.stat().st_mtime:
+                    needs_rebuild = True
+                    break
+
+    if needs_rebuild:
         print(f"→ Building image {image_tag}...")
         subprocess.run(["docker", "build", "-t", image_tag, str(build_dir)], check=True)
         stamp.touch()
@@ -199,7 +202,7 @@ def docker_run(
     ]
 
     # Add environment variables from os.environ for PNAME and VERSION if they exist
-    for key in ["PNAME", "VERSION", "TARGET_DIR"]:
+    for key in ["PNAME", "VERSION", "TARGET_DIR", "NP_GIT"]:
         if key in os.environ:
             docker_command += ["-e", f"{key}={os.environ[key]}"]
 
@@ -269,6 +272,8 @@ def main() -> None:
     # Set defaults for PNAME and VERSION if not present
     if "PNAME" not in os.environ:
         os.environ["PNAME"] = "udslauncher"
+    if "NP_GIT" not in os.environ:
+        os.environ["NP_GIT"] = "/usr/bin/git"
     if "VERSION" not in os.environ:
         # Try to read version from ../../../VERSION
         version_file = crate_path.parent.parent / "VERSION"

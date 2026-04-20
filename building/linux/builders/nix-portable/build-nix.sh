@@ -9,7 +9,7 @@ TARGET_DIR=${TARGET_DIR:-/crate/target/release}
 echo "Building Nix-Portable for $PNAME version $VERSION"
 
 # Use a temporary default.nix to avoid modifying the original template
-TEMP_NIX=$(mktemp)
+TEMP_NIX=$(mktemp -p /crate default.nix.XXXXXX)
 cp /crate/building/linux/builders/nix-portable/default.nix "$TEMP_NIX"
 
 sed -i "s/%%PNAME%%/$PNAME/g" "$TEMP_NIX"

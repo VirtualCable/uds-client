@@ -34,7 +34,7 @@ pkgs.rustPlatform.buildRustPackage {
     pango
     glib
     cairo
-    freerdp3
+    freerdp
     alsa-lib
     libpulseaudio
     libclang

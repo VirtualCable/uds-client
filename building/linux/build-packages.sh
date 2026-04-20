@@ -110,7 +110,7 @@ build_nix_portable() {
 requested_targets=("$@")
 
 if [ ${#requested_targets[@]} -eq 0 ]; then
-    requested_targets=(Debian12 Debian13 Fedora openSUSE nix-portable)
+    requested_targets=(Debian12 Debian13 Fedora openSUSE)  # nix-portable to be added later
 fi
 
 build_pids=()

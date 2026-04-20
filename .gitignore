@@ -10,3 +10,4 @@ target/
 .vs
 *~
 /local_dlls
+/default.nix.*
