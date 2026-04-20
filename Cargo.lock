@@ -3139,7 +3139,6 @@ dependencies = [
  "rand 0.10.1",
  "rdp",
  "regex",
- "reqwest",
  "serde",
  "serde_json",
  "serial_test",

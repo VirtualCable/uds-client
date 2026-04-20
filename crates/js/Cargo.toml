@@ -24,8 +24,6 @@ futures.workspace = true
 async-trait.workspace = true
 regex.workspace = true
 
-reqwest.workspace = true
-
 anyhow.workspace = true
 rand.workspace = true
 
