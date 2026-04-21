@@ -53,7 +53,3 @@ appimage-builder --recipe "$RECIPE" --skip-test
 # Cleanup temporary build files
 echo "Cleaning up..."
 rm -rf AppDir appimage-build
-
-# Move result to output
-mkdir -p /crate/building/linux/builders/AppImage/output
-mv *.AppImage /crate/building/linux/builders/AppImage/output/

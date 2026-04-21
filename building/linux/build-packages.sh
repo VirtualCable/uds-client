@@ -118,7 +118,7 @@ build_appimage() {
 
     mkdir -p "${outdir}"
     rm -f "${outdir}"/udslauncher-*.AppImage
-    cp "${TOP}/builders/AppImage/output/udslauncher.AppImage" "${outdir}/udslauncher-${VERSION}-${ARCH}.AppImage" || return 1
+    cp "${TOP}/builders/AppImage/output"/udslauncher-*.AppImage "${outdir}/" || return 1
 }
 
 requested_targets=("$@")

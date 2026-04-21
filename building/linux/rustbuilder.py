@@ -10,6 +10,7 @@ import pathlib
 import typing
 import argparse
 import shutil
+import collections.abc
 
 # === Type aliases ===
 PathLike = str | pathlib.Path
@@ -116,11 +117,67 @@ def exec_builder_for_distro(
         subprocess.run(["docker", "build", "-t", image_tag, str(build_dir)], check=True)
         stamp.touch()
 
-    # Build
+    # Artifact handlers
+    def handle_standard_artifacts() -> None:
+        release_dir = get_target_path(target_root, debug)
+        executables = [f for f in release_dir.iterdir() if f.is_file() and os.access(f, os.X_OK)]
+        so_files = [f for f in release_dir.iterdir() if f.suffix == ".so"]
+        symlinks = [f for f in release_dir.iterdir() if f.is_symlink() and '.so' in f.suffixes]
+
+        if not executables:
+            raise RuntimeError(f"No executables found in {release_dir}")
+
+        def copy(src: PathLike, dest: PathLike) -> None:
+            src = pathlib.Path(src).resolve()
+            dest = pathlib.Path(dest).resolve()
+            print(f"→ Copying {src} to {dest}")
+            dest.write_bytes(src.read_bytes())
+
+        # Copy executables
+        for exe in executables:
+            copy(exe, output_dir / exe.name)
+            if not debug:
+                subprocess.run(["strip", output_dir / exe.name], check=True)
+            os.chmod(output_dir / exe.name, 0o755)
+
+        # Copy .so files
+        for so in so_files:
+            copy(so, output_dir / so.name)
+            subprocess.run(["strip", output_dir / so.name], check=True)
+
+        # Create symlinks
+        for symlink in symlinks:
+            target = symlink.resolve()
+            link_name = output_dir / symlink.name
+            target_name = output_dir / target.name
+            print(f"→ Creating symlink {link_name} -> {target_name}")
+            if not target_name.exists():
+                raise RuntimeError(f"Target for symlink does not exist: {target_name}")
+            link_name.symlink_to(target_name.name)
+
+    def handle_appimage_artifacts() -> None:
+        # AppImage is generated in the crate_path (root of project)
+        print("→ Moving AppImage artifacts to output directory")
+        for item in crate_path.iterdir():
+            if item.is_file():
+                if item.name.endswith(".AppImage"):
+                    # Move to output_dir
+                    dest = output_dir / item.name
+                    print(f"  Moving {item.name} to {dest}")
+                    shutil.move(str(item), str(dest))
+                elif item.name.endswith(".zsync"):
+                    # Clean up unwanted zsync files
+                    print(f"  Removing unwanted {item.name}")
+                    item.unlink()
+
+    # Clean output directory BEFORE build to avoid permission issues and ensure fresh results
+    remove_target_root(output_dir, image_tag)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Execute build steps
     build_cmd = ["cargo", "build", "--release"] if not debug else ["cargo", "build"]
     docker_run(crate_path, image_tag, build_cmd, target_root)
 
-    # Extra command inside docker
     if extra_docker_cmd:
         docker_run(
             crate_path,
@@ -133,51 +190,11 @@ def exec_builder_for_distro(
             target_root,
         )
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    release_dir = get_target_path(target_root, debug)
-
-    # Copy binaries and .so files
-    executables = [f for f in release_dir.iterdir() if f.is_file() and os.access(f, os.X_OK)]
-    so_files = [f for f in release_dir.iterdir() if f.suffix == ".so"]
-    symlinks = [f for f in release_dir.iterdir() if f.is_symlink() and '.so' in f.suffixes]
-
-    if not executables:
-        raise RuntimeError("No executables found in target/release")
-
-    def copy(src: PathLike, dest: PathLike) -> None:
-        src = pathlib.Path(src).resolve()
-        dest = pathlib.Path(dest).resolve()
-        print(f"→ Copying {src} to {dest}")
-        dest.write_bytes(src.read_bytes())
-
-    # Clean output directory
-    remove_target_root(output_dir, image_tag)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Copy executables
-    for exe in executables:
-        copy(exe, output_dir / exe.name)
-        # Strip binaries to reduce size (with local stripping tool)
-        if not debug:
-            subprocess.run(["strip", output_dir / exe.name], check=True)
-        # Also, ensure executable permissions
-        os.chmod(output_dir / exe.name, 0o755)
-
-    # Copy .so files
-    for so in so_files:
-        copy(so, output_dir / so.name)
-        # Strip .so files to reduce size
-        subprocess.run(["strip", output_dir / so.name], check=True)
-
-    # create symlinks for .so.X.Y files on
-    for symlink in symlinks:
-        target = symlink.resolve()
-        link_name = output_dir / symlink.name
-        target_name = output_dir / target.name
-        print(f"→ Creating symlink {link_name} -> {target_name}")
-        if not target_name.exists():
-            raise RuntimeError(f"Target for symlink does not exist: {target_name}")
-        link_name.symlink_to(target_name.name)
+    # Dispatch artifact handling
+    handlers: typing.Final[dict[str, collections.abc.Callable[[], None]]] = {
+        "AppImage": handle_appimage_artifacts,
+    }
+    handlers.get(distro, handle_standard_artifacts)()
 
 
 def docker_image_exists(image: str) -> bool:
@@ -265,7 +282,6 @@ def main() -> None:
 
     extra_docker_cmd: str = {
         "Debian12": SCRIPT,
-        "Debian13": SCRIPT,
         "AppImage": "/usr/local/bin/build-appimage.sh",
         "openSUSE": SCRIPT.replace("/usr/local/lib", "/usr/local/lib64"),
     }.get(distro, "")

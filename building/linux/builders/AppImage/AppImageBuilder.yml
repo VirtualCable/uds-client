@@ -45,5 +45,4 @@ AppDir:
       - usr/share/info
 
 AppImage:
-  update-information: None
   arch: "{{APPIMAGE_ARCH}}"
