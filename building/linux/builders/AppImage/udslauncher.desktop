@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=UDS Launcher
+Exec=udslauncher
+Icon=udslauncher
+Comment=UDS Launcher for Linux
+Categories=Network;RemoteAccess;

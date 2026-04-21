@@ -1,0 +1,49 @@
+version: 1
+AppDir:
+  path: /crate/AppDir
+  app_info:
+    id: org.opencannula.udslauncher
+    name: udslauncher
+    icon: udslauncher
+    version: "{{VERSION}}"
+    exec: usr/bin/udslauncher
+  apt:
+    arch: "{{APT_ARCH}}"
+    sources:
+      - sourceline: 'deb [arch={{APT_ARCH}}] http://ftp.nl.debian.org/debian/ trixie main contrib non-free'
+        key_url: 'https://ftp-master.debian.org/keys/archive-key-13.asc'
+    include:
+      - libssl3
+      - libgl1
+      - libglu1-mesa
+      - libxft2
+      - libxext6
+      - libxinerama1
+      - libxcursor1
+      - libxfixes3
+      - libpango-1.0-0
+      - libglib2.0-0
+      - libgio-2.0-0
+      - libcairo2
+      - libfreerdp3-3
+      - libwinpr3-3
+      - libfreerdp-client3-3
+      - libxss1
+    exclude: []
+  after_runtime: |
+    set -eu
+    usr_bin="${TARGET_APPDIR}/usr/bin"
+    # create symlink for xfreerdp
+    if [ ! -e "${usr_bin}/xfreerdp" ] && [ -e "${usr_bin}/xfreerdp3" ]; then
+      ln -s "xfreerdp3" "${usr_bin}/xfreerdp"
+    fi
+
+  files:
+    exclude:
+      - usr/share/man
+      - usr/share/doc
+      - usr/share/info
+
+AppImage:
+  update-information: None
+  arch: "{{APPIMAGE_ARCH}}"

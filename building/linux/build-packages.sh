@@ -15,6 +15,21 @@ TOP=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # Resolve $TOP/../..
 CRATE_ROOT=$(realpath "${TOP}/../..")
 
+usage() {
+    echo "Usage: $0 [all|debian12|debian13|fedora|opensuse|appimage]"
+    echo "  all: Build for all supported distributions (default)"
+    echo "  debian12: Build for Debian 12"
+    echo "  debian13: Build for Debian 13"
+    echo "  fedora: Build for Fedora"
+    echo "  opensuse: Build for openSUSE"
+    echo "  appimage: Build portable AppImage"
+    exit 1
+}
+
+if [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+    usage
+fi
+
 build_debian_based() {
     local debian_version="$1"
     local docker_image="rust-builder-udslauncher:Debian${debian_version}"
@@ -94,23 +109,26 @@ build_rpm_based() {
     rm -f "${outdir}"/udslauncher-*.rpm
     cp "${TOP}/rpm-${distro_lower}/RPMS/${ARCH}"/udslauncher-*.rpm "${outdir}"/ || return 1
 }
-build_nix_portable() {
-    local docker_image="rust-builder-udslauncher:nix-portable"
-    local outdir="${TOP}/../bin/nix-portable"
+build_appimage() {
+    local outdir="${TOP}/../bin/appimage"
 
-    echo "=== Building udslauncher portable bundle using rustbuilder.py for nix-portable ==="
+    echo "=== Building udslauncher AppImage using rustbuilder.py ==="
     cd "${TOP}" || return 1
-    python3 rustbuilder.py "nix-portable" || return 1
+    python3 rustbuilder.py "AppImage" || return 1
 
     mkdir -p "${outdir}"
-    rm -f "${outdir}"/udslauncher-portable
-    cp "${TOP}/builders/nix-portable/output/udslauncher-portable" "${outdir}/" || return 1
+    rm -f "${outdir}"/udslauncher-*.AppImage
+    cp "${TOP}/builders/AppImage/output/udslauncher.AppImage" "${outdir}/udslauncher-${VERSION}-${ARCH}.AppImage" || return 1
 }
 
 requested_targets=("$@")
 
 if [ ${#requested_targets[@]} -eq 0 ]; then
-    requested_targets=(Debian12 Debian13 Fedora openSUSE)  # nix-portable to be added later
+    requested_targets=("debian12" "debian13" "fedora" "opensuse" "appimage")
+fi
+
+if [ "$1" == "all" ]; then
+    requested_targets=("debian12" "debian13" "fedora" "opensuse" "appimage")
 fi
 
 build_pids=()
@@ -154,15 +172,15 @@ for target in "${requested_targets[@]}"; do
             scheduled_targets+=("opensuse")
             recognized_targets=1
             ;;
-        nix-portable)
-            build_nix_portable &
+        appimage)
+            build_appimage &
             build_pids+=("$!")
-            build_names+=("nix-portable")
-            scheduled_targets+=("nix-portable")
+            build_names+=("AppImage")
+            scheduled_targets+=("appimage")
             recognized_targets=1
             ;;
         *)
-            echo "Unknown build target: ${target}. Supported values: debian12, debian13, fedora, opensuse, nix-portable." >&2
+            echo "Unknown build target: ${target}. Supported values: debian12, debian13, fedora, opensuse, appimage." >&2
             ;;
     esac
 done

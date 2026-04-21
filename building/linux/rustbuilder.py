@@ -36,22 +36,24 @@ def remove_target_root(target_root: pathlib.Path, image: str | None = None) -> N
         shutil.rmtree(target_root)
         return
     except PermissionError:
-        if image is None:
+        if image is None or not docker_image_exists(image):
             raise
 
+    # This is due to permissions from the user. Use absolute path for Docker volume mount.
+    abs_parent = target_root.parent.resolve()
     subprocess.run(
         [
             "docker",
             "run",
             "--rm",
             "-v",
-            f"{target_root.parent}:/cleanup",
+            f"{abs_parent}:/cleanup",
             image,
             "sh",
             "-c",
             f"rm -rf /cleanup/{target_root.name}",
         ],
-        check=True,
+        check=False,
     )
 
 
@@ -96,7 +98,12 @@ def exec_builder_for_distro(
     print(f"=== [{distro}{' (debug)' if debug else ''}] ===")
 
     # Build Docker image if needed
-    needs_rebuild = not docker_image_exists(image_tag) or not stamp.exists()
+    dockerfile = build_dir / "Dockerfile"
+    needs_rebuild = (
+        not docker_image_exists(image_tag)
+        or not stamp.exists()
+        or (dockerfile.exists() and dockerfile.stat().st_mtime > stamp.stat().st_mtime)
+    )
     if not needs_rebuild:
         for item in build_dir.iterdir():
             if item.is_file() and item.name != "build.stamp" and item.name != "output":
@@ -109,9 +116,9 @@ def exec_builder_for_distro(
         subprocess.run(["docker", "build", "-t", image_tag, str(build_dir)], check=True)
         stamp.touch()
 
-    # Build (skip cargo build for nix-portable since Nix handles it)
-    if distro != "nix-portable":
-        docker_run(crate_path, image_tag, (["cargo", "build", "--release"] if not debug else ["cargo", "build"]), target_root)
+    # Build
+    build_cmd = ["cargo", "build", "--release"] if not debug else ["cargo", "build"]
+    docker_run(crate_path, image_tag, build_cmd, target_root)
 
     # Extra command inside docker
     if extra_docker_cmd:
@@ -144,11 +151,8 @@ def exec_builder_for_distro(
         dest.write_bytes(src.read_bytes())
 
     # Clean output directory
-    for item in output_dir.iterdir():
-        if item.is_file() or item.is_symlink():
-            item.unlink()
-        elif item.is_dir():
-            subprocess.run(["rm", "-rf", str(item)], check=True)
+    remove_target_root(output_dir, image_tag)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # Copy executables
     for exe in executables:
@@ -259,28 +263,12 @@ def main() -> None:
         "for f in /usr/local/lib/*.so.*; do ln --force -s \"${f%%.*}.so\" \"$(basename $f)\"; done"
     )
 
-    NIX_SCRIPT: typing.Final[str] = (
-        "TARGET_DIR=[TARGET] /usr/local/bin/build-nix.sh"
-    )
-
     extra_docker_cmd: str = {
         "Debian12": SCRIPT,
+        "Debian13": SCRIPT,
+        "AppImage": "/usr/local/bin/build-appimage.sh",
         "openSUSE": SCRIPT.replace("/usr/local/lib", "/usr/local/lib64"),
-        "nix-portable": NIX_SCRIPT,
     }.get(distro, "")
-
-    # Set defaults for PNAME and VERSION if not present
-    if "PNAME" not in os.environ:
-        os.environ["PNAME"] = "udslauncher"
-    if "NP_GIT" not in os.environ:
-        os.environ["NP_GIT"] = "/usr/bin/git"
-    if "VERSION" not in os.environ:
-        # Try to read version from ../../../VERSION
-        version_file = crate_path.parent.parent / "VERSION"
-        if version_file.exists():
-            os.environ["VERSION"] = version_file.read_text().strip()
-        else:
-            os.environ["VERSION"] = "5.0.0"
 
     build_for_distro(distro, crate_path, debug, extra_docker_cmd)
     print("=== Build completed ===")

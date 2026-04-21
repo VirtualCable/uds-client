@@ -8,7 +8,18 @@ fsunlock
 cp UDSClient /bin/udsclient
 chmod 755 /bin/udsclient
 # RDP Script for UDSClient. Launchs udsclient using the "Template_UDS" profile
-cp udsrdp /usr/bin
+
+# Get the distribution release number
+. /etc/lsb-release
+
+# If DISTRIB_RELEASE is 8 or later, use udsrdp, else uds udsrpdp-compat
+if [[ "$(printf '%s\n' "$DISTRIB_RELEASE" "8" | sort -V | head -n1)" != "$DISTRIB_RELEASE" ]]; then
+    cp udsrdp /usr/bin
+    chmod 755 /usr/bin/udsrdp
+else
+    cp udsrdp-compat /usr/bin/udsrdp
+    chmod 755 /usr/bin/udsrdp
+fi
 
 INSTALLED=0
 # Installation for 7.1.x version
