@@ -1,49 +1,26 @@
 #!/bin/sh
 
-# Common part
+echo "Installing UDSClient and UDSRDP"
 
 # unlocks so we can write on TC
 fsunlock
+
 
 cp UDSClient /bin/udsclient
 chmod 755 /bin/udsclient
 # RDP Script for UDSClient. Launchs udsclient using the "Template_UDS" profile
 
-# Get the distribution release number
-. /etc/lsb-release
+cp udsrdp /usr/bin
+chmod 755 /usr/bin/udsrdp
 
-# If DISTRIB_RELEASE is 8 or later, use udsrdp, else uds udsrpdp-compat
-if [[ "$(printf '%s\n' "$DISTRIB_RELEASE" "8" | sort -V | head -n1)" != "$DISTRIB_RELEASE" ]]; then
-    cp udsrdp /usr/bin
-    chmod 755 /usr/bin/udsrdp
-else
-    cp udsrdp-compat /usr/bin/udsrdp
-    chmod 755 /usr/bin/udsrdp
-fi
-
-INSTALLED=0
-# Installation for 7.1.x version
-grep -q "7.1" /etc/issue
-if [ $? -eq 0 ]; then
-    echo "Installing for thinpro version 7.1"
-    # Allow UDS apps without asking
-    cp firefox7.1/syspref.js /etc/firefox
-    # Copy handlers.json for firefox
-    mkdir -p /lib/UDSClient/firefox/ > /dev/null 2>&1
-    cp firefox7.1/handlers.json /lib/UDSClient/firefox/
-    # and runner
-    cp firefox7.1/45-uds /etc/hptc-firefox-mgr/prestart
-else
-    echo "Installing for thinpro version 7.2 or later"
-    # Copy handlers for firefox
-    mkdir -p /lib/UDSClient/firefox/ > /dev/null 2>&1
-    # Copy handlers.json for firefox
-    cp firefox/handlers.json /lib/UDSClient/firefox/
-    cp firefox/45-uds /etc/hptc-firefox-mgr/prestart
-    # copy uds handler for firefox
-    cp firefox/uds /usr/share/hptc-firefox-mgr/handlers/uds
-    chmod 755 /usr/share/hptc-firefox-mgr/handlers/uds
-fi
+# Copy handlers for firefox
+mkdir -p /lib/UDSClient/firefox/ > /dev/null 2>&1
+# Copy handlers.json for firefox
+cp firefox/handlers.json /lib/UDSClient/firefox/
+cp firefox/45-uds /etc/hptc-firefox-mgr/prestart
+# copy uds handler for firefox
+cp firefox/uds /usr/share/hptc-firefox-mgr/handlers/uds
+chmod 755 /usr/share/hptc-firefox-mgr/handlers/uds
 
 # Common part
 fslock
