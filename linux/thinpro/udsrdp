@@ -1,9 +1,6 @@
 #!/bin/bash
 
-. /etc/lsb-release
-
 FREERDP=freerdp2
-
 
 function clearParams {
     mclient set $REGKEY/address ""
