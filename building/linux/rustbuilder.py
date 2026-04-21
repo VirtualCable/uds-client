@@ -156,9 +156,9 @@ def exec_builder_for_distro(
             link_name.symlink_to(target_name.name)
 
     def handle_appimage_artifacts() -> None:
-        # AppImage is generated in the crate_path (root of project)
-        print("→ Moving AppImage artifacts to output directory")
-        for item in crate_path.iterdir():
+        # AppImage is generated in the target_root (target/AppImage)
+        print(f"→ Moving AppImage artifacts from {target_root} to output directory")
+        for item in target_root.iterdir():
             if item.is_file():
                 if item.name.endswith(".AppImage"):
                     # Move to output_dir

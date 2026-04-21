@@ -38,6 +38,28 @@ AppDir:
       ln -s "xfreerdp3" "${usr_bin}/xfreerdp"
     fi
 
+    # Fix glibc loader paths in compat runtime
+    compat="${TARGET_APPDIR}/runtime/compat"
+    if [ -d "${compat}" ]; then
+      cd "${compat}"
+      if [ ! -e "lib64" ] && [ -d "usr/lib64" ]; then
+        ln -s "usr/lib64" "lib64"
+      fi
+      if [ ! -e "lib" ] && [ -d "usr/lib" ]; then
+        ln -s "usr/lib" "lib"
+      fi
+      # For aarch64 / multiarch
+      for arch_dir in usr/lib/*-linux-gnu; do
+        if [ -d "$arch_dir" ]; then
+          arch_name=$(basename "$arch_dir")
+          mkdir -p "lib"
+          if [ ! -e "lib/$arch_name" ]; then
+            ln -s "../$arch_dir" "lib/$arch_name"
+          fi
+        fi
+      done
+    fi
+
   files:
     exclude:
       - usr/share/man

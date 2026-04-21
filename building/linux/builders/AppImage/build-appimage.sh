@@ -18,14 +18,17 @@ echo "Building AppImage for $ARCH ($APT_ARCH)..."
 export APPIMAGE_ARCH
 export APT_ARCH
 
-# Ensure we are in the crate root
-cd /crate
-echo "Current directory: $(pwd)"
-ls -la # Debug: show contents of /crate
+# Use /crate/target as working directory.
+# Note: rustbuilder.py mounts [host-target/rustbuilder/AppImage] to [/crate/target]
+BUILD_DIR="/crate/target"
+mkdir -p "$BUILD_DIR"
+cd "$BUILD_DIR"
+
+echo "Working directory: $(pwd)"
 
 # Use a temporary recipe to avoid modifying the original
-RECIPE="/tmp/AppImageBuilder.yml"
-cp building/linux/builders/AppImage/AppImageBuilder.yml "$RECIPE"
+RECIPE="$BUILD_DIR/AppImageBuilder.yml"
+cp /crate/building/linux/builders/AppImage/AppImageBuilder.yml "$RECIPE"
 
 # Replace placeholders in the recipe
 export VERSION=${VERSION:-"5.0.0"}
@@ -39,8 +42,8 @@ mkdir -p AppDir/usr/bin
 mkdir -p AppDir/usr/lib
 mkdir -p AppDir/usr/share/icons/hicolor/scalable/apps
 
-# Copy binary
-cp target/release/launcher AppDir/usr/bin/udslauncher
+# Copy binary from the previously built target release
+cp /crate/target/release/launcher AppDir/usr/bin/udslauncher
 
 # Copy desktop file and icon
 cp /crate/building/linux/builders/AppImage/udslauncher.desktop AppDir/
@@ -50,6 +53,4 @@ cp /crate/assets/img/uds.png AppDir/usr/share/icons/hicolor/scalable/apps/udslau
 # Run appimage-builder
 appimage-builder --recipe "$RECIPE" --skip-test
 
-# Cleanup temporary build files
-echo "Cleaning up..."
-rm -rf AppDir appimage-build
+# Cleanup is NOT needed inside here anymore as it is in target/ and we want the results
