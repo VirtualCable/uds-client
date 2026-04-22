@@ -2,7 +2,7 @@ version: 1
 AppDir:
   path: /crate/AppDir
   app_info:
-    id: org.opencannula.udslauncher
+    id: org.openuds.udslauncher
     name: udslauncher
     icon: udslauncher
     version: "{{VERSION}}"
@@ -14,21 +14,11 @@ AppDir:
         key_url: 'https://ftp-master.debian.org/keys/archive-key-13.asc'
     include:
       - libssl3
-      - libgl1
-      - libglu1-mesa
-      - libxft2
-      - libxext6
-      - libxinerama1
-      - libxcursor1
-      - libxfixes3
-      - libpango-1.0-0
-      - libglib2.0-0
-      - libgio-2.0-0
-      - libcairo2
+      - freerdp3-x11
+      - freerdp3-wayland
       - libfreerdp3-3
       - libwinpr3-3
       - libfreerdp-client3-3
-      - libxss1
     exclude: []
   after_runtime: |
     set -eu
