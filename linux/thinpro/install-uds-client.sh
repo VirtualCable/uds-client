@@ -5,13 +5,25 @@ echo "Installing UDSClient and UDSRDP"
 # unlocks so we can write on TC
 fsunlock
 
+# TC hast /bin as a symlink to /usr/bin, so we can copy the client there
 
-cp UDSClient /bin/udsclient
-chmod 755 /bin/udsclient
+cp UDSClient /usr/bin/udsclient
+chmod 755 /usr/bin/udsclient
 # RDP Script for UDSClient. Launchs udsclient using the "Template_UDS" profile
 
 cp udsrdp /usr/bin
 chmod 755 /usr/bin/udsrdp
+
+# Crate if not exists and copy template for UDS connections
+if [ ! -d /usr/share/uds ]; then
+    mkdir /usr/share/uds
+fi
+
+cp Template_UDS.xml /usr/share/uds/Template_UDS.xml
+chmod 644 /usr/share/uds/Template_UDS.xml
+
+mclient import /usr/share/uds/Template_UDS.xml
+mclient commit
 
 # Copy handlers for firefox
 mkdir -p /lib/UDSClient/firefox/ > /dev/null 2>&1
