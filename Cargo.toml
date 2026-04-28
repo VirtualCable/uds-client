@@ -28,22 +28,22 @@ license = "BSD-3-Clause"
 anyhow = "1.0"
 thiserror = "2.0"
 zeroize = { version = "1.8", features = ["derive"] }
-chrono = { version = "0.4.42" }
+chrono = { version = "0.4" }
 directories-next = "2.0"
-hostname = "0.4.2"
+hostname = "0.4"
 is_executable = "1.0"
-num_enum = "0.7.6"
+num_enum = "0.7"
 
 # randomness
-rand = "0.10.1"
+rand = "0.10"
 
 # Concurrency channels and utilities
-flume = { version = "0.12.0", features = ["async"] }
+flume = { version = "0.12", features = ["async"] }
 
 
 # SSL/TLS
-rustls = "0.23.36"
-rustls-native-certs = "0.8.3"
+rustls = "0.23"
+rustls-native-certs = "0.8"
 
 # async & async TLS
 tokio-rustls = "0.26.4"
@@ -57,18 +57,18 @@ tokio = { version = "1.50", features = [
     "process",
 ] }
 
-futures = "0.3.31"
-async-trait = "0.1.89"
+futures = "0.3"
+async-trait = "0.1"
 
 # HTTP client
-reqwest = { version = "0.13.1", features = ["json", "rustls", "system-proxy"] }
+reqwest = { version = "0.13", features = ["json", "rustls", "system-proxy"] }
 
 # Json handling
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 # Clipboard handling
-clipboard-rs = "0.3.1"
+clipboard-rs = "0.3"
 
 # Encoding/Decoding
 base64 = "0.22.1"
@@ -76,7 +76,7 @@ bzip2 = "0.6.1"
 
 # i18n
 gettext = "0.4.0"
-rust-embed = "8.9.0"
+rust-embed = "8.11"
 sys-locale = "0.3.2"
 
 # Graphics/UI
@@ -95,40 +95,40 @@ libcrux-ml-dsa = "0.0.8"
 libcrux-ml-kem = "0.0.8"
 
 # key derivation
-hkdf = "0.12"
-sha2 = "0.10"
-aes-gcm = "0.10.3"
+hkdf = "0.13"
+sha2 = "0.11"
+aes-gcm = "0.10"
 
 # regex
 regex = "1.12"
 
 # JavaScript engine
-boa_engine = { version = "0.21.0" }
+boa_engine = { version = "0.21" }
 
 # Logging
-tracing = "0.1.44"
-tracing-subscriber = { version = "0.3.22", features = [
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = [
     "env-filter",
     "local-time",
 ] }
-tracing-log = "0.2.0"
+tracing-log = "0.2"
 
 # Testing
-rcgen = "0.14.7"
+rcgen = "0.14"
 serial_test = "3.3"
 mockito = "1.7"
 
 # Building
 bindgen = "0.72"
 cc = "1.2"
-winres = "0.1.12"
-glob = "0.3.3"
+winres = "0.1"
+glob = "0.3"
 
 # Linux/macos
-libc = "0.2.183"
+libc = "0.2"
 
 # Windows
-windows = { version = "0.62.2", features = [
+windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_System_Registry",
     "Win32_Security_Cryptography",
@@ -141,6 +141,6 @@ windows = { version = "0.62.2", features = [
 widestring = { version = "1.2" }
 
 # MacOS
-objc2 = "0.6.4"
-objc2-foundation = "0.3.2"
-objc2-app-kit = "0.3.2"
+objc2 = "0.6"
+objc2-foundation = "0.3"
+objc2-app-kit = "0.3"
