@@ -557,15 +557,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "audio"
-version = "5.0.0"
-dependencies = [
- "cpal",
- "flume",
- "shared",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3559,6 +3550,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "multimedia"
+version = "5.0.0"
+dependencies = [
+ "cpal",
+ "flume",
+ "shared",
+]
+
+[[package]]
 name = "naga"
 version = "29.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4906,11 +4906,11 @@ name = "rdp"
 version = "5.0.0"
 dependencies = [
  "anyhow",
- "audio",
  "clipboard-rs",
  "flume",
  "freerdp-sys",
  "glob",
+ "multimedia",
  "shared",
  "windows 0.62.2",
  "zeroize",

@@ -8,7 +8,7 @@ license.workspace = true
 [dependencies]
 freerdp-sys = { path = "../freerdp-sys" }
 shared = { path = "../../shared" }
-audio = { path = "../../audio" }
+multimedia = { path = "../../multimedia" }
 
 anyhow.workspace = true
 

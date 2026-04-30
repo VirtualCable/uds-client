@@ -36,7 +36,7 @@ use freerdp_sys::{
 };
 
 use crate::context::OwnerFromCtx;
-use audio::{AudioCommand, AudioHandle};
+use multimedia::audio::{AudioCommand, AudioHandle};
 use shared::log;
 
 #[repr(C)]

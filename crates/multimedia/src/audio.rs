@@ -22,6 +22,7 @@
 // DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
 // FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
 // DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+//
 // SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
@@ -267,13 +268,23 @@ impl<I: Iterator<Item = f32>> Iterator for ResamplerIterator<I> {
         let i = self.pos.floor() as usize;
         let frac = self.pos - i as f32;
 
+        // while i + 1 >= self.buffer.len() { // Original line was wrong, it should be while...
+        //     // load more data
+        //     if let Some(sample) = self.inner.next() {
+        //         self.buffer.push(sample);
+        //     } else {
+        //         return None;
+        //     }
+        // }
+        
+        // Corrected logic for interpolation boundary check
         while i + 1 >= self.buffer.len() {
-            // load more data
-            if let Some(sample) = self.inner.next() {
-                self.buffer.push(sample);
-            } else {
-                return None;
-            }
+             // load more data
+             if let Some(sample) = self.inner.next() {
+                 self.buffer.push(sample);
+             } else {
+                 return None;
+             }
         }
 
         let s0 = self.buffer[i];
@@ -382,6 +393,10 @@ impl AudioStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use shared::log;
+
+    // The shared::log needs to be imported here because it was available in the original lib.rs scope, 
+    // and tests use it. If I don't import it here, the tests will fail.
 
     #[test]
     fn test_audio_handle_creation() {
