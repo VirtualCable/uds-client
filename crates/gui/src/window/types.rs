@@ -51,7 +51,7 @@ pub enum GuiMessage {
     ShowYesNo(String, Arc<RwLock<Option<oneshot::Sender<bool>>>>), // Yes/No dialog
     // Progress
     ShowProgress,
-    Progress(f32, String), // progress percentage (0.0-100.0), message
+    Progress(u8, String), // progress percentage (0-100), message
     ConnectRdp(rdp::settings::RdpSettings), // Connect RDP with given settings
 }
 

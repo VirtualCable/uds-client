@@ -90,7 +90,7 @@ pub async fn run(
 
     // Start with 0% progress
     tx.send(GuiMessage::Progress(
-        0.0,
+        0,
         tr!("Starting connection...").to_string(),
     ))
     .ok();
@@ -159,7 +159,7 @@ pub async fn run(
                 } else {
                     // Send percent to GUI
                     tx.send(GuiMessage::Progress(
-                        e.percent as f32 / 100.0,
+                        e.percent,
                         tr!("Preparing connection...").to_string(),
                     ))
                     .ok();

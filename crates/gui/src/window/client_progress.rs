@@ -31,7 +31,7 @@
 #![allow(dead_code)]
 use std::{
     fmt,
-    sync::{Arc, atomic::AtomicU16},
+    sync::{Arc, atomic::AtomicU8},
     time::Instant,
 };
 
@@ -44,7 +44,7 @@ use super::{AppWindow, types::AppState};
 
 #[derive(Clone)]
 pub struct ProgressState {
-    pub progress: Arc<AtomicU16>, // Progress percentage (0-100)
+    pub progress: Arc<AtomicU8>, // Progress percentage (0-100)
     pub progress_message: String,
     pub start: Instant,
 }
@@ -52,7 +52,7 @@ pub struct ProgressState {
 impl Default for ProgressState {
     fn default() -> Self {
         Self {
-            progress: Arc::new(AtomicU16::new(0)),
+            progress: Arc::new(AtomicU8::new(0)),
             progress_message: String::new(),
             start: Instant::now(),
         }

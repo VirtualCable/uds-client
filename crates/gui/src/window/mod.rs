@@ -212,7 +212,7 @@ impl eframe::App for AppWindow {
                     log::debug!("Received progress update: {}% - {}", percentage, message);
                     if let types::AppState::ClientProgress(state) = &mut self.app_state {
                         state.progress.store(
-                            (percentage.clamp(0.0, 1.0) * 100.0) as u16,
+                            percentage.clamp(0, 100),
                             Ordering::Relaxed,
                         );
                         state.progress_message = message;
