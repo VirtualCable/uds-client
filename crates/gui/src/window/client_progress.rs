@@ -104,7 +104,7 @@ impl AppWindow {
         state: ProgressState,
     ) {
         let elapsed = state.start.elapsed().as_secs_f32();
-        let progress = state.progress.load(std::sync::atomic::Ordering::Relaxed) as f32;
+        let progress = state.progress.load(std::sync::atomic::Ordering::Relaxed) as f32 / 100.0;
         egui::CentralPanel::default().show_inside(ui, |ui| {
             ui.add_space(30.0);
             ui.horizontal_centered(|ui| {
