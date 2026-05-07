@@ -8,6 +8,7 @@ use std::sync::OnceLock;
 
 use winit::{event_loop::ActiveEventLoop, monitor::MonitorHandle};
 
+#[allow(dead_code)]
 /// Monitor geometry queried from winit at startup.
 #[derive(Debug, Clone)]
 pub struct MonitorInfo {
@@ -39,16 +40,19 @@ pub fn populate(event_loop: &ActiveEventLoop) {
     );
 }
 
+#[allow(dead_code)]
 /// Number of monitors detected at startup, or 1 as sensible default.
 pub fn count() -> usize {
     MONITORS.get().map(|m| m.len()).unwrap_or(1)
 }
 
+#[allow(dead_code)]
 /// Size of monitor `index`, or None if the index is out of bounds.
 pub fn size(index: usize) -> Option<(u32, u32)> {
     MONITORS.get().and_then(|m| m.get(index)).map(|mi| mi.size)
 }
 
+#[allow(dead_code)]
 /// Scale factor of monitor `index`, or 1.0 if not available.
 pub fn scale(index: usize) -> f64 {
     MONITORS
