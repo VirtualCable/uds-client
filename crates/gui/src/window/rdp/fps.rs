@@ -74,24 +74,20 @@ impl Fps {
             return;
         }
         egui::Area::new("fps_info".into())
-            .anchor(egui::Align2::RIGHT_TOP, egui::vec2(-64.0, 0.0)) // Centered at top
-            .order(egui::Order::Foreground) // Above all layers
-            .constrain(true) // Keep within screen bounds
+            .anchor(egui::Align2::RIGHT_TOP, egui::vec2(-16.0, 8.0))
+            .order(egui::Order::Foreground)
+            .constrain(true)
             .show(ctx, |ui| {
-                // Frame with margins so it does not occupy the entire width
-                egui::Frame::NONE
-                    .inner_margin(egui::Margin {
-                        left: 64,
-                        top: 8,
-                        right: 16,
-                        bottom: 8,
-                    })
+                egui::Frame::popup(ui.style())
+                    .fill(egui::Color32::from_rgba_premultiplied(40, 80, 160, 200))
+                    .corner_radius(egui::CornerRadius::same(6))
+                    .inner_margin(egui::Margin::symmetric(12, 4))
                     .show(ui, |ui| {
                         ui.label(
                             egui::RichText::new(format!("FPS: {:.1}", self.average_fps()))
-                                .color(egui::Color32::BLACK),
+                                .color(egui::Color32::WHITE)
+                                .size(14.0),
                         );
-                        // ui.label("Other info here...");
                     });
             });
     }
