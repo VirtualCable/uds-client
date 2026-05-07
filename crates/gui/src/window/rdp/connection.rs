@@ -217,7 +217,7 @@ impl AppWindow {
             .frame(egui::Frame::default().inner_margin(0.0))
             .show_inside(ui, |ui| {
                 // If the size of gdi is not equal to size of content, resize gdi and recreate texture
-                let start = std::time::Instant::now();
+                // let start = std::time::Instant::now();
                 let mut rects_to_update: Vec<rdp::geom::Rect> = Vec::new();
                 while let Ok(message) = rdp_state.update_rx.try_recv() {
                     log::trace!("Got message {:?}", message);
@@ -255,12 +255,13 @@ impl AppWindow {
                         }
                     }
                 }
+                // log::debug!("RDP message processing took {:?} with {} rects", start.elapsed(), rects_to_update.len());
                 rdp_state.screen.update_screen_texture(
                     &rects_to_update,
                     rdp_state.gdi,
                     &rdp_state.gdi_lock,
                 );
-                log::trace!("RDP update processing took {:?}", start.elapsed());
+                // log::debug!("RDP update processing took {:?} with {} rects", start.elapsed(), rects_to_update.len());
                 // Show the texture on 0,0, full size
                 let size = ui.available_size();
                 ui.add_sized(
@@ -271,7 +272,7 @@ impl AppWindow {
                     )),
                 );
 
-                log::trace!("RDP frame rendered took {:?}", start.elapsed());
+                //log::debug!("RDP frame rendered took {:?}", start.elapsed());
             });
         // Pinbar at top
         self.show_pinbar(ui, &mut rdp_state);

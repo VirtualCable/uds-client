@@ -133,26 +133,21 @@ impl Screen {
 
         if self.use_rgba {
             for row in 0..safe_h {
-                for col in 0..safe_w {
-                    let px = safe_x + col as usize;
-                    let py = safe_y + row as usize;
-                    let idx = py * stride_bytes + px * 4;
-                    self.scratch.push(framebuffer[idx]);
-                    self.scratch.push(framebuffer[idx + 1]);
-                    self.scratch.push(framebuffer[idx + 2]);
-                    self.scratch.push(framebuffer[idx + 3]);
-                }
+                let py = safe_y + row as usize;
+                let start = py * stride_bytes + safe_x * 4;
+                self.scratch
+                    .extend_from_slice(&framebuffer[start..start + safe_w as usize * 4]);
             }
         } else {
             for row in 0..safe_h {
-                for col in 0..safe_w {
-                    let px = safe_x + col as usize;
-                    let py = safe_y + row as usize;
-                    let idx = py * stride_bytes + px * 4;
-                    self.scratch.push(framebuffer[idx + 2]);
-                    self.scratch.push(framebuffer[idx + 1]);
-                    self.scratch.push(framebuffer[idx]);
-                    self.scratch.push(framebuffer[idx + 3]);
+                let py = safe_y + row as usize;
+                let start = py * stride_bytes + safe_x * 4;
+                let row_len = safe_w as usize * 4;
+                let base = self.scratch.len();
+                self.scratch
+                    .extend_from_slice(&framebuffer[start..start + row_len]);
+                for chunk in self.scratch[base..].chunks_exact_mut(4) {
+                    chunk.swap(0, 2);
                 }
             }
         }
@@ -164,11 +159,14 @@ impl Screen {
 
         // If texture is inside the image, do a partial update, else, do nothing
         let texture_size = self.texture_handle.size();
-        if safe_x + safe_w as usize > texture_size[0] || safe_y + safe_h as usize > texture_size[1] {
-            log::warn!("Received update rect that is outside of the screen texture, skipping update");
+        if safe_x + safe_w as usize > texture_size[0] || safe_y + safe_h as usize > texture_size[1]
+        {
+            log::warn!(
+                "Received update rect that is outside of the screen texture, skipping update"
+            );
             return;
         }
-        
+
         self.texture_handle
             .set_partial([safe_x, safe_y], image, egui::TextureOptions::LINEAR);
     }
