@@ -51,6 +51,8 @@ pub mod about;
 
 pub mod logo;
 
+mod monitor;
+
 #[derive(Debug)]
 pub struct RawKey {
     pub keycode: winit::keyboard::KeyCode,
@@ -71,6 +73,7 @@ pub struct RdpAppProxy<'a> {
 impl ApplicationHandler<UserEvent> for RdpAppProxy<'_> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         self.eframe_app.resumed(event_loop);
+        monitor::populate(event_loop);
     }
 
     fn window_event(
