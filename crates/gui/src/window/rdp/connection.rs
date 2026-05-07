@@ -203,7 +203,6 @@ impl AppWindow {
             let gdi_height = unsafe { (*rdp_state.gdi).height as f32 };
             egui::Vec2::new(gdi_width / egui_size.x, gdi_height / egui_size.y)
         };
-
         if self.handle_hotkeys(ui.ctx(), &mut rdp_state) {
             // Hotkey handled, skip input processing this frame
             return;
@@ -333,7 +332,10 @@ impl AppWindow {
                     100, // in percent
                     100, // in percent
                 );
-                rdp_state.screen.resize_screen_texture(current_size);
+                rdp_state.screen.resize_screen_texture(egui::Vec2::new(
+                    actual_width as f32,
+                    actual_height as f32,
+                ));
             }
         }
     }

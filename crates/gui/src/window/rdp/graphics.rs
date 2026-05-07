@@ -162,6 +162,13 @@ impl Screen {
             &self.scratch,
         );
 
+        // If texture is inside the image, do a partial update, else, do nothing
+        let texture_size = self.texture_handle.size();
+        if safe_x + safe_w as usize > texture_size[0] || safe_y + safe_h as usize > texture_size[1] {
+            log::warn!("Received update rect that is outside of the screen texture, skipping update");
+            return;
+        }
+        
         self.texture_handle
             .set_partial([safe_x, safe_y], image, egui::TextureOptions::LINEAR);
     }
