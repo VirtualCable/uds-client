@@ -103,7 +103,10 @@ pub extern "C" fn pointer_position(
     context: *mut rdpContext,
     pointer_position: *const POINTER_POSITION_UPDATE,
 ) -> BOOL {
-    log::debug!(" **** Pointer Position callback invoked: {:?}", pointer_position);
+    log::debug!(
+        " **** Pointer Position callback invoked: {:?}",
+        pointer_position
+    );
     if let Some(owner) = context.owner() {
         owner.on_pointer_position(pointer_position).into()
     } else {
@@ -115,7 +118,10 @@ pub extern "C" fn pointer_system(
     context: *mut rdpContext,
     pointer_system: *const POINTER_SYSTEM_UPDATE,
 ) -> BOOL {
-    log::debug!(" **** Pointer System callback invoked: {:?}", pointer_system);
+    log::debug!(
+        " **** Pointer System callback invoked: {:?}",
+        pointer_system
+    );
     if let Some(owner) = context.owner() {
         owner.on_pointer_system(pointer_system).into()
     } else {

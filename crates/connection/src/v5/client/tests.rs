@@ -210,12 +210,7 @@ async fn inbound_chan_closed_works() {
     let message = ctrl_rx.try_recv();
     // Should have received a ClientResult command with no packet, sequence (0, 0) and a message about the client stopped only.
     assert!(
-        matches!(
-            message,
-            Ok(Command::ClientResult {
-                ..
-            })
-        ),
+        matches!(message, Ok(Command::ClientResult { .. })),
         "Expected ClientResult, got {:?}",
         message
     );
@@ -263,12 +258,7 @@ async fn outbound_chan_closed_works() {
     let message = ctrl_rx.try_recv();
     // Should have received a ClientResult command with no packet, sequence (0, 0) and a message about the client stopped only.
     assert!(
-        matches!(
-            message,
-            Ok(Command::ClientResult {
-                ..
-            })
-        ),
+        matches!(message, Ok(Command::ClientResult { .. })),
         "Expected ClientResult, got {:?}",
         message
     );

@@ -29,9 +29,9 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 pub mod connection;
-pub mod preconnection;
-pub mod graphics;
-pub mod mouse;
-pub mod fps;
-pub mod input;
 pub mod consts;
+pub mod fps;
+pub mod graphics;
+pub mod input;
+pub mod mouse;
+pub mod preconnection;

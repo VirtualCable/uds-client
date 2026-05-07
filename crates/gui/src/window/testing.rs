@@ -100,7 +100,8 @@ impl AppWindow {
             }
 
             if ui.button("Warning").clicked()
-                && let Err(e) = self.enter_warning(ui, frame, "This is a warning message.".to_string())
+                && let Err(e) =
+                    self.enter_warning(ui, frame, "This is a warning message.".to_string())
             {
                 ui.label(format!("Failed to show warning: {}", e));
             }

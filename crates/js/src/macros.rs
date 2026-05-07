@@ -86,7 +86,6 @@ macro_rules! register_js_module {
     }};
 }
 
-
 macro_rules! extract_js_args {
     ($args:expr, $ctx:expr, $($t:ty),* $(,)?) => {
         {

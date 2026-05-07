@@ -29,7 +29,10 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 #![allow(dead_code)]
-use std::{env, fs, io, path::{PathBuf, Path}};
+use std::{
+    env, fs, io,
+    path::{Path, PathBuf},
+};
 
 use glob::glob;
 
@@ -47,7 +50,11 @@ fn resolve_name(path: &Path, name: &str) -> String {
     let path = path.join(name);
     // try globbing
     let pattern = path.to_string_lossy().to_string();
-    if let Some(path) = glob(&pattern).expect("Failed to read glob pattern").flatten().next() {
+    if let Some(path) = glob(&pattern)
+        .expect("Failed to read glob pattern")
+        .flatten()
+        .next()
+    {
         return path.file_name().unwrap().to_string_lossy().to_string();
     }
     name.to_string()

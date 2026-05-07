@@ -29,7 +29,7 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 #![allow(dead_code)]
-use std::sync::{atomic::Ordering, Arc, RwLock};
+use std::sync::{Arc, RwLock, atomic::Ordering};
 
 use shared::log;
 
@@ -50,7 +50,12 @@ pub struct Screen {
 }
 
 impl Screen {
-    pub fn new(ctx: &egui::Context, _frame: &mut eframe::Frame, size: egui::Vec2, use_rgba: bool) -> Self {
+    pub fn new(
+        ctx: &egui::Context,
+        _frame: &mut eframe::Frame,
+        size: egui::Vec2,
+        use_rgba: bool,
+    ) -> Self {
         let size_ux = [size.x as usize, size.y as usize];
         let image = egui::ColorImage::new(
             size_ux,
@@ -67,7 +72,6 @@ impl Screen {
             scratch: Vec::with_capacity((size_ux[0] * size_ux[1] * 4).max(1024)),
         }
     }
-
 
     pub fn supports_bgra(_frame: &mut eframe::Frame) -> bool {
         #[cfg(target_os = "macos")]
@@ -101,10 +105,7 @@ impl Screen {
         };
 
         let framebuffer = unsafe {
-            std::slice::from_raw_parts(
-                (*gdi).primary_buffer as *const u8,
-                stride_bytes * fb_height,
-            )
+            std::slice::from_raw_parts((*gdi).primary_buffer as *const u8, stride_bytes * fb_height)
         };
 
         let unique_rect = rects.iter().fold(None, |acc: Option<rdp::geom::Rect>, r| {
@@ -119,12 +120,8 @@ impl Screen {
 
         let safe_x = rect.x.min(fb_width as u32) as usize;
         let safe_y = rect.y.min(fb_height as u32) as usize;
-        let safe_w = rect
-            .w
-            .min((fb_width as u32).saturating_sub(safe_x as u32));
-        let safe_h = rect
-            .h
-            .min((fb_height as u32).saturating_sub(safe_y as u32));
+        let safe_w = rect.w.min((fb_width as u32).saturating_sub(safe_x as u32));
+        let safe_h = rect.h.min((fb_height as u32).saturating_sub(safe_y as u32));
 
         if safe_w == 0 || safe_h == 0 {
             return;
@@ -165,11 +162,8 @@ impl Screen {
             &self.scratch,
         );
 
-        self.texture_handle.set_partial(
-            [safe_x, safe_y],
-            image,
-            egui::TextureOptions::LINEAR,
-        );
+        self.texture_handle
+            .set_partial([safe_x, safe_y], image, egui::TextureOptions::LINEAR);
     }
 
     pub fn resize_screen_texture(&mut self, new_size: egui::Vec2) {
@@ -183,8 +177,7 @@ impl Screen {
             vec![egui::Color32::TRANSPARENT; (new_size.x as usize) * (new_size.y as usize)],
         );
 
-        self.texture_handle
-            .set(image, egui::TextureOptions::LINEAR);
+        self.texture_handle.set(image, egui::TextureOptions::LINEAR);
     }
 
     pub fn texture_id(&self) -> egui::TextureId {

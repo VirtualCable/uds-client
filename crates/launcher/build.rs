@@ -31,12 +31,10 @@
 
 fn main() {
     #[cfg(windows)]
-    builder::build_windows(
-        builder::BuildInfo {
-            product_name: "UDS Launcher",
-            description: "UDS Launcher Application",
-            icon: None,
-            bmp: None,
-        }
-    );
+    builder::build_windows(builder::BuildInfo {
+        product_name: "UDS Launcher",
+        description: "UDS Launcher Application",
+        icon: None,
+        bmp: None,
+    });
 }

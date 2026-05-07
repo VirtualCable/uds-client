@@ -87,8 +87,8 @@ impl AudioHandle {
 
                 // Keep last 32 play requests stamp, to calculate the mean time between them
                 let mut output_sample_rate = sample_rate;
-                if let Some(dev) = device && let Some(cfg) =
-                    AudioHandle::get_stream_config(&dev, sample_rate)
+                if let Some(dev) = device
+                    && let Some(cfg) = AudioHandle::get_stream_config(&dev, sample_rate)
                 {
                     log::debug!(
                         "Using audio format: {:?}, range={}",
@@ -276,15 +276,15 @@ impl<I: Iterator<Item = f32>> Iterator for ResamplerIterator<I> {
         //         return None;
         //     }
         // }
-        
+
         // Corrected logic for interpolation boundary check
         while i + 1 >= self.buffer.len() {
-             // load more data
-             if let Some(sample) = self.inner.next() {
-                 self.buffer.push(sample);
-             } else {
-                 return None;
-             }
+            // load more data
+            if let Some(sample) = self.inner.next() {
+                self.buffer.push(sample);
+            } else {
+                return None;
+            }
         }
 
         let s0 = self.buffer[i];
@@ -395,7 +395,7 @@ mod tests {
     use super::*;
     use shared::log;
 
-    // The shared::log needs to be imported here because it was available in the original lib.rs scope, 
+    // The shared::log needs to be imported here because it was available in the original lib.rs scope,
     // and tests use it. If I don't import it here, the tests will fail.
 
     #[test]

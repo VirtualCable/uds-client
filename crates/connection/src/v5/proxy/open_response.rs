@@ -7,7 +7,7 @@ use crypt::types::Ticket;
 const RESERVED_LENGTH: usize = 6;
 
 // Important Note:
-// inbound is inbound for REMOTE tunnel (so, our outbound), 
+// inbound is inbound for REMOTE tunnel (so, our outbound),
 //and outbound is outbound for REMOTE tunnel (so, our inbound)
 #[derive(Debug)]
 pub struct OpenResponse {
@@ -19,7 +19,12 @@ pub struct OpenResponse {
 }
 
 impl OpenResponse {
-    pub fn new(session_id: Ticket, channel_count: u16, inbound_seq: u64, outbound_seq: u64) -> Self {
+    pub fn new(
+        session_id: Ticket,
+        channel_count: u16,
+        inbound_seq: u64,
+        outbound_seq: u64,
+    ) -> Self {
         OpenResponse {
             session_id,
             channel_count,
@@ -40,7 +45,11 @@ impl OpenResponse {
 
     pub fn from_slice(data: &[u8]) -> Result<Self> {
         if data.len() != TICKET_LENGTH + 2 + 8 + 8 + RESERVED_LENGTH {
-            anyhow::bail!("Invalid OpenResponse length: expected {}, got {}", TICKET_LENGTH + 2 + 8 + 8 + RESERVED_LENGTH, data.len());
+            anyhow::bail!(
+                "Invalid OpenResponse length: expected {}, got {}",
+                TICKET_LENGTH + 2 + 8 + 8 + RESERVED_LENGTH,
+                data.len()
+            );
         }
         let session_id = Ticket::try_from(&data[0..TICKET_LENGTH])?;
         let channel_count = u16::from_be_bytes(
@@ -61,7 +70,12 @@ impl OpenResponse {
         //
         // let mut reserved = [0u8; RESERVED_LENGTH];
         // reserved.copy_from_slice(&data[TICKET_LENGTH + 2..]);
-        Ok(OpenResponse::new(session_id, channel_count, inbound_seq, outbound_seq))
+        Ok(OpenResponse::new(
+            session_id,
+            channel_count,
+            inbound_seq,
+            outbound_seq,
+        ))
     }
 }
 

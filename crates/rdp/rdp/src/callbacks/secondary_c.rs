@@ -35,9 +35,7 @@ use freerdp_sys::{
 };
 
 use super::{
-    super::utils::{ToStringLossy},
-    super::context::OwnerFromCtx,
-    secondary::SecondaryCallbacks,
+    super::context::OwnerFromCtx, super::utils::ToStringLossy, secondary::SecondaryCallbacks,
 };
 use shared::log::debug;
 

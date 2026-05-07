@@ -39,19 +39,15 @@ use super::{
 
 const MESSAGE: &str = "UDS Launcher\nVersion: 5.0.0\nUDS Client Launcher";
 
-
 impl AppWindow {
-    pub fn enter_invisible(
-        &mut self,
-        ui: &mut egui::Ui,
-        _frame: &mut eframe::Frame,
-    ) -> Result<()> {
+    pub fn enter_invisible(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) -> Result<()> {
         self.set_app_state(AppState::Invisible);
 
         self.set_visible(ui, false);
         let text_height = calculate_text_height(MESSAGE, 40);
         self.resize_and_center(ui.ctx(), [320.0, text_height + 48.0], true);
-        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Title(self.gettext("UDS Launcher")));
+        ui.ctx()
+            .send_viewport_cmd(egui::ViewportCommand::Title(self.gettext("UDS Launcher")));
         Ok(())
     }
 
@@ -70,7 +66,10 @@ impl AppWindow {
                         ui.vertical_centered(|ui: &mut egui::Ui| {
                             ui.add_space(12.0);
                             if ui
-                                .add_sized([80.0, 30.0], egui::Button::new(self.gettext("Exit now")))
+                                .add_sized(
+                                    [80.0, 30.0],
+                                    egui::Button::new(self.gettext("Exit now")),
+                                )
                                 .clicked()
                             {
                                 // Set stop

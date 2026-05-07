@@ -31,7 +31,7 @@
 use std::{fs::File, io::Write, net::ToSocketAddrs, time::Duration};
 use tokio::{net::TcpStream, time::timeout};
 
-use rand::{prelude::*, distr::Alphabetic};
+use rand::{distr::Alphabetic, prelude::*};
 
 use anyhow::{Context as _, Result};
 use regex::Regex;
@@ -74,7 +74,7 @@ pub(super) async fn test_server(host: &str, port: u16, timeout_ms: u64) -> bool 
         Ok(mut addrs) => {
             if let Some(sockaddr) = addrs.next() {
                 match timeout(timeout_dur, TcpStream::connect(sockaddr)).await {
-                    Ok(Ok(_stream)) => true,  // Connection successful
+                    Ok(Ok(_stream)) => true, // Connection successful
                     _ => false,
                 }
             } else {

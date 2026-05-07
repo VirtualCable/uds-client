@@ -210,7 +210,10 @@ pub fn execute_app(
             move || {
                 log::debug!("Trigger wait thread started");
                 while keep_running.is_set() {
-                    if stop.wait_timeout(std::time::Duration::from_millis(300)).is_ok() {
+                    if stop
+                        .wait_timeout(std::time::Duration::from_millis(300))
+                        .is_ok()
+                    {
                         log::debug!("Trigger activated, signaling stop_event");
                         stop_event.signal();
                         break;

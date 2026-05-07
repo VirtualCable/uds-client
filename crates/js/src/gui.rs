@@ -29,13 +29,9 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 use flume::Sender;
-use std::{
-    sync::{LazyLock, Mutex},
-};
+use std::sync::{LazyLock, Mutex};
 
-use shared::{
-    log,
-};
+use shared::log;
 
 pub use gui::window::types::GuiMessage;
 

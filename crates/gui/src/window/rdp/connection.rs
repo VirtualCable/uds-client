@@ -40,8 +40,8 @@ use std::{
 };
 
 use anyhow::Result;
-use flume::{Receiver, Sender, bounded};
 use eframe::egui;
+use flume::{Receiver, Sender, bounded};
 
 use crate::{log, logo::load_logo};
 
@@ -256,15 +256,20 @@ impl AppWindow {
                         }
                     }
                 }
-                rdp_state
-                    .screen
-                    .update_screen_texture(&rects_to_update, rdp_state.gdi, &rdp_state.gdi_lock);
+                rdp_state.screen.update_screen_texture(
+                    &rects_to_update,
+                    rdp_state.gdi,
+                    &rdp_state.gdi_lock,
+                );
                 log::trace!("RDP update processing took {:?}", start.elapsed());
                 // Show the texture on 0,0, full size
                 let size = ui.available_size();
                 ui.add_sized(
                     size,
-                    egui::Image::new(egui::load::SizedTexture::new(rdp_state.screen.texture_id(), size)),
+                    egui::Image::new(egui::load::SizedTexture::new(
+                        rdp_state.screen.texture_id(),
+                        size,
+                    )),
                 );
 
                 log::trace!("RDP frame rendered took {:?}", start.elapsed());
@@ -328,9 +333,7 @@ impl AppWindow {
                     100, // in percent
                     100, // in percent
                 );
-                rdp_state
-                    .screen
-                    .resize_screen_texture(current_size);
+                rdp_state.screen.resize_screen_texture(current_size);
             }
         }
     }

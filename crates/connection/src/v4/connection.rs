@@ -164,4 +164,3 @@ where
     .await
     .context("CMD_OPEN timed out")?
 }
-

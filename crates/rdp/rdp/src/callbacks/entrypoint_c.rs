@@ -65,10 +65,7 @@ pub extern "C" fn client_free(_instance: *mut freerdp, _context: *mut rdpContext
 }
 
 pub extern "C" fn client_start(context: *mut rdpContext) -> ::std::os::raw::c_int {
-    log::debug!(
-        " **** RDP client start called with context: {:?}",
-        context
-    );
+    log::debug!(" **** RDP client start called with context: {:?}", context);
     if let Some(owner) = context.owner() {
         owner.client_start().into()
     } else {

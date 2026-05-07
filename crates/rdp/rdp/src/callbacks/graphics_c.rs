@@ -72,7 +72,9 @@ extern "C" fn pointer_new(context: *mut rdpContext, pointer_new: *mut rdpPointer
 
 extern "C" fn pointer_free(context: *mut rdpContext, pointer: *mut rdpPointer) {
     if let Some(rdp) = context.owner() {
-        unsafe { rdp.on_pointer_free(pointer); }
+        unsafe {
+            rdp.on_pointer_free(pointer);
+        }
     }
 }
 

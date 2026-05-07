@@ -113,7 +113,8 @@ mod tests {
             Logger.warn("Warn message");
             Logger.error("Error message");
         "#,
-        ).await
+        )
+        .await
         .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
 
         Ok(())

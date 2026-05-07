@@ -55,7 +55,9 @@ impl Crypt {
             result = buffer.read(reader) => {
                 result
             }
-        }? == 0 { // EOF, fine, return empty data (end of stream, no error)
+        }? == 0
+        {
+            // EOF, fine, return empty data (end of stream, no error)
             log::debug!("EOF on crypted stream");
             return Ok((&buffer.data()[..0], 0));
         }

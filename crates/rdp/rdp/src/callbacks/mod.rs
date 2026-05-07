@@ -60,8 +60,8 @@ pub mod window_c;
 pub mod entrypoint;
 pub mod entrypoint_c;
 
-pub mod channels_c;
 pub mod channels;
+pub mod channels_c;
 
 #[derive(Debug)]
 pub struct Callbacks {

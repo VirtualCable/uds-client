@@ -28,7 +28,6 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
-use shared::log::debug;
 use freerdp_sys::{
     DRAW_NINE_GRID_ORDER, DSTBLT_ORDER, ELLIPSE_CB_ORDER, ELLIPSE_SC_ORDER, FAST_GLYPH_ORDER,
     FAST_INDEX_ORDER, GLYPH_INDEX_ORDER, LINE_TO_ORDER, MEM3BLT_ORDER, MEMBLT_ORDER,
@@ -36,6 +35,7 @@ use freerdp_sys::{
     MULTI_SCRBLT_ORDER, OPAQUE_RECT_ORDER, ORDER_INFO, PATBLT_ORDER, POLYGON_CB_ORDER,
     POLYGON_SC_ORDER, POLYLINE_ORDER, SAVE_BITMAP_ORDER, SCRBLT_ORDER,
 };
+use shared::log::debug;
 
 pub trait PrimaryCallbacks {
     fn on_dst_blt(&self, dstblt: *const DSTBLT_ORDER) -> bool {
@@ -156,22 +156,34 @@ pub trait PrimaryCallbacks {
     }
 
     fn on_polygon_sc(&self, polygon_sc: *const POLYGON_SC_ORDER) -> bool {
-        debug!(" **** Default on_polygon_sc called: polygon_sc={:?}", polygon_sc);
+        debug!(
+            " **** Default on_polygon_sc called: polygon_sc={:?}",
+            polygon_sc
+        );
         true
     }
 
     fn on_polygon_cb(&self, polygon_cb: *mut POLYGON_CB_ORDER) -> bool {
-        debug!(" **** Default on_polygon_cb called: polygon_cb={:?}", polygon_cb);
+        debug!(
+            " **** Default on_polygon_cb called: polygon_cb={:?}",
+            polygon_cb
+        );
         true
     }
 
     fn on_ellipse_sc(&self, ellipse_sc: *const ELLIPSE_SC_ORDER) -> bool {
-        debug!(" **** Default on_ellipse_sc called: ellipse_sc={:?}", ellipse_sc);
+        debug!(
+            " **** Default on_ellipse_sc called: ellipse_sc={:?}",
+            ellipse_sc
+        );
         true
     }
 
     fn on_ellipse_cb(&self, ellipse_cb: *const ELLIPSE_CB_ORDER) -> bool {
-        debug!(" **** Default on_ellipse_cb called: ellipse_cb={:?}", ellipse_cb);
+        debug!(
+            " **** Default on_ellipse_cb called: ellipse_cb={:?}",
+            ellipse_cb
+        );
         true
     }
 

@@ -31,7 +31,10 @@
 use eframe::egui;
 
 use super::consts;
-use crate::{keymap, window::{rdp::connection::RdpConnectionState, types::HotKey}};
+use crate::{
+    keymap,
+    window::{rdp::connection::RdpConnectionState, types::HotKey},
+};
 use shared::log;
 
 use crate::window::AppWindow;
@@ -187,7 +190,11 @@ impl AppWindow {
         });
     }
 
-    pub(super) fn handle_hotkeys(&mut self, ctx: &egui::Context, rdp_state: &mut RdpConnectionState) -> bool {
+    pub(super) fn handle_hotkeys(
+        &mut self,
+        ctx: &egui::Context,
+        rdp_state: &mut RdpConnectionState,
+    ) -> bool {
         match HotKey::from_input(ctx) {
             HotKey::ToggleFullScreen => {
                 self.toggle_fullscreen(ctx, rdp_state);

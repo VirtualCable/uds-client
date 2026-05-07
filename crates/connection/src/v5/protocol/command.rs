@@ -212,7 +212,6 @@ impl TryFrom<PayloadWithChannel> for Command {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

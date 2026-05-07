@@ -70,7 +70,8 @@ impl About {
 impl eframe::App for About {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         // fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        ui.ctx().request_repaint_after(std::time::Duration::from_millis(50));
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_millis(50));
 
         let elapsed = self.start.elapsed().as_secs_f32();
 

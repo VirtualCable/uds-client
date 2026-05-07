@@ -5,7 +5,10 @@ use sha2::Sha256;
 
 use shared::log;
 
-use crate::{types::{SharedSecret, Ticket}, tunnel::Crypt};
+use crate::{
+    tunnel::Crypt,
+    types::{SharedSecret, Ticket},
+};
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy)]
 pub struct CryptoKeys {
@@ -57,10 +60,7 @@ pub fn derive_tunnel_material(
 /// # Arguments
 /// * `keys` - Derived cryptographic keys
 /// * `seqs` - Initial sequence numbers for (inbound, outbound) crypts
-pub fn get_tunnel_crypts(
-    keys: &CryptoKeys,
-    seqs: (u64, u64),
-) -> Result<(Crypt, Crypt)> {
+pub fn get_tunnel_crypts(keys: &CryptoKeys, seqs: (u64, u64)) -> Result<(Crypt, Crypt)> {
     log::debug!(
         "Derived tunnel material: key_receive={:?}, key_send={:?}",
         keys.key_receive,

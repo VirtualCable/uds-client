@@ -81,10 +81,8 @@ fn get_private_key_bytes() -> Result<[u8; PRIVATE_KEY_SIZE]> {
 fn test_recover_invalid_data_from_json() {
     let ticket = BrokerTicket::new("AES-256-GCM", "", "");
 
-    let result = ticket.recover_data_from_json(
-        TICKET_ID_TESTING,
-        &get_private_key_bytes().unwrap(),
-    );
+    let result =
+        ticket.recover_data_from_json(TICKET_ID_TESTING, &get_private_key_bytes().unwrap());
     assert!(result.is_err());
 }
 
@@ -92,10 +90,8 @@ fn test_recover_invalid_data_from_json() {
 fn test_recover_valid_data_from_json() {
     let ticket: BrokerTicket = serde_json::from_str(TEST_TICKET_JSON).unwrap();
 
-    let result = ticket.recover_data_from_json(
-        TICKET_ID_TESTING,
-        &get_private_key_bytes().unwrap(),
-    );
+    let result =
+        ticket.recover_data_from_json(TICKET_ID_TESTING, &get_private_key_bytes().unwrap());
     assert!(
         result.is_ok(),
         "Failed to recover data from JSON ticket: {:?}",
@@ -106,9 +102,13 @@ fn test_recover_valid_data_from_json() {
     let json_value = result.unwrap();
     println!("Recovered JSON value: {}", json_value);
     // Get object "shared_secret"
-    let _shared_secret: SharedSecret = serde_json::from_value(json_value
-        .get("shared_secret")
-        .expect("Missing shared_secret field").clone()).expect("Not a valid shared secret");
+    let _shared_secret: SharedSecret = serde_json::from_value(
+        json_value
+            .get("shared_secret")
+            .expect("Missing shared_secret field")
+            .clone(),
+    )
+    .expect("Not a valid shared secret");
 
     assert_eq!(
         json_value.get("script").unwrap(),

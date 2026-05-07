@@ -38,7 +38,6 @@ use super::connection::{connect_and_upgrade, send_open_cmd, send_test_cmd};
 
 use helpers::{connect, create_runner, create_ticket};
 
-
 // use super::{consts, proxy};
 
 #[tokio::test]

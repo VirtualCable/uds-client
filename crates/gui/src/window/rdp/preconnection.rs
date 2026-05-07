@@ -93,7 +93,8 @@ impl AppWindow {
                     self.screen_size = Some((screen_size.x as u32, screen_size.y as u32));
                 }
                 // Switch to RdpConnected after 1 second, this is only for setting fullscreen etc.
-                if let Err(err) = self.enter_rdp_connection(ui.ctx(), frame, state.settings.clone()) {
+                if let Err(err) = self.enter_rdp_connection(ui.ctx(), frame, state.settings.clone())
+                {
                     self.enter_error(
                         ui,
                         frame,
@@ -103,7 +104,8 @@ impl AppWindow {
                     return;
                 }
                 if state.switch_to_fullscreen.load(Ordering::Relaxed) {
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
+                    ui.ctx()
+                        .send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
                     state.switch_to_fullscreen.store(false, Ordering::Relaxed);
                 }
                 ui.label("Connecting to RDP server...");

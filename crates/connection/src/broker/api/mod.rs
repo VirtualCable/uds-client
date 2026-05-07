@@ -204,7 +204,8 @@ impl BrokerApi for UdsBrokerApi {
     async fn request_rdp_sign(&self, ticket: &str, rdp: &str) -> Result<String> {
         log::debug!("Sending rdp sign request to broker at {}", self.broker_url);
         let rdp_sign_data = types::RdpSignRequest { rdp };
-        let response = self.client
+        let response = self
+            .client
             .put(format!("{}/{}/rdp_sign", self.broker_url, ticket))
             .headers(self.headers())
             .json(&rdp_sign_data)

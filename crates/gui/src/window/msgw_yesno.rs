@@ -54,7 +54,8 @@ impl AppWindow {
         let text_height = calculate_text_height(&message, 40);
         self.resize_and_center(ui.ctx(), [320.0, text_height + 48.0], true);
         self.set_app_state(AppState::YesNo(message, resp_tx));
-        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Title(self.gettext("Question")));
+        ui.ctx()
+            .send_viewport_cmd(egui::ViewportCommand::Title(self.gettext("Question")));
         Ok(())
     }
 

@@ -111,7 +111,14 @@ fn main() {
     let app_data = shared::appdata::AppData::load();
 
     // Run the GUI, this will block until the GUI is closed
-    gui::run_gui(intl::get_catalog().clone(), None, messages_rx, stop.clone(), app_data.fps_limit).unwrap();
+    gui::run_gui(
+        intl::get_catalog().clone(),
+        None,
+        messages_rx,
+        stop.clone(),
+        app_data.fps_limit,
+    )
+    .unwrap();
 
     // Gui closed, wait for app to finish also
     stop.wait();

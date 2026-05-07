@@ -72,7 +72,7 @@ impl RecoverySendBuffer {
     }
 
     pub fn push(&mut self, seq: u64, data: PayloadWithChannel) -> Result<&PayloadWithChannel> {
-         let item_size = data.len();
+        let item_size = data.len();
         if item_size > self.max_bytes {
             return Err(anyhow::anyhow!("Item size exceeds buffer capacity"));
         }

@@ -54,4 +54,3 @@ fn main() {
 
     stop_trigger.trigger();
 }
-    

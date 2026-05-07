@@ -36,11 +36,7 @@ use freerdp_sys::{
     POLYGON_SC_ORDER, POLYLINE_ORDER, SAVE_BITMAP_ORDER, SCRBLT_ORDER, rdpContext,
 };
 
-use super::{
-    super::{utils::{ToStringLossy}},
-    super::context::OwnerFromCtx,
-    primary::PrimaryCallbacks,
-};
+use super::{super::context::OwnerFromCtx, super::utils::ToStringLossy, primary::PrimaryCallbacks};
 use shared::log::debug;
 
 #[allow(dead_code)]
@@ -112,7 +108,7 @@ pub unsafe fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
             debug!(" **** Primary not initialized, cannot override callbacks.");
             return;
         }
-        
+
         for override_cb in overrides {
             match override_cb {
                 Callbacks::DstBlt => {

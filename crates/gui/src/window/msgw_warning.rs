@@ -47,16 +47,12 @@ impl AppWindow {
         let text_height = calculate_text_height(&message, 40);
         self.resize_and_center(ui.ctx(), [320.0, text_height + 48.0], true);
         self.set_app_state(AppState::Warning(message));
-        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Title(self.gettext("Warning")));
+        ui.ctx()
+            .send_viewport_cmd(egui::ViewportCommand::Title(self.gettext("Warning")));
         Ok(())
     }
 
-    pub fn update_warning(
-        &mut self,
-        ui: &mut egui::Ui,
-        frame: &mut eframe::Frame,
-        message: &str,
-    ) {
+    pub fn update_warning(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame, message: &str) {
         egui::CentralPanel::default().show_inside(ui, |ui| {
             ui.set_width(300.0);
             ui.horizontal_centered(|ui: &mut egui::Ui| {

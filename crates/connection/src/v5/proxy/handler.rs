@@ -99,16 +99,9 @@ impl Handler {
             .context("Failed to send release channel command")
     }
 
-    pub async fn client_result(
-        &self,
-        sequence: (u64, u64),
-        message: String,
-    ) -> Result<()> {
+    pub async fn client_result(&self, sequence: (u64, u64), message: String) -> Result<()> {
         self.ctrl_tx
-            .send_async(Command::ClientResult {
-                sequence,
-                message,
-            })
+            .send_async(Command::ClientResult { sequence, message })
             .await
             .context("Failed to send client result command")
     }

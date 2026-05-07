@@ -29,14 +29,18 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 use freerdp_sys::{
-    POINTER_CACHED_UPDATE, POINTER_COLOR_UPDATE, POINTER_LARGE_UPDATE, POINTER_NEW_UPDATE, POINTER_POSITION_UPDATE, POINTER_SYSTEM_UPDATE
+    POINTER_CACHED_UPDATE, POINTER_COLOR_UPDATE, POINTER_LARGE_UPDATE, POINTER_NEW_UPDATE,
+    POINTER_POSITION_UPDATE, POINTER_SYSTEM_UPDATE,
 };
 
 use shared::log::debug;
 
 pub trait PointerCallbacks {
     fn on_pointer_position(&self, pointer_position: *const POINTER_POSITION_UPDATE) -> bool {
-        debug!("Pointer position event: pointer_position={:?}", pointer_position);
+        debug!(
+            "Pointer position event: pointer_position={:?}",
+            pointer_position
+        );
         true
     }
 

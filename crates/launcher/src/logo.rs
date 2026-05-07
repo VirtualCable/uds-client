@@ -28,8 +28,8 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
-use image::load_from_memory;
 use eframe::egui::{ColorImage, IconData};
+use image::load_from_memory;
 
 const LOGO_BYTES: &[u8] = include_bytes!("../../../assets/img/uds-64.png");
 const ICON_BYTES: &[u8] = include_bytes!("../../../assets/img/uds-icon.png");

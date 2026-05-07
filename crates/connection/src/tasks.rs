@@ -73,7 +73,8 @@ pub async fn wait_all_apps(stop: Trigger) {
         if all_done
             || stop
                 .wait_timeout_async(std::time::Duration::from_secs(2))
-                .await.is_ok()
+                .await
+                .is_ok()
         {
             break;
         }
@@ -86,7 +87,8 @@ pub async fn wait_all_tunnels(stop: Trigger) {
         if !is_any_tunnel_active()
             || stop
                 .wait_timeout_async(std::time::Duration::from_secs(2))
-                .await.is_ok()
+                .await
+                .is_ok()
         {
             break;
         }
@@ -115,7 +117,8 @@ async fn wait_internal_rdp(stop: Trigger) {
         if !is_internal_rdp_running()
             || stop
                 .wait_timeout_async(std::time::Duration::from_secs(2))
-                .await.is_ok()
+                .await
+                .is_ok()
         {
             break;
         }

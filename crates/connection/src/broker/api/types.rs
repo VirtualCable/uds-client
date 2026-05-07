@@ -203,7 +203,7 @@ pub struct Script {
     pub signature_algorithm: String, // Optional signature algorithm
     pub params: String, // from codecs.encode(codecs.encode(json.dumps(self.parameters).encode(), 'bz2'), 'base64').decode()
     pub log: Log,
-    pub shared_secret: Option<SharedSecret>,  // provided by the broker for cryptographic operations
+    pub shared_secret: Option<SharedSecret>, // provided by the broker for cryptographic operations
 }
 
 impl Script {
@@ -249,7 +249,6 @@ pub struct LogUpload<'a> {
 pub struct RdpSignRequest<'a> {
     pub rdp: &'a str,
 }
-
 
 // Test helper to get a sample Script
 #[cfg(test)]

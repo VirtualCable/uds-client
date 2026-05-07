@@ -28,9 +28,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
-use freerdp_sys::{
-    rdpPointer
-};
+use freerdp_sys::rdpPointer;
 
 use shared::log::debug;
 

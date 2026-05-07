@@ -74,12 +74,18 @@ impl PacketBuffer {
 
     // length is length of data + channel id (2 bytes)
     pub fn data_mut(&mut self) -> &mut [u8] {
-        let length = self.length().unwrap_or(consts::MAX_PACKET_SIZE).saturating_sub(2);
+        let length = self
+            .length()
+            .unwrap_or(consts::MAX_PACKET_SIZE)
+            .saturating_sub(2);
         &mut self.buffer[consts::DATA_START..consts::DATA_START + length]
     }
 
     pub fn data(&self) -> &[u8] {
-        let length = self.length().unwrap_or(consts::MAX_PACKET_SIZE).saturating_sub(2);
+        let length = self
+            .length()
+            .unwrap_or(consts::MAX_PACKET_SIZE)
+            .saturating_sub(2);
         &self.buffer[consts::DATA_START..consts::DATA_START + length]
     }
 
