@@ -438,7 +438,16 @@ impl AppWindow {
                             continue;
                         }
                         
-                        let texture_id_opt = window.texture.as_ref().map(|tex| tex.id());
+                        if window.show_state == Some(0) { // 0 = SW_HIDE
+                            continue;
+                        }
+
+                        let texture_id = if let Some(tex) = &window.texture {
+                            tex.id()
+                        } else {
+                            // If we don't have window pixels yet, skip drawing this viewport to avoid black flashes
+                            continue;
+                        };
                         
                         let id = egui::ViewportId::from_hash_of(window.id);
                         
@@ -468,15 +477,13 @@ impl AppWindow {
                                 egui::CentralPanel::default()
                                     .frame(egui::Frame::default().inner_margin(0.0))
                                     .show_inside(ctx, |ui| {
-                                        if let Some(texture_id) = texture_id_opt {
-                                            ui.add_sized(
-                                                [rect.w as f32, rect.h as f32],
-                                                egui::Image::new(egui::load::SizedTexture::new(
-                                                    texture_id,
-                                                    [rect.w as f32, rect.h as f32]
-                                                )).uv(uv)
-                                            );
-                                        }
+                                        ui.add_sized(
+                                            [rect.w as f32, rect.h as f32],
+                                            egui::Image::new(egui::load::SizedTexture::new(
+                                                texture_id,
+                                                [rect.w as f32, rect.h as f32]
+                                            )).uv(uv)
+                                        );
                                     });
                                 
                                 ctx.input(|i| {
