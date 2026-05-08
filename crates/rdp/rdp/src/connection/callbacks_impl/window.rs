@@ -61,6 +61,7 @@ impl WindowCallbacks for Rdp {
         order_info: *const WINDOW_ORDER_INFO,
         window_state: *const WINDOW_STATE_ORDER,
     ) -> bool {
+        #[allow(clippy::unnecessary_cast)]  // Needed beceuse windows/linux differ in the expected type on windowOffset..
         let (window_id, title, show_state, is_offscreen, pos, size) = unsafe {
             let info = &*order_info;
             let state = &*window_state;

@@ -61,6 +61,9 @@ struct RdpSettings {
     pub drives_to_redirect: Option<Vec<String>>,
     pub sound_latency_threshold: Option<u16>,
     pub best_experience: Option<bool>,
+    pub rail_app: Option<String>,
+    pub rail_args: Option<String>,
+    pub rail_working_dir: Option<String>,
 }
 
 impl Default for RdpSettings {
@@ -82,6 +85,9 @@ impl Default for RdpSettings {
             drives_to_redirect: None,
             sound_latency_threshold: None,
             best_experience: None,
+            rail_app: None,
+            rail_args: None,
+            rail_working_dir: None,
         }
     }
 }
@@ -143,6 +149,9 @@ fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
             .unwrap_or_else(|| defs.drives_to_redirect.clone()),
         sound_latency_threshold: rdp_settings.sound_latency_threshold,
         best_experience: rdp_settings.best_experience.unwrap_or(defs.best_experience),
+        rail_app: rdp_settings.rail_app.or(defs.rail_app),
+        rail_args: rdp_settings.rail_args.or(defs.rail_args),
+        rail_working_dir: rdp_settings.rail_working_dir.or(defs.rail_working_dir),
     };
 
     log::debug!("Starting RDP with settings: {:?}", settings);

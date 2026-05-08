@@ -64,6 +64,8 @@ pub struct RemoteWindow {
     pub show_state: Option<u32>,
     pub is_offscreen: bool,
     pub texture: Option<egui::TextureHandle>,
+    pub resize_requested: bool,
+    pub move_requested: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -309,6 +311,8 @@ impl AppWindow {
                                     show_state,
                                     is_offscreen: is_offscreen.unwrap_or(false),
                                     texture: None,
+                                    resize_requested: true,
+                                    move_requested: true,
                                 },
                             );
                         }
@@ -384,6 +388,12 @@ impl AppWindow {
                             log::debug!("GUI received WindowPixels: id={}, size={}x{}", window_id, width, height);
                             let mut windows = rdp_state.remote_windows.borrow_mut();
                             if let Some(w) = windows.get_mut(&window_id) {
+                                if w.rect.w != width || w.rect.h != height {
+                                    w.rect.w = width;
+                                    w.rect.h = height;
+                                    w.resize_requested = true;
+                                    ui.ctx().request_repaint();
+                                }
                                 let mut data_with_alpha = data;
                                 // Force alpha to 255 just in case
                                 for chunk in data_with_alpha.chunks_exact_mut(4) {
@@ -404,6 +414,7 @@ impl AppWindow {
                                         egui::TextureOptions::LINEAR,
                                     ));
                                 }
+                                ui.ctx().request_repaint_of(egui::ViewportId::from_hash_of(window_id));
                             }
                         }
                         RdpMessage::ClipboardData(_) => {}
@@ -453,6 +464,17 @@ impl AppWindow {
                         
                         let rect = window.rect;
                         let offset = egui::Vec2::new(rect.x as f32, rect.y as f32);
+
+                        let resize_requested = window.resize_requested;
+                        let move_requested = window.move_requested;
+
+                        if resize_requested || move_requested {
+                            let mut windows_map = rdp_state.remote_windows.borrow_mut();
+                            if let Some(w) = windows_map.get_mut(&window.id) {
+                                w.resize_requested = false;
+                                w.move_requested = false;
+                            }
+                        }
                         
                         // We use the whole window texture now, not a mapped UV of the primary desktop!
                         let uv = egui::Rect::from_min_max(
@@ -469,13 +491,20 @@ impl AppWindow {
                                 .with_title(&window.title)
                                 .with_inner_size([rect.w as f32, rect.h as f32])
                                 .with_position(egui::pos2(rect.x as f32, rect.y as f32))
-                                .with_decorations(true)
-                                .with_transparent(false)
+                                .with_decorations(false)
+                                .with_transparent(true)
                                 .with_visible(true),
                             move |ctx, _class| {
+                                if resize_requested {
+                                    ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize([rect.w as f32, rect.h as f32].into()));
+                                }
+                                if move_requested {
+                                    ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(rect.x as f32, rect.y as f32)));
+                                }
+
                                 let safe_input = safe_input; // Force capture the wrapper, not just the raw ptr
                                 egui::CentralPanel::default()
-                                    .frame(egui::Frame::default().inner_margin(0.0))
+                                    .frame(egui::Frame::default().inner_margin(0.0).fill(egui::Color32::TRANSPARENT))
                                     .show_inside(ctx, |ui| {
                                         ui.add_sized(
                                             [rect.w as f32, rect.h as f32],
@@ -491,6 +520,7 @@ impl AppWindow {
                                 });
 
                                 if ctx.input(|i| i.viewport().close_requested()) {
+                                    ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
                                     if let Some(rail) = &rail_channel_clone {
                                         rail.send_system_command(window_id, rdp::consts::SC_CLOSE as u16);
                                     }
