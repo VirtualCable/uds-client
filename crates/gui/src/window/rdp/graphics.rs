@@ -118,8 +118,8 @@ impl Screen {
 
         let rect = if let Some(r) = unique_rect { r } else { return };
 
-        let safe_x = rect.x.min(fb_width as u32) as usize;
-        let safe_y = rect.y.min(fb_height as u32) as usize;
+        let safe_x = rect.x.max(0).min(fb_width as i32) as usize;
+        let safe_y = rect.y.max(0).min(fb_height as i32) as usize;
         let safe_w = rect.w.min((fb_width as u32).saturating_sub(safe_x as u32));
         let safe_h = rect.h.min((fb_height as u32).saturating_sub(safe_y as u32));
 

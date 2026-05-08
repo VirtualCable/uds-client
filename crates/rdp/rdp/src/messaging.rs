@@ -50,7 +50,8 @@ pub enum RdpMessage {
         title: String,
         show_state: Option<u32>,
         is_offscreen: Option<bool>,
-        rect: Option<Rect>,
+        pos: Option<(i32, i32)>,
+        size: Option<(u32, u32)>,
     },
     WindowUpdate {
         window_id: u32,
@@ -59,7 +60,8 @@ pub enum RdpMessage {
         /// Some(true) when coordinates are in the offscreen/minimized zone (< -1000)
         /// None when field flags don't specify coordinate updates
         is_offscreen: Option<bool>,
-        rect: Option<Rect>,
+        pos: Option<(i32, i32)>,
+        size: Option<(u32, u32)>,
     },
     WindowDelete(u32),
     ClientWindowMove {
@@ -72,6 +74,16 @@ pub enum RdpMessage {
     ClientSystemCommand {
         window_id: u32,
         command: u32,
+    },
+    MicConfig {
+        sample_rate: u32,
+        frames_per_packet: u32,
+    },
+    WindowPixels {
+        window_id: u32,
+        width: u32,
+        height: u32,
+        data: Vec<u8>,
     },
 }
 

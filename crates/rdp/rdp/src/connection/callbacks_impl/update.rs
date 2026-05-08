@@ -1,5 +1,5 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,58 +26,25 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+//
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 use freerdp_sys::*;
 
 use shared::log;
 
-use crate::{callbacks::update, utils::normalize_rects};
+use crate::callbacks::update;
 
 use super::{Rdp, RdpMessage};
 
 impl update::UpdateCallbacks for Rdp {
     fn on_begin_paint(&mut self) -> bool {
-        // Note: Regions are cleared by update_begin_paint by FreeRDP itself
-        // Else, we should have to set invalid.null to true and ninvalid to 0 here manually on hwnd.
-
         true
     }
 
     fn on_end_paint(&mut self) -> bool {
-        // If no sender, skip
-        if let Some(tx) = &self.update_tx {
-            // If no updates, skip
-            if let Some(gdi) = self.gdi() {
-                // We can simply get "invalid", that is the joined rects that needs update
-                // for more granular updates, we get all rects and send them individually
-                let (rects_raw, width, height) = unsafe {
-                    let primary = &mut *(*gdi).primary;
-                    let width = (*gdi).width as u32;
-                    let height = (*gdi).height as u32;
-                    let hwnd = (*primary.hdc).hwnd;
-                    if (*hwnd).invalid.is_null()
-                        || (*(*hwnd).invalid).null != 0
-                        || (*hwnd).ninvalid <= 0
-                    {
-                        return true;
-                    }
-
-                    // Currently, using joined rect only (invalid), individials comes on cinvalid with ninvalid count
-                    // But this should be enough for most cases (until implemented our own drawing routines)
-                    (
-                        std::slice::from_raw_parts((*hwnd).invalid, 1),
-                        width,
-                        height,
-                    )
-                };
-
-                if let Some(rects) = normalize_rects(rects_raw, width, height) {
-                    let _ = tx.try_send(RdpMessage::UpdateRects(rects));
-                }
-            }
-        }
-        true
+        log::trace!("on_end_paint called");
+        self.send_update()
     }
 
     fn on_desktop_resize(&mut self) -> bool {
@@ -98,6 +65,72 @@ impl update::UpdateCallbacks for Rdp {
         let _gdi_guard = gdi_lock.write().unwrap();
         if let Some(gdi) = self.gdi() {
             unsafe { gdi_resize(gdi, width as u32, height as u32) };
+        }
+        true
+    }
+}
+
+impl Rdp {
+    fn send_update(&self) -> bool {
+        log::debug!("send_update called");
+        if let Some(tx) = &self.update_tx
+            && let Some(gdi) = self.gdi()
+        {
+            unsafe {
+                // CRITICAL: Use gdi->primary->hdc->hwnd->invalid (like Guacamole),
+                // NOT gdi->drawing. The GFX pipeline writes to primary and sets
+                // its invalidation region, but 'drawing' may point elsewhere.
+                let primary = (*gdi).primary;
+                if primary.is_null() {
+                    return true;
+                }
+                let hdc = (*primary).hdc;
+                if hdc.is_null() || (*hdc).hwnd.is_null() {
+                    return true;
+                }
+
+                let hwnd = (*hdc).hwnd;
+                let rgn = (*hwnd).invalid;
+                let ninvalid = (*hwnd).ninvalid;
+
+                if !rgn.is_null() && ((*rgn).null == 0 || ninvalid > 0) {
+                    let mut rects = vec![];
+                    if (*rgn).null == 0 {
+                        rects.push(crate::geom::Rect::new(
+                            (*rgn).x as i32,
+                            (*rgn).y as i32,
+                            (*rgn).w as u32,
+                            (*rgn).h as u32,
+                        ));
+                    }
+                    if ninvalid > 0 {
+                        let cinvalid = (*hwnd).cinvalid;
+                        if !cinvalid.is_null() {
+                            let slice = std::slice::from_raw_parts(cinvalid, ninvalid as usize);
+                            for crgn in slice.iter() {
+                                if crgn.null == 0 {
+                                    rects.push(crate::geom::Rect::new(
+                                        crgn.x as i32,
+                                        crgn.y as i32,
+                                        crgn.w as u32,
+                                        crgn.h as u32,
+                                    ));
+                                }
+                            }
+                        }
+                    }
+
+                    if !rects.is_empty() {
+                        // Use debug instead of trace so we can see it without changing log level
+                        log::debug!("Sending UpdateRects: block, items: {}", rects.len());
+                        let _ = tx.try_send(RdpMessage::UpdateRects(rects));
+                    }
+
+                    // Reset invalidation after sending, following Guacamole's pattern
+                    (*rgn).null = 1;
+                    (*hwnd).ninvalid = 0;
+                }
+            }
         }
         true
     }

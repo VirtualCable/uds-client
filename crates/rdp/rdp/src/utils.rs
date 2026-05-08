@@ -77,8 +77,8 @@ pub fn normalize_rects(rects_raw: &[GDI_RGN], width: u32, height: u32) -> Option
                 && r.h > 0
             {
                 Some(Rect {
-                    x: r.x as u32,
-                    y: r.y as u32,
+                    x: r.x as i32,
+                    y: r.y as i32,
                     w: r.w as u32,
                     h: r.h as u32,
                 })

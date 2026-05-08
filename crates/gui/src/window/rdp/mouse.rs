@@ -39,8 +39,8 @@ use crate::window::AppWindow;
 #[derive(Clone)]
 pub struct RdpMouseCursor {
     pub texture: egui::TextureHandle,
-    pub x: u32,
-    pub y: u32,
+    pub x: i32,
+    pub y: i32,
     pub width: u32,
     pub height: u32,
 }
@@ -57,8 +57,8 @@ impl RdpMouseCursor {
     pub fn update(
         &mut self,
         texture: egui::TextureHandle,
-        x: u32,
-        y: u32,
+        x: i32,
+        y: i32,
         width: u32,
         height: u32,
     ) {

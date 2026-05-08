@@ -87,6 +87,22 @@ impl AppWindow {
                     ui.label(format!("Failed to connect: {}", e));
                 }
             }
+            if ui.button("RDP RAIL Calc").clicked() {
+                if let Err(e) = self.enter_rdp_connection(
+                    ui,
+                    frame,
+                    RdpSettings {
+                        server: "172.27.247.161".to_string(),
+                        user: "user".to_string(),
+                        password: "temporal".to_string(),
+                        screen_size: ScreenSize::Full,
+                        rail_app: Some("c:\\windows\\system32\\calc.exe".to_string()),
+                        ..RdpSettings::default()
+                    },
+                ) {
+                    ui.label(format!("Failed to connect: {}", e));
+                }
+            }
             if ui.button("Progress").clicked()
                 && let Err(e) = self.enter_client_progress(ui, frame, ProgressState::default())
             {

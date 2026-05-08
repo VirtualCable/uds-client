@@ -89,6 +89,16 @@ impl channels::ChannelsCallbacks for Rdp {
                 self.channels.write().unwrap().set_gfx_ptr(interface);
                 unsafe {
                     self.channels.read().unwrap().gfx().unwrap().hook_gdi(self.gdi().unwrap());
+                    
+                    // Re-register EndPaint/BeginPaint because gdi_graphics_pipeline_init overwrites them
+                    let context = self.instance.as_deref().unwrap().context;
+                    crate::callbacks::update_c::set_callbacks(
+                        context,
+                        &[
+                            crate::callbacks::update_c::Callbacks::BeginPaint,
+                            crate::callbacks::update_c::Callbacks::EndPaint,
+                        ],
+                    );
                 }
                 true
             }

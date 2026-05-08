@@ -61,7 +61,7 @@ impl WindowCallbacks for Rdp {
         order_info: *const WINDOW_ORDER_INFO,
         window_state: *const WINDOW_STATE_ORDER,
     ) -> bool {
-        let (window_id, title, show_state, is_offscreen, rect) = unsafe {
+        let (window_id, title, show_state, is_offscreen, pos, size) = unsafe {
             let info = &*order_info;
             let state = &*window_state;
             let show_state = if info.fieldFlags & WINDOW_ORDER_FIELD_SHOW != 0 {
@@ -74,13 +74,13 @@ impl WindowCallbacks for Rdp {
             } else {
                 None
             };
-            let rect = if info.fieldFlags & (WINDOW_ORDER_FIELD_WND_OFFSET | WINDOW_ORDER_FIELD_WND_SIZE) != 0 {
-                Some(crate::geom::Rect::new(
-                    state.windowOffsetX as u32,
-                    state.windowOffsetY as u32,
-                    state.windowWidth as u32,
-                    state.windowHeight as u32,
-                ))
+            let pos = if info.fieldFlags & WINDOW_ORDER_FIELD_WND_OFFSET != 0 {
+                Some((state.windowOffsetX as i32, state.windowOffsetY as i32))
+            } else {
+                None
+            };
+            let size = if info.fieldFlags & WINDOW_ORDER_FIELD_WND_SIZE != 0 {
+                Some((state.windowWidth as u32, state.windowHeight as u32))
             } else {
                 None
             };
@@ -89,17 +89,19 @@ impl WindowCallbacks for Rdp {
                 get_rail_string(&state.titleInfo),
                 show_state,
                 is_offscreen,
-                rect,
+                pos,
+                size,
             )
         };
 
         log::debug!(
-            "WindowCreate: id={}, title={:?}, show_state={:?}, is_offscreen={:?}, rect={:?}",
+            "WindowCreate: id={}, title={:?}, show_state={:?}, is_offscreen={:?}, pos={:?}, size={:?}",
             window_id,
             title,
             show_state,
             is_offscreen,
-            rect
+            pos,
+            size
         );
 
         if let Some(tx) = &self.update_tx {
@@ -108,7 +110,8 @@ impl WindowCallbacks for Rdp {
                 title,
                 show_state,
                 is_offscreen,
-                rect,
+                pos,
+                size,
             });
             // If the window is being created in SW_SHOW(5) or SW_SHOWMAXIMIZED(3) state,
             // trigger a screen sync to be safe.
@@ -130,7 +133,7 @@ impl WindowCallbacks for Rdp {
         order_info: *const WINDOW_ORDER_INFO,
         window_state: *const WINDOW_STATE_ORDER,
     ) -> bool {
-        let (window_id, title, show_state, is_offscreen, rect, state_ref) = unsafe {
+        let (window_id, title, show_state, is_offscreen, pos, size, state_ref) = unsafe {
             let info = &*order_info;
             let state = &*window_state;
             let show_state = if info.fieldFlags & WINDOW_ORDER_FIELD_SHOW != 0 {
@@ -143,13 +146,13 @@ impl WindowCallbacks for Rdp {
             } else {
                 None
             };
-            let rect = if info.fieldFlags & (WINDOW_ORDER_FIELD_WND_OFFSET | WINDOW_ORDER_FIELD_WND_SIZE) != 0 {
-                Some(crate::geom::Rect::new(
-                    state.windowOffsetX as u32,
-                    state.windowOffsetY as u32,
-                    state.windowWidth as u32,
-                    state.windowHeight as u32,
-                ))
+            let pos = if info.fieldFlags & WINDOW_ORDER_FIELD_WND_OFFSET != 0 {
+                Some((state.windowOffsetX as i32, state.windowOffsetY as i32))
+            } else {
+                None
+            };
+            let size = if info.fieldFlags & WINDOW_ORDER_FIELD_WND_SIZE != 0 {
+                Some((state.windowWidth as u32, state.windowHeight as u32))
             } else {
                 None
             };
@@ -158,13 +161,14 @@ impl WindowCallbacks for Rdp {
                 get_rail_string(&state.titleInfo),
                 show_state,
                 is_offscreen,
-                rect,
+                pos,
+                size,
                 state,
             )
         };
 
         log::debug!(
-            "WindowUpdate: id={}, flags=0x{:X}, title={:?}, show_state={:?}, pos=({}, {}), offscreen={:?}, rect={:?}",
+            "WindowUpdate: id={}, flags=0x{:X}, title={:?}, show_state={:?}, offset=({}, {}), offscreen={:?}, pos={:?}, size={:?}",
             window_id,
             unsafe { (*order_info).fieldFlags },
             title,
@@ -172,7 +176,8 @@ impl WindowCallbacks for Rdp {
             state_ref.windowOffsetX,
             state_ref.windowOffsetY,
             is_offscreen,
-            rect
+            pos,
+            size
         );
 
         if let Some(tx) = &self.update_tx {
@@ -181,7 +186,8 @@ impl WindowCallbacks for Rdp {
                 title,
                 show_state,
                 is_offscreen,
-                rect,
+                pos,
+                size,
             });
 
             if let Some(show_state) = show_state
