@@ -42,6 +42,7 @@ pub mod wlog;
 
 pub mod geom;
 pub mod settings;
+pub mod consts;
 
 pub mod context;
 pub mod messaging;

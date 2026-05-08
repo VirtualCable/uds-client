@@ -1,5 +1,5 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,53 +26,36 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+//
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
-use flume;
 
-use crate::geom::Rect;
+// BSD 3-Clause License
+// Copyright (c) 2026, Virtual Cable S.L.
+// All rights reserved.
 
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub enum RdpMessage {
-    UpdateRects(Vec<Rect>),
-    Disconnect,
-    FocusRequired,
-    Error(String),
-    SetCursorIcon(Vec<u8>, u32, u32, u32, u32), // x, y, (of pointer "pointer") width, height
-    ClipboardData(String),
-    None, // Used on interrrupting recv by a timeout
+/// Window show states (Win32 SW_* constants)
+pub const SW_HIDE: u32 = 0;
+pub const SW_SHOWNORMAL: u32 = 1;
+pub const SW_SHOWMINIMIZED: u32 = 2;
+pub const SW_SHOWMAXIMIZED: u32 = 3;
+pub const SW_SHOWNOACTIVATE: u32 = 4;
+pub const SW_SHOW: u32 = 5;
+pub const SW_MINIMIZE: u32 = 6;
+pub const SW_SHOWMINNOACTIVE: u32 = 7;
+pub const SW_SHOWNA: u32 = 8;
+pub const SW_RESTORE: u32 = 9;
+pub const SW_SHOWDEFAULT: u32 = 10;
+pub const SW_FORCEMINIMIZE: u32 = 11;
 
-    // RAIL window events — metadata only, no pixel routing
-    // show_state: None = unknown, Some(2) = minimized, Some(3) = maximized, Some(1/5) = normal
-    WindowCreate {
-        window_id: u32,
-        title: String,
-        show_state: Option<u32>,
-        is_offscreen: Option<bool>,
-        rect: Option<Rect>,
-    },
-    WindowUpdate {
-        window_id: u32,
-        title: String,
-        show_state: Option<u32>,
-        /// Some(true) when coordinates are in the offscreen/minimized zone (< -1000)
-        /// None when field flags don't specify coordinate updates
-        is_offscreen: Option<bool>,
-        rect: Option<Rect>,
-    },
-    WindowDelete(u32),
-    ClientWindowMove {
-        window_id: u32,
-        x: i32,
-        y: i32,
-        width: u32,
-        height: u32,
-    },
-    ClientSystemCommand {
-        window_id: u32,
-        command: u32,
-    },
-}
+/// RAIL System Commands
+pub const SC_MINIMIZE: u32 = 0xF020;
+pub const SC_MAXIMIZE: u32 = 0xF030;
+pub const SC_RESTORE: u32 = 0xF120;
+pub const SC_CLOSE: u32 = 0xF060;
 
-pub type Sender = flume::Sender<RdpMessage>;
+/// Coordinate thresholds and constants
+pub const OFFSCREEN_THRESHOLD: i32 = -1000;
+pub const MINIMIZED_COORD: i32 = -32000;
+
+/// Screen synchronization constants
+pub const MAX_SYNC_SIZE: u32 = 4000;

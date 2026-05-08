@@ -34,6 +34,8 @@ use shared::log;
 
 pub mod cliprdr;
 pub mod disp;
+pub mod gfx;
+pub mod rail;
 
 #[derive(Clone, Debug)]
 pub struct RdpChannels {
@@ -42,6 +44,9 @@ pub struct RdpChannels {
 
     // Helper for clipbrdr channel, to connect with native clipboard
     native: Option<Arc<RwLock<cliprdr::native::ClipboardNative>>>,
+
+    rail: Option<rail::RailChannel>,
+    gfx: Option<gfx::GfxChannel>,
 }
 
 impl RdpChannels {
@@ -50,6 +55,8 @@ impl RdpChannels {
             disp: None,
             cliprdr: None,
             native: None,
+            rail: None,
+            gfx: None,
         }
     }
 
@@ -81,6 +88,30 @@ impl RdpChannels {
 
     pub fn native(&self) -> Option<Arc<RwLock<cliprdr::native::ClipboardNative>>> {
         self.native.clone()
+    }
+
+    pub fn set_rail_ptr(&mut self, rail: *mut freerdp_sys::RailClientContext) {
+        self.rail = Some(rail::RailChannel::new(rail));
+    }
+
+    pub fn clear_rail(&mut self) {
+        self.rail = None;
+    }
+
+    pub fn rail(&self) -> Option<rail::RailChannel> {
+        self.rail.clone()
+    }
+
+    pub fn set_gfx_ptr(&mut self, gfx: *mut freerdp_sys::RdpgfxClientContext) {
+        self.gfx = Some(gfx::GfxChannel::new(gfx));
+    }
+
+    pub fn clear_gfx(&mut self) {
+        self.gfx = None;
+    }
+
+    pub fn gfx(&self) -> Option<gfx::GfxChannel> {
+        self.gfx.clone()
     }
 
     pub fn stop_native(&self) {

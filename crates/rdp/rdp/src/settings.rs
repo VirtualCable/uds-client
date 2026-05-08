@@ -66,6 +66,12 @@ pub struct RdpSettings {
     pub sound_latency_threshold: Option<u16>,
     #[zeroize(skip)]
     pub best_experience: bool,
+    #[zeroize(skip)]
+    pub rail_app: Option<String>,
+    #[zeroize(skip)]
+    pub rail_args: Option<String>,
+    #[zeroize(skip)]
+    pub rail_working_dir: Option<String>,
 }
 
 impl Default for RdpSettings {
@@ -86,6 +92,9 @@ impl Default for RdpSettings {
             drives_to_redirect: vec!["all".to_string()], // By default, redirect all drives.
             sound_latency_threshold: None,
             best_experience: true,
+            rail_app: None,
+            rail_args: None,
+            rail_working_dir: None,
         }
     }
 }
@@ -115,6 +124,9 @@ impl fmt::Debug for RdpSettings {
             .field("drives_to_redirect", &self.drives_to_redirect)
             .field("sound_latency_threshold", &self.sound_latency_threshold)
             .field("best_experience", &self.best_experience)
+            .field("rail_app", &self.rail_app)
+            .field("rail_args", &self.rail_args)
+            .field("rail_working_dir", &self.rail_working_dir)
             .finish()
     }
 }

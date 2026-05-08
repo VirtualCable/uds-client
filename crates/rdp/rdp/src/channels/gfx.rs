@@ -1,5 +1,5 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,53 +26,46 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+//
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
-use flume;
 
-use crate::geom::Rect;
+use crate::utils;
+use freerdp_sys::*;
+use shared::log;
 
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub enum RdpMessage {
-    UpdateRects(Vec<Rect>),
-    Disconnect,
-    FocusRequired,
-    Error(String),
-    SetCursorIcon(Vec<u8>, u32, u32, u32, u32), // x, y, (of pointer "pointer") width, height
-    ClipboardData(String),
-    None, // Used on interrrupting recv by a timeout
-
-    // RAIL window events — metadata only, no pixel routing
-    // show_state: None = unknown, Some(2) = minimized, Some(3) = maximized, Some(1/5) = normal
-    WindowCreate {
-        window_id: u32,
-        title: String,
-        show_state: Option<u32>,
-        is_offscreen: Option<bool>,
-        rect: Option<Rect>,
-    },
-    WindowUpdate {
-        window_id: u32,
-        title: String,
-        show_state: Option<u32>,
-        /// Some(true) when coordinates are in the offscreen/minimized zone (< -1000)
-        /// None when field flags don't specify coordinate updates
-        is_offscreen: Option<bool>,
-        rect: Option<Rect>,
-    },
-    WindowDelete(u32),
-    ClientWindowMove {
-        window_id: u32,
-        x: i32,
-        y: i32,
-        width: u32,
-        height: u32,
-    },
-    ClientSystemCommand {
-        window_id: u32,
-        command: u32,
-    },
+#[derive(Clone, Debug)]
+pub struct GfxChannel {
+    ptr: Option<utils::SafePtr<freerdp_sys::RdpgfxClientContext>>,
 }
 
-pub type Sender = flume::Sender<RdpMessage>;
+impl GfxChannel {
+    pub fn new(ptr: *mut freerdp_sys::RdpgfxClientContext) -> Self {
+        Self {
+            ptr: utils::SafePtr::new(ptr),
+        }
+    }
+
+    /// # Safety
+    ///
+    /// The caller must ensure that `gdi` is a valid pointer to an `rdpGdi` structure.
+    /// The caller must also ensure that the `GfxChannel` is valid and that the
+    /// `rdpGdi` structure is properly initialized.
+    ///
+    /// Hooks the Graphics Pipeline into the GDI drawing engine.
+    /// This handles drawing GFX frames into the GDI surface and
+    /// automatically sends frame acknowledgments for flow control.
+    pub unsafe fn hook_gdi(&self, gdi: *mut rdpGdi) -> bool {
+        if let Some(ptr) = &self.ptr {
+            log::debug!("GFX: Hooking GDI pipeline");
+            let context = ptr.as_mut_ptr();
+            unsafe {
+                if gdi_graphics_pipeline_init(gdi, context) != 0 {
+                    log::info!("GFX: Graphics pipeline integrated with GDI.");
+                    return true;
+                }
+            }
+        }
+        log::error!("GFX: Failed to hook GDI pipeline.");
+        false
+    }
+}

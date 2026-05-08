@@ -36,14 +36,25 @@
 #include <freerdp/codec/color.h>
 #include <freerdp/transport_io.h>
 
+// Client
 #include <freerdp/client/disp.h>
 #include <freerdp/client/cliprdr.h>
 #include <freerdp/client/rdpsnd.h>
+#include <freerdp/client/audin.h>
+#include <freerdp/client/rail.h>
+#include <freerdp/client/rdpgfx.h>
+#include <freerdp/client/cmdline.h>
 
 // Channels
+#include <freerdp/channels/channels.h>
 #include <freerdp/channels/disp.h>
 #include <freerdp/channels/cliprdr.h>
 #include <freerdp/channels/rail.h>
+#include <freerdp/channels/rdpsnd.h>
+#include <freerdp/channels/audin.h>
+
+#include <freerdp/gdi/gfx.h>
+#include <freerdp/codec/h264.h>
 
 #include <winpr/synch.h>
 #include <winpr/wtypes.h>

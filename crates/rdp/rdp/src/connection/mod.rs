@@ -246,6 +246,51 @@ impl Rdp {
                     );
                 }
 
+                // RAIL / RemoteApp mode
+                if let Some(rail_app) = &self.config.settings.rail_app {
+                    freerdp_settings_set_bool(
+                        settings,
+                        FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteApplicationMode,
+                        true.into(),
+                    );
+                    freerdp_settings_set_uint32(
+                        settings,
+                        FreeRDP_Settings_Keys_UInt32_FreeRDP_RemoteApplicationSupportLevel,
+                        (freerdp_sys::RAIL_LEVEL_SUPPORTED
+                            | freerdp_sys::RAIL_LEVEL_HANDSHAKE_EX_SUPPORTED) as u32,
+                    );
+                    freerdp_settings_set_uint32(
+                        settings,
+                        FreeRDP_Settings_Keys_UInt32_FreeRDP_RemoteApplicationSupportMask,
+                        0xFFFFFFFF, // Allow all capabilities negotiated with server
+                    );
+                    
+                    let capp = std::ffi::CString::new(rail_app.clone()).unwrap();
+                    freerdp_settings_set_string(
+                        settings,
+                        FreeRDP_Settings_Keys_String_FreeRDP_RemoteApplicationProgram,
+                        capp.as_ptr(),
+                    );
+
+                    if let Some(rail_args) = &self.config.settings.rail_args {
+                        let cargs = std::ffi::CString::new(rail_args.clone()).unwrap();
+                        freerdp_settings_set_string(
+                            settings,
+                            FreeRDP_Settings_Keys_String_FreeRDP_RemoteApplicationCmdLine,
+                            cargs.as_ptr(),
+                        );
+                    }
+
+                    if let Some(rail_dir) = &self.config.settings.rail_working_dir {
+                        let cdir = std::ffi::CString::new(rail_dir.clone()).unwrap();
+                        freerdp_settings_set_string(
+                            settings,
+                            FreeRDP_Settings_Keys_String_FreeRDP_RemoteApplicationWorkingDir,
+                            cdir.as_ptr(),
+                        );
+                    }
+                }
+
                 freerdp_settings_set_bool(
                     settings,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_IgnoreCertificate,

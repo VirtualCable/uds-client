@@ -69,6 +69,27 @@ impl channels::ChannelsCallbacks for Rdp {
                     [..freerdp_sys::RAIL_SVC_CHANNEL_NAME.len() - 1] =>
             {
                 log::debug!("**** RAIL channel connection accepted.");
+                let interface = p_interface as *mut RailClientContext;
+                unsafe {
+                    (*interface).custom =
+                        self.context().unwrap() as *const _ as *mut std::os::raw::c_void;
+                }
+                self.channels
+                    .write()
+                    .unwrap()
+                    .set_rail_ptr(interface);
+                true
+            }
+            name if name
+                == &freerdp_sys::RDPGFX_DVC_CHANNEL_NAME
+                    [..freerdp_sys::RDPGFX_DVC_CHANNEL_NAME.len() - 1] =>
+            {
+                log::debug!("**** RDPGFX channel connection accepted.");
+                let interface = p_interface as *mut RdpgfxClientContext;
+                self.channels.write().unwrap().set_gfx_ptr(interface);
+                unsafe {
+                    self.channels.read().unwrap().gfx().unwrap().hook_gdi(self.gdi().unwrap());
+                }
                 true
             }
             name if name
@@ -107,6 +128,15 @@ impl channels::ChannelsCallbacks for Rdp {
                     [..freerdp_sys::RAIL_SVC_CHANNEL_NAME.len() - 1] =>
             {
                 log::debug!("**** RAIL channel disconnected.");
+                self.channels.write().unwrap().clear_rail();
+                true
+            }
+            name if name
+                == &freerdp_sys::RDPGFX_DVC_CHANNEL_NAME
+                    [..freerdp_sys::RDPGFX_DVC_CHANNEL_NAME.len() - 1] =>
+            {
+                log::debug!("**** RDPGFX channel disconnected.");
+                self.channels.write().unwrap().clear_gfx();
                 true
             }
             name if name

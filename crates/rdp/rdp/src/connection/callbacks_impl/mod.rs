@@ -38,7 +38,7 @@ mod update; // implements update callbacks // implements channel callbacks
 // and will invoke us
 mod clipboard; // implements clipboard callbacks
 
-use crate::callbacks::{altsec, entrypoint, input, pointer_update, primary, secondary, window};
+use crate::callbacks::{altsec, entrypoint, input, pointer_update, primary, secondary};
 
 use super::{Rdp, RdpMessage};
 
@@ -47,5 +47,5 @@ impl pointer_update::PointerCallbacks for Rdp {}
 impl primary::PrimaryCallbacks for Rdp {}
 impl secondary::SecondaryCallbacks for Rdp {}
 impl altsec::AltSecCallbacks for Rdp {}
-impl window::WindowCallbacks for Rdp {}
+mod window;
 impl entrypoint::EntrypointCallbacks for Rdp {}

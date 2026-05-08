@@ -57,19 +57,19 @@ use rdp::sys::{
 };
 
 impl AppWindow {
-    fn handle_mouse(
-        &mut self,
+    pub(super) fn handle_mouse(
         _ctx: &egui::Context,
         rdp_input: *mut rdpInput,
         input_state: &egui::InputState,
         scale: egui::Vec2,
+        offset: egui::Vec2,
     ) {
         for ev in &input_state.events {
             match ev {
                 egui::Event::PointerMoved(pos) => {
                     // Mouse moved
-                    let x = (pos.x * scale.x) as u16;
-                    let y = (pos.y * scale.y) as u16;
+                    let x = (pos.x * scale.x + offset.x) as u16;
+                    let y = (pos.y * scale.y + offset.y) as u16;
                     unsafe {
                         freerdp_input_send_mouse_event(rdp_input, PTR_FLAGS_MOVE as u16, x, y)
                     };
@@ -89,7 +89,7 @@ impl AppWindow {
                         egui::PointerButton::Extra1 => (0, PTR_XFLAGS_BUTTON1, pressed.to_owned()),
                         egui::PointerButton::Extra2 => (0, PTR_XFLAGS_BUTTON2, pressed.to_owned()),
                     };
-                    let (x, y) = ((pos.x * scale.x) as u16, (pos.y * scale.y) as u16);
+                    let (x, y) = ((pos.x * scale.x + offset.x) as u16, (pos.y * scale.y + offset.y) as u16);
                     if flags != 0 {
                         unsafe {
                             freerdp_input_send_mouse_event(
@@ -146,7 +146,7 @@ impl AppWindow {
         }
     }
 
-    fn handle_keyboard(
+    pub(super) fn handle_keyboard(
         &mut self,
         _ctx: &egui::Context,
         rdp_input: *mut rdpInput,
@@ -184,7 +184,7 @@ impl AppWindow {
             //     log::debug!("Input event: {:?}", ev);
             // }
             // Handle mouse input
-            self.handle_mouse(ctx, rdp_input, input_state, scale);
+            Self::handle_mouse(ctx, rdp_input, input_state, scale, egui::Vec2::ZERO);
             // Handle keyboard input
             self.handle_keyboard(ctx, rdp_input, input_state);
         });

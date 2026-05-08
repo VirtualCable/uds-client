@@ -56,6 +56,26 @@ use crate::window::{AppWindow, types::AppState};
 
 const FRAMES_IN_FLIGHT: usize = 128;
 
+#[derive(Clone, Debug)]
+pub struct RemoteWindow {
+    pub id: u32,
+    pub title: String,
+    pub rect: rdp::geom::Rect,
+    pub show_state: Option<u32>,
+    pub is_offscreen: bool,
+}
+
+#[derive(Clone, Copy)]
+pub struct SafeInputPtr(pub *mut rdpInput);
+unsafe impl Send for SafeInputPtr {}
+unsafe impl Sync for SafeInputPtr {}
+
+impl fmt::Debug for SafeInputPtr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("SafeInputPtr").field(&self.0).finish()
+    }
+}
+
 // Arcs are to keep original references when cloning
 // because states are cloned when switching app states
 #[derive(Clone)]
@@ -63,7 +83,7 @@ pub struct RdpConnectionState {
     pub update_rx: Receiver<RdpMessage>,
     pub gdi: *mut rdpGdi,
     pub gdi_lock: Arc<RwLock<()>>,
-    pub input: *mut rdpInput,
+    pub input: SafeInputPtr,
     pub channels: Arc<RwLock<rdp::channels::RdpChannels>>,
     pub screen: super::graphics::Screen,
     pub cursor: Rc<RefCell<super::mouse::RdpMouseCursor>>,
@@ -78,6 +98,10 @@ pub struct RdpConnectionState {
     // Very basic fps calculation
     // We get time between frames
     pub fps: Rc<RefCell<super::fps::Fps>>,
+
+    // RAIL / RemoteApp mode
+    pub is_rail: bool,
+    pub remote_windows: Rc<RefCell<std::collections::HashMap<u32, RemoteWindow>>>,
 }
 
 impl fmt::Debug for RdpConnectionState {
@@ -111,6 +135,12 @@ impl AppWindow {
         };
 
         let use_rgba = !super::graphics::Screen::supports_bgra(frame);
+
+        let is_rail = rdp_settings.rail_app.is_some();
+
+        if is_rail {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+        }
 
         // Rdp shouls be pinned, as build() inserts self reference inside freedrp structs
         let mut rdp: std::pin::Pin<Box<Rdp>> = Box::pin(Rdp::new(rdp_settings, tx, use_rgba));
@@ -155,7 +185,7 @@ impl AppWindow {
         self.set_app_state(AppState::RdpConnected(RdpConnectionState {
             update_rx: rx,
             gdi,
-            input,
+            input: SafeInputPtr(input),
             channels: rdp.channels().clone(),
             gdi_lock,
             screen: super::graphics::Screen::new(ctx, frame, texture_size, use_rgba),
@@ -170,6 +200,8 @@ impl AppWindow {
             pinbar_visible: Rc::new(AtomicBool::new(false)),
             last_resize: Rc::new(RefCell::new(std::time::Instant::now())),
             fps: Rc::new(RefCell::new(super::fps::Fps::new())),
+            is_rail,
+            remote_windows: Rc::new(RefCell::new(std::collections::HashMap::new())),
         }));
 
         std::thread::spawn(move || {
@@ -208,8 +240,14 @@ impl AppWindow {
             return;
         }
 
-        let input = rdp_state.input;
-        self.handle_input(ui.ctx(), input, scale);
+        let input = rdp_state.input.0;
+        if !rdp_state.is_rail {
+            self.handle_input(ui.ctx(), input, scale);
+        } else {
+            ui.ctx().input(|i| {
+                self.handle_keyboard(ui.ctx(), input, i);
+            });
+        }
 
         self.handle_screen_resize(ui.ctx().content_rect().size(), &mut rdp_state);
 
@@ -226,6 +264,52 @@ impl AppWindow {
                         RdpMessage::UpdateRects(rects) => {
                             rects_to_update.extend_from_slice(&rects);
                         }
+                        RdpMessage::WindowCreate {
+                            window_id,
+                            title,
+                            show_state,
+                            is_offscreen,
+                            rect,
+                        } => {
+                            let mut windows = rdp_state.remote_windows.borrow_mut();
+                            let existing_rect = windows.get(&window_id).map(|w| w.rect).unwrap_or(rdp::geom::Rect::new(0, 0, 0, 0));
+                            windows.insert(
+                                window_id,
+                                RemoteWindow {
+                                    id: window_id,
+                                    title,
+                                    rect: rect.unwrap_or(existing_rect),
+                                    show_state,
+                                    is_offscreen: is_offscreen.unwrap_or(false),
+                                },
+                            );
+                        }
+                        RdpMessage::WindowUpdate {
+                            window_id,
+                            title,
+                            show_state,
+                            is_offscreen,
+                            rect,
+                        } => {
+                            let mut windows = rdp_state.remote_windows.borrow_mut();
+                            if let Some(w) = windows.get_mut(&window_id) {
+                                w.title = title;
+                                if let Some(s) = show_state {
+                                    w.show_state = Some(s);
+                                }
+                                if let Some(o) = is_offscreen {
+                                    w.is_offscreen = o;
+                                }
+                                if let Some(r) = rect {
+                                    w.rect = r;
+                                }
+                            }
+                        }
+                        RdpMessage::WindowDelete(window_id) => {
+                            rdp_state.remote_windows.borrow_mut().remove(&window_id);
+                        }
+                        RdpMessage::ClientWindowMove { .. } => {}
+                        RdpMessage::ClientSystemCommand { .. } => {}
                         RdpMessage::Disconnect => {
                             log::debug!("RDP Disconnected");
                             self.exit(ui.ctx());
@@ -253,6 +337,8 @@ impl AppWindow {
                                 },
                             );
                         }
+                        RdpMessage::ClipboardData(_) => {}
+                        RdpMessage::None => {}
                     }
                 }
                 // log::debug!("RDP message processing took {:?} with {} rects", start.elapsed(), rects_to_update.len());
@@ -261,16 +347,82 @@ impl AppWindow {
                     rdp_state.gdi,
                     &rdp_state.gdi_lock,
                 );
-                // log::debug!("RDP update processing took {:?} with {} rects", start.elapsed(), rects_to_update.len());
-                // Show the texture on 0,0, full size
-                let size = ui.available_size();
-                ui.add_sized(
-                    size,
-                    egui::Image::new(egui::load::SizedTexture::new(
-                        rdp_state.screen.texture_id(),
+
+                if rdp_state.is_rail {
+                    // Hide the main window if not already hidden
+                    // Note: If we just don't show CentralPanel, does it hide the native window?
+                    // Best way is to send visible(false) to the main viewport, but eframe needs a main window
+                    // to keep the event loop alive. We can make it completely transparent or very small.
+                    // For now, we'll draw the windows using viewports.
+                    
+                    let windows = rdp_state.remote_windows.borrow().clone();
+                    let rail_channel = rdp_state.channels.read().unwrap().rail();
+                    let safe_input = rdp_state.input;
+                    
+                    for (_, window) in windows {
+                        if window.is_offscreen || window.rect.w == 0 || window.rect.h == 0 {
+                            continue;
+                        }
+                        let id = egui::ViewportId::from_hash_of(window.id);
+                        let texture_id = rdp_state.screen.texture_id();
+                        let texture_size = rdp_state.screen.size();
+                        
+                        let rect = window.rect;
+                        let offset = egui::Vec2::new(rect.x as f32, rect.y as f32);
+                        
+                        // Calculate uv mapping
+                        let uv = egui::Rect::from_min_max(
+                            egui::pos2(rect.x as f32 / texture_size.x, rect.y as f32 / texture_size.y),
+                            egui::pos2((rect.x as f32 + rect.w as f32) / texture_size.x, (rect.y as f32 + rect.h as f32) / texture_size.y)
+                        );
+                        
+                        let rail_channel_clone = rail_channel.clone();
+                        let window_id = window.id;
+
+                        ui.ctx().show_viewport_deferred(
+                            id,
+                            egui::ViewportBuilder::default()
+                                .with_title(window.title)
+                                .with_inner_size([rect.w as f32, rect.h as f32])
+                                // .with_position([rect.x as f32, rect.y as f32]) // Maybe set pos on creation
+                                .with_visible(true),
+                            move |ctx, _class| {
+                                let safe_input = safe_input; // Force capture the wrapper, not just the raw ptr
+                                egui::CentralPanel::default()
+                                    .frame(egui::Frame::default().inner_margin(0.0))
+                                    .show_inside(ctx, |ui| {
+                                        ui.add_sized(
+                                            [rect.w as f32, rect.h as f32],
+                                            egui::Image::new(egui::load::SizedTexture::new(
+                                                texture_id,
+                                                [rect.w as f32, rect.h as f32]
+                                            )).uv(uv)
+                                        );
+                                    });
+                                
+                                ctx.input(|i| {
+                                    AppWindow::handle_mouse(ctx, safe_input.0, i, egui::Vec2::new(1.0, 1.0), offset);
+                                });
+
+                                if ctx.input(|i| i.viewport().close_requested()) {
+                                    if let Some(rail) = &rail_channel_clone {
+                                        rail.send_system_command(window_id, rdp::consts::SC_CLOSE as u16);
+                                    }
+                                }
+                            }
+                        );
+                    }
+                } else {
+                    // Show the texture on 0,0, full size
+                    let size = ui.available_size();
+                    ui.add_sized(
                         size,
-                    )),
-                );
+                        egui::Image::new(egui::load::SizedTexture::new(
+                            rdp_state.screen.texture_id(),
+                            size,
+                        )),
+                    );
+                }
 
                 //log::debug!("RDP frame rendered took {:?}", start.elapsed());
             });
