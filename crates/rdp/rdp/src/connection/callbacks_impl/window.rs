@@ -33,7 +33,7 @@ use crate::callbacks::window::WindowCallbacks;
 use crate::consts::*;
 use crate::messaging::RdpMessage;
 use freerdp_sys::{
-    WINDOW_ORDER_FIELD_SHOW, WINDOW_ORDER_FIELD_WND_OFFSET, WINDOW_ORDER_FIELD_WND_SIZE, WINDOW_ORDER_INFO, WINDOW_STATE_ORDER,
+    WINDOW_ORDER_FIELD_OWNER, WINDOW_ORDER_FIELD_SHOW, WINDOW_ORDER_FIELD_STYLE, WINDOW_ORDER_FIELD_TASKBAR_BUTTON, WINDOW_ORDER_FIELD_WND_OFFSET, WINDOW_ORDER_FIELD_WND_SIZE, WINDOW_ORDER_INFO, WINDOW_STATE_ORDER,
 };
 use shared::log;
 
@@ -62,11 +62,26 @@ impl WindowCallbacks for Rdp {
         window_state: *const WINDOW_STATE_ORDER,
     ) -> bool {
         #[allow(clippy::unnecessary_cast)]  // Needed beceuse windows/linux differ in the expected type on windowOffset..
-        let (window_id, title, show_state, is_offscreen, pos, size) = unsafe {
+        let (window_id, owner_id, style, ext_style, taskbar_button, title, show_state, is_offscreen, pos, size) = unsafe {
             let info = &*order_info;
             let state = &*window_state;
+            let owner_id = if info.fieldFlags & WINDOW_ORDER_FIELD_OWNER != 0 {
+                Some(state.ownerWindowId)
+            } else {
+                None
+            };
+            let (style, ext_style) = if info.fieldFlags & WINDOW_ORDER_FIELD_STYLE != 0 {
+                (Some(state.style), Some(state.extendedStyle))
+            } else {
+                (None, None)
+            };
+            let taskbar_button = if info.fieldFlags & WINDOW_ORDER_FIELD_TASKBAR_BUTTON != 0 {
+                Some(state.TaskbarButton != 0)
+            } else {
+                None
+            };
             let show_state = if info.fieldFlags & WINDOW_ORDER_FIELD_SHOW != 0 {
-                Some(state.showState)
+                Some(state.showState as u8)
             } else {
                 None
             };
@@ -87,6 +102,10 @@ impl WindowCallbacks for Rdp {
             };
             (
                 info.windowId,
+                owner_id,
+                style,
+                ext_style,
+                taskbar_button,
                 get_rail_string(&state.titleInfo),
                 show_state,
                 is_offscreen,
@@ -96,8 +115,9 @@ impl WindowCallbacks for Rdp {
         };
 
         log::debug!(
-            "WindowCreate: id={}, title={:?}, show_state={:?}, is_offscreen={:?}, pos={:?}, size={:?}",
+            "WindowCreate: id={}, owner_id={:?}, title={:?}, show_state={:?}, is_offscreen={:?}, pos={:?}, size={:?}",
             window_id,
+            owner_id,
             title,
             show_state,
             is_offscreen,
@@ -108,6 +128,10 @@ impl WindowCallbacks for Rdp {
         if let Some(tx) = &self.update_tx {
             let _ = tx.send(RdpMessage::WindowCreate {
                 window_id,
+                owner_id,
+                style,
+                ext_style,
+                taskbar_button,
                 title,
                 show_state,
                 is_offscreen,
@@ -116,7 +140,7 @@ impl WindowCallbacks for Rdp {
             });
             // If the window is being created in SW_SHOW(5) or SW_SHOWMAXIMIZED(3) state,
             // trigger a screen sync to be safe.
-            if show_state == Some(SW_SHOWMAXIMIZED) || show_state == Some(SW_SHOW) {
+            if show_state.map(|s| s as u32) == Some(SW_SHOWMAXIMIZED) || show_state.map(|s| s as u32) == Some(SW_SHOW) {
                 let _ = tx.send(RdpMessage::UpdateRects(vec![crate::geom::Rect::new(
                     0,
                     0,
@@ -134,11 +158,27 @@ impl WindowCallbacks for Rdp {
         order_info: *const WINDOW_ORDER_INFO,
         window_state: *const WINDOW_STATE_ORDER,
     ) -> bool {
-        let (window_id, title, show_state, is_offscreen, pos, size, state_ref) = unsafe {
+        #[allow(clippy::unnecessary_cast)]  // Windows/linux/mac differ on INT32 implementation
+        let (window_id, owner_id, style, ext_style, taskbar_button, title, show_state, is_offscreen, pos, size, state_ref) = unsafe {
             let info = &*order_info;
             let state = &*window_state;
+            let owner_id = if info.fieldFlags & WINDOW_ORDER_FIELD_OWNER != 0 {
+                Some(state.ownerWindowId)
+            } else {
+                None
+            };
+            let (style, ext_style) = if info.fieldFlags & WINDOW_ORDER_FIELD_STYLE != 0 {
+                (Some(state.style), Some(state.extendedStyle))
+            } else {
+                (None, None)
+            };
+            let taskbar_button = if info.fieldFlags & WINDOW_ORDER_FIELD_TASKBAR_BUTTON != 0 {
+                Some(state.TaskbarButton != 0)
+            } else {
+                None
+            };
             let show_state = if info.fieldFlags & WINDOW_ORDER_FIELD_SHOW != 0 {
-                Some(state.showState)
+                Some(state.showState as u8)
             } else {
                 None
             };
@@ -159,6 +199,10 @@ impl WindowCallbacks for Rdp {
             };
             (
                 info.windowId,
+                owner_id,
+                style,
+                ext_style,
+                taskbar_button,
                 get_rail_string(&state.titleInfo),
                 show_state,
                 is_offscreen,
@@ -169,8 +213,9 @@ impl WindowCallbacks for Rdp {
         };
 
         log::debug!(
-            "WindowUpdate: id={}, flags=0x{:X}, title={:?}, show_state={:?}, offset=({}, {}), offscreen={:?}, pos={:?}, size={:?}",
+            "WindowUpdate: id={}, owner_id={:?}, flags=0x{:X}, title={:?}, show_state={:?}, offset=({}, {}), offscreen={:?}, pos={:?}, size={:?}",
             window_id,
+            owner_id,
             unsafe { (*order_info).fieldFlags },
             title,
             show_state,
@@ -184,6 +229,10 @@ impl WindowCallbacks for Rdp {
         if let Some(tx) = &self.update_tx {
             let _ = tx.send(RdpMessage::WindowUpdate {
                 window_id,
+                owner_id,
+                style,
+                ext_style,
+                taskbar_button,
                 title,
                 show_state,
                 is_offscreen,
@@ -192,7 +241,7 @@ impl WindowCallbacks for Rdp {
             });
 
             if let Some(show_state) = show_state
-                && [SW_SHOW, SW_SHOWNORMAL].contains(&show_state)
+                && [SW_SHOW, SW_SHOWNORMAL].contains(&(show_state as u32))
                 && is_offscreen == Some(false)
             {
                 log::info!("RAIL: Restoration nudge triggered for window {}", window_id);

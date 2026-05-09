@@ -71,6 +71,17 @@ extern "C" fn update_window_from_surface(
                 return CHANNEL_RC_OK;
             }
 
+            if mapped_width != width || mapped_height != height {
+                log::trace!("GFX Surface size mismatch for window {}: surface={}x{}, mapped={}x{}", window_id, width, height, mapped_width, mapped_height);
+            }
+
+            // Ensure we don't try to copy more than what we have in the surface
+            // freerdp_image_copy doesn't scale, it just copies pixels.
+            // If mapped size is different, it usually means scaling is handled elsewhere
+            // or we should be using surface size for the copy.
+            let copy_width = mapped_width.min(width);
+            let copy_height = mapped_height.min(height);
+
             let mut data = vec![0u8; (mapped_width * mapped_height * 4) as usize];
             let format = if owner.use_rgba() {
                 utils::pixel_format(32, 3, 8, 8, 8, 8)
@@ -85,8 +96,8 @@ extern "C" fn update_window_from_surface(
                 mapped_width * 4,
                 0,
                 0,
-                mapped_width,
-                mapped_height,
+                copy_width,
+                copy_height,
                 (*surface).data,
                 (*surface).format,
                 (*surface).scanline,
@@ -94,59 +105,6 @@ extern "C" fn update_window_from_surface(
                 0,
                 &(*gdi).palette,
                 FREERDP_IMAGE_FLAGS_FREERDP_FLIP_NONE as u32,  
-            );
-
-            if res == 0 {
-                log::error!("freerdp_image_copy failed!");
-            }
-
-            // Re-order BGRA to RGBA if necessary, freerdp_image_copy might not do everything perfectly for egui
-            if !owner.use_rgba() {
-                for chunk in data.chunks_exact_mut(4) {
-                    chunk.swap(0, 2); // Swap B and R
-                }
-            }
-
-            if let Some(tx) = &owner.update_tx {
-                // log::debug!("GFX sending WindowPixels for id={}, {}x{}", window_id, mapped_width, mapped_height);
-                let _ = tx.try_send(crate::messaging::RdpMessage::WindowPixels {
-                    window_id,
-                    width: mapped_width,
-                    height: mapped_height,
-                    data,
-                });
-            }
-            if mapped_height == 0 {
-                mapped_height = height;
-            }
-
-            if mapped_width == 0 || mapped_height == 0 || (*surface).data.is_null() {
-                return CHANNEL_RC_OK;
-            }
-
-            let mut data = vec![0u8; (mapped_width * mapped_height * 4) as usize];
-            let format = if owner.use_rgba() {
-                utils::pixel_format(32, 3, 8, 8, 8, 8)
-            } else {
-                utils::pixel_format(32, 4, 8, 8, 8, 8)
-            };
-
-            #[allow(clippy::unnecessary_cast)]  // Needed beceuse windows/linux differ in the expected type of the flags parameter
-            let res = freerdp_image_copy(
-                data.as_mut_ptr(),
-                format,
-                mapped_width * 4,
-                0,
-                0,
-                mapped_width,
-                mapped_height,
-                (*surface).data,
-                (*surface).format,
-                (*surface).scanline,
-                0,
-                0,
-                &(*gdi).palette,
-                FREERDP_IMAGE_FLAGS_FREERDP_FLIP_NONE as u32,
             );
 
             if res == 0 {

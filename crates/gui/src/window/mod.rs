@@ -29,10 +29,7 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 #![allow(dead_code)]
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
+use std::sync::{Arc, atomic::Ordering};
 
 use eframe::egui;
 use flume::Receiver;
@@ -58,8 +55,8 @@ pub(super) struct AppWindow {
     pub app_state: types::AppState,
     pub prev_app_state: types::AppState,
     pub texture: egui::TextureHandle, // Logo texture, useful for various windows
-    pub processing_events: Arc<AtomicBool>, // Set if we need to process wininit events (keyboard events right now)
-    pub events: Receiver<crate::RawKey>,
+    pub processing_events: Arc<std::sync::atomic::AtomicBool>,
+    pub keys_rx: Receiver<crate::RawKey>,
     pub gui_messages_rx: Receiver<types::GuiMessage>,
     pub stop: Trigger,                   // For stopping any ongoing operations
     pub screen_size: Option<(u32, u32)>, // Cached screen size
@@ -70,8 +67,8 @@ pub(super) struct AppWindow {
 impl AppWindow {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        processing_events: Arc<AtomicBool>,
-        events: Receiver<crate::RawKey>,
+        processing_events: Arc<std::sync::atomic::AtomicBool>,
+        keys_rx: Receiver<crate::RawKey>,
         gui_messages_rx: Receiver<types::GuiMessage>,
         stop: Trigger,
         catalog: gettext::Catalog,
@@ -79,7 +76,6 @@ impl AppWindow {
         cc: &eframe::CreationContext<'_>,
         fps_limit: Option<u32>,
     ) -> Self {
-        processing_events.store(false, Ordering::Relaxed); // Initially not processing events
         let texture = cc.egui_ctx.load_texture(
             "empty",
             crate::logo::load_logo(),
@@ -89,9 +85,9 @@ impl AppWindow {
             app_state: initial_state.unwrap_or_default(),
             prev_app_state: types::AppState::default(),
             texture,
-            events,
-            gui_messages_rx,
             processing_events,
+            keys_rx,
+            gui_messages_rx,
             stop,
             screen_size: None,
             fps_limit,
@@ -130,7 +126,6 @@ impl AppWindow {
     }
 
     pub fn set_app_state(&mut self, new_state: types::AppState) {
-        self.processing_events.store(false, Ordering::Relaxed); // Stop processing rdp raw events on event loop
         // Only testing and client_progress states can go back
         self.prev_app_state = if matches!(
             self.app_state,
@@ -144,7 +139,6 @@ impl AppWindow {
     }
 
     pub fn restore_previous_state(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
-        self.processing_events.store(false, Ordering::Relaxed); // Stop processing rdp raw events on event loop
         self.app_state = self.prev_app_state.clone();
         self.prev_app_state = types::AppState::default();
         // Call restore if necessary, that is, for testing and client_progress states

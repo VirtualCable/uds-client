@@ -31,6 +31,7 @@
 use std::sync::{Arc, RwLock};
 
 pub mod callbacks;
+pub mod commands;
 
 mod addins;
 pub mod connection;
@@ -70,6 +71,8 @@ pub struct Rdp {
     // because they are initialized after connection is created, on a later step
     channels: Arc<RwLock<channels::RdpChannels>>,
     stop_event: utils::SafeHandle,
+    command_rx: commands::Receiver,
+    command_event: utils::SafeHandle, // Win32 event to signal new commands
     _pin: std::marker::PhantomPinned, // Do not allow moving
 }
 
@@ -79,24 +82,34 @@ impl Rdp {
         settings: settings::RdpSettings,
         update_tx: messaging::Sender,
         use_rgba: bool,
-    ) -> Self {
+    ) -> (Self, commands::Sender) {
         let stop_event: freerdp_sys::HANDLE =
             unsafe { freerdp_sys::CreateEventW(std::ptr::null_mut(), 1, 0, std::ptr::null()) };
+        let command_event: freerdp_sys::HANDLE =
+            unsafe { freerdp_sys::CreateEventW(std::ptr::null_mut(), 0, 0, std::ptr::null()) }; // Auto-reset event
 
         let stop_event = utils::SafeHandle::new(stop_event).unwrap();
-        Rdp {
-            config: Config {
-                settings,
-                use_rgba,
-                callbacks: callbacks::Callbacks::default(),
+        let command_event = utils::SafeHandle::new(command_event).unwrap();
+        let (command_tx, command_rx) = flume::unbounded();
+
+        (
+            Rdp {
+                config: Config {
+                    settings,
+                    use_rgba,
+                    callbacks: callbacks::Callbacks::default(),
+                },
+                instance: None,
+                update_tx: Some(update_tx),
+                gdi_lock: Arc::new(RwLock::new(())),
+                channels: Arc::new(RwLock::new(channels::RdpChannels::new())),
+                stop_event,
+                command_rx,
+                command_event,
+                _pin: std::marker::PhantomPinned,
             },
-            instance: None,
-            update_tx: Some(update_tx),
-            gdi_lock: Arc::new(RwLock::new(())),
-            channels: Arc::new(RwLock::new(channels::RdpChannels::new())),
-            stop_event,
-            _pin: std::marker::PhantomPinned,
-        }
+            command_tx,
+        )
     }
 
     pub fn context(&self) -> Option<&context::RdpContext> {
@@ -113,6 +126,12 @@ impl Rdp {
     pub fn get_stop_event(&self) -> crate::utils::SafeHandle {
         crate::utils::SafeHandle::new(self.stop_event.as_handle()).unwrap_or_else(|| {
             panic!("Failed to clone stop event handle");
+        })
+    }
+
+    pub fn get_command_event(&self) -> crate::utils::SafeHandle {
+        crate::utils::SafeHandle::new(self.command_event.as_handle()).unwrap_or_else(|| {
+            panic!("Failed to clone command event handle");
         })
     }
 

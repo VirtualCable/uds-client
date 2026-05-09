@@ -55,9 +55,8 @@ impl AppWindow {
             ui.heading("Test Screen");
             ui.label("Select action.");
             // Here you can add input fields for server, user, password, etc.
-            if ui.button("RDP Connecting").clicked() {
-                // For demonstration, we use a hardcoded host
-                if let Err(e) = self.enter_rdp_preconnection(
+            if ui.button("RDP Connecting").clicked()
+                && let Err(e) = self.enter_rdp_preconnection(
                     ui,
                     frame,
                     RdpSettings {
@@ -67,13 +66,12 @@ impl AppWindow {
                         screen_size: ScreenSize::Full, // ScreenSize::Fixed(1600, 900),
                         ..RdpSettings::default()
                     },
-                ) {
-                    ui.label(format!("Failed to start connecting: {}", e));
-                }
+                )
+            {
+                ui.label(format!("Failed to start connecting: {}", e));
             }
-            if ui.button("RDP Connect").clicked() {
-                // For demonstration, we use a hardcoded host
-                if let Err(e) = self.enter_rdp_connection(
+            if ui.button("RDP Connect").clicked()
+                && let Err(e) = self.enter_rdp_connection(
                     ui,
                     frame,
                     RdpSettings {
@@ -83,12 +81,12 @@ impl AppWindow {
                         screen_size: ScreenSize::Full, // ScreenSize::Fixed(1600, 900),
                         ..RdpSettings::default()
                     },
-                ) {
-                    ui.label(format!("Failed to connect: {}", e));
-                }
+                )
+            {
+                ui.label(format!("Failed to connect: {}", e));
             }
-            if ui.button("RDP RAIL Calc").clicked() {
-                if let Err(e) = self.enter_rdp_connection(
+            if ui.button("RDP RAIL Calc").clicked()
+                && let Err(e) = self.enter_rdp_connection(
                     ui,
                     frame,
                     RdpSettings {
@@ -96,12 +94,14 @@ impl AppWindow {
                         user: "user".to_string(),
                         password: "temporal".to_string(),
                         screen_size: ScreenSize::Full,
-                        rail_app: Some("c:\\windows\\system32\\calc.exe".to_string()),
+                        //rail_app: Some("c:\\windows\\system32\\calc.exe".to_string()),
+                        // notepad
+                        rail_app: Some("c:\\windows\\notepad.exe".to_string()),
                         ..RdpSettings::default()
                     },
-                ) {
-                    ui.label(format!("Failed to connect: {}", e));
-                }
+                )
+            {
+                ui.label(format!("Failed to connect: {}", e));
             }
             if ui.button("Progress").clicked()
                 && let Err(e) = self.enter_client_progress(ui, frame, ProgressState::default())

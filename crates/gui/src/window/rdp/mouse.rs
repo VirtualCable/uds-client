@@ -71,7 +71,7 @@ impl RdpMouseCursor {
 }
 
 impl AppWindow {
-    pub(super) fn handle_cursor(&self, ctx: &egui::Context, rdp_state: &RdpConnectionState) {
+    pub(crate) fn handle_cursor(&self, ctx: &egui::Context, rdp_state: &RdpConnectionState) {
         // Set custom cursor
         // Custom cursor, last to be on top
         if let Some(pos) = ctx.input(|i| i.pointer.latest_pos()) {
@@ -89,9 +89,11 @@ impl AppWindow {
             if rdp_state.pinbar_visible.load(Ordering::Relaxed) {
                 // If pinbar is visible, show default cursor
                 ctx.set_cursor_icon(egui::CursorIcon::Default);
+                ctx.send_viewport_cmd(egui::ViewportCommand::CursorVisible(true));
             } else {
                 // Hide system cursor
                 ctx.set_cursor_icon(egui::CursorIcon::None);
+                ctx.send_viewport_cmd(egui::ViewportCommand::CursorVisible(false));
             }
             egui::Area::new("rdp_cursor_area".into())
                 .order(egui::Order::Foreground)
@@ -114,7 +116,7 @@ impl AppWindow {
         );
     }
 
-    pub(super) fn set_custom_cursor(
+    pub(crate) fn set_custom_cursor(
         &self,
         ctx: &egui::Context,
         rdp_state: &mut RdpConnectionState,

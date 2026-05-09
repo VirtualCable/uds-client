@@ -39,6 +39,9 @@ pub struct RailChannel {
     ptr: Option<utils::SafePtr<freerdp_sys::RailClientContext>>,
 }
 
+unsafe impl Send for RailChannel {}
+unsafe impl Sync for RailChannel {}
+
 impl RailChannel {
     pub fn new(ptr: *mut freerdp_sys::RailClientContext) -> Self {
         let mut slf = Self {
@@ -145,8 +148,8 @@ fn complete_handshake(context: *mut RailClientContext) -> UINT {
             // 1. Client Information/Status
             if let Some(client_info_fn) = (*context).ClientInformation {
                 let status = RAIL_CLIENT_STATUS_ORDER {
-                    // ALLOWLOCALMOVESIZE | APPBAR_REMOTING_SUPPORTED
-                    flags: 0x01 | 0x40,
+                    // ALLOWLOCALMOVESIZE | ZORDER_SYNC | WINDOW_RESIZE_MARGIN_SUPPORTED | APPBAR_REMOTING_SUPPORTED
+                    flags: 0x01 | 0x04 | 0x08 | 0x40,
                 };
                 log::debug!("RAIL: Sending ClientInformation");
                 client_info_fn(context, &status);

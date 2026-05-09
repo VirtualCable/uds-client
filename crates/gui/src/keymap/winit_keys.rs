@@ -178,7 +178,7 @@ static WININIT_SCANCODE_MAP: LazyLock<HashMap<KeyCode, RdpScanCode>> = LazyLock:
 });
 
 impl RdpScanCode {
-    pub fn from_egui_key(key_code: &KeyCode) -> Option<Self> {
+    pub fn from_winit_key(key_code: &KeyCode) -> Option<Self> {
         WININIT_SCANCODE_MAP.get(key_code).copied()
     }
 }
