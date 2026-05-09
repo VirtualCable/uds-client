@@ -102,12 +102,7 @@ impl ApplicationHandler<UserEvent> for RdpAppProxy<'_> {
                 log::warn!("Failed to send keyboard event: {}", e);
             }
         }
-        // We can process Unidentified::NativeKeyCode if needed
-        // log::debug!(
-        //     "Keyboard event: {:?}, pressed: {}",
-        //     event.physical_key,
-        //     event.state == winit::event::ElementState::Pressed,
-        // );
+
         self.eframe_app.window_event(event_loop, window_id, event);
     }
 

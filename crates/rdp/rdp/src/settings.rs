@@ -72,6 +72,8 @@ pub struct RdpSettings {
     pub rail_args: Option<String>,
     #[zeroize(skip)]
     pub rail_working_dir: Option<String>,
+    #[zeroize(skip)]
+    pub scale_factor: f64,
 }
 
 impl Default for RdpSettings {
@@ -95,6 +97,7 @@ impl Default for RdpSettings {
             rail_app: None,
             rail_args: None,
             rail_working_dir: None,
+            scale_factor: 1.0,
         }
     }
 }
@@ -127,6 +130,7 @@ impl fmt::Debug for RdpSettings {
             .field("rail_app", &self.rail_app)
             .field("rail_args", &self.rail_args)
             .field("rail_working_dir", &self.rail_working_dir)
+            .field("scale_factor", &self.scale_factor)
             .finish()
     }
 }

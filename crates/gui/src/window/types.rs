@@ -34,13 +34,6 @@ use tokio::sync::oneshot;
 
 use super::{client_progress, rdp::connection, rdp::preconnection};
 
-static WAS_MAXIMIZED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-fn is_maximized(current_maximized: bool) -> bool {
-    let previous = WAS_MAXIMIZED.load(std::sync::atomic::Ordering::Relaxed);
-    WAS_MAXIMIZED.store(current_maximized, std::sync::atomic::Ordering::Relaxed);
-    previous != current_maximized && current_maximized
-}
 
 #[derive(Debug)]
 pub enum GuiMessage {
@@ -81,27 +74,35 @@ pub enum HotKey {
 }
 
 impl HotKey {
-    pub fn from_input(ctx: &eframe::egui::Context) -> Self {
-        ctx.input(|input| {
-            if is_maximized(input.viewport().maximized.unwrap_or(false)) {
-                return Self::ToggleFullScreen; // If maximized state changed, toggle fullscreen
+    pub fn from_event(key: eframe::egui::Key, pressed: bool, modifiers: &eframe::egui::Modifiers) -> Self {
+        match key {
+            eframe::egui::Key::Enter => {
+                // Support both Alt+Enter and Ctrl+Alt+Enter
+                let is_hotkey = modifiers.alt && !modifiers.shift && !modifiers.command;
+                let is_hotkey_ctrl = modifiers.alt && modifiers.ctrl && !modifiers.shift;
+                
+                if is_hotkey || is_hotkey_ctrl {
+                    if pressed {
+                        Self::ToggleFullScreen
+                    } else {
+                        Self::Skip
+                    }
+                } else {
+                    Self::None
+                }
             }
-
-            if !input.modifiers.alt || !input.modifiers.command || input.modifiers.shift {
-                return Self::None;
+            eframe::egui::Key::F => {
+                if modifiers.alt && !modifiers.shift && !modifiers.ctrl && !modifiers.command {
+                    if pressed {
+                        Self::ToggleFPS
+                    } else {
+                        Self::Skip
+                    }
+                } else {
+                    Self::None
+                }
             }
-
-            if input.key_pressed(eframe::egui::Key::Enter) {
-                Self::ToggleFullScreen
-            } else if input.key_pressed(eframe::egui::Key::F) {
-                Self::ToggleFPS
-            } else if input.key_released(eframe::egui::Key::Enter)
-                || input.key_released(eframe::egui::Key::F)
-            {
-                Self::Skip
-            } else {
-                Self::None
-            }
-        })
+            _ => Self::None,
+        }
     }
 }

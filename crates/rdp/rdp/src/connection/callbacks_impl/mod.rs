@@ -47,5 +47,5 @@ impl pointer_update::PointerCallbacks for Rdp {}
 impl primary::PrimaryCallbacks for Rdp {}
 impl secondary::SecondaryCallbacks for Rdp {}
 impl altsec::AltSecCallbacks for Rdp {}
-mod window;
+pub mod window;
 impl entrypoint::EntrypointCallbacks for Rdp {}

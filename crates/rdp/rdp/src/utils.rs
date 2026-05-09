@@ -76,6 +76,7 @@ pub fn normalize_rects(rects_raw: &[GDI_RGN], width: u32, height: u32) -> Option
                 && r.h <= height
                 && r.h > 0
             {
+                #[allow(clippy::unnecessary_cast)]  // Windows/linux/mac differ on INT32 implementation
                 Some(Rect {
                     x: r.x as i32,
                     y: r.y as i32,
@@ -92,11 +93,19 @@ pub fn normalize_rects(rects_raw: &[GDI_RGN], width: u32, height: u32) -> Option
 }
 
 #[repr(transparent)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug)]
 pub struct SafePtr<T> {
     ptr: std::ptr::NonNull<std::os::raw::c_void>,
     _marker: std::marker::PhantomData<T>,
 }
+
+impl<T> Clone for SafePtr<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T> Copy for SafePtr<T> {}
 
 unsafe impl<T> Send for SafePtr<T> {}
 unsafe impl<T> Sync for SafePtr<T> {}

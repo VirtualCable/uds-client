@@ -47,16 +47,24 @@ pub enum RdpMessage {
     // show_state: None = unknown, Some(2) = minimized, Some(3) = maximized, Some(1/5) = normal
     WindowCreate {
         window_id: u32,
+        owner_id: Option<u32>,
+        style: Option<u32>,
+        ext_style: Option<u32>,
+        taskbar_button: Option<bool>,
         title: String,
-        show_state: Option<u32>,
+        show_state: Option<u8>,
         is_offscreen: Option<bool>,
         pos: Option<(i32, i32)>,
         size: Option<(u32, u32)>,
     },
     WindowUpdate {
         window_id: u32,
+        owner_id: Option<u32>,
+        style: Option<u32>,
+        ext_style: Option<u32>,
+        taskbar_button: Option<bool>,
         title: String,
-        show_state: Option<u32>,
+        show_state: Option<u8>,
         /// Some(true) when coordinates are in the offscreen/minimized zone (< -1000)
         /// None when field flags don't specify coordinate updates
         is_offscreen: Option<bool>,

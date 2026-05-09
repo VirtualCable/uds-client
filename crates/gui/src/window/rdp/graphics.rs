@@ -29,7 +29,9 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 #![allow(dead_code)]
+use std::rc::Rc;
 use std::sync::{Arc, RwLock, atomic::Ordering};
+use std::cell::RefCell;
 
 use shared::log;
 
@@ -38,6 +40,7 @@ use eframe::egui;
 use rdp::sys::rdpGdi;
 
 use super::connection::RdpConnectionState;
+use super::fps::Fps;
 use crate::window::AppWindow;
 
 #[derive(Clone)]
@@ -93,7 +96,7 @@ impl Screen {
         if rects.is_empty() {
             return;
         }
-
+        let start = std::time::Instant::now();
         let _gdi_guard = gdi_lock.read().unwrap();
 
         let (stride_bytes, fb_height, fb_width) = unsafe {
@@ -169,6 +172,8 @@ impl Screen {
 
         self.texture_handle
             .set_partial([safe_x, safe_y], image, egui::TextureOptions::LINEAR);
+        
+        log::debug!("update_screen_texture: {} rects, {} bytes, {}us", rects.len(), needed, start.elapsed().as_micros());
     }
 
     pub fn resize_screen_texture(&mut self, new_size: egui::Vec2) {
@@ -192,29 +197,22 @@ impl Screen {
     pub fn size(&self) -> egui::Vec2 {
         self.size
     }
+
+    pub fn paint(&self, ui: &mut egui::Ui, rect: egui::Rect, fps: Rc<RefCell<Fps>>) {
+        let start = std::time::Instant::now();
+        let texture_id = self.texture_id();
+        let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+        ui.painter().image(texture_id, rect, uv, egui::Color32::WHITE);
+        fps.borrow().show(ui.ctx());
+        log::debug!("paint: {}us", start.elapsed().as_micros());
+    }
 }
 
 impl AppWindow {
-    pub(super) fn toggle_fullscreen(
-        &mut self,
-        ctx: &egui::Context,
-        rdp_state: &mut RdpConnectionState,
-    ) {
-        log::debug!("ALT+ENTER pressed, toggling fullscreen");
-        if rdp_state.full_screen.load(Ordering::Relaxed) {
-            // Switch to fixed size, restores original size
-            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
-            rdp_state.full_screen.store(false, Ordering::Relaxed);
-        } else {
-            // Switch to fullscreen
-            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
-            rdp_state.full_screen.store(true, Ordering::Relaxed);
-        }
-    }
 
-    pub(super) fn show_pinbar(&mut self, ui: &mut egui::Ui, rdp_state: &mut RdpConnectionState) {
-        let fullscreen = rdp_state.full_screen.clone();
-        if !rdp_state.pinbar_visible.load(Ordering::Relaxed) || !fullscreen.load(Ordering::Relaxed)
+    pub(crate) fn show_pinbar(&mut self, ui: &mut egui::Ui, rdp_state: &mut RdpConnectionState) {
+        let is_fs = ui.ctx().input(|i| i.viewport().fullscreen).unwrap_or(false);
+        if !rdp_state.pinbar_visible.load(Ordering::Relaxed) || !is_fs
         {
             return;
         }
@@ -240,7 +238,7 @@ impl AppWindow {
                                 egui::Layout::left_to_right(egui::Align::Center),
                                 |ui| {
                                     if ui.button("⬜").clicked() {
-                                        self.toggle_fullscreen(ui.ctx(), rdp_state);
+                                        rdp_state.toggle_fullscreen(ui.ctx());
                                     }
                                     if ui.button("🗙").clicked() {
                                         self.exit(ui.ctx());

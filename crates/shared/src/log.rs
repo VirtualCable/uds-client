@@ -215,7 +215,9 @@ pub fn setup_logging(level: &str, log_type: LogType) {
     } + ".log";
 
     LOGGER_INIT.get_or_init(|| {
-        let env_filter = EnvFilter::new(level.clone());
+        let env_filter = EnvFilter::new(level.clone())
+            .add_directive("naga=warn".parse().unwrap())
+            .add_directive("wgpu=warn".parse().unwrap());
         let (reload_layer, handle) = reload::Layer::<EnvFilter, Registry>::new(env_filter);
 
         let _ = RELOAD_HANDLE.set(handle);

@@ -72,12 +72,12 @@ impl update::UpdateCallbacks for Rdp {
 
 impl Rdp {
     fn send_update(&self) -> bool {
-        log::debug!("send_update called");
+        log::trace!("send_update called");
         if let Some(tx) = &self.update_tx
             && let Some(gdi) = self.gdi()
         {
             unsafe {
-                // CRITICAL: Use gdi->primary->hdc->hwnd->invalid (like Guacamole),
+                // CRITICAL: Use gdi->primary->hdc->hwnd->invalid,
                 // NOT gdi->drawing. The GFX pipeline writes to primary and sets
                 // its invalidation region, but 'drawing' may point elsewhere.
                 let primary = (*gdi).primary;
@@ -122,8 +122,8 @@ impl Rdp {
                     }
 
                     if !rects.is_empty() {
-                        // Use debug instead of trace so we can see it without changing log level
-                        log::debug!("Sending UpdateRects: block, items: {}", rects.len());
+                        // Use trace instead of debug
+                        log::trace!("Sending UpdateRects: block, items: {}", rects.len());
                         let _ = tx.try_send(RdpMessage::UpdateRects(rects));
                     }
 

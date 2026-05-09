@@ -151,6 +151,14 @@ impl Rdp {
                         1,
                     ),
                     (FreeRDP_Settings_Keys_UInt32_FreeRDP_FrameAcknowledge, 0),
+                    (
+                        FreeRDP_Settings_Keys_UInt32_FreeRDP_DesktopScaleFactor,
+                        (self.config.settings.scale_factor * 100.0) as u32,
+                    ),
+                    (
+                        FreeRDP_Settings_Keys_UInt32_FreeRDP_DeviceScaleFactor,
+                        (self.config.settings.scale_factor * 100.0) as u32,
+                    ),
                 ]
                 .iter()
                 .for_each(|(i, v)| {
@@ -253,6 +261,7 @@ impl Rdp {
                         FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteApplicationMode,
                         true.into(),
                     );
+                    #[allow(clippy::unnecessary_cast)]  // Windows/linux/mac differ on UINT32 implementation
                     freerdp_settings_set_uint32(
                         settings,
                         FreeRDP_Settings_Keys_UInt32_FreeRDP_RemoteApplicationSupportLevel,
@@ -451,12 +460,13 @@ impl Rdp {
                 ))?;
                 break;
             }
-            // Add our stop event handle
+            // Add our stop event handle and command event handle
             handles[handle_count] = self.stop_event.as_handle();
+            handles[handle_count + 1] = self.command_event.as_handle();
 
             let wait_result = unsafe {
                 WaitForMultipleObjects(
-                    (handle_count + 1) as u32,
+                    (handle_count + 2) as u32,
                     handles.as_ptr(),
                     0,        // wait for any
                     INFINITE, // wait indefinitely
@@ -473,6 +483,79 @@ impl Rdp {
             if wait_result == (handle_count as u32) {
                 log::debug!("Stop event signaled, disconnecting...");
                 break;
+            }
+
+            // If our command event is signaled, process commands
+            if wait_result == (handle_count as u32 + 1) {
+                while let Ok(cmd) = self.command_rx.try_recv() {
+                    match cmd {
+                        crate::commands::RdpCommand::Input(ev) => {
+                            unsafe {
+                                if let Some(instance) = self.instance.as_ref() {
+                                    let instance_ptr = instance.as_mut_ptr();
+                                    if instance_ptr.is_null() { continue; }
+                                    let context = (*instance_ptr).context;
+                                    if context.is_null() { continue; }
+                                    let input = (*context).input;
+                                    if input.is_null() { continue; }
+
+                                    match ev {
+                                        crate::commands::InputEvent::Keyboard { scancode, pressed } => {
+                                            freerdp_input_send_keyboard_event_ex(
+                                                input,
+                                                if pressed { 1 } else { 0 },
+                                                0,
+                                                scancode as u32,
+                                            );
+                                        }
+                                        crate::commands::InputEvent::Mouse { flags, x, y } => {
+                                            freerdp_input_send_mouse_event(
+                                                input,
+                                                flags,
+                                                x,
+                                                y,
+                                            );
+                                        }
+                                        crate::commands::InputEvent::ExtendedMouse { flags, x, y } => {
+                                            freerdp_input_send_extended_mouse_event(
+                                                input,
+                                                flags,
+                                                x,
+                                                y,
+                                            );
+                                        }
+                                        crate::commands::InputEvent::Unicode { code } => {
+                                            freerdp_input_send_unicode_keyboard_event(
+                                                input,
+                                                0,
+                                                code,
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        crate::commands::RdpCommand::ViewportMove { window_id, left, top, right, bottom } => {
+                            if let Some(rail) = self.channels.read().unwrap().rail() {
+                                rail.send_window_move(window_id, left, top, right, bottom);
+                            }
+                        }
+                        crate::commands::RdpCommand::Close => {
+                            unsafe {
+                                freerdp_set_last_error_ex(
+                                    context as *mut rdpContext,
+                                    0, // Success
+                                    std::ptr::null(),
+                                    std::ptr::null(),
+                                    0,
+                                );
+                            }
+                            break;
+                        }
+                    }
+                }
+                // Continue to wait/process events
+                continue;
             }
 
             if unsafe { freerdp_check_event_handles(context as *mut rdpContext) } == 0 {

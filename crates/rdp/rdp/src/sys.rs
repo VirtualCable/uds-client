@@ -42,9 +42,9 @@ pub use freerdp_sys::{
     PTR_XFLAGS_BUTTON1,
     PTR_XFLAGS_BUTTON2,
     freerdp_input_send_extended_mouse_event,
-    // SetEvent,
     freerdp_input_send_keyboard_event_ex,
     freerdp_input_send_mouse_event,
+    SetEvent,
     rdpGdi,
     rdpInput,
 };
