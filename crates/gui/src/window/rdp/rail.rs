@@ -174,7 +174,12 @@ impl AppWindow {
                             height,
                             data,
                         } => {
-                            log::debug!("RAIL WindowPixels: id={}, {}x{}", window_id, width, height);
+                            log::debug!(
+                                "RAIL WindowPixels: id={}, {}x{}",
+                                window_id,
+                                width,
+                                height
+                            );
                             let mut windows = rdp_state.remote_windows.write().unwrap();
                             let scale_factor = rdp_state.scale_factor;
                             let lw = (width as f64 / scale_factor) as u32;
@@ -296,7 +301,7 @@ fn draw_rail_windows(
                 egui::ViewportCommand::InnerSize([rect.w as f32, rect.h as f32].into()),
             );
         }
-        
+
         // Force the position every frame to prevent Windows from applying
         // cascading logic (+20, +20) to new RAIL windows like menus/dialogs.
         ui.ctx().send_viewport_cmd_to(
@@ -347,7 +352,10 @@ fn draw_rail_windows(
                     }
                 }
 
-                if can_activate && should_activate && let Some(rail) = &window_rail {
+                if can_activate
+                    && should_activate
+                    && let Some(rail) = &window_rail
+                {
                     rail.send_activate(window_id, true);
                 }
 
@@ -370,10 +378,8 @@ fn draw_rail_windows(
                 ctx.input(|i| {
                     let rail_for_click = window_rail.clone();
                     let mut on_click = move || {
-                        if can_activate {
-                            if let Some(rail) = &rail_for_click {
-                                rail.send_activate(window_id, true);
-                            }
+                        if can_activate && let Some(rail) = &rail_for_click {
+                            rail.send_activate(window_id, true);
                         }
                     };
                     let mut capture = window_capture.lock().unwrap();
