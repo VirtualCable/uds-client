@@ -15,8 +15,9 @@ anyhow.workspace = true
 flume.workspace = true
 tokio.workspace = true
 
-eframe.workspace = true
 winit.workspace = true
+
+softbuffer = "0.4"
 
 zeroize.workspace = true
 image.workspace = true
