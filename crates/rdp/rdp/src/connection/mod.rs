@@ -261,19 +261,21 @@ impl Rdp {
                         FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteApplicationMode,
                         true.into(),
                     );
-                    #[allow(clippy::unnecessary_cast)]  // Windows/linux/mac differ on UINT32 implementation
+                    #[allow(clippy::unnecessary_cast)]
+                    // Windows/linux/mac differ on UINT32 implementation
                     freerdp_settings_set_uint32(
                         settings,
                         FreeRDP_Settings_Keys_UInt32_FreeRDP_RemoteApplicationSupportLevel,
                         (freerdp_sys::RAIL_LEVEL_SUPPORTED
-                            | freerdp_sys::RAIL_LEVEL_HANDSHAKE_EX_SUPPORTED) as u32,
+                            | freerdp_sys::RAIL_LEVEL_HANDSHAKE_EX_SUPPORTED)
+                            as u32,
                     );
                     freerdp_settings_set_uint32(
                         settings,
                         FreeRDP_Settings_Keys_UInt32_FreeRDP_RemoteApplicationSupportMask,
                         0xFFFFFFFF, // Allow all capabilities negotiated with server
                     );
-                    
+
                     let capp = std::ffi::CString::new(rail_app.clone()).unwrap();
                     freerdp_settings_set_string(
                         settings,
@@ -356,7 +358,11 @@ impl Rdp {
                 ]
                 .iter()
                 .for_each(|key| {
-                    freerdp_settings_set_bool(settings, *key, (!self.config.settings.best_experience).into());
+                    freerdp_settings_set_bool(
+                        settings,
+                        *key,
+                        (!self.config.settings.best_experience).into(),
+                    );
                 });
                 [
                     FreeRDP_Settings_Keys_Bool_FreeRDP_AllowFontSmoothing,
@@ -364,7 +370,11 @@ impl Rdp {
                 ]
                 .iter()
                 .for_each(|key| {
-                    freerdp_settings_set_bool(settings, *key, self.config.settings.best_experience.into());
+                    freerdp_settings_set_bool(
+                        settings,
+                        *key,
+                        self.config.settings.best_experience.into(),
+                    );
                 });
 
                 // Set perfromance flags from settings
@@ -488,53 +498,49 @@ impl Rdp {
             if wait_result == (handle_count as u32 + 1) {
                 while let Ok(cmd) = self.command_rx.try_recv() {
                     match cmd {
-                        crate::commands::RdpCommand::Input(ev) => {
-                            unsafe {
-                                if let Some(instance) = self.instance.as_ref() {
-                                    let instance_ptr = instance.as_mut_ptr();
-                                    if instance_ptr.is_null() { continue; }
-                                    let context = (*instance_ptr).context;
-                                    if context.is_null() { continue; }
-                                    let input = (*context).input;
-                                    if input.is_null() { continue; }
+                        crate::commands::RdpCommand::Input(ev) => unsafe {
+                            if let Some(instance) = self.instance.as_ref() {
+                                let instance_ptr = instance.as_mut_ptr();
+                                if instance_ptr.is_null() {
+                                    continue;
+                                }
+                                let context = (*instance_ptr).context;
+                                if context.is_null() {
+                                    continue;
+                                }
+                                let input = (*context).input;
+                                if input.is_null() {
+                                    continue;
+                                }
 
-                                    match ev {
-                                        crate::commands::InputEvent::Keyboard { scancode, pressed } => {
-                                            freerdp_input_send_keyboard_event_ex(
-                                                input,
-                                                if pressed { 1 } else { 0 },
-                                                0,
-                                                scancode as u32,
-                                            );
-                                        }
-                                        crate::commands::InputEvent::Mouse { flags, x, y } => {
-                                            freerdp_input_send_mouse_event(
-                                                input,
-                                                flags,
-                                                x,
-                                                y,
-                                            );
-                                        }
-                                        crate::commands::InputEvent::ExtendedMouse { flags, x, y } => {
-                                            freerdp_input_send_extended_mouse_event(
-                                                input,
-                                                flags,
-                                                x,
-                                                y,
-                                            );
-                                        }
-                                        crate::commands::InputEvent::Unicode { code } => {
-                                            freerdp_input_send_unicode_keyboard_event(
-                                                input,
-                                                0,
-                                                code,
-                                            );
-                                        }
+                                match ev {
+                                    crate::commands::InputEvent::Keyboard { scancode, pressed } => {
+                                        freerdp_input_send_keyboard_event_ex(
+                                            input,
+                                            if pressed { 1 } else { 0 },
+                                            0,
+                                            scancode as u32,
+                                        );
+                                    }
+                                    crate::commands::InputEvent::Mouse { flags, x, y } => {
+                                        freerdp_input_send_mouse_event(input, flags, x, y);
+                                    }
+                                    crate::commands::InputEvent::ExtendedMouse { flags, x, y } => {
+                                        freerdp_input_send_extended_mouse_event(input, flags, x, y);
+                                    }
+                                    crate::commands::InputEvent::Unicode { code } => {
+                                        freerdp_input_send_unicode_keyboard_event(input, 0, code);
                                     }
                                 }
                             }
-                        }
-                        crate::commands::RdpCommand::ViewportMove { window_id, left, top, right, bottom } => {
+                        },
+                        crate::commands::RdpCommand::ViewportMove {
+                            window_id,
+                            left,
+                            top,
+                            right,
+                            bottom,
+                        } => {
                             if let Some(rail) = self.channels.read().unwrap().rail() {
                                 rail.send_window_move(window_id, left, top, right, bottom);
                             }

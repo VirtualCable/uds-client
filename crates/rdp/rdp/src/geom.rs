@@ -56,7 +56,7 @@ impl Rect {
 }
 
 impl From<&freerdp_sys::GDI_RGN> for Rect {
-    #[allow(clippy::unnecessary_cast)]  // Windows/linux/mac differ on INT32 impl
+    #[allow(clippy::unnecessary_cast)] // Windows/linux/mac differ on INT32 impl
     fn from(rgn: &freerdp_sys::GDI_RGN) -> Self {
         Self {
             x: rgn.x as i32,

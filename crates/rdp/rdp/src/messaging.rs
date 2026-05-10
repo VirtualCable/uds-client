@@ -99,61 +99,67 @@ pub enum RdpMessage {
 impl core::fmt::Debug for RdpMessage {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            RdpMessage::UpdateRects(rects) => {
-                f.debug_struct("UpdateRects")
-                    .field("count", &rects.len())
-                    .finish()
-            }
+            RdpMessage::UpdateRects(rects) => f
+                .debug_struct("UpdateRects")
+                .field("count", &rects.len())
+                .finish(),
             RdpMessage::Disconnect => f.debug_struct("Disconnect").finish(),
             RdpMessage::FocusRequired => f.debug_struct("FocusRequired").finish(),
             RdpMessage::Error(s) => f.debug_tuple("Error").field(s).finish(),
-            RdpMessage::SetCursorIcon(_, x, y, w, h) => {
-                f.debug_tuple("SetCursorIcon")
-                    .field(x)
-                    .field(y)
-                    .field(w)
-                    .field(h)
-                    .finish()
-            }
+            RdpMessage::SetCursorIcon(_, x, y, w, h) => f
+                .debug_tuple("SetCursorIcon")
+                .field(x)
+                .field(y)
+                .field(w)
+                .field(h)
+                .finish(),
             RdpMessage::ClipboardData(s) => f.debug_tuple("ClipboardData").field(s).finish(),
             RdpMessage::None => f.debug_struct("None").finish(),
-            RdpMessage::WindowCreate { window_id, title, .. } => {
-                f.debug_struct("WindowCreate")
-                    .field("window_id", window_id)
-                    .field("title", title)
-                    .finish()
-            }
-            RdpMessage::WindowUpdate { window_id, title, .. } => {
-                f.debug_struct("WindowUpdate")
-                    .field("window_id", window_id)
-                    .field("title", title)
-                    .finish()
-            }
+            RdpMessage::WindowCreate {
+                window_id, title, ..
+            } => f
+                .debug_struct("WindowCreate")
+                .field("window_id", window_id)
+                .field("title", title)
+                .finish(),
+            RdpMessage::WindowUpdate {
+                window_id, title, ..
+            } => f
+                .debug_struct("WindowUpdate")
+                .field("window_id", window_id)
+                .field("title", title)
+                .finish(),
             RdpMessage::WindowDelete(window_id) => {
                 f.debug_tuple("WindowDelete").field(window_id).finish()
             }
-            RdpMessage::ClientWindowMove { window_id, .. } => {
-                f.debug_struct("ClientWindowMove").field("window_id", window_id).finish()
-            }
-            RdpMessage::ClientSystemCommand { window_id, command } => {
-                f.debug_struct("ClientSystemCommand")
-                    .field("window_id", window_id)
-                    .field("command", command)
-                    .finish()
-            }
-            RdpMessage::MicConfig { sample_rate, frames_per_packet } => {
-                f.debug_struct("MicConfig")
-                    .field("sample_rate", sample_rate)
-                    .field("frames_per_packet", frames_per_packet)
-                    .finish()
-            }
-            RdpMessage::WindowPixels { window_id, width, height, .. } => {
-                f.debug_struct("WindowPixels")
-                    .field("window_id", window_id)
-                    .field("width", width)
-                    .field("height", height)
-                    .finish()
-            }
+            RdpMessage::ClientWindowMove { window_id, .. } => f
+                .debug_struct("ClientWindowMove")
+                .field("window_id", window_id)
+                .finish(),
+            RdpMessage::ClientSystemCommand { window_id, command } => f
+                .debug_struct("ClientSystemCommand")
+                .field("window_id", window_id)
+                .field("command", command)
+                .finish(),
+            RdpMessage::MicConfig {
+                sample_rate,
+                frames_per_packet,
+            } => f
+                .debug_struct("MicConfig")
+                .field("sample_rate", sample_rate)
+                .field("frames_per_packet", frames_per_packet)
+                .finish(),
+            RdpMessage::WindowPixels {
+                window_id,
+                width,
+                height,
+                ..
+            } => f
+                .debug_struct("WindowPixels")
+                .field("window_id", window_id)
+                .field("width", width)
+                .field("height", height)
+                .finish(),
         }
     }
 }

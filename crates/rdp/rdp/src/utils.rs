@@ -76,7 +76,8 @@ pub fn normalize_rects(rects_raw: &[GDI_RGN], width: u32, height: u32) -> Option
                 && r.h <= height
                 && r.h > 0
             {
-                #[allow(clippy::unnecessary_cast)]  // Windows/linux/mac differ on INT32 implementation
+                #[allow(clippy::unnecessary_cast)]
+                // Windows/linux/mac differ on INT32 implementation
                 Some(Rect {
                     x: r.x as i32,
                     y: r.y as i32,

@@ -29,9 +29,9 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 #![allow(dead_code)]
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::{Arc, RwLock, atomic::Ordering};
-use std::cell::RefCell;
 
 use shared::log;
 
@@ -172,8 +172,13 @@ impl Screen {
 
         self.texture_handle
             .set_partial([safe_x, safe_y], image, egui::TextureOptions::LINEAR);
-        
-        log::debug!("update_screen_texture: {} rects, {} bytes, {}us", rects.len(), needed, start.elapsed().as_micros());
+
+        log::debug!(
+            "update_screen_texture: {} rects, {} bytes, {}us",
+            rects.len(),
+            needed,
+            start.elapsed().as_micros()
+        );
     }
 
     pub fn resize_screen_texture(&mut self, new_size: egui::Vec2) {
@@ -202,18 +207,17 @@ impl Screen {
         let start = std::time::Instant::now();
         let texture_id = self.texture_id();
         let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
-        ui.painter().image(texture_id, rect, uv, egui::Color32::WHITE);
+        ui.painter()
+            .image(texture_id, rect, uv, egui::Color32::WHITE);
         fps.borrow().show(ui.ctx());
         log::debug!("paint: {}us", start.elapsed().as_micros());
     }
 }
 
 impl AppWindow {
-
     pub(crate) fn show_pinbar(&mut self, ui: &mut egui::Ui, rdp_state: &mut RdpConnectionState) {
         let is_fs = ui.ctx().input(|i| i.viewport().fullscreen).unwrap_or(false);
-        if !rdp_state.pinbar_visible.load(Ordering::Relaxed) || !is_fs
-        {
+        if !rdp_state.pinbar_visible.load(Ordering::Relaxed) || !is_fs {
             return;
         }
 

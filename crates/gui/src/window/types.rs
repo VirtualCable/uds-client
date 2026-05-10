@@ -34,7 +34,6 @@ use tokio::sync::oneshot;
 
 use super::{client_progress, rdp::connection, rdp::preconnection};
 
-
 #[derive(Debug)]
 pub enum GuiMessage {
     Close,                                                         // Close gui
@@ -74,13 +73,17 @@ pub enum HotKey {
 }
 
 impl HotKey {
-    pub fn from_event(key: eframe::egui::Key, pressed: bool, modifiers: &eframe::egui::Modifiers) -> Self {
+    pub fn from_event(
+        key: eframe::egui::Key,
+        pressed: bool,
+        modifiers: &eframe::egui::Modifiers,
+    ) -> Self {
         match key {
             eframe::egui::Key::Enter => {
                 // Support both Alt+Enter and Ctrl+Alt+Enter
                 let is_hotkey = modifiers.alt && !modifiers.shift && !modifiers.command;
                 let is_hotkey_ctrl = modifiers.alt && modifiers.ctrl && !modifiers.shift;
-                
+
                 if is_hotkey || is_hotkey_ctrl {
                     if pressed {
                         Self::ToggleFullScreen
@@ -93,11 +96,7 @@ impl HotKey {
             }
             eframe::egui::Key::F => {
                 if modifiers.alt && !modifiers.shift && !modifiers.ctrl && !modifiers.command {
-                    if pressed {
-                        Self::ToggleFPS
-                    } else {
-                        Self::Skip
-                    }
+                    if pressed { Self::ToggleFPS } else { Self::Skip }
                 } else {
                     Self::None
                 }

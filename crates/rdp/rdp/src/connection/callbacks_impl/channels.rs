@@ -74,10 +74,7 @@ impl channels::ChannelsCallbacks for Rdp {
                     (*interface).custom =
                         self.context().unwrap() as *const _ as *mut std::os::raw::c_void;
                 }
-                self.channels
-                    .write()
-                    .unwrap()
-                    .set_rail_ptr(interface);
+                self.channels.write().unwrap().set_rail_ptr(interface);
                 true
             }
             name if name
@@ -88,8 +85,13 @@ impl channels::ChannelsCallbacks for Rdp {
                 let interface = p_interface as *mut RdpgfxClientContext;
                 self.channels.write().unwrap().set_gfx_ptr(interface);
                 unsafe {
-                    self.channels.read().unwrap().gfx().unwrap().hook_gdi(self.gdi().unwrap());
-                    
+                    self.channels
+                        .read()
+                        .unwrap()
+                        .gfx()
+                        .unwrap()
+                        .hook_gdi(self.gdi().unwrap());
+
                     // Re-register EndPaint/BeginPaint because gdi_graphics_pipeline_init overwrites them
                     let context = self.instance.as_deref().unwrap().context;
                     crate::callbacks::update_c::set_callbacks(

@@ -2,26 +2,12 @@
 // Copyright (c) 2025, Virtual Cable S.L.
 // All rights reserved.
 
-
 #[derive(Debug, Clone)]
 pub enum InputEvent {
-    Keyboard {
-        scancode: u16,
-        pressed: bool,
-    },
-    Mouse {
-        flags: u16,
-        x: u16,
-        y: u16,
-    },
-    ExtendedMouse {
-        flags: u16,
-        x: u16,
-        y: u16,
-    },
-    Unicode {
-        code: u16,
-    },
+    Keyboard { scancode: u16, pressed: bool },
+    Mouse { flags: u16, x: u16, y: u16 },
+    ExtendedMouse { flags: u16, x: u16, y: u16 },
+    Unicode { code: u16 },
 }
 
 #[derive(Debug, Clone)]

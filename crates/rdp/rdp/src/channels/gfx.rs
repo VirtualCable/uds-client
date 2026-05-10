@@ -29,8 +29,8 @@
 //
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
-use crate::utils;
 use crate::context::OwnerFromCtx;
+use crate::utils;
 use freerdp_sys::*;
 use shared::log;
 
@@ -72,7 +72,14 @@ extern "C" fn update_window_from_surface(
             }
 
             if mapped_width != width || mapped_height != height {
-                log::trace!("GFX Surface size mismatch for window {}: surface={}x{}, mapped={}x{}", window_id, width, height, mapped_width, mapped_height);
+                log::trace!(
+                    "GFX Surface size mismatch for window {}: surface={}x{}, mapped={}x{}",
+                    window_id,
+                    width,
+                    height,
+                    mapped_width,
+                    mapped_height
+                );
             }
 
             // Ensure we don't try to copy more than what we have in the surface
@@ -89,7 +96,8 @@ extern "C" fn update_window_from_surface(
                 utils::pixel_format(32, 4, 8, 8, 8, 8)
             };
 
-            #[allow(clippy::unnecessary_cast)]  // Needed beceuse windows/linux differ in the expected type of the flags parameter
+            #[allow(clippy::unnecessary_cast)]
+            // Needed beceuse windows/linux differ in the expected type of the flags parameter
             let res = freerdp_image_copy(
                 data.as_mut_ptr(),
                 format,
@@ -104,7 +112,7 @@ extern "C" fn update_window_from_surface(
                 0,
                 0,
                 &(*gdi).palette,
-                FREERDP_IMAGE_FLAGS_FREERDP_FLIP_NONE as u32,  
+                FREERDP_IMAGE_FLAGS_FREERDP_FLIP_NONE as u32,
             );
 
             if res == 0 {

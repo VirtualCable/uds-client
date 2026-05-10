@@ -93,7 +93,8 @@ impl Rdp {
                 let rgn = (*hwnd).invalid;
                 let ninvalid = (*hwnd).ninvalid;
 
-                #[allow(clippy::unnecessary_cast)]  // Needed beceuse windows/linux differ in the expected type of the flags parameter
+                #[allow(clippy::unnecessary_cast)]
+                // Needed beceuse windows/linux differ in the expected type of the flags parameter
                 if !rgn.is_null() && ((*rgn).null == 0 || ninvalid > 0) {
                     let mut rects = vec![];
                     if (*rgn).null == 0 {

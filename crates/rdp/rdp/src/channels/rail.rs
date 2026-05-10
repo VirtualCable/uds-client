@@ -182,10 +182,9 @@ fn complete_handshake(context: *mut RailClientContext) -> UINT {
                         .unwrap_or("C:\\"),
                 )
                 .unwrap();
-                let cargs = std::ffi::CString::new(
-                    rdp.config.settings.rail_args.as_deref().unwrap_or(""),
-                )
-                .unwrap();
+                let cargs =
+                    std::ffi::CString::new(rdp.config.settings.rail_args.as_deref().unwrap_or(""))
+                        .unwrap();
                 let exec = RAIL_EXEC_ORDER {
                     flags: RAIL_EXEC_FLAG_EXPAND_ARGUMENTS as u16,
                     RemoteApplicationProgram: capp.as_ptr(),

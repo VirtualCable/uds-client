@@ -2,10 +2,10 @@
 // Copyright (c) 2025, Virtual Cable S.L.
 // All rights reserved.
 
-use eframe::egui;
-use shared::log;
-use rdp::messaging::RdpMessage;
 use crate::window::{AppWindow, rdp::connection::RdpConnectionState};
+use eframe::egui;
+use rdp::messaging::RdpMessage;
+use shared::log;
 
 impl AppWindow {
     pub fn update_rdp_session(
@@ -22,7 +22,6 @@ impl AppWindow {
             egui::Vec2::new(gdi_width / egui_size.x, gdi_height / egui_size.y)
         };
 
-        
         self.handle_input(&mut rdp_state, ui, scale, egui::Vec2::ZERO);
         self.handle_screen_resize(ui.ctx(), ui.ctx().content_rect().size(), &mut rdp_state);
 
@@ -70,7 +69,9 @@ impl AppWindow {
 
                 // If the size of gdi is not equal to size of content, resize gdi and recreate texture
                 let screen_rect = ui.available_rect_before_wrap();
-                rdp_state.screen.paint(ui, screen_rect, rdp_state.fps.clone());
+                rdp_state
+                    .screen
+                    .paint(ui, screen_rect, rdp_state.fps.clone());
 
                 self.handle_cursor(ui.ctx(), &rdp_state);
                 self.show_pinbar(ui, &mut rdp_state);

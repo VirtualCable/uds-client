@@ -34,29 +34,19 @@ use std::{
     fmt,
     rc::Rc,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc, Mutex, RwLock,
+        atomic::{AtomicBool, Ordering},
     },
 };
 
+use crate::{log, logo::load_logo};
 use anyhow::Result;
 use eframe::egui;
-use flume::{bounded, Receiver, Sender};
-use crate::{log, logo::load_logo};
+use flume::{Receiver, Sender, bounded};
 
+use rdp::{Rdp, messaging::RdpMessage, settings::RdpSettings, sys::rdpGdi};
 
-
-use rdp::{
-    Rdp,
-    messaging::RdpMessage,
-    settings::RdpSettings,
-    sys::rdpGdi,
-};
-
-use crate::window::{
-    AppWindow,
-    types::AppState,
-};
+use crate::window::{AppWindow, types::AppState};
 
 const FRAMES_IN_FLIGHT: usize = 128;
 
@@ -126,9 +116,7 @@ unsafe impl Sync for SafeInputPtr {}
 
 impl fmt::Debug for RdpConnectionState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("RdpState")
-            .field("gdi", &self.gdi)
-            .finish()
+        f.debug_struct("RdpState").field("gdi", &self.gdi).finish()
     }
 }
 
@@ -148,16 +136,18 @@ impl AppWindow {
 
         let is_full_screen = if rdp_settings.screen_size.is_fullscreen() {
             let real_size = ctx.content_rect().size();
-            rdp_settings.screen_size =
-                rdp::geom::ScreenSize::Fixed(
-                    (real_size.x as f64 * scale_factor) as u32,
-                    (real_size.y as f64 * scale_factor) as u32
-                );
+            rdp_settings.screen_size = rdp::geom::ScreenSize::Fixed(
+                (real_size.x as f64 * scale_factor) as u32,
+                (real_size.y as f64 * scale_factor) as u32,
+            );
             true
         } else {
             false
         };
-        log::info!("RDP Negotiated Scale Factor: {}%", rdp_settings.scale_factor * 100.0);
+        log::info!(
+            "RDP Negotiated Scale Factor: {}%",
+            rdp_settings.scale_factor * 100.0
+        );
 
         let use_rgba = !super::graphics::Screen::supports_bgra(frame);
 
@@ -165,7 +155,10 @@ impl AppWindow {
 
         let (width, height) = crate::monitor::size(0).unwrap_or_else(|| {
             let screen_size = ctx.input(|i| i.content_rect().size());
-            ((screen_size.x * scale_factor as f32) as u32, (screen_size.y * scale_factor as f32) as u32)
+            (
+                (screen_size.x * scale_factor as f32) as u32,
+                (screen_size.y * scale_factor as f32) as u32,
+            )
         });
 
         if is_rail {
@@ -178,7 +171,11 @@ impl AppWindow {
             // to allow mouse events to reach windows positioned anywhere.
             // We use the primary monitor size (index 0) as the base.
             rdp_settings.screen_size = rdp::geom::ScreenSize::Fixed(width, height);
-            log::info!("RAIL: Virtual desktop size set to {}x{} (from monitor 0)", width, height);
+            log::info!(
+                "RAIL: Virtual desktop size set to {}x{} (from monitor 0)",
+                width,
+                height
+            );
         }
 
         let (mut rdp_instance, command_tx) = Rdp::new(rdp_settings, tx, use_rgba);
