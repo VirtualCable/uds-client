@@ -290,12 +290,13 @@ fn draw_rail_windows(
                 egui::ViewportCommand::InnerSize([rect.w as f32, rect.h as f32].into()),
             );
         }
-        if window.move_requested {
-            ui.ctx().send_viewport_cmd_to(
-                id,
-                egui::ViewportCommand::OuterPosition(egui::pos2(rect.x as f32, rect.y as f32)),
-            );
-        }
+        
+        // Force the position every frame to prevent Windows from applying
+        // cascading logic (+20, +20) to new RAIL windows like menus/dialogs.
+        ui.ctx().send_viewport_cmd_to(
+            id,
+            egui::ViewportCommand::OuterPosition(egui::pos2(rect.x as f32, rect.y as f32)),
+        );
 
         let window_rail = rail_channel.clone();
         let window_capture = mouse_capture.clone();
@@ -312,13 +313,16 @@ fn draw_rail_windows(
             !(is_tool_window || has_real_owner)
         };
 
+        let can_activate = show_in_taskbar;
+
         let builder = egui::ViewportBuilder::default()
             .with_title(window_title)
             .with_inner_size([rect.w as f32, rect.h as f32])
             .with_decorations(false)
             .with_transparent(true)
             .with_visible(true)
-            .with_taskbar(show_in_taskbar);
+            .with_taskbar(show_in_taskbar)
+            .with_position(egui::pos2(rect.x as f32, rect.y as f32));
 
         let windows_for_closure = remote_windows.clone();
         let keys_rx = keys_rx.clone();
@@ -337,7 +341,7 @@ fn draw_rail_windows(
                     }
                 }
 
-                if should_activate && let Some(rail) = &window_rail {
+                if can_activate && should_activate && let Some(rail) = &window_rail {
                     rail.send_activate(window_id, true);
                 }
 
@@ -360,8 +364,10 @@ fn draw_rail_windows(
                 ctx.input(|i| {
                     let rail_for_click = window_rail.clone();
                     let mut on_click = move || {
-                        if let Some(rail) = &rail_for_click {
-                            rail.send_activate(window_id, true);
+                        if can_activate {
+                            if let Some(rail) = &rail_for_click {
+                                rail.send_activate(window_id, true);
+                            }
                         }
                     };
                     let mut capture = window_capture.lock().unwrap();

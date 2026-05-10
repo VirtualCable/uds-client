@@ -33,7 +33,9 @@ use crate::callbacks::window::WindowCallbacks;
 use crate::consts::*;
 use crate::messaging::RdpMessage;
 use freerdp_sys::{
-    WINDOW_ORDER_FIELD_OWNER, WINDOW_ORDER_FIELD_SHOW, WINDOW_ORDER_FIELD_STYLE, WINDOW_ORDER_FIELD_TASKBAR_BUTTON, WINDOW_ORDER_FIELD_WND_OFFSET, WINDOW_ORDER_FIELD_WND_SIZE, WINDOW_ORDER_INFO, WINDOW_STATE_ORDER,
+    WINDOW_ORDER_FIELD_OWNER, WINDOW_ORDER_FIELD_SHOW, WINDOW_ORDER_FIELD_STYLE,
+    WINDOW_ORDER_FIELD_TASKBAR_BUTTON, WINDOW_ORDER_FIELD_WND_OFFSET, WINDOW_ORDER_FIELD_WND_SIZE,
+    WINDOW_ORDER_INFO, WINDOW_STATE_ORDER,
 };
 use shared::log;
 
@@ -61,8 +63,27 @@ impl WindowCallbacks for Rdp {
         order_info: *const WINDOW_ORDER_INFO,
         window_state: *const WINDOW_STATE_ORDER,
     ) -> bool {
-        #[allow(clippy::unnecessary_cast)]  // Needed beceuse windows/linux differ in the expected type on windowOffset..
-        let (window_id, owner_id, style, ext_style, taskbar_button, title, show_state, is_offscreen, pos, size) = unsafe {
+        unsafe {
+            log::debug!(
+                "WindowCallbacks::on_window_create: order_info={:?}, window_state={:?}",
+                *order_info,
+                *window_state
+            )
+        };
+        #[allow(clippy::unnecessary_cast)]
+        // Needed beceuse windows/linux differ in the expected type on windowOffset..
+        let (
+            window_id,
+            owner_id,
+            style,
+            ext_style,
+            taskbar_button,
+            title,
+            show_state,
+            is_offscreen,
+            pos,
+            size,
+        ) = unsafe {
             let info = &*order_info;
             let state = &*window_state;
             let owner_id = if info.fieldFlags & WINDOW_ORDER_FIELD_OWNER != 0 {
@@ -114,17 +135,6 @@ impl WindowCallbacks for Rdp {
             )
         };
 
-        log::debug!(
-            "WindowCreate: id={}, owner_id={:?}, title={:?}, show_state={:?}, is_offscreen={:?}, pos={:?}, size={:?}",
-            window_id,
-            owner_id,
-            title,
-            show_state,
-            is_offscreen,
-            pos,
-            size
-        );
-
         if let Some(tx) = &self.update_tx {
             let _ = tx.send(RdpMessage::WindowCreate {
                 window_id,
@@ -140,7 +150,9 @@ impl WindowCallbacks for Rdp {
             });
             // If the window is being created in SW_SHOW(5) or SW_SHOWMAXIMIZED(3) state,
             // trigger a screen sync to be safe.
-            if show_state.map(|s| s as u32) == Some(SW_SHOWMAXIMIZED) || show_state.map(|s| s as u32) == Some(SW_SHOW) {
+            if show_state.map(|s| s as u32) == Some(SW_SHOWMAXIMIZED)
+                || show_state.map(|s| s as u32) == Some(SW_SHOW)
+            {
                 let _ = tx.send(RdpMessage::UpdateRects(vec![crate::geom::Rect::new(
                     0,
                     0,
@@ -158,8 +170,28 @@ impl WindowCallbacks for Rdp {
         order_info: *const WINDOW_ORDER_INFO,
         window_state: *const WINDOW_STATE_ORDER,
     ) -> bool {
-        #[allow(clippy::unnecessary_cast)]  // Windows/linux/mac differ on INT32 implementation
-        let (window_id, owner_id, style, ext_style, taskbar_button, title, show_state, is_offscreen, pos, size, state_ref) = unsafe {
+        unsafe {
+            log::debug!(
+                "WindowCallbacks::on_window_update: order_info={:?}, window_state={:?}",
+                *order_info,
+                *window_state
+            )
+        };
+
+        #[allow(clippy::unnecessary_cast)] // Windows/linux/mac differ on INT32 implementation
+        let (
+            window_id,
+            owner_id,
+            style,
+            ext_style,
+            taskbar_button,
+            title,
+            show_state,
+            is_offscreen,
+            pos,
+            size,
+            _state_ref,
+        ) = unsafe {
             let info = &*order_info;
             let state = &*window_state;
             let owner_id = if info.fieldFlags & WINDOW_ORDER_FIELD_OWNER != 0 {
@@ -211,20 +243,6 @@ impl WindowCallbacks for Rdp {
                 state,
             )
         };
-
-        log::debug!(
-            "WindowUpdate: id={}, owner_id={:?}, flags=0x{:X}, title={:?}, show_state={:?}, offset=({}, {}), offscreen={:?}, pos={:?}, size={:?}",
-            window_id,
-            owner_id,
-            unsafe { (*order_info).fieldFlags },
-            title,
-            show_state,
-            state_ref.windowOffsetX,
-            state_ref.windowOffsetY,
-            is_offscreen,
-            pos,
-            size
-        );
 
         if let Some(tx) = &self.update_tx {
             let _ = tx.send(RdpMessage::WindowUpdate {
