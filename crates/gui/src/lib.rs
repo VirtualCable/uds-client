@@ -101,6 +101,8 @@ impl ApplicationHandler<UserEvent> for RdpAppProxy<'_> {
                 // Chanel may be full or disconnected, log and continue
                 log::warn!("Failed to send keyboard event: {}", e);
             }
+            // Do not let eframe process the event
+            return;
         }
 
         self.eframe_app.window_event(event_loop, window_id, event);

@@ -66,7 +66,6 @@ impl AppWindow {
                             pos,
                             size,
                         } => {
-                            log::info!("RAIL: WindowCreate id={}", window_id);
                             let scale_factor = rdp_state.scale_factor;
                             let (x, y) = pos.unwrap_or((0, 0));
                             let (width, height) = size.unwrap_or((0, 0));
@@ -165,7 +164,6 @@ impl AppWindow {
                             }
                         }
                         RdpMessage::WindowDelete(window_id) => {
-                            log::info!("RAIL: WindowDelete id={}", window_id);
                             rdp_state.remote_windows.write().unwrap().remove(&window_id);
                         }
                         RdpMessage::WindowPixels {
@@ -174,12 +172,6 @@ impl AppWindow {
                             height,
                             data,
                         } => {
-                            log::debug!(
-                                "RAIL WindowPixels: id={}, {}x{}",
-                                window_id,
-                                width,
-                                height
-                            );
                             let mut windows = rdp_state.remote_windows.write().unwrap();
                             let scale_factor = rdp_state.scale_factor;
                             let lw = (width as f64 / scale_factor) as u32;
