@@ -347,26 +347,25 @@ impl Rdp {
                     );
                 }
 
-                if self.config.settings.best_experience {
-                    [
-                        FreeRDP_Settings_Keys_Bool_FreeRDP_DisableWallpaper,
-                        FreeRDP_Settings_Keys_Bool_FreeRDP_DisableFullWindowDrag,
-                        FreeRDP_Settings_Keys_Bool_FreeRDP_DisableMenuAnims,
-                        FreeRDP_Settings_Keys_Bool_FreeRDP_DisableThemes,
-                    ]
-                    .iter()
-                    .for_each(|key| {
-                        freerdp_settings_set_bool(settings, *key, false.into());
-                    });
-                    [
-                        FreeRDP_Settings_Keys_Bool_FreeRDP_AllowFontSmoothing,
-                        FreeRDP_Settings_Keys_Bool_FreeRDP_AllowDesktopComposition,
-                    ]
-                    .iter()
-                    .for_each(|key| {
-                        freerdp_settings_set_bool(settings, *key, true.into());
-                    });
-                }
+                // Best experience settings (enabled an disabled due to Disable && Allow
+                [
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_DisableWallpaper,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_DisableFullWindowDrag,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_DisableMenuAnims,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_DisableThemes,
+                ]
+                .iter()
+                .for_each(|key| {
+                    freerdp_settings_set_bool(settings, *key, (!self.config.settings.best_experience).into());
+                });
+                [
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_AllowFontSmoothing,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_AllowDesktopComposition,
+                ]
+                .iter()
+                .for_each(|key| {
+                    freerdp_settings_set_bool(settings, *key, self.config.settings.best_experience.into());
+                });
 
                 // Set perfromance flags from settings
                 freerdp_sys::freerdp_performance_flags_make(settings);

@@ -265,6 +265,12 @@ fn draw_rail_windows(
             continue;
         }
 
+        // Filter out shadow/overlay windows which are purely for visual effects
+        // and render as black rectangles. They always have WS_EX_TRANSPARENT (0x20).
+        if window.extended_style.is_some_and(|s| (s & 0x20) != 0) {
+            continue;
+        }
+
         let texture_id = if let Some(tex) = &window.texture {
             tex.id()
         } else {

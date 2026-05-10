@@ -97,6 +97,7 @@ impl AppWindow {
                         //rail_app: Some("c:\\windows\\system32\\calc.exe".to_string()),
                         // notepad
                         rail_app: Some("c:\\windows\\notepad.exe".to_string()),
+                        best_experience: false,
                         ..RdpSettings::default()
                     },
                 )
