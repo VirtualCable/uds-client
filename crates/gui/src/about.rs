@@ -38,6 +38,9 @@ struct AboutState {
     logo_h: u32,
     start: Instant,
     angle: f32,
+    phys_w: u32,
+    phys_h: u32,
+    scale: f32,
 }
 
 impl AboutState {
@@ -53,13 +56,19 @@ impl AboutState {
 
         let context =
             softbuffer::Context::new(window.clone()).map_err(|e| anyhow::anyhow!("{e}"))?;
+        let phys = window.inner_size();
         let mut surface = softbuffer::Surface::new(&context, window.clone())
             .map_err(|e| anyhow::anyhow!("{e}"))?;
         surface
-            .resize(NonZeroU32::new(420).unwrap(), NonZeroU32::new(440).unwrap())
+            .resize(
+                NonZeroU32::new(phys.width).unwrap_or(NonZeroU32::new(1).unwrap()),
+                NonZeroU32::new(phys.height).unwrap_or(NonZeroU32::new(1).unwrap()),
+            )
             .map_err(|e| anyhow::anyhow!("{e}"))?;
 
         let logo = logo::load_logo();
+        let phys_size = window.inner_size();
+        let win_scale = window.scale_factor() as f32;
 
         Ok(AboutState {
             window,
@@ -69,6 +78,9 @@ impl AboutState {
             logo_h: logo.height,
             start: Instant::now(),
             angle: 0.0,
+            phys_w: phys_size.width,
+            phys_h: phys_size.height,
+            scale: win_scale,
         })
     }
 
@@ -81,8 +93,9 @@ impl AboutState {
             Err(_) => return,
         };
 
-        let w = 420u32;
-        let h = 440u32;
+        let w = self.phys_w;
+        let h = self.phys_h;
+        let s = self.scale;
 
         // Background gradient
         for row in 0..h {
@@ -101,19 +114,28 @@ impl AboutState {
 
         // Logo centered at top with rotation wobble
         {
-            let logo_x = (w as i32 - self.logo_w as i32) / 2;
-            let logo_y = 30i32;
+            let logo_y = (30.0 * s) as i32;
             let cx = self.logo_w as f32 / 2.0;
             let cy = self.logo_h as f32 / 2.0;
+            let scaled_ww = (self.logo_w as f32 * s) as u32;
+            let scaled_hh = (self.logo_h as f32 * s) as u32;
+            let logo_x = (w as i32 - scaled_ww as i32) / 2;
 
             for row in 0..self.logo_h {
                 for col in 0..self.logo_w {
+                    // Scale position for target
+                    let dst_row = (row as f32 * s) as u32;
+                    let dst_col = (col as f32 * s) as u32;
+                    if dst_row >= scaled_hh || dst_col >= scaled_ww {
+                        continue;
+                    }
+
                     let sx = col as f32 - cx;
                     let sy = row as f32 - cy;
                     let rx = sx * self.angle.cos() - sy * self.angle.sin() + cx;
                     let ry = sx * self.angle.sin() + sy * self.angle.cos() + cy;
-                    let px = logo_x + rx as i32;
-                    let py = logo_y + ry as i32;
+                    let px = logo_x + (rx * s) as i32;
+                    let py = logo_y + (ry * s) as i32;
                     if px >= 0 && py >= 0 && (px as u32) < w && (py as u32) < h {
                         let si = (row * self.logo_w + col) as usize * 4;
                         if si + 3 < self.logo_rgba.len() {
@@ -143,16 +165,27 @@ impl AboutState {
         }
 
         // Draw about text lines
-        let base_y = (self.logo_h as i32 + 50) as f32;
+        let base_y = self.logo_h as f32 * s + 80.0 * s;
         for (i, line) in ABOUT_LINES.iter().enumerate() {
-            let y = base_y + i as f32 * 22.0;
-            draw_text_centered(&mut buffer, w, line, y, 14.0, 0xFF_C0_C0_E0);
+            let y = base_y + i as f32 * (22.0 * s);
+            draw_text_centered(&mut buffer, w, line, y, 14.0 * s, 0xFF_C0_C0_E0, s);
         }
 
         // Close button
-        let btn_x = (w as f32 - 80.0) / 2.0;
-        let btn_y = base_y + ABOUT_LINES.len() as f32 * 22.0 + 20.0;
-        draw_button(&mut buffer, w, btn_x as i32, btn_y as i32, 80, 35, "Close");
+        let btn_w = (80.0 * s) as i32;
+        let btn_h = (35.0 * s) as i32;
+        let btn_x = (w as f32 - btn_w as f32) / 2.0;
+        let btn_y = base_y + ABOUT_LINES.len() as f32 * (22.0 * s) + 20.0 * s;
+        draw_button_scaled(
+            &mut buffer,
+            w,
+            btn_x as i32,
+            btn_y as i32,
+            btn_w,
+            btn_h,
+            "Close",
+            s,
+        );
 
         let _ = buffer.present();
     }
@@ -163,19 +196,25 @@ fn draw_text_centered(
     screen_w: u32,
     text: &str,
     y: f32,
-    _size: f32,
+    size_px: f32,
     color: u32,
+    _scale: f32,
 ) {
-    let char_w = 8;
-    let char_h = 12;
-    let x = (screen_w as f32 - text.len() as f32 * char_w as f32) / 2.0;
+    let char_h = (size_px as i32).max(6);
+    let char_w = char_h * 2 / 3;
+    if char_w < 1 {
+        return;
+    }
+    let x = (screen_w as i32 - text.len() as i32 * char_w) / 2;
 
     for (i, ch) in text.chars().enumerate() {
-        let cx = x as i32 + i as i32 * char_w;
+        let cx = x + i as i32 * char_w;
         let cy = y as i32;
         for row in 0..char_h {
+            let src_row = (row * 12 / char_h).min(11);
             for col in 0..char_w {
-                if let Some(_) = char_pixel_simple(ch, col, row) {
+                let src_col = (col * 8 / char_w).min(7);
+                if char_pixel_simple(ch, src_col, src_row).is_some() {
                     let px = cx + col;
                     let py = cy + row;
                     if px >= 0 && py >= 0 && (px as u32) < screen_w {
@@ -190,7 +229,18 @@ fn draw_text_centered(
     }
 }
 
-fn draw_button(buffer: &mut [u32], screen_w: u32, bx: i32, by: i32, bw: i32, bh: i32, label: &str) {
+#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
+fn draw_button_scaled(
+    buffer: &mut [u32],
+    screen_w: u32,
+    bx: i32,
+    by: i32,
+    bw: i32,
+    bh: i32,
+    label: &str,
+    scale: f32,
+) {
     let bg = 0xFF_50_50_70_u32;
     let border = 0xFF_80_80_A0_u32;
     for row in by..(by + bh) {
@@ -209,10 +259,16 @@ fn draw_button(buffer: &mut [u32], screen_w: u32, bx: i32, by: i32, bw: i32, bh:
         buffer,
         screen_w,
         label,
-        by as f32 + (bh as f32 - 12.0) / 2.0,
-        12.0,
+        by as f32 + (bh as f32 - 12.0 * scale) / 2.0,
+        12.0 * scale,
         0xFF_C0_C0_E0,
+        scale,
     );
+}
+
+#[allow(dead_code)]
+fn draw_button(buffer: &mut [u32], screen_w: u32, bx: i32, by: i32, bw: i32, bh: i32, label: &str) {
+    draw_button_scaled(buffer, screen_w, bx, by, bw, bh, label, 1.0)
 }
 
 fn char_pixel_simple(ch: char, col: i32, row: i32) -> Option<()> {
@@ -225,105 +281,95 @@ fn char_pixel_simple(ch: char, col: i32, row: i32) -> Option<()> {
         match (ch, col, row) {
             // Basic alphabet - simplified for readability
             ('A', c, r)
-                if c >= 1
-                    && c <= 5
-                    && r >= 1
-                    && r <= 9
+                if (1..=5).contains(&c)
+                    && (1..=9).contains(&r)
                     && (c == 1 || c == 5 || r == 1 || r == 5) =>
             {
                 Some(())
             }
             ('B', c, r)
-                if c >= 1
-                    && c <= 5
-                    && r >= 1
-                    && r <= 9
+                if (1..=5).contains(&c)
+                    && (1..=9).contains(&r)
                     && (c == 1 || c == 5 || r == 1 || r == 5 || r == 9) =>
             {
                 Some(())
             }
-            ('C', c, r) if c >= 1 && c <= 5 && r >= 1 && r <= 9 && (c == 1 || r == 1 || r == 9) => {
+            ('C', c, r)
+                if (1..=5).contains(&c) && (1..=9).contains(&r) && (c == 1 || r == 1 || r == 9) =>
+            {
                 Some(())
             }
             ('D', c, r)
-                if c >= 1
-                    && c <= 5
-                    && r >= 1
-                    && r <= 9
+                if (1..=5).contains(&c)
+                    && (1..=9).contains(&r)
                     && (c == 1 || c == 5 || r == 1 || r == 9) =>
             {
                 Some(())
             }
             ('E', c, r)
-                if c >= 1
-                    && c <= 5
-                    && r >= 1
-                    && r <= 9
+                if (1..=5).contains(&c)
+                    && (1..=9).contains(&r)
                     && (c == 1 || r == 1 || r == 5 || r == 9) =>
             {
                 Some(())
             }
-            ('F', c, r) if c >= 1 && c <= 5 && r >= 1 && r <= 9 && (c == 1 || r == 1 || r == 5) => {
+            ('F', c, r)
+                if (1..=5).contains(&c) && (1..=9).contains(&r) && (c == 1 || r == 1 || r == 5) =>
+            {
                 Some(())
             }
             ('G', c, r)
-                if c >= 1
-                    && c <= 5
-                    && r >= 1
-                    && r <= 9
+                if (1..=5).contains(&c)
+                    && (1..=9).contains(&r)
                     && (c == 1 || r == 1 || r == 9 || (c >= 3 && r == 5) || (c == 5 && r >= 5)) =>
             {
                 Some(())
             }
-            ('H', c, r) if c >= 1 && c <= 5 && r >= 1 && r <= 9 && (c == 1 || c == 5 || r == 5) => {
+            ('H', c, r)
+                if (1..=5).contains(&c) && (1..=9).contains(&r) && (c == 1 || c == 5 || r == 5) =>
+            {
                 Some(())
             }
-            ('I', c, _) if c >= 2 && c <= 4 => Some(()),
+            ('I', c, _) if (2..=4).contains(&c) => Some(()),
             ('K', c, r)
-                if c >= 1
-                    && c <= 5
-                    && r >= 1
-                    && r <= 9
+                if (1..=5).contains(&c)
+                    && (1..=9).contains(&r)
                     && (c == 1 || (r >= 5 && c == r - 5 + 2) || (r <= 5 && c == 6 - r)) =>
             {
                 Some(())
             }
-            ('L', c, r) if c >= 1 && c <= 5 && r >= 1 && r <= 9 && (c == 1 || r == 9) => Some(()),
+            ('L', c, r) if (1..=5).contains(&c) && (1..=9).contains(&r) && (c == 1 || r == 9) => {
+                Some(())
+            }
             ('M', c, r)
-                if c >= 1
-                    && c <= 5
-                    && r >= 1
-                    && r <= 9
+                if (1..=5).contains(&c)
+                    && (1..=9).contains(&r)
                     && (c == 1 || c == 5 || (r <= 5 && (c == r || c == 6 - r))) =>
             {
                 Some(())
             }
-            ('N', c, r) if c >= 1 && c <= 5 && r >= 1 && r <= 9 && (c == 1 || c == 5 || c == r) => {
+            ('N', c, r)
+                if (1..=5).contains(&c) && (1..=9).contains(&r) && (c == 1 || c == 5 || c == r) =>
+            {
                 Some(())
             }
             ('O', c, r)
-                if c >= 1
-                    && c <= 5
-                    && r >= 1
-                    && r <= 9
+                if (1..=5).contains(&c)
+                    && (1..=9).contains(&r)
                     && (c == 1 || c == 5 || r == 1 || r == 9) =>
             {
                 Some(())
             }
             ('P', c, r)
-                if c >= 1
-                    && c <= 5
-                    && r >= 1
-                    && r <= 9
+                if (1..=5).contains(&c)
+                    && (1..=9).contains(&r)
                     && (c == 1 || (r <= 5 && c == 5) || r == 1 || r == 5) =>
             {
                 Some(())
             }
             ('R', c, r)
-                if c >= 1
-                    && c <= 5
-                    && r >= 1
-                    && r <= 9
+                if (1..=5).contains(&c)
+                    && (1..=9).contains(&r)
                     && (c == 1
                         || (r <= 5 && c == 5)
                         || r == 1
@@ -333,143 +379,123 @@ fn char_pixel_simple(ch: char, col: i32, row: i32) -> Option<()> {
                 Some(())
             }
             ('S', c, r)
-                if c >= 1
-                    && c <= 5
-                    && r >= 1
-                    && r <= 9
+                if (1..=5).contains(&c)
+                    && (1..=9).contains(&r)
                     && ((r <= 5 && c == 1) || (r >= 5 && c == 5) || r == 1 || r == 5 || r == 9) =>
             {
                 Some(())
             }
-            ('T', c, r) if c >= 1 && c <= 5 && r >= 1 && r <= 9 && (r == 1 || c == 3) => Some(()),
-            ('U', c, r) if c >= 1 && c <= 5 && r >= 1 && r <= 9 && (c == 1 || c == 5 || r == 9) => {
+            ('T', c, r) if (1..=5).contains(&c) && (1..=9).contains(&r) && (r == 1 || c == 3) => {
+                Some(())
+            }
+            ('U', c, r)
+                if (1..=5).contains(&c) && (1..=9).contains(&r) && (c == 1 || c == 5 || r == 9) =>
+            {
                 Some(())
             }
             ('V', c, r)
-                if c >= 1
-                    && c <= 5
-                    && r >= 1
-                    && r <= 9
+                if (1..=5).contains(&c)
+                    && (1..=9).contains(&r)
                     && ((r <= 5 && (c == 1 || c == 5)) || (r >= 5 && c == 3)) =>
             {
                 Some(())
             }
             ('W', c, r)
-                if c >= 1
-                    && c <= 5
-                    && r >= 1
-                    && r <= 9
+                if (1..=5).contains(&c)
+                    && (1..=9).contains(&r)
                     && (c == 1 || c == 5 || (r >= 5 && (c == 3 || c == 2 || c == 4))) =>
             {
                 Some(())
             }
-            ('X', c, r) if c >= 1 && c <= 5 && r >= 1 && r <= 9 && (c == r || c == 6 - r) => {
+            ('X', c, r)
+                if (1..=5).contains(&c) && (1..=9).contains(&r) && (c == r || c == 6 - r) =>
+            {
                 Some(())
             }
             ('Y', c, r)
-                if c >= 1
-                    && c <= 5
-                    && r >= 1
-                    && r <= 9
+                if (1..=5).contains(&c)
+                    && (1..=9).contains(&r)
                     && ((r <= 5 && (c == r || c == 6 - r)) || (r >= 5 && c == 3)) =>
             {
                 Some(())
             }
-            ('0', c, r) if c >= 1 && c <= 5 && r >= 1 && r <= 9 => Some(()),
-            ('1', c, _) if c == 3 => Some(()),
+            ('0', c, r) if (1..=5).contains(&c) && (1..=9).contains(&r) => Some(()),
+            ('1', 3, _) => Some(()),
             ('2', c, r)
-                if c >= 1
-                    && c <= 5
-                    && r >= 1
-                    && r <= 9
+                if (1..=5).contains(&c)
+                    && (1..=9).contains(&r)
                     && (r == 1 || r == 5 || r == 9 || (r <= 5 && c == 5) || (r >= 5 && c == 1)) =>
             {
                 Some(())
             }
             ('3', c, r)
-                if c >= 1
-                    && c <= 5
-                    && r >= 1
-                    && r <= 9
+                if (1..=5).contains(&c)
+                    && (1..=9).contains(&r)
                     && (r == 1 || r == 5 || r == 9 || c == 5) =>
             {
                 Some(())
             }
             ('4', c, r)
-                if c >= 1
-                    && c <= 5
-                    && r >= 1
-                    && r <= 9
+                if (1..=5).contains(&c)
+                    && (1..=9).contains(&r)
                     && (c == 5 || r == 5 || (r <= 5 && c == 1)) =>
             {
                 Some(())
             }
             ('5', c, r)
-                if c >= 1
-                    && c <= 5
-                    && r >= 1
-                    && r <= 9
+                if (1..=5).contains(&c)
+                    && (1..=9).contains(&r)
                     && (r == 1 || r == 5 || r == 9 || (r <= 5 && c == 1) || (r >= 5 && c == 5)) =>
             {
                 Some(())
             }
             ('6', c, r)
-                if c >= 1
-                    && c <= 5
-                    && r >= 1
-                    && r <= 9
+                if (1..=5).contains(&c)
+                    && (1..=9).contains(&r)
                     && (c == 1 || r == 5 || r == 9 || (r >= 5 && c == 5)) =>
             {
                 Some(())
             }
-            ('7', c, r) if c >= 1 && c <= 5 && r >= 1 && r <= 9 && (r == 1 || c == 5) => Some(()),
+            ('7', c, r) if (1..=5).contains(&c) && (1..=9).contains(&r) && (r == 1 || c == 5) => {
+                Some(())
+            }
             ('8', c, r)
-                if c >= 1
-                    && c <= 5
-                    && r >= 1
-                    && r <= 9
+                if (1..=5).contains(&c)
+                    && (1..=9).contains(&r)
                     && (c == 1 || c == 5 || r == 1 || r == 5 || r == 9) =>
             {
                 Some(())
             }
             ('9', c, r)
-                if c >= 1
-                    && c <= 5
-                    && r >= 1
-                    && r <= 9
+                if (1..=5).contains(&c)
+                    && (1..=9).contains(&r)
                     && (c == 5 || r == 1 || r == 5 || (r <= 5 && c == 1)) =>
             {
                 Some(())
             }
-            ('.', _, r) if r == 8 => Some(()),
-            ('-', _, r) if r == 5 => Some(()),
-            (':', c, _) if c == 3 => Some(()),
+            ('.', _, 8) => Some(()),
+            ('-', _, 5) => Some(()),
+            (':', 3, _) => Some(()),
             ('/', c, r) if c == 6 - r => Some(()),
             ('%', c, r)
-                if c >= 1
-                    && c <= 5
-                    && r >= 1
-                    && r <= 9
+                if (1..=5).contains(&c)
+                    && (1..=9).contains(&r)
                     && ((c == 1 && r <= 3) || (c == 5 && r >= 7) || c == r) =>
             {
                 Some(())
             }
             ('\'', c, r) if c == 3 && r <= 3 => Some(()),
             (')', c, r)
-                if c >= 3
-                    && c <= 5
-                    && r >= 1
-                    && r <= 9
-                    && ((c == 5 && (r >= 2 && r <= 8)) || (c == r + 2) && (r == 1 || r == 9)) =>
+                if (3..=5).contains(&c)
+                    && (1..=9).contains(&r)
+                    && ((c == 5 && (2..=8).contains(&r)) || (c == r + 2) && (r == 1 || r == 9)) =>
             {
                 Some(())
             }
             ('(', c, r)
-                if c >= 1
-                    && c <= 3
-                    && r >= 1
-                    && r <= 9
-                    && ((c == 1 && (r >= 2 && r <= 8)) || (c + r == 5) && (r == 1 || r == 9)) =>
+                if (1..=3).contains(&c)
+                    && (1..=9).contains(&r)
+                    && ((c == 1 && (2..=8).contains(&r)) || (c + r == 5) && (r == 1 || r == 9)) =>
             {
                 Some(())
             }
@@ -499,6 +525,7 @@ pub fn show_about_window() {
     });
 }
 
+#[allow(dead_code)]
 struct AboutHandler<'a> {
     state: &'a mut Option<AboutState>,
     last_frame: Instant,
@@ -532,13 +559,13 @@ impl ApplicationHandler for AboutHandler<'_> {
                     state.paint();
                 }
             }
-            WindowEvent::MouseInput { state, button, .. } => {
-                if state.is_pressed() && button == winit::event::MouseButton::Left {
-                    // Close button hit test
-                    if let Some(_s) = self.state.as_ref() {
-                        // Close button at bottom center
-                        event_loop.exit();
-                    }
+            WindowEvent::MouseInput { state, button, .. }
+                if state.is_pressed() && button == winit::event::MouseButton::Left =>
+            {
+                // Close button hit test
+                if let Some(_s) = self.state.as_ref() {
+                    // Close button at bottom center
+                    event_loop.exit();
                 }
             }
             _ => {}
@@ -547,7 +574,7 @@ impl ApplicationHandler for AboutHandler<'_> {
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         if let Some(state) = self.state.as_ref() {
-            let _ = state.window.request_redraw();
+            state.window.request_redraw();
         }
     }
 }

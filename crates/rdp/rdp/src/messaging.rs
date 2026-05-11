@@ -93,6 +93,7 @@ pub enum RdpMessage {
         height: u32,
         data: Vec<u8>,
     },
+    DesktopResize(u32, u32),
 }
 
 // Debug without bin fields
@@ -157,6 +158,11 @@ impl core::fmt::Debug for RdpMessage {
             } => f
                 .debug_struct("WindowPixels")
                 .field("window_id", window_id)
+                .field("width", width)
+                .field("height", height)
+                .finish(),
+            RdpMessage::DesktopResize(width, height) => f
+                .debug_struct("DesktopResize")
                 .field("width", width)
                 .field("height", height)
                 .finish(),

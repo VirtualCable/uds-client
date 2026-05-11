@@ -5,8 +5,10 @@
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
 use std::collections::HashMap;
-use std::num::NonZeroU32;
-use std::sync::{Arc, RwLock, atomic::AtomicBool};
+use std::sync::{
+    Arc, RwLock,
+    atomic::{AtomicBool, Ordering},
+};
 
 use anyhow::Result;
 use flume::{Receiver, bounded};
@@ -20,15 +22,16 @@ const FRAMES_IN_FLIGHT: usize = 128;
 
 // ── RDP Window ──────────────────────────────────────────────
 
+#[allow(dead_code)]
 pub struct RdpWindow {
     pub window: Arc<winit::window::Window>,
-    pub surface: softbuffer::Surface<Arc<winit::window::Window>, Arc<winit::window::Window>>,
-    pub context: softbuffer::Context<Arc<winit::window::Window>>,
+    pub renderer: crate::wgpu_render::WgpuRenderer,
     pub scratch: Vec<u8>,
 }
 
 // ── RAIL State ──────────────────────────────────────────────
 
+#[allow(dead_code)]
 pub struct RailWindow {
     pub id: u32,
     pub window: Arc<winit::window::Window>,
@@ -39,6 +42,7 @@ pub struct RailWindow {
     pub height: u32,
 }
 
+#[allow(dead_code)]
 pub struct RailState {
     pub windows: HashMap<winit::window::WindowId, RailWindow>,
     pub visible_windows: HashMap<winit::window::WindowId, u32>,
@@ -48,6 +52,7 @@ pub struct RailState {
 
 // ── RDP State ───────────────────────────────────────────────
 
+#[allow(dead_code)]
 pub struct RdpState {
     pub window: RdpWindow,
     pub update_rx: Receiver<RdpMessage>,
@@ -60,19 +65,31 @@ pub struct RdpState {
     pub scale_factor: f64,
     pub desktop_size: (u32, u32),
     pub full_screen: Arc<AtomicBool>,
+    pub last_resize: std::time::Instant,
+    pub pending_resize: bool,
     pub keys_rx: Receiver<RawKey>,
     pub fps: Fps,
 
     pub rail: Option<RailState>,
     pub rail_channel: Option<rdp::channels::rail::RailChannel>,
+
+    pub cursor_data: Vec<u8>,
+    pub cursor_hot_x: u32,
+    pub cursor_hot_y: u32,
+    pub cursor_w: u32,
+    pub cursor_h: u32,
+    pub cursor_visible: bool,
+    pub cursor_x: f32,
+    pub cursor_y: f32,
 }
 
 // ── FPS Counter ─────────────────────────────────────────────
 
+#[allow(dead_code)]
 pub struct Fps {
     pub last_instant: std::time::Instant,
     frames: Vec<f32>,
-    pub enabled: bool,
+    pub enabled: AtomicBool,
 }
 
 impl Fps {
@@ -80,7 +97,7 @@ impl Fps {
         Self {
             last_instant: std::time::Instant::now(),
             frames: Vec::new(),
-            enabled: false,
+            enabled: AtomicBool::new(false),
         }
     }
     pub fn record(&mut self) {
@@ -91,13 +108,15 @@ impl Fps {
             self.frames.remove(0);
         }
     }
-    pub fn toggle(&mut self) {
-        self.enabled = !self.enabled;
+    pub fn toggle(&self) {
+        let v = self.enabled.load(Ordering::Relaxed);
+        self.enabled.store(!v, Ordering::Relaxed);
     }
 }
 
 // ── RDP Action Result ───────────────────────────────────────
 
+#[allow(dead_code)]
 pub enum RdpActionResult {
     Continue,
     Skip,
@@ -147,6 +166,13 @@ impl RdpState {
         let gdi_lock = rdp.gdi_lock();
         let channels = rdp.channels().clone();
 
+        log::info!(
+            "RDP connected: GDI={}x{} stride={}",
+            unsafe { (*gdi).width },
+            unsafe { (*gdi).height },
+            unsafe { (*gdi).stride }
+        );
+
         let rail_channel = if is_rail {
             channels.read().unwrap().rail()
         } else {
@@ -174,133 +200,152 @@ impl RdpState {
             scale_factor,
             desktop_size,
             full_screen: Arc::new(AtomicBool::new(false)),
+            last_resize: std::time::Instant::now()
+                .checked_sub(std::time::Duration::from_secs(60))
+                .unwrap_or(std::time::Instant::now()),
+            pending_resize: false,
             keys_rx,
             fps: Fps::new(),
             rail: None,
             rail_channel,
+            cursor_data: Vec::new(),
+            cursor_hot_x: 0,
+            cursor_hot_y: 0,
+            cursor_w: 0,
+            cursor_h: 0,
+            cursor_visible: false,
+            cursor_x: 0.0,
+            cursor_y: 0.0,
         })
     }
 
     pub fn update_screen(&mut self) -> Result<()> {
         let gdi = self.gdi;
-        let _lock = self.gdi_lock.read().unwrap();
 
-        let (stride, fb_h, fb_w) = unsafe {
-            (
-                (*gdi).stride as usize,
-                (*gdi).height as usize,
-                (*gdi).width as usize,
-            )
+        let (stride, fb_h, fb_w) = {
+            let _lock = self.gdi_lock.read().unwrap();
+            unsafe {
+                (
+                    (*gdi).stride as usize,
+                    (*gdi).height as usize,
+                    (*gdi).width as usize,
+                )
+            }
         };
 
+        log::debug!("update_screen: GDI={fb_w}x{fb_h} stride={stride}");
+
         if fb_w == 0 || fb_h == 0 {
+            log::warn!("update_screen: GDI dimensions are 0, skipping");
             return Ok(());
         }
 
-        let cw = fb_w as u32;
-        let ch = fb_h as u32;
-        if cw > 0 && ch > 0 {
-            let _ = self
-                .window
-                .surface
-                .resize(NonZeroU32::new(cw).unwrap(), NonZeroU32::new(ch).unwrap());
-        }
+        let need_swizzle = !cfg!(target_os = "macos");
+        let total = fb_w * fb_h * 4;
+        self.window.scratch.resize(total, 0);
 
-        let framebuffer = unsafe {
-            std::slice::from_raw_parts((*gdi).primary_buffer as *const u8, stride * fb_h)
-        };
+        {
+            let _lock = self.gdi_lock.read().unwrap();
+            let framebuffer = unsafe {
+                std::slice::from_raw_parts((*gdi).primary_buffer as *const u8, stride * fb_h)
+            };
 
-        if let Ok(mut buffer) = self.window.surface.buffer_mut() {
-            let need_swizzle = cfg!(target_os = "macos");
-            let dst = buffer.as_mut();
-            for row in 0..fb_h.min(dst.len() as usize / fb_w.max(1)) {
+            // Copy GDI → scratch with optional swizzle
+            for row in 0..fb_h {
                 let src_start = row * stride;
-                let dst_start = row * fb_w.max(1);
-                for col in 0..fb_w {
-                    let si = src_start + col * 4;
-                    if si + 3 < framebuffer.len() {
-                        let b = framebuffer[si];
-                        let g = framebuffer[si + 1];
-                        let r = framebuffer[si + 2];
-                        let a = framebuffer[si + 3];
-                        let di = dst_start + col;
-                        if di < dst.len() {
-                            if need_swizzle {
-                                dst[di] = u32::from_ne_bytes([r, g, b, a]);
-                            } else {
-                                dst[di] = u32::from_ne_bytes([b, g, r, a]);
-                            }
+                let dst_start = row * fb_w * 4;
+                let row_bytes = (fb_w * 4).min(framebuffer.len().saturating_sub(src_start));
+                let dst_end = (dst_start + row_bytes).min(self.window.scratch.len());
+                if need_swizzle {
+                    for col in 0..fb_w {
+                        let si = src_start + col * 4;
+                        let di = dst_start + col * 4;
+                        if si + 3 < framebuffer.len() && di + 3 < self.window.scratch.len() {
+                            self.window.scratch[di] = framebuffer[si + 2];
+                            self.window.scratch[di + 1] = framebuffer[si + 1];
+                            self.window.scratch[di + 2] = framebuffer[si];
+                            self.window.scratch[di + 3] = framebuffer[si + 3];
                         }
                     }
+                } else {
+                    self.window.scratch[dst_start..dst_end]
+                        .copy_from_slice(&framebuffer[src_start..src_start + row_bytes]);
                 }
             }
-            let _ = buffer.present();
-        }
+        } // lock dropped
+
+        // Build cursor params: (data, w, h, draw_x, draw_y, scale)
+        let cursor_params = if self.cursor_visible && !self.cursor_data.is_empty() {
+            let sf = self.scale_factor as f32;
+            let hot_x = self.cursor_hot_x as f32;
+            let hot_y = self.cursor_hot_y as f32;
+            Some((
+                self.cursor_data.as_slice(),
+                self.cursor_w,
+                self.cursor_h,
+                self.cursor_x - hot_x * sf,
+                self.cursor_y - hot_y * sf,
+                sf,
+            ))
+        } else {
+            None
+        };
+
+        self.window.renderer.update_and_render(
+            &self.window.scratch,
+            fb_w as u32,
+            fb_h as u32,
+            cursor_params,
+        );
 
         Ok(())
     }
 
-    pub fn update_screen_rects(&mut self, rects: &[rdp::geom::Rect]) {
-        let gdi = self.gdi;
-        let _lock = self.gdi_lock.read().unwrap();
-
-        let (stride, fb_h, fb_w) = unsafe {
-            (
-                (*gdi).stride as usize,
-                (*gdi).height as usize,
-                (*gdi).width as usize,
-            )
-        };
-
-        let framebuffer = unsafe {
-            std::slice::from_raw_parts((*gdi).primary_buffer as *const u8, stride * fb_h)
-        };
-
-        let need_swizzle = cfg!(target_os = "macos");
-
-        if let Ok(mut buffer) = self.window.surface.buffer_mut() {
-            let dst = buffer.as_mut();
-            for rect in rects {
-                let rx = rect.x.max(0) as usize;
-                let ry = rect.y.max(0) as usize;
-                let rw = rect.w as usize;
-                let rh = rect.h as usize;
-
-                for row in 0..rh {
-                    let py = ry + row;
-                    if py >= fb_h {
-                        break;
-                    }
-                    let src_start = py * stride + rx * 4;
-                    let dst_start = py * fb_w.max(1) + rx;
-                    for col in 0..rw {
-                        let si = src_start + col * 4;
-                        if si + 3 < framebuffer.len() && dst_start + col < dst.len() {
-                            let b = framebuffer[si];
-                            let g = framebuffer[si + 1];
-                            let r = framebuffer[si + 2];
-                            let a = framebuffer[si + 3];
-                            if need_swizzle {
-                                dst[dst_start + col] = u32::from_ne_bytes([r, g, b, a]);
-                            } else {
-                                dst[dst_start + col] = u32::from_ne_bytes([b, g, r, a]);
-                            }
-                        }
-                    }
-                }
-            }
-            let _ = buffer.present();
+    /// Called when window size changes (fullscreen toggle, manual resize).
+    /// Sends the new logical resolution to the RDP server.
+    /// The server responds with DesktopResize when done.
+    pub fn request_screen_resize(&mut self) {
+        if self.last_resize.elapsed().as_millis() < 500 {
+            return;
         }
+        let phys = self.window.window.inner_size();
+        let sf = self.scale_factor.max(1.0);
+        let rdp_w = ((phys.width as f64 / sf) as u32).max(1) & !3;
+        let rdp_h = ((phys.height as f64 / sf) as u32).max(1) & !3;
+
+        log::info!(
+            "request_screen_resize: phys={}x{} → rdp={rdp_w}x{rdp_h} (scale={sf})",
+            phys.width,
+            phys.height
+        );
+
+        self.window.renderer.reconfigure(phys.width, phys.height);
+        self.last_resize = std::time::Instant::now();
+        self.pending_resize = true;
+
+        if let Some(disp) = self.channels.write().unwrap().disp() {
+            disp.send_monitor_layout(rdp::geom::Rect::new(0, 0, rdp_w, rdp_h), 0, 100, 100);
+        }
+    }
+
+    /// Called when the server acknowledges the resize via DesktopResize message
+    pub fn on_desktop_resize(&mut self, _width: u32, _height: u32) {
+        log::info!("DesktopResize acknowledged: {_width}x{_height}");
+        self.pending_resize = false;
+        // The GDI has already been updated by FreeRDP internally
+        // Just reconfigure the wgpu surface in case it changed
+        let phys = self.window.window.inner_size();
+        self.window.renderer.reconfigure(phys.width, phys.height);
     }
 }
 
 /// Process an RDP message, returning the action to take
 pub fn handle_rdp_message(state: &mut RdpState, message: RdpMessage) -> RdpActionResult {
+    log::trace!("RDP message: {:?}", message);
     match message {
-        RdpMessage::UpdateRects(rects) => {
-            if !state.is_rail {
-                state.update_screen_rects(&rects);
-            }
+        RdpMessage::UpdateRects(_rects) => RdpActionResult::Continue,
+        RdpMessage::DesktopResize(w, h) => {
+            state.on_desktop_resize(w, h);
             RdpActionResult::Continue
         }
         RdpMessage::Disconnect => RdpActionResult::Disconnect,
@@ -311,8 +356,8 @@ pub fn handle_rdp_message(state: &mut RdpState, message: RdpMessage) -> RdpActio
         RdpMessage::WindowCreate {
             window_id,
             title,
-            pos,
-            size,
+            pos: _,
+            size: _,
             ..
         } if state.is_rail => {
             log::info!("RAIL window created: {} ({})", window_id, title);
@@ -337,14 +382,22 @@ pub fn handle_rdp_message(state: &mut RdpState, message: RdpMessage) -> RdpActio
                         rw.rgba_data = Some(data);
                         rw.width = width;
                         rw.height = height;
-                        let _ = rw.window.request_redraw();
+                        rw.window.request_redraw();
                         break;
                     }
                 }
             }
             RdpActionResult::Skip
         }
-        RdpMessage::SetCursorIcon(_data, _x, _y, _width, _height) => RdpActionResult::Skip,
+        RdpMessage::SetCursorIcon(data, x, y, width, height) => {
+            state.cursor_data = data;
+            state.cursor_hot_x = x;
+            state.cursor_hot_y = y;
+            state.cursor_w = width;
+            state.cursor_h = height;
+            state.cursor_visible = width > 0 && height > 0;
+            RdpActionResult::Continue
+        }
         _ => RdpActionResult::Skip,
     }
 }

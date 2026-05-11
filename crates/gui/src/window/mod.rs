@@ -4,8 +4,7 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
-/// Re-export types for backwards compatibility
+//! Re-export types for backwards compatibility
 pub mod types {
-    //! Public API types re-exported from crate root
     pub use crate::types::*;
 }

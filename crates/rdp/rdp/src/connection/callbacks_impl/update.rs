@@ -66,6 +66,11 @@ impl update::UpdateCallbacks for Rdp {
         if let Some(gdi) = self.gdi() {
             unsafe { gdi_resize(gdi, width as u32, height as u32) };
         }
+        // If update_tx is present, notify it of the resize
+        // with try_send, so it doesn't block if the gui thread is not ready
+        if let Some(tx) = &self.update_tx {
+            let _ = tx.try_send(RdpMessage::DesktopResize(width as u32, height as u32));
+        }
         true
     }
 }

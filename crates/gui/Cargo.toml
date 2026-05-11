@@ -19,6 +19,10 @@ winit.workspace = true
 
 softbuffer = "0.4"
 
+wgpu.workspace = true
+pollster.workspace = true
+bytemuck = { version = "1", features = ["derive"] }
+
 zeroize.workspace = true
 image.workspace = true
 
