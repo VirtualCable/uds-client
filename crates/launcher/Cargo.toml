@@ -17,8 +17,6 @@ anyhow = { workspace = true }
 
 tokio = { workspace = true }
 
-eframe = { workspace = true }
-image = { workspace = true }
 open = { workspace = true }
 
 # Persistence

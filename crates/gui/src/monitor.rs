@@ -4,7 +4,7 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 // Monitor geometry, queried from winit at startup via RdpAppProxy::resumed.
-use std::sync::OnceLock;
+use std::sync::{LazyLock, OnceLock};
 
 use winit::{event_loop::ActiveEventLoop, monitor::MonitorHandle};
 
@@ -60,4 +60,17 @@ pub fn scale(index: usize) -> f64 {
         .and_then(|m| m.get(index))
         .map(|mi| mi.scale)
         .unwrap_or(1.0)
+}
+
+/// Cached scale factor from monitor 0. Populated after `populate()` is called.
+pub static SCALE_FACTOR: LazyLock<f64> = LazyLock::new(|| scale(0));
+
+/// Convert logical (GDI) pixels to physical (screen) pixels using cached scale factor.
+pub fn logical_to_physical(logical: u32) -> u32 {
+    (logical as f64 * *SCALE_FACTOR).round() as u32
+}
+
+/// Convert physical (screen) pixels to logical (GDI) pixels using cached scale factor.
+pub fn physical_to_logical(physical: u32) -> u32 {
+    (physical as f64 / *SCALE_FACTOR).round() as u32
 }

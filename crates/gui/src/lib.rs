@@ -3,7 +3,6 @@
 // All rights reserved.
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
-use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
@@ -25,10 +24,12 @@ mod monitor;
 pub mod types;
 pub mod window;
 
+mod draw;
 mod launcher;
 mod session;
 mod wgpu_render;
 
+use crate::wgpu_render::WgpuRenderer;
 use launcher::{LauncherInner, LauncherState, TestAction, paint_launcher};
 use session::{RdpState, RdpWindow, handle_rdp_message};
 use types::{AppState, GuiMessage, ReturnCode};
@@ -112,32 +113,13 @@ impl AppHandler {
 
         let window = Arc::new(event_loop.create_window(window_attrs)?);
         let physical = window.inner_size();
-        let win_scale = window.scale_factor() as f32;
-        let context = softbuffer::Context::new(window.clone())
-            .map_err(|e| anyhow::anyhow!("Softbuffer context error: {e}"))?;
-        let (ph_w, ph_h) = (
-            NonZeroU32::new(physical.width).unwrap_or(NonZeroU32::new(1).unwrap()),
-            NonZeroU32::new(physical.height).unwrap_or(NonZeroU32::new(1).unwrap()),
-        );
-        let mut surface = softbuffer::Surface::new(&context, window.clone())
-            .map_err(|e| anyhow::anyhow!("Softbuffer surface error: {e}"))?;
-        surface
-            .resize(ph_w, ph_h)
-            .map_err(|e| anyhow::anyhow!("Softbuffer resize error: {e}"))?;
+        let renderer = WgpuRenderer::new(window.clone(), physical.width, physical.height)?;
 
-        let l = logo::load_logo();
         let launcher = LauncherState {
             window: Some(window),
-            surface: Some(surface),
-            context: Some(context),
-            logo_rgba: l.rgba,
-            logo_width: l.width,
-            logo_height: l.height,
+            renderer: Some(renderer),
             inner,
             last_mouse_pos: None,
-            phys_w: physical.width,
-            phys_h: physical.height,
-            scale_factor: win_scale,
         };
         self.phase = Phase::Launcher(launcher);
         Ok(())
@@ -324,6 +306,14 @@ impl ApplicationHandler for AppHandler {
                         winit::keyboard::KeyCode::KeyF => {
                             log::debug!("Hotkey: Alt+F → toggle FPS");
                             state.fps.toggle();
+                            log::debug!(
+                                "FPS display: {}",
+                                if state.fps.enabled.load(Ordering::Relaxed) {
+                                    "enabled"
+                                } else {
+                                    "disabled"
+                                }
+                            );
                             return;
                         }
                         winit::keyboard::KeyCode::F4 => {
@@ -372,7 +362,11 @@ impl ApplicationHandler for AppHandler {
                         }
                     }
                     WindowEvent::CursorMoved { position, .. } => {
-                        let sf = launcher.scale_factor;
+                        let sf = launcher
+                            .window
+                            .as_ref()
+                            .map(|w| w.scale_factor() as f32)
+                            .unwrap_or(1.0);
                         launcher.last_mouse_pos =
                             Some((position.x as f32 / sf, position.y as f32 / sf));
                     }
@@ -406,6 +400,24 @@ impl ApplicationHandler for AppHandler {
                             state.cursor_x = position.x as f32;
                             state.cursor_y = position.y as f32;
                             self.last_pointer = Some(*position);
+
+                            // Pinbar: show when fullscreen and cursor near top
+                            let is_fs = state.full_screen.load(Ordering::Relaxed);
+                            let near_top = position.y < 30.0;
+                            let prev = state.pinbar_visible;
+                            state.pinbar_visible = is_fs && near_top;
+                            if state.pinbar_visible != prev {
+                                log::debug!(
+                                    "Pinbar: {}",
+                                    if state.pinbar_visible {
+                                        "shown"
+                                    } else {
+                                        "hidden"
+                                    }
+                                );
+                                state.window.window.request_redraw();
+                            }
+
                             state.window.window.request_redraw();
                             let gdi_w = unsafe { (*state.gdi).width as u32 };
                             let gdi_h = unsafe { (*state.gdi).height as u32 };

@@ -80,12 +80,11 @@ rust-embed = "8.11"
 sys-locale = "0.3.2"
 
 # Graphics/UI
-eframe = { version = "0.34", features = ["glow", "wgpu"] }
 image = { version = "0.25.10", features = ["png"] }
 winit = { version = "0.30.13" }
-softbuffer = "0.4"
 wgpu = "29"
 pollster = "0.4"
+wgpu_text = "29"
 
 # Sound
 cpal = "0.17.2"

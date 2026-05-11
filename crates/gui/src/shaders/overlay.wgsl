@@ -1,4 +1,4 @@
-struct CursorUniforms {
+struct OverlayUniforms {
     pos: vec2<f32>,
     size: vec2<f32>,
     scale: f32,
@@ -6,7 +6,7 @@ struct CursorUniforms {
     screen: vec2<f32>,
 }
 
-@group(0) @binding(0) var<uniform> u: CursorUniforms;
+@group(0) @binding(0) var<uniform> u: OverlayUniforms;
 @group(0) @binding(1) var t: texture_2d<f32>;
 @group(0) @binding(2) var s: sampler;
 

@@ -33,12 +33,10 @@ use flume::{Receiver, Sender, bounded};
 
 use shared::{log, system::trigger::Trigger};
 
-mod about;
 mod asyncthread;
 
 #[macro_use]
 mod intl;
-mod logo;
 mod runner;
 
 fn collect_arguments() -> Option<(String, String, String)> {
@@ -85,7 +83,7 @@ fn main() {
     shared::tls::init_tls(None);
     let (host, ticket, scrambler) = collect_arguments().unwrap_or_else(|| {
         // Show about window if no valid arguments
-        about::show_about_window();
+        gui::about::show_about_window();
         std::process::exit(0);
     });
 

@@ -35,8 +35,6 @@ pub struct RdpWindow {
 pub struct RailWindow {
     pub id: u32,
     pub window: Arc<winit::window::Window>,
-    pub surface: softbuffer::Surface<Arc<winit::window::Window>, Arc<winit::window::Window>>,
-    pub _context: softbuffer::Context<Arc<winit::window::Window>>,
     pub rgba_data: Option<Vec<u8>>,
     pub width: u32,
     pub height: u32,
@@ -67,6 +65,7 @@ pub struct RdpState {
     pub full_screen: Arc<AtomicBool>,
     pub last_resize: std::time::Instant,
     pub pending_resize: bool,
+    pub pinbar_visible: bool,
     pub keys_rx: Receiver<RawKey>,
     pub fps: Fps,
 
@@ -111,6 +110,14 @@ impl Fps {
     pub fn toggle(&self) {
         let v = self.enabled.load(Ordering::Relaxed);
         self.enabled.store(!v, Ordering::Relaxed);
+    }
+    pub fn average(&self) -> f32 {
+        let count = self.frames.len();
+        if count < 2 {
+            return 0.0;
+        }
+        let sum: f32 = self.frames.iter().sum();
+        sum / count as f32
     }
 }
 
@@ -204,6 +211,7 @@ impl RdpState {
                 .checked_sub(std::time::Duration::from_secs(60))
                 .unwrap_or(std::time::Instant::now()),
             pending_resize: false,
+            pinbar_visible: false,
             keys_rx,
             fps: Fps::new(),
             rail: None,
@@ -232,8 +240,6 @@ impl RdpState {
                 )
             }
         };
-
-        log::debug!("update_screen: GDI={fb_w}x{fb_h} stride={stride}");
 
         if fb_w == 0 || fb_h == 0 {
             log::warn!("update_screen: GDI dimensions are 0, skipping");
@@ -274,37 +280,56 @@ impl RdpState {
             }
         } // lock dropped
 
-        // Build cursor params: (data, w, h, draw_x, draw_y, scale)
-        let cursor_params = if self.cursor_visible && !self.cursor_data.is_empty() {
+        // Build overlays: cursor, FPS, pinbar
+        let mut overlays: Vec<crate::wgpu_render::OverlayParams> = Vec::new();
+
+        if self.cursor_visible && !self.cursor_data.is_empty() {
             let sf = self.scale_factor as f32;
-            let hot_x = self.cursor_hot_x as f32;
-            let hot_y = self.cursor_hot_y as f32;
-            log::debug!(
-                "cursor: pos=({:.0},{:.0}) size={}x{} hot=({},{}) scale={sf}",
-                self.cursor_x,
-                self.cursor_y,
-                self.cursor_w,
-                self.cursor_h,
-                hot_x,
-                hot_y
-            );
-            Some((
-                self.cursor_data.as_slice(),
-                self.cursor_w,
-                self.cursor_h,
-                self.cursor_x - hot_x * sf,
-                self.cursor_y - hot_y * sf,
-                sf,
-            ))
-        } else {
-            None
-        };
+            overlays.push(crate::wgpu_render::OverlayParams {
+                rgba: self.cursor_data.as_slice(),
+                width: self.cursor_w,
+                height: self.cursor_h,
+                x: self.cursor_x - self.cursor_hot_x as f32 * sf,
+                y: self.cursor_y - self.cursor_hot_y as f32 * sf,
+                scale: sf,
+            });
+        }
+
+        // Build text sections for FPS + pinbar
+        let mut text_sections: Vec<crate::wgpu_render::OwnedSection> = Vec::new();
+        let phys = self.window.window.inner_size();
+
+        if self.fps.enabled.load(Ordering::Relaxed) {
+            let fps_text = format!("FPS: {:.1}", self.fps.average());
+            let section = crate::wgpu_render::Section::default()
+                .add_text(
+                    crate::wgpu_render::Text::new(&fps_text)
+                        .with_scale(14.0)
+                        .with_color([1.0, 1.0, 1.0, 1.0]),
+                )
+                .with_screen_position(((phys.width - 100) as f32, 8.0))
+                .to_owned();
+            text_sections.push(section);
+        }
+
+        if self.pinbar_visible {
+            let section = crate::wgpu_render::Section::default()
+                .add_text(
+                    crate::wgpu_render::Text::new("UDS Connection      [ \u{2B1C} ]  [ X ]")
+                        .with_scale(14.0)
+                        .with_color([1.0, 1.0, 1.0, 1.0]),
+                )
+                .with_screen_position(((phys.width / 2) as f32 - 100.0, 4.0))
+                .to_owned();
+            text_sections.push(section);
+        }
 
         self.window.renderer.update_and_render(
             &self.window.scratch,
             fb_w as u32,
             fb_h as u32,
-            cursor_params,
+            &overlays,
+            &text_sections,
         );
 
         Ok(())
