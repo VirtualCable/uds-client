@@ -279,6 +279,15 @@ impl RdpState {
             let sf = self.scale_factor as f32;
             let hot_x = self.cursor_hot_x as f32;
             let hot_y = self.cursor_hot_y as f32;
+            log::debug!(
+                "cursor: pos=({:.0},{:.0}) size={}x{} hot=({},{}) scale={sf}",
+                self.cursor_x,
+                self.cursor_y,
+                self.cursor_w,
+                self.cursor_h,
+                hot_x,
+                hot_y
+            );
             Some((
                 self.cursor_data.as_slice(),
                 self.cursor_w,

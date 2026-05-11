@@ -364,89 +364,90 @@ impl WgpuRenderer {
         // ── Cursor texture ───
         let cursor_bind_group = cursor.and_then(
             |(data, cw, ch, draw_x, draw_y, cursor_scale): CursorParams| {
-            if data.is_empty() || cw == 0 || ch == 0 {
-                return None;
-            }
-            let cursor_cache_valid = self
-                .cursor_cached_texture
-                .as_ref()
-                .is_some_and(|(_, _, tw, th)| *tw == cw && *th == ch);
+                if data.is_empty() || cw == 0 || ch == 0 {
+                    return None;
+                }
+                let cursor_cache_valid = self
+                    .cursor_cached_texture
+                    .as_ref()
+                    .is_some_and(|(_, _, tw, th)| *tw == cw && *th == ch);
 
-            if !cursor_cache_valid {
-                let tex = self.device.create_texture(&wgpu::TextureDescriptor {
-                    label: Some("Cursor Texture"),
-                    size: wgpu::Extent3d {
+                if !cursor_cache_valid {
+                    let tex = self.device.create_texture(&wgpu::TextureDescriptor {
+                        label: Some("Cursor Texture"),
+                        size: wgpu::Extent3d {
+                            width: cw,
+                            height: ch,
+                            depth_or_array_layers: 1,
+                        },
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                        view_formats: &[],
+                    });
+                    let v = tex.create_view(&wgpu::TextureViewDescriptor::default());
+                    self.cursor_cached_texture = Some((tex, v, cw, ch));
+                }
+
+                let cursor_tex = &self.cursor_cached_texture.as_ref().unwrap().0;
+                let cursor_view = &self.cursor_cached_texture.as_ref().unwrap().1;
+
+                self.queue.write_texture(
+                    wgpu::TexelCopyTextureInfo {
+                        texture: cursor_tex,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    data,
+                    wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(cw * 4),
+                        rows_per_image: Some(ch),
+                    },
+                    wgpu::Extent3d {
                         width: cw,
                         height: ch,
                         depth_or_array_layers: 1,
                     },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                    view_formats: &[],
+                );
+
+                // Update uniform buffer
+                let uniforms = CursorUniforms {
+                    pos: [draw_x, draw_y],
+                    size: [cw as f32, ch as f32],
+                    scale: cursor_scale,
+                    _pad: 0.0,
+                    screen: [surf_w as f32, surf_h as f32],
+                };
+                self.queue
+                    .write_buffer(&self.cursor_uniform_buf, 0, bytemuck::bytes_of(&uniforms));
+
+                let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("cursor_bind_group"),
+                    layout: &self.cursor_bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::Buffer(
+                                self.cursor_uniform_buf.as_entire_buffer_binding(),
+                            ),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::TextureView(cursor_view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: wgpu::BindingResource::Sampler(&self.cursor_sampler),
+                        },
+                    ],
                 });
-                let v = tex.create_view(&wgpu::TextureViewDescriptor::default());
-                self.cursor_cached_texture = Some((tex, v, cw, ch));
-            }
-
-            let cursor_tex = &self.cursor_cached_texture.as_ref().unwrap().0;
-            let cursor_view = &self.cursor_cached_texture.as_ref().unwrap().1;
-
-            self.queue.write_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture: cursor_tex,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                data,
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(cw * 4),
-                    rows_per_image: Some(ch),
-                },
-                wgpu::Extent3d {
-                    width: cw,
-                    height: ch,
-                    depth_or_array_layers: 1,
-                },
-            );
-
-            // Update uniform buffer
-            let uniforms = CursorUniforms {
-                pos: [draw_x, draw_y],
-                size: [cw as f32, ch as f32],
-                scale: cursor_scale,
-                _pad: 0.0,
-                screen: [surf_w as f32, surf_h as f32],
-            };
-            self.queue
-                .write_buffer(&self.cursor_uniform_buf, 0, bytemuck::bytes_of(&uniforms));
-
-            let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("cursor_bind_group"),
-                layout: &self.cursor_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::Buffer(
-                            self.cursor_uniform_buf.as_entire_buffer_binding(),
-                        ),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(cursor_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&self.cursor_sampler),
-                    },
-                ],
-            });
-            Some(bg)
-        });
+                Some(bg)
+            },
+        );
 
         // ── Render ───
         let mut encoder = self
