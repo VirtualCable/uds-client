@@ -33,7 +33,7 @@ mod wgpu_render;
 use crate::wgpu_render::WgpuRenderer;
 use launcher::{LauncherInner, LauncherState, TestAction, paint_launcher};
 use popup::{PopupKind, PopupState};
-use session::{RdpState, RdpWindow, handle_rdp_message};
+use session::{RailAction, RailWindow, RdpState, RdpWindow, handle_rdp_message};
 use types::{AppState, GuiMessage, ReturnCode};
 
 #[derive(Debug)]
@@ -73,7 +73,7 @@ pub struct AppHandler {
     fps_limit: u32,
     alt_held: bool,
     last_pointer: Option<winit::dpi::PhysicalPosition<f64>>,
-    last_render: Instant,
+    rail_button_down: Option<u32>,
     return_code: ReturnCode,
     initial_state: Option<AppState>,
     first_resume: bool,
@@ -106,7 +106,7 @@ pub fn run_gui(
         fps_limit: fps_limit.unwrap_or(60),
         alt_held: false,
         last_pointer: None,
-        last_render: Instant::now(),
+        rail_button_down: None,
         return_code: ReturnCode::Exit,
         initial_state,
         first_resume: true,
@@ -397,6 +397,12 @@ impl AppHandler {
 
     fn handle_rdp_input(&mut self, event: &WindowEvent) -> bool {
         let Some(s) = &mut self.rdp else { return true };
+        if s.is_rail {
+            match event {
+                WindowEvent::CloseRequested => return false,
+                _ => return true,
+            }
+        }
         match event {
             WindowEvent::CloseRequested => return false,
             WindowEvent::Resized(_) => {
@@ -579,6 +585,233 @@ impl AppHandler {
 // ── Message processing ────────────────────────────────────
 
 impl AppHandler {
+    fn handle_rail_redraw(&mut self, rail_id: u32) {
+        if let Some(ref mut state) = self.rdp {
+            if let Some(rw) = state.rail_windows.get_mut(&rail_id) {
+                // Force position every frame to prevent Windows cascading offset
+                let sf = state.scale_factor.max(1.0);
+                let _ = rw.window.set_outer_position(winit::dpi::PhysicalPosition::new(
+                    (rw.rect.x as f64 * sf) as i32,
+                    (rw.rect.y as f64 * sf) as i32,
+                ));
+                if let (Some(rgba), Some(ref mut renderer)) = (&rw.rgba_data, rw.renderer.as_mut())
+                {
+                    let _ = renderer.update_and_render(
+                        rgba.as_slice(),
+                        rw.width,
+                        rw.height,
+                        &[],
+                        &[],
+                        None,
+                    );
+                }
+            }
+        }
+    }
+
+    fn handle_rail_event(&mut self, rail_id: u32, event: WindowEvent) {
+        let Some(ref mut state) = self.rdp else {
+            return;
+        };
+        let Some(rail_channel) = state.rail_channel.clone() else {
+            return;
+        };
+        let cmd_tx = state.command_tx.clone();
+        let cmd_ev = state.command_event;
+
+        if let WindowEvent::MouseInput { state: btn, .. } = &event {
+            self.rail_button_down = if btn.is_pressed() {
+                Some(rail_id)
+            } else {
+                None
+            };
+        }
+
+        match event {
+            WindowEvent::CloseRequested => {
+                rail_channel.send_system_command(rail_id, rdp::consts::SC_CLOSE as u16);
+            }
+            WindowEvent::Focused(true) => {
+                rail_channel.send_activate(rail_id, true);
+            }
+            WindowEvent::Moved(position) => {
+                let sf = state.scale_factor.max(1.0);
+                let x = (position.x as f64 / sf) as i16;
+                let y = (position.y as f64 / sf) as i16;
+                if let Some(rw) = state.rail_windows.get(&rail_id) {
+                    let right = x.saturating_add(rw.width as i16);
+                    let bottom = y.saturating_add(rw.height as i16);
+                    rail_channel.send_window_move(rail_id, x, y, right, bottom);
+                }
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                self.last_pointer = Some(position);
+                if let Some(rw) = state.rail_windows.get(&rail_id) {
+                    let sf = state.scale_factor;
+                    let dw = state.desktop_size.0.saturating_sub(1) as f64;
+                    let dh = state.desktop_size.1.saturating_sub(1) as f64;
+                    let gx = (position.x + rw.rect.x as f64 * sf).round().clamp(0.0, dw) as u16;
+                    let gy = (position.y + rw.rect.y as f64 * sf).round().clamp(0.0, dh) as u16;
+                    let _ = cmd_tx.send(rdp::commands::RdpCommand::Input(
+                        rdp::commands::InputEvent::Mouse {
+                            flags: rdp::sys::PTR_FLAGS_MOVE as u16,
+                            x: gx,
+                            y: gy,
+                        },
+                    ));
+                    unsafe {
+                        rdp::sys::SetEvent(cmd_ev.as_handle());
+                    }
+                }
+            }
+            WindowEvent::CursorLeft { .. } => {
+                // Synthesize button release if mouse left while button was pressed
+                if let Some(capture_id) = self.rail_button_down {
+                    if capture_id == rail_id {
+                        let pos = self.last_pointer.unwrap_or_default();
+                        if let Some(rw) = state.rail_windows.get(&capture_id) {
+                            let sf = state.scale_factor;
+                            let dw = state.desktop_size.0.saturating_sub(1) as f64;
+                            let dh = state.desktop_size.1.saturating_sub(1) as f64;
+                            let gx = (pos.x + rw.rect.x as f64 * sf).round().clamp(0.0, dw) as u16;
+                            let gy = (pos.y + rw.rect.y as f64 * sf).round().clamp(0.0, dh) as u16;
+                            let _ = cmd_tx.send(rdp::commands::RdpCommand::Input(
+                                rdp::commands::InputEvent::Mouse {
+                                    flags: rdp::sys::PTR_FLAGS_BUTTON1 as u16,
+                                    x: gx,
+                                    y: gy,
+                                },
+                            ));
+                            unsafe { rdp::sys::SetEvent(cmd_ev.as_handle()); }
+                        }
+                        self.rail_button_down = None;
+                    }
+                }
+            }
+            WindowEvent::MouseInput {
+                button, state: btn, ..
+            } => {
+                if btn.is_pressed() {
+                    rail_channel.send_activate(rail_id, true);
+                }
+                if let Some(pos) = self.last_pointer {
+                    if let Some(rw) = state.rail_windows.get(&rail_id) {
+                        let bm = match button {
+                            winit::event::MouseButton::Left => rdp::sys::PTR_FLAGS_BUTTON1,
+                            winit::event::MouseButton::Right => rdp::sys::PTR_FLAGS_BUTTON2,
+                            winit::event::MouseButton::Middle => rdp::sys::PTR_FLAGS_BUTTON3,
+                            _ => return,
+                        } as u16;
+                        let f = bm
+                            | if btn.is_pressed() {
+                                rdp::sys::PTR_FLAGS_DOWN as u16
+                            } else {
+                                0
+                            };
+                        let sf = state.scale_factor;
+                        let dw = state.desktop_size.0.saturating_sub(1) as f64;
+                        let dh = state.desktop_size.1.saturating_sub(1) as f64;
+                        let gx = (pos.x + rw.rect.x as f64 * sf).round().clamp(0.0, dw) as u16;
+                        let gy = (pos.y + rw.rect.y as f64 * sf).round().clamp(0.0, dh) as u16;
+                        let _ = cmd_tx.send(rdp::commands::RdpCommand::Input(
+                            rdp::commands::InputEvent::Mouse {
+                                flags: f,
+                                x: gx,
+                                y: gy,
+                            },
+                        ));
+                        unsafe {
+                            rdp::sys::SetEvent(cmd_ev.as_handle());
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn process_rail_actions(&mut self, el: &ActiveEventLoop) {
+        let actions = if let Some(ref mut state) = self.rdp {
+            std::mem::take(&mut state.rail_actions)
+        } else {
+            return;
+        };
+        let mut regs: Vec<(winit::window::WindowId, u32)> = Vec::new();
+        for action in &actions {
+            let Some(ref mut state) = self.rdp else { break };
+            match action {
+                RailAction::Create(id, title, rect, taskbar, decorations) => {
+                    if state.rail_windows.contains_key(id) {
+                        continue;
+                    }
+                    let Ok(window) = el.create_window(
+                        winit::window::Window::default_attributes()
+                            .with_title(title.clone())
+                            .with_decorations(*decorations)
+                            .with_transparent(true)
+                            .with_inner_size(winit::dpi::LogicalSize::new(
+                                rect.w as f64,
+                                rect.h as f64,
+                            )),
+                    ) else {
+                        continue;
+                    };
+                    let wid = window.id();
+                    // Position window at server-specified coordinates
+                    let sf = state.scale_factor.max(1.0);
+                    let _ = window.set_outer_position(winit::dpi::PhysicalPosition::new(
+                        (rect.x as f64 * sf) as i32,
+                        (rect.y as f64 * sf) as i32,
+                    ));
+                    let window = Arc::new(window);
+                    let renderer =
+                        crate::wgpu_render::WgpuRenderer::new(window.clone(), rect.w, rect.h).ok();
+                    state.rail_windows.insert(
+                        *id,
+                        RailWindow {
+                            id: *id,
+                            window,
+                            renderer,
+                            rgba_data: None,
+                            width: rect.w,
+                            height: rect.h,
+                            rect: *rect,
+                            title: String::new(),
+                            show_in_taskbar: *taskbar,
+                            has_decorations: *decorations,
+                            last_focused: false,
+                            offscreen: false,
+                        },
+                    );
+                    regs.push((wid, *id));
+                    log::info!("RAIL window created: id={id} {rect:?}");
+                }
+                RailAction::Delete(id) => {
+                    if let Some(rw) = state.rail_windows.remove(id) {
+                        regs.push((rw.window.id(), *id));
+                    }
+                }
+                RailAction::UpdatePosition(id, rect) => {
+                    if let Some(rw) = state.rail_windows.get_mut(id) {
+                        rw.rect = *rect;
+                        let _ = rw.window.request_inner_size(winit::dpi::LogicalSize::new(
+                            rect.w as f64,
+                            rect.h as f64,
+                        ));
+                        let sf = state.scale_factor.max(1.0);
+                        let _ = rw.window.set_outer_position(winit::dpi::PhysicalPosition::new(
+                            (rect.x as f64 * sf) as i32,
+                            (rect.y as f64 * sf) as i32,
+                        ));
+                    }
+                }
+            }
+        }
+        for (wid, id) in regs {
+            self.register_window(wid, WindowKind::RdpRail(id));
+        }
+    }
+
     fn process_gui_messages(&mut self, el: &ActiveEventLoop) {
         while let Ok(msg) = self.gui_messages_rx.try_recv() {
             match msg {
@@ -776,19 +1009,10 @@ impl ApplicationHandler<UserEvent> for AppHandler {
 
         match event {
             WindowEvent::RedrawRequested => {
-                let elapsed = self.last_render.elapsed();
-                let frame_time = Duration::from_secs_f64(1.0 / self.fps_limit as f64);
-                // Only render if enough time has passed (skip frame if too fast)
-                let ok = self.rdp.is_none() || elapsed >= frame_time;
-
-                // Process messages and updates (always, not tied to frame skip)
+                // Process messages and updates (always)
                 self.process_gui_messages(el);
                 self.process_rdp_updates(el);
-
-                if !ok {
-                    return;
-                }
-                self.last_render = Instant::now();
+                self.process_rail_actions(el);
 
                 // Dispatch redraw by window kind
                 match self.windows.get(&wid) {
@@ -796,10 +1020,12 @@ impl ApplicationHandler<UserEvent> for AppHandler {
                         self.handle_launcher_event(el, WindowEvent::RedrawRequested)
                     }
                     Some(WindowKind::Rdp) => {
-                        let _ = self.rdp.as_mut().map(|s| s.update_screen());
+                        if !self.rdp.as_ref().is_some_and(|s| s.is_rail) {
+                            let _ = self.rdp.as_mut().map(|s| s.update_screen());
+                        }
                     }
-                    Some(WindowKind::Popup) => {
-                        self.handle_popup_event(WindowEvent::RedrawRequested)
+                    Some(&WindowKind::RdpRail(id)) => {
+                        self.handle_rail_redraw(id);
                     }
                     Some(WindowKind::About) => {
                         self.handle_about_event(WindowEvent::RedrawRequested)
@@ -817,6 +1043,9 @@ impl ApplicationHandler<UserEvent> for AppHandler {
                             self.stop.trigger();
                             el.exit();
                         }
+                    }
+                    Some(&WindowKind::RdpRail(id)) => {
+                        self.handle_rail_event(id, event);
                     }
                     Some(WindowKind::Popup) => self.handle_popup_event(event),
                     Some(WindowKind::About) => self.handle_about_event(event),

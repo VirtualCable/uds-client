@@ -36,17 +36,29 @@ pub struct RdpWindow {
 pub struct RailWindow {
     pub id: u32,
     pub window: Arc<winit::window::Window>,
+    pub renderer: Option<crate::wgpu_render::WgpuRenderer>,
     pub rgba_data: Option<Vec<u8>>,
     pub width: u32,
     pub height: u32,
+    pub rect: rdp::geom::Rect,
+    pub title: String,
+    pub show_in_taskbar: bool,
+    pub has_decorations: bool,
+    pub last_focused: bool,
+    pub offscreen: bool,
 }
 
 #[allow(dead_code)]
 pub struct RailState {
-    pub windows: HashMap<winit::window::WindowId, RailWindow>,
-    pub visible_windows: HashMap<winit::window::WindowId, u32>,
+    pub windows: HashMap<winit::window::WindowId, u32>, // WindowId → rail window_id
     pub mouse_capture: Option<u32>,
-    pub last_focused: HashMap<winit::window::WindowId, u32>,
+}
+
+/// Pending RAIL action to be executed by the event loop
+pub enum RailAction {
+    Create(u32, String, rdp::geom::Rect, bool, bool), // id, title, rect, taskbar, decorations
+    Delete(u32),                                      // window_id
+    UpdatePosition(u32, rdp::geom::Rect),
 }
 
 // ── RDP State ───────────────────────────────────────────────
@@ -74,8 +86,10 @@ pub struct RdpState {
     pub keys_rx: Receiver<RawKey>,
     pub fps: Fps,
 
-    pub rail: Option<RailState>,
+    pub rail: RailState,
     pub rail_channel: Option<rdp::channels::rail::RailChannel>,
+    pub rail_actions: Vec<RailAction>,
+    pub rail_windows: HashMap<u32, RailWindow>, // id → RailWindow
 
     pub cursor_data: Vec<u8>,
     pub cursor_hot_x: u32,
@@ -223,8 +237,13 @@ impl RdpState {
             pinbar_btn_close_x: 0.0..0.0,
             keys_rx,
             fps: Fps::new(),
-            rail: None,
+            rail: RailState {
+                windows: HashMap::new(),
+                mouse_capture: None,
+            },
             rail_channel,
+            rail_actions: Vec::new(),
+            rail_windows: HashMap::new(),
             cursor_data: Vec::new(),
             cursor_hot_x: 0,
             cursor_hot_y: 0,
@@ -481,20 +500,71 @@ pub fn handle_rdp_message(state: &mut RdpState, message: RdpMessage) -> RdpActio
         }
         RdpMessage::WindowCreate {
             window_id,
+            owner_id,
             title,
-            pos: _,
-            size: _,
+            pos,
+            size,
+            taskbar_button,
+            ext_style,
+            is_offscreen,
+            show_state,
             ..
         } if state.is_rail => {
-            log::info!("RAIL window created: {} ({})", window_id, title);
-            RdpActionResult::Skip
+            // Skip transparent overlay/shadow windows (WS_EX_TRANSPARENT = 0x20)
+            if ext_style.is_some_and(|s| (s & 0x20) != 0) {
+                return RdpActionResult::Continue;
+            }
+            let sf = state.scale_factor.max(1.0);
+            let (x, y) = pos.unwrap_or((0, 0));
+            let (w, h) = size.unwrap_or((0, 0));
+            let rect = rdp::geom::Rect::new(
+                (x as f64 / sf) as i32,
+                (y as f64 / sf) as i32,
+                (w as f64 / sf) as u32,
+                (h as f64 / sf) as u32,
+            );
+            let is_tool = ext_style.is_some_and(|s| (s & 0x80) != 0);
+            let has_owner = owner_id.is_some() && owner_id != Some(0);
+            let show_taskbar = taskbar_button.unwrap_or(!is_tool && !has_owner);
+            let hidden = show_state == Some(0);
+            if !hidden && rect.w > 0 && rect.h > 0 && !is_offscreen.unwrap_or(false) {
+                state.rail_actions.push(RailAction::Create(
+                    window_id,
+                    title,
+                    rect,
+                    show_taskbar,
+                    false,
+                ));
+            }
+            RdpActionResult::Continue
+        }
+        RdpMessage::WindowUpdate {
+            window_id,
+            pos,
+            size,
+            is_offscreen,
+            show_state,
+            ..
+        } if state.is_rail => {
+            if is_offscreen.unwrap_or(false) || show_state == Some(0) {
+                state.rail_actions.push(RailAction::Delete(window_id));
+            } else if let (Some((x, y)), Some((w, h))) = (pos, size) {
+                let sf = state.scale_factor.max(1.0);
+                let rect = rdp::geom::Rect::new(
+                    (x as f64 / sf) as i32,
+                    (y as f64 / sf) as i32,
+                    (w as f64 / sf) as u32,
+                    (h as f64 / sf) as u32,
+                );
+                state
+                    .rail_actions
+                    .push(RailAction::UpdatePosition(window_id, rect));
+            }
+            RdpActionResult::Continue
         }
         RdpMessage::WindowDelete(window_id) if state.is_rail => {
-            log::info!("RAIL window deleted: {}", window_id);
-            if let Some(rail) = &mut state.rail {
-                rail.visible_windows.retain(|_, &mut v| v != window_id);
-            }
-            RdpActionResult::Skip
+            state.rail_actions.push(RailAction::Delete(window_id));
+            RdpActionResult::Continue
         }
         RdpMessage::WindowPixels {
             window_id,
@@ -502,18 +572,13 @@ pub fn handle_rdp_message(state: &mut RdpState, message: RdpMessage) -> RdpActio
             height,
             data,
         } if state.is_rail => {
-            if let Some(rail) = &mut state.rail {
-                for rw in rail.windows.values_mut() {
-                    if rw.id == window_id {
-                        rw.rgba_data = Some(data);
-                        rw.width = width;
-                        rw.height = height;
-                        rw.window.request_redraw();
-                        break;
-                    }
-                }
+            if let Some(rw) = state.rail_windows.get_mut(&window_id) {
+                rw.rgba_data = Some(data);
+                rw.width = width;
+                rw.height = height;
+                rw.window.request_redraw();
             }
-            RdpActionResult::Skip
+            RdpActionResult::Continue
         }
         RdpMessage::SetCursorIcon(data, x, y, width, height) => {
             state.cursor_data = data;
