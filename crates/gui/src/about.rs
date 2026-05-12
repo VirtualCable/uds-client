@@ -138,9 +138,7 @@ pub fn show_about_window() {
     };
     event_loop.set_control_flow(ControlFlow::Poll);
     let mut state: Option<AboutState> = None;
-    let _ = event_loop.run_app(&mut AboutHandler {
-        state: &mut state,
-    });
+    let _ = event_loop.run_app(&mut AboutHandler { state: &mut state });
 }
 
 struct AboutHandler<'a> {

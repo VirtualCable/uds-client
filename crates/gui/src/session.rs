@@ -64,6 +64,7 @@ pub struct RdpState {
     pub scale_factor: f64,
     pub desktop_size: (u32, u32),
     pub full_screen: Arc<AtomicBool>,
+    pub last_windowed_size: Option<(u32, u32)>,
     pub last_resize: std::time::Instant,
     pub pending_resize: bool,
     pub pinbar_visible: bool,
@@ -211,6 +212,7 @@ impl RdpState {
             scale_factor,
             desktop_size,
             full_screen: Arc::new(AtomicBool::new(false)),
+            last_windowed_size: None,
             last_resize: std::time::Instant::now()
                 .checked_sub(std::time::Duration::from_secs(60))
                 .unwrap_or(std::time::Instant::now()),

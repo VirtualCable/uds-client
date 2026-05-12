@@ -44,6 +44,7 @@ pub struct WgpuRenderer {
     overlay_sampler: wgpu::Sampler,
     overlay_cache: HashMap<(u32, u32), (wgpu::Texture, wgpu::TextureView)>,
     text_brush: TextBrush<FontRef<'static>>,
+    max_texture_size: u32,
 }
 
 impl WgpuRenderer {
@@ -57,11 +58,15 @@ impl WgpuRenderer {
             compatible_surface: Some(&surface),
             force_fallback_adapter: false,
         }))?;
+        let max_texture_size = adapter.limits().max_texture_dimension_2d;
         let (device, queue) =
             pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
                 label: Some("UDS"),
                 required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::default(),
+                required_limits: wgpu::Limits {
+                    max_texture_dimension_2d: max_texture_size,
+                    ..wgpu::Limits::default()
+                },
                 memory_hints: wgpu::MemoryHints::Performance,
                 trace: wgpu::Trace::Off,
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
@@ -248,6 +253,7 @@ impl WgpuRenderer {
             overlay_sampler,
             overlay_cache: HashMap::new(),
             text_brush,
+            max_texture_size,
         })
     }
 
@@ -260,6 +266,8 @@ impl WgpuRenderer {
         sections: &[OwnedSection],
         cursor: Option<&OverlayParams>,
     ) {
+        let sw = sw.min(self.max_texture_size);
+        let sh = sh.min(self.max_texture_size);
         if sw == 0 || sh == 0 {
             return;
         }
@@ -546,6 +554,8 @@ impl WgpuRenderer {
     }
 
     pub fn reconfigure(&mut self, w: u32, h: u32) {
+        let w = w.min(self.max_texture_size);
+        let h = h.min(self.max_texture_size);
         if w == 0 || h == 0 {
             return;
         }
