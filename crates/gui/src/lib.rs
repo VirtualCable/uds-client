@@ -661,34 +661,14 @@ impl AppHandler {
                 }
             }
             WindowEvent::CursorLeft { .. } => {
-                shared::log::trace!("RAIL[{rail_id}] CursorLeft (button_down={})", self.rail_button_down.is_some());
-                // Synthesize button release if mouse left while button was pressed
-                if let Some(capture_id) = self.rail_button_down {
-                    if capture_id == rail_id {
-                        let pos = self.last_pointer.unwrap_or_default();
-                        if let Some(rw) = state.rail_windows.get(&capture_id) {
-                            let sf = state.scale_factor;
-                            let dw = state.desktop_size.0.saturating_sub(1) as f64;
-                            let dh = state.desktop_size.1.saturating_sub(1) as f64;
-                            let gx = (pos.x + rw.rect.x as f64 * sf).round().clamp(0.0, dw) as u16;
-                            let gy = (pos.y + rw.rect.y as f64 * sf).round().clamp(0.0, dh) as u16;
-                            let _ = cmd_tx.send(rdp::commands::RdpCommand::Input(
-                                rdp::commands::InputEvent::Mouse {
-                                    flags: rdp::sys::PTR_FLAGS_BUTTON1 as u16,
-                                    x: gx,
-                                    y: gy,
-                                },
-                            ));
-                            unsafe { rdp::sys::SetEvent(cmd_ev.as_handle()); }
-                        }
-                        self.rail_button_down = None;
-                    }
-                }
+                // Do NOT synthesize release — Windows SetCapture will deliver
+                // the real MouseInput release even when cursor is outside.
+                shared::log::debug!("RAIL[{rail_id}] CursorLeft (button_down={})", self.rail_button_down.is_some());
             }
             WindowEvent::MouseInput {
                 button, state: btn, ..
             } => {
-                shared::log::trace!("RAIL[{rail_id}] MouseInput({button:?} pressed={})", btn.is_pressed());
+                shared::log::debug!("RAIL[{rail_id}] MouseInput({button:?} pressed={})", btn.is_pressed());
                 if btn.is_pressed()
                     && state.rail_windows.get(&rail_id).is_some_and(|rw| rw.show_in_taskbar)
                 {
@@ -793,6 +773,8 @@ impl AppHandler {
                 }
                 RailAction::UpdatePosition(id, rect) => {
                     if let Some(rw) = state.rail_windows.get_mut(id) {
+                        shared::log::debug!("RAIL[{id}] UpdatePosition rect=({},{}) {}x{} button_down={}",
+                            rect.x, rect.y, rect.w, rect.h, self.rail_button_down.is_some());
                         rw.rect = *rect;
                         let _ = rw.window.request_inner_size(winit::dpi::LogicalSize::new(
                             rect.w as f64,

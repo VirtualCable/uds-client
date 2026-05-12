@@ -548,14 +548,30 @@ pub fn handle_rdp_message(state: &mut RdpState, message: RdpMessage) -> RdpActio
         } if state.is_rail => {
             if is_offscreen.unwrap_or(false) || show_state == Some(0) {
                 state.rail_actions.push(RailAction::Delete(window_id));
-            } else if let (Some((x, y)), Some((w, h))) = (pos, size) {
+            } else if pos.is_some() || size.is_some() {
                 let sf = state.scale_factor.max(1.0);
-                let rect = rdp::geom::Rect::new(
-                    (x as f64 / sf) as i32,
-                    (y as f64 / sf) as i32,
-                    (w as f64 / sf) as u32,
-                    (h as f64 / sf) as u32,
-                );
+                let default_rect = state
+                    .rail_windows
+                    .get(&window_id)
+                    .map(|rw| rw.rect)
+                    .unwrap_or(rdp::geom::Rect::new(0, 0, 0, 0));
+                let x = match pos {
+                    Some((x, _)) => (x as f64 / sf) as i32,
+                    None => default_rect.x,
+                };
+                let y = match pos {
+                    Some((_, y)) => (y as f64 / sf) as i32,
+                    None => default_rect.y,
+                };
+                let w = match size {
+                    Some((w, _)) => (w as f64 / sf) as u32,
+                    None => default_rect.w,
+                };
+                let h = match size {
+                    Some((_, h)) => (h as f64 / sf) as u32,
+                    None => default_rect.h,
+                };
+                let rect = rdp::geom::Rect::new(x, y, w, h);
                 state
                     .rail_actions
                     .push(RailAction::UpdatePosition(window_id, rect));
