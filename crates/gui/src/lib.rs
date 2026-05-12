@@ -631,21 +631,17 @@ impl AppHandler {
             WindowEvent::CloseRequested => {
                 rail_channel.send_system_command(rail_id, rdp::consts::SC_CLOSE as u16);
             }
-            WindowEvent::Focused(true) => {
-                rail_channel.send_activate(rail_id, true);
-            }
-            WindowEvent::Moved(position) => {
-                let sf = state.scale_factor.max(1.0);
-                let x = (position.x as f64 / sf) as i16;
-                let y = (position.y as f64 / sf) as i16;
-                if let Some(rw) = state.rail_windows.get(&rail_id) {
-                    let right = x.saturating_add(rw.width as i16);
-                    let bottom = y.saturating_add(rw.height as i16);
-                    rail_channel.send_window_move(rail_id, x, y, right, bottom);
+            WindowEvent::Focused(focused) => {
+                if let Some(rw) = state.rail_windows.get_mut(&rail_id) {
+                    if focused && !rw.last_focused && rw.show_in_taskbar {
+                        rail_channel.send_activate(rail_id, true);
+                    }
+                    rw.last_focused = focused;
                 }
             }
-            WindowEvent::CursorMoved { position, .. } => {
-                self.last_pointer = Some(position);
+            WindowEvent::CursorMoved { ref position, .. } => {
+                shared::log::trace!("RAIL[{rail_id}] CursorMoved({:.0},{:.0})", position.x, position.y);
+                self.last_pointer = Some(*position);
                 if let Some(rw) = state.rail_windows.get(&rail_id) {
                     let sf = state.scale_factor;
                     let dw = state.desktop_size.0.saturating_sub(1) as f64;
@@ -665,6 +661,7 @@ impl AppHandler {
                 }
             }
             WindowEvent::CursorLeft { .. } => {
+                shared::log::trace!("RAIL[{rail_id}] CursorLeft (button_down={})", self.rail_button_down.is_some());
                 // Synthesize button release if mouse left while button was pressed
                 if let Some(capture_id) = self.rail_button_down {
                     if capture_id == rail_id {
@@ -691,7 +688,10 @@ impl AppHandler {
             WindowEvent::MouseInput {
                 button, state: btn, ..
             } => {
-                if btn.is_pressed() {
+                shared::log::trace!("RAIL[{rail_id}] MouseInput({button:?} pressed={})", btn.is_pressed());
+                if btn.is_pressed()
+                    && state.rail_windows.get(&rail_id).is_some_and(|rw| rw.show_in_taskbar)
+                {
                     rail_channel.send_activate(rail_id, true);
                 }
                 if let Some(pos) = self.last_pointer {

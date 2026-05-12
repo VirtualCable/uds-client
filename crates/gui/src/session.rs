@@ -573,6 +573,21 @@ pub fn handle_rdp_message(state: &mut RdpState, message: RdpMessage) -> RdpActio
             data,
         } if state.is_rail => {
             if let Some(rw) = state.rail_windows.get_mut(&window_id) {
+                let sf = state.scale_factor.max(1.0);
+                let lw = ((width as f64 / sf) as u32).min(state.desktop_size.0);
+                let lh = ((height as f64 / sf) as u32).min(state.desktop_size.1);
+                if rw.rect.w != lw || rw.rect.h != lh {
+                    rw.rect.w = lw;
+                    rw.rect.h = lh;
+                    let _ = rw.window.request_inner_size(winit::dpi::LogicalSize::new(
+                        lw as f64,
+                        lh as f64,
+                    ));
+                    if let Some(ref mut renderer) = rw.renderer {
+                        let phys = rw.window.inner_size();
+                        renderer.reconfigure(phys.width, phys.height);
+                    }
+                }
                 rw.rgba_data = Some(data);
                 rw.width = width;
                 rw.height = height;
