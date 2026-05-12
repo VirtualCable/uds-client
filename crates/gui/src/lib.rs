@@ -1,11 +1,9 @@
 // BSD 3-Clause License
 // Copyright (c) 2025, Virtual Cable S.L.
 // All rights reserved.
-
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Instant;
 
 use anyhow::Result;
 use flume::{Receiver, Sender, bounded};
@@ -21,6 +19,7 @@ pub mod about;
 pub mod keymap;
 pub mod logo;
 mod monitor;
+mod popup;
 pub mod types;
 pub mod window;
 
@@ -31,6 +30,7 @@ mod wgpu_render;
 
 use crate::wgpu_render::WgpuRenderer;
 use launcher::{LauncherInner, LauncherState, TestAction, paint_launcher};
+use popup::{PopupKind, PopupState};
 use session::{RdpState, RdpWindow, handle_rdp_message};
 use types::{AppState, GuiMessage, ReturnCode};
 
@@ -41,141 +41,127 @@ pub struct RawKey {
     pub repeat: bool,
 }
 
-enum Phase {
-    Launcher(LauncherState),
-    RdpSession(Box<RdpState>),
-}
-
-#[allow(dead_code)]
 pub struct AppHandler {
-    phase: Phase,
+    // Windows — at most one of each type active
+    launcher: Option<LauncherState>,
+    rdp: Option<Box<RdpState>>,
+    popup: Option<PopupState>,
+    about: Option<crate::about::AboutState>,
+
+    // Channels
     keys_tx: Sender<RawKey>,
     keys_rx: Receiver<RawKey>,
     gui_messages_rx: Receiver<GuiMessage>,
     processing_events: Arc<AtomicBool>,
     stop: Trigger,
     fps_limit: Option<u32>,
-    catalog: gettext::Catalog,
-    last_frame: Instant,
+    alt_held: bool,
+    last_pointer: Option<winit::dpi::PhysicalPosition<f64>>,
     return_code: ReturnCode,
     initial_state: Option<AppState>,
     first_resume: bool,
-    alt_held: bool,
-    last_pointer: Option<winit::dpi::PhysicalPosition<f64>>,
 }
 
 pub fn run_gui(
-    catalog: gettext::Catalog,
+    _catalog: gettext::Catalog,
     initial_state: Option<AppState>,
     messages_rx: Receiver<GuiMessage>,
     stop: Trigger,
-    fps_limit: Option<u32>,
+    _fps_limit: Option<u32>,
 ) -> Result<ReturnCode> {
     let (keys_tx, keys_rx) = bounded::<RawKey>(1024);
     let processing_events = Arc::new(AtomicBool::new(false));
-
     let event_loop = EventLoop::new()?;
     event_loop.set_control_flow(ControlFlow::Poll);
 
     let mut app = AppHandler {
-        phase: Phase::Launcher(LauncherState::new()),
+        launcher: None,
+        rdp: None,
+        popup: None,
+        about: None,
         keys_tx,
         keys_rx,
         gui_messages_rx: messages_rx,
         processing_events,
         stop,
-        fps_limit,
-        catalog,
-        last_frame: Instant::now(),
+        fps_limit: _fps_limit,
+        alt_held: false,
+        last_pointer: None,
         return_code: ReturnCode::Exit,
         initial_state,
         first_resume: true,
-        alt_held: false,
-        last_pointer: None,
     };
-
     event_loop.run_app(&mut app)?;
-
     Ok(app.return_code)
 }
 
 impl AppHandler {
-    fn create_launcher_window(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        inner: LauncherInner,
-    ) -> Result<()> {
-        let window_attrs = Window::default_attributes()
-            .with_title("UDS Launcher")
-            .with_inner_size(winit::dpi::LogicalSize::new(400.0, 300.0))
-            .with_window_icon(Some(logo::load_icon()))
-            .with_resizable(false);
-
-        let window = Arc::new(event_loop.create_window(window_attrs)?);
-        let physical = window.inner_size();
-        let renderer = WgpuRenderer::new(window.clone(), physical.width, physical.height)?;
-
-        let launcher = LauncherState {
+    fn open_launcher(&mut self, el: &ActiveEventLoop, inner: LauncherInner) -> Result<()> {
+        let window = Arc::new(
+            el.create_window(
+                Window::default_attributes()
+                    .with_title("UDS Launcher")
+                    .with_inner_size(winit::dpi::LogicalSize::new(400.0, 300.0))
+                    .with_window_icon(Some(logo::load_icon()))
+                    .with_resizable(false),
+            )?,
+        );
+        let phys = window.inner_size();
+        let renderer = WgpuRenderer::new(window.clone(), phys.width, phys.height)?;
+        self.launcher = Some(LauncherState {
             window: Some(window),
             renderer: Some(renderer),
             inner,
             last_mouse_pos: None,
-        };
-        self.phase = Phase::Launcher(launcher);
+        });
         Ok(())
     }
 
-    fn enter_rdp(
+    fn close_launcher(&mut self) {
+        self.launcher = None;
+    }
+
+    fn open_rdp(
         &mut self,
-        event_loop: &ActiveEventLoop,
+        el: &ActiveEventLoop,
         mut settings: rdp::settings::RdpSettings,
     ) -> Result<()> {
         let is_rail = settings.rail_app.is_some();
         let use_rgba = cfg!(target_os = "macos");
-
         let (desktop_w, desktop_h) = monitor::size(0).unwrap_or((1920, 1080));
         let monitor_scale = monitor::scale(0);
-
-        // Use logical resolution for RDP: physical / scale → saves bandwidth on HiDPI
         let (rdp_w, rdp_h) = match settings.screen_size {
-            rdp::geom::ScreenSize::Full => (
-                (desktop_w as f64 / monitor_scale) as u32,
-                (desktop_h as f64 / monitor_scale) as u32,
-            ),
+            rdp::geom::ScreenSize::Full => {
+                let (lw, lh) =
+                    monitor::phys_2_logic((desktop_w as i32, desktop_h as i32), monitor_scale);
+                (lw as u32, lh as u32)
+            }
             rdp::geom::ScreenSize::Fixed(w, h) => (w, h),
         };
-
         settings.scale_factor = monitor_scale;
         let is_fullscreen = settings.screen_size.is_fullscreen() && !is_rail;
-
+        let (window_logical_w, window_logical_h) =
+            monitor::phys_2_logic((desktop_w as i32, desktop_h as i32), monitor_scale);
         log::info!(
             "enter_rdp: rail={is_rail} fullscreen={is_fullscreen} logical={rdp_w}x{rdp_h} scale={monitor_scale} desktop={desktop_w}x{desktop_h}"
         );
 
-        // Window at physical size, RDP framebuffer at logical size
-        let window_logical_w = desktop_w as f64 / monitor_scale;
-        let window_logical_h = desktop_h as f64 / monitor_scale;
-
         if is_rail {
             settings.screen_size = rdp::geom::ScreenSize::Fixed(rdp_w, rdp_h);
-
             let window = Arc::new(
-                event_loop.create_window(
+                el.create_window(
                     Window::default_attributes()
                         .with_title("UDS RemoteApp")
                         .with_inner_size(winit::dpi::LogicalSize::new(300.0, 100.0))
                         .with_window_icon(Some(logo::load_icon())),
                 )?,
             );
-
-            let renderer = crate::wgpu_render::WgpuRenderer::new(window.clone(), 300, 100)?;
-
+            let renderer = WgpuRenderer::new(window.clone(), 300, 100)?;
             let rdp_window = RdpWindow {
                 window,
                 renderer,
                 scratch: Vec::new(),
             };
-
             let rdp_state = RdpState::new(
                 rdp_window,
                 settings,
@@ -185,12 +171,11 @@ impl AppHandler {
                 self.keys_rx.clone(),
                 use_rgba,
             )?;
-            self.phase = Phase::RdpSession(Box::new(rdp_state));
+            self.rdp = Some(Box::new(rdp_state));
         } else {
             settings.screen_size = rdp::geom::ScreenSize::Fixed(rdp_w, rdp_h);
-
             let window = Arc::new(
-                event_loop.create_window(
+                el.create_window(
                     Window::default_attributes()
                         .with_title("UDS Remote Desktop")
                         .with_inner_size(winit::dpi::LogicalSize::new(
@@ -200,17 +185,13 @@ impl AppHandler {
                         .with_window_icon(Some(logo::load_icon())),
                 )?,
             );
-
             let phys = window.inner_size();
-            let renderer =
-                crate::wgpu_render::WgpuRenderer::new(window.clone(), phys.width, phys.height)?;
-
+            let renderer = WgpuRenderer::new(window.clone(), phys.width, phys.height)?;
             let rdp_window = RdpWindow {
                 window,
                 renderer,
                 scratch: Vec::new(),
             };
-
             let rdp_state = RdpState::new(
                 rdp_window,
                 settings,
@@ -220,7 +201,6 @@ impl AppHandler {
                 self.keys_rx.clone(),
                 use_rgba,
             )?;
-
             if is_fullscreen {
                 rdp_state
                     .window
@@ -228,313 +208,353 @@ impl AppHandler {
                     .set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
                 rdp_state.full_screen.store(true, Ordering::Relaxed);
             }
-
-            self.phase = Phase::RdpSession(Box::new(rdp_state));
+            self.rdp = Some(Box::new(rdp_state));
         }
-
         while self.keys_rx.try_recv().is_ok() {}
         self.processing_events.store(true, Ordering::Relaxed);
-        if let Phase::RdpSession(ref state) = self.phase {
+        if let Some(ref state) = self.rdp {
             state.window.window.set_cursor_visible(false);
         }
         Ok(())
     }
 
-    fn toggle_fullscreen(state: &mut RdpState) {
-        let is_fs = state.full_screen.load(Ordering::Relaxed);
-        if !is_fs {
-            state
-                .window
-                .window
-                .set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
-            state.full_screen.store(true, Ordering::Relaxed);
-        } else {
-            state.window.window.set_fullscreen(None);
-            state.full_screen.store(false, Ordering::Relaxed);
+    fn close_rdp(&mut self) {
+        self.processing_events.store(false, Ordering::Relaxed);
+        self.rdp = None;
+    }
+
+    fn rdp_window_id(&self) -> Option<WindowId> {
+        self.rdp.as_ref().map(|r| r.window.window.id())
+    }
+    fn launcher_window_id(&self) -> Option<WindowId> {
+        self.launcher
+            .as_ref()
+            .and_then(|l| l.window.as_ref().map(|w| w.id()))
+    }
+    fn popup_window_id(&self) -> Option<WindowId> {
+        self.popup.as_ref().map(|p| p.window.id())
+    }
+    fn about_window_id(&self) -> Option<WindowId> {
+        self.about.as_ref().map(|a| a.window().id())
+    }
+
+    fn handle_rdp_input(&mut self, event: &WindowEvent) -> bool {
+        match event {
+            WindowEvent::CloseRequested => return false,
+            WindowEvent::Resized(_) => {
+                if let Some(s) = &mut self.rdp {
+                    s.request_screen_resize();
+                }
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                self.last_pointer = Some(*position);
+                if let Some(s) = &mut self.rdp {
+                    s.cursor_x = position.x as f32;
+                    s.cursor_y = position.y as f32;
+                    s.window.window.request_redraw();
+                    let gdi_w = unsafe { (*s.gdi).width as u32 };
+                    let gdi_h = unsafe { (*s.gdi).height as u32 };
+                    let phys_w = s.window.window.inner_size().width;
+                    let phys_h = s.window.window.inner_size().height;
+                    let x = ((position.x * gdi_w as f64) / phys_w as f64)
+                        .round()
+                        .clamp(0.0, (gdi_w - 1) as f64) as u16;
+                    let y = ((position.y * gdi_h as f64) / phys_h as f64)
+                        .round()
+                        .clamp(0.0, (gdi_h - 1) as f64) as u16;
+                    let _ = s.command_tx.send(rdp::commands::RdpCommand::Input(
+                        rdp::commands::InputEvent::Mouse {
+                            flags: rdp::sys::PTR_FLAGS_MOVE as u16,
+                            x,
+                            y,
+                        },
+                    ));
+                    unsafe {
+                        rdp::sys::SetEvent(s.command_event.as_handle());
+                    }
+                    // Pinbar
+                    let is_fs = s.full_screen.load(Ordering::Relaxed);
+                    // Show: in fullscreen AND cursor in center-top (< 5px Y, 40-60% X)
+                    let show_trigger = position.y < 5.0
+                        && position.x > s.window.window.inner_size().width as f64 * 0.4
+                        && position.x < s.window.window.inner_size().width as f64 * 0.6;
+                    if show_trigger {
+                        s.pinbar_visible = is_fs;
+                    }
+                    // Hide: cursor leaves the pinbar area (Y > 32 px)
+                    if position.y > 32.0 {
+                        s.pinbar_visible = false;
+                    }
+                }
+            }
+            WindowEvent::MouseInput {
+                state: btn, button, ..
+            } => {
+                // Pinbar button handling
+                if let Some(pos) = self.last_pointer
+                    && let Some(s) = &self.rdp
+                    && s.pinbar_visible
+                    && btn.is_pressed()
+                    && *button == winit::event::MouseButton::Left
+                {
+                    let px = pos.x as f32;
+                    if s.pinbar_btn_fs_x.contains(&px) {
+                        self.toggle_fullscreen();
+                        return true;
+                    }
+                    if s.pinbar_btn_close_x.contains(&px) {
+                        return false; // Close RDP
+                    }
+                }
+
+                if let Some(pos) = self.last_pointer
+                    && let Some(s) = &self.rdp
+                {
+                    let gdi_w = unsafe { (*s.gdi).width as u32 };
+                    let gdi_h = unsafe { (*s.gdi).height as u32 };
+                    let phys_w = s.window.window.inner_size().width;
+                    let phys_h = s.window.window.inner_size().height;
+                    let x = ((pos.x * gdi_w as f64) / phys_w as f64)
+                        .round()
+                        .clamp(0.0, (gdi_w - 1) as f64) as u16;
+                    let y = ((pos.y * gdi_h as f64) / phys_h as f64)
+                        .round()
+                        .clamp(0.0, (gdi_h - 1) as f64) as u16;
+                    let flags = match *button {
+                        winit::event::MouseButton::Left => rdp::sys::PTR_FLAGS_BUTTON1,
+                        winit::event::MouseButton::Right => rdp::sys::PTR_FLAGS_BUTTON2,
+                        winit::event::MouseButton::Middle => rdp::sys::PTR_FLAGS_BUTTON3,
+                        _ => 0,
+                    } as u16;
+                    if flags != 0 {
+                        let f = flags
+                            | if btn.is_pressed() {
+                                rdp::sys::PTR_FLAGS_DOWN as u16
+                            } else {
+                                0
+                            };
+                        let _ = s.command_tx.send(rdp::commands::RdpCommand::Input(
+                            rdp::commands::InputEvent::Mouse { flags: f, x, y },
+                        ));
+                        unsafe {
+                            rdp::sys::SetEvent(s.command_event.as_handle());
+                        }
+                    }
+                }
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                if let Some(ref s) = self.rdp {
+                    let dy = match delta {
+                        winit::event::MouseScrollDelta::LineDelta(_, y) => *y as i32,
+                        winit::event::MouseScrollDelta::PixelDelta(pos) => pos.y as i32,
+                    };
+                    let mut wheel_delta = (dy as f32 * 120.0) as i32;
+                    let flags = (rdp::sys::PTR_FLAGS_WHEEL as u16)
+                        | if wheel_delta < 0 {
+                            wheel_delta = -wheel_delta;
+                            rdp::sys::PTR_FLAGS_WHEEL_NEGATIVE as u16
+                        } else {
+                            0
+                        };
+                    while wheel_delta > 0 {
+                        let step: u16 = if wheel_delta > 0xFF {
+                            0xFF
+                        } else {
+                            (wheel_delta & 0xFF) as u16
+                        };
+                        wheel_delta -= step as i32;
+                        let cflags = if flags & (rdp::sys::PTR_FLAGS_WHEEL_NEGATIVE as u16) != 0 {
+                            flags | (0x100 - step)
+                        } else {
+                            flags | step
+                        };
+                        let _ = s.command_tx.send(rdp::commands::RdpCommand::Input(
+                            rdp::commands::InputEvent::Mouse {
+                                flags: cflags,
+                                x: 0,
+                                y: 0,
+                            },
+                        ));
+                        unsafe {
+                            rdp::sys::SetEvent(s.command_event.as_handle());
+                        }
+                    }
+                }
+            }
+            _ => {}
         }
-        // resize will be picked up by Resized event → request_screen_resize
+        true
+    }
+
+    fn toggle_fullscreen(&mut self) {
+        if let Some(ref mut s) = self.rdp {
+            let is_fs = s.full_screen.load(Ordering::Relaxed);
+            if !is_fs {
+                s.window
+                    .window
+                    .set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+                s.full_screen.store(true, Ordering::Relaxed);
+            } else {
+                s.window.window.set_fullscreen(None);
+                s.full_screen.store(false, Ordering::Relaxed);
+            }
+        }
     }
 }
 
 impl ApplicationHandler for AppHandler {
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        monitor::populate(event_loop);
+    fn resumed(&mut self, el: &ActiveEventLoop) {
+        monitor::populate(el);
         if self.first_resume {
             self.first_resume = false;
-            let initial = self.initial_state.take().unwrap_or_default();
-            let inner = match initial {
+            let inner = match self.initial_state.take().unwrap_or_default() {
                 AppState::Test => LauncherInner::new_test(),
                 AppState::Invisible => LauncherInner::Invisible,
             };
-            let _ = self.create_launcher_window(event_loop, inner);
+            let _ = self.open_launcher(el, inner);
         }
     }
 
-    fn window_event(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        window_id: WindowId,
-        event: WindowEvent,
-    ) {
-        // ── Keyboard interception + hotkeys ──
-        if let Phase::RdpSession(_) = self.phase
+    fn window_event(&mut self, el: &ActiveEventLoop, wid: WindowId, event: WindowEvent) {
+        // Keyboard interception for RDP
+        if self.rdp.is_some()
             && let WindowEvent::KeyboardInput { event: key_ev, .. } = &event
             && let PhysicalKey::Code(code) = key_ev.physical_key
         {
-            // Track Alt key state for hotkeys
             match code {
                 winit::keyboard::KeyCode::AltLeft | winit::keyboard::KeyCode::AltRight => {
                     self.alt_held = key_ev.state.is_pressed();
                 }
                 _ => {}
             }
-
             if self.processing_events.load(Ordering::Relaxed) {
-                // Hotkeys: Alt+Enter (fullscreen), Alt+F (FPS toggle), Alt+F4 (exit)
-                if let Phase::RdpSession(ref mut state) = self.phase
-                    && !state.is_rail
-                    && self.alt_held
-                    && key_ev.state.is_pressed()
-                    && !key_ev.repeat
-                {
+                if self.alt_held && key_ev.state.is_pressed() && !key_ev.repeat {
                     match code {
                         winit::keyboard::KeyCode::Enter => {
-                            log::debug!("Hotkey: Alt+Enter → toggle fullscreen");
-                            Self::toggle_fullscreen(state);
+                            log::debug!("Alt+Enter → fullscreen");
+                            self.toggle_fullscreen();
                             return;
                         }
                         winit::keyboard::KeyCode::KeyF => {
-                            log::debug!("Hotkey: Alt+F → toggle FPS");
-                            state.fps.toggle();
-                            log::debug!(
-                                "FPS display: {}",
-                                if state.fps.enabled.load(Ordering::Relaxed) {
-                                    "enabled"
-                                } else {
-                                    "disabled"
-                                }
-                            );
+                            if let Some(ref s) = self.rdp {
+                                s.fps.toggle();
+                            }
                             return;
                         }
                         winit::keyboard::KeyCode::F4 => {
-                            log::debug!("Hotkey: Alt+F4 → exit RDP");
+                            log::debug!("Alt+F4 → exit");
                             self.stop.trigger();
-                            event_loop.exit();
+                            el.exit();
                             return;
                         }
                         _ => {}
                     }
                 }
-
                 let raw = RawKey {
                     keycode: code,
                     pressed: key_ev.state.is_pressed(),
                     repeat: key_ev.repeat,
                 };
-                if let Err(e) = self.keys_tx.send(raw) {
-                    log::warn!("Failed to send keyboard event: {}", e);
-                }
+                let _ = self.keys_tx.send(raw);
                 return;
             }
         }
 
         let should_redraw = matches!(&event, WindowEvent::RedrawRequested);
 
-        match &mut self.phase {
-            Phase::Launcher(launcher) => {
-                let win_id = launcher.window.as_ref().map(|w| w.id());
-                if win_id != Some(window_id) {
-                    return;
+        // Dispatch by window
+        if Some(wid) == self.launcher_window_id() {
+            match event {
+                WindowEvent::CloseRequested => {
+                    self.stop.trigger();
+                    el.exit();
                 }
-                match event {
-                    WindowEvent::CloseRequested => {
-                        self.stop.trigger();
-                        event_loop.exit();
-                    }
-                    WindowEvent::MouseInput { state, button, .. }
-                        if state.is_pressed() && button == winit::event::MouseButton::Left =>
+                WindowEvent::MouseInput { state, button, .. }
+                    if state.is_pressed() && button == winit::event::MouseButton::Left =>
+                {
+                    if let Some(ref mut l) = self.launcher
+                        && let Some(pos) = l.last_mouse_pos
                     {
-                        if let Some(pos) = launcher.last_mouse_pos {
-                            launcher.inner.handle_click(pos.0, pos.1);
-                        }
-                        if let Some(w) = &launcher.window {
-                            w.request_redraw();
-                        }
+                        l.inner.handle_click(pos.0, pos.1);
                     }
-                    WindowEvent::CursorMoved { position, .. } => {
-                        let sf = launcher
-                            .window
-                            .as_ref()
-                            .map(|w| w.scale_factor() as f32)
-                            .unwrap_or(1.0);
-                        launcher.last_mouse_pos =
-                            Some((position.x as f32 / sf, position.y as f32 / sf));
+                    if let Some(ref l) = self.launcher
+                        && let Some(w) = &l.window
+                    {
+                        w.request_redraw();
                     }
-                    _ => {}
                 }
-                if should_redraw {
-                    paint_launcher(launcher);
+                WindowEvent::CursorMoved { position, .. } => {
+                    if let Some(ref mut l) = self.launcher {
+                        let sf = *monitor::SCALE_FACTOR as f32;
+                        l.last_mouse_pos = Some((position.x as f32 / sf, position.y as f32 / sf));
+                    }
+                }
+                _ => {}
+            }
+            if should_redraw && let Some(ref mut l) = self.launcher {
+                paint_launcher(l);
+            }
+        } else if Some(wid) == self.rdp_window_id() {
+            if self.rdp.as_ref().map(|s| s.is_rail).unwrap_or(false) {
+                if let WindowEvent::CloseRequested = event {
+                    self.stop.trigger();
+                    el.exit();
+                }
+            } else {
+                let ok = self.handle_rdp_input(&event);
+                if !ok {
+                    self.stop.trigger();
+                    el.exit();
+                }
+                if should_redraw && let Some(ref mut s) = self.rdp {
+                    let _ = s.update_screen();
                 }
             }
-            Phase::RdpSession(state) => {
-                let is_rail = state.is_rail;
-                let main_win = state.window.window.id();
-
-                if is_rail {
-                    if window_id == main_win
-                        && let WindowEvent::CloseRequested = event
+        } else if Some(wid) == self.popup_window_id() {
+            match &event {
+                WindowEvent::CloseRequested => {
+                    self.popup = None;
+                }
+                WindowEvent::MouseInput { state, button, .. }
+                    if state.is_pressed() && *button == winit::event::MouseButton::Left =>
+                {
+                    // Use last_pointer if it was set on this window
+                    if let Some(pos) = self.last_pointer
+                        && let Some(ref mut p) = self.popup
+                        && p.handle_click(pos.x as f32, pos.y as f32)
                     {
-                        self.stop.trigger();
-                        event_loop.exit();
-                    }
-                } else if window_id == main_win {
-                    match &event {
-                        WindowEvent::CloseRequested => {
-                            self.stop.trigger();
-                            event_loop.exit();
-                        }
-                        WindowEvent::Resized(_) => {
-                            state.request_screen_resize();
-                        }
-                        WindowEvent::CursorMoved { position, .. } => {
-                            state.cursor_x = position.x as f32;
-                            state.cursor_y = position.y as f32;
-                            self.last_pointer = Some(*position);
-
-                            // Pinbar: show when fullscreen and cursor near top
-                            let is_fs = state.full_screen.load(Ordering::Relaxed);
-                            let near_top = position.y < 30.0;
-                            let prev = state.pinbar_visible;
-                            state.pinbar_visible = is_fs && near_top;
-                            if state.pinbar_visible != prev {
-                                log::debug!(
-                                    "Pinbar: {}",
-                                    if state.pinbar_visible {
-                                        "shown"
-                                    } else {
-                                        "hidden"
-                                    }
-                                );
-                                state.window.window.request_redraw();
-                            }
-
-                            state.window.window.request_redraw();
-                            let gdi_w = unsafe { (*state.gdi).width as u32 };
-                            let gdi_h = unsafe { (*state.gdi).height as u32 };
-                            let phys_w = state.window.window.inner_size().width;
-                            let phys_h = state.window.window.inner_size().height;
-                            // Map physical window coords → GDI logical coords (round for HiDPI)
-                            let x = ((position.x * gdi_w as f64) / phys_w as f64)
-                                .round()
-                                .clamp(0.0, (gdi_w - 1) as f64)
-                                as u16;
-                            let y = ((position.y * gdi_h as f64) / phys_h as f64)
-                                .round()
-                                .clamp(0.0, (gdi_h - 1) as f64)
-                                as u16;
-                            let _ = state.command_tx.send(rdp::commands::RdpCommand::Input(
-                                rdp::commands::InputEvent::Mouse {
-                                    flags: rdp::sys::PTR_FLAGS_MOVE as u16,
-                                    x,
-                                    y,
-                                },
-                            ));
-                            unsafe {
-                                rdp::sys::SetEvent(state.command_event.as_handle());
-                            }
-                        }
-                        WindowEvent::MouseInput {
-                            state: btn, button, ..
-                        } => {
-                            if let Some(pos) = self.last_pointer {
-                                let gdi_w = unsafe { (*state.gdi).width as u32 };
-                                let gdi_h = unsafe { (*state.gdi).height as u32 };
-                                let phys_w = state.window.window.inner_size().width;
-                                let phys_h = state.window.window.inner_size().height;
-                                let x = ((pos.x * gdi_w as f64) / phys_w as f64)
-                                    .round()
-                                    .clamp(0.0, (gdi_w - 1) as f64)
-                                    as u16;
-                                let y = ((pos.y * gdi_h as f64) / phys_h as f64)
-                                    .round()
-                                    .clamp(0.0, (gdi_h - 1) as f64)
-                                    as u16;
-                                let flags = match button {
-                                    winit::event::MouseButton::Left => rdp::sys::PTR_FLAGS_BUTTON1,
-                                    winit::event::MouseButton::Right => rdp::sys::PTR_FLAGS_BUTTON2,
-                                    winit::event::MouseButton::Middle => {
-                                        rdp::sys::PTR_FLAGS_BUTTON3
-                                    }
-                                    _ => 0,
-                                } as u16;
-                                if flags != 0 {
-                                    let f = flags
-                                        | if btn.is_pressed() {
-                                            rdp::sys::PTR_FLAGS_DOWN as u16
-                                        } else {
-                                            0
-                                        };
-                                    let _ =
-                                        state.command_tx.send(rdp::commands::RdpCommand::Input(
-                                            rdp::commands::InputEvent::Mouse { flags: f, x, y },
-                                        ));
-                                    unsafe {
-                                        rdp::sys::SetEvent(state.command_event.as_handle());
-                                    }
-                                }
-                            }
-                        }
-                        WindowEvent::MouseWheel { delta, .. } => {
-                            let dy = match delta {
-                                winit::event::MouseScrollDelta::LineDelta(_, y) => *y as i32,
-                                winit::event::MouseScrollDelta::PixelDelta(pos) => pos.y as i32,
-                            };
-                            let mut wheel_delta = (dy as f32 * 120.0) as i32;
-                            let flags = (rdp::sys::PTR_FLAGS_WHEEL as u16)
-                                | if wheel_delta < 0 {
-                                    wheel_delta = -wheel_delta;
-                                    rdp::sys::PTR_FLAGS_WHEEL_NEGATIVE as u16
-                                } else {
-                                    0
-                                };
-                            while wheel_delta > 0 {
-                                let step: u16 = if wheel_delta > 0xFF {
-                                    0xFF
-                                } else {
-                                    (wheel_delta & 0xFF) as u16
-                                };
-                                wheel_delta -= step as i32;
-                                let cflags =
-                                    if flags & (rdp::sys::PTR_FLAGS_WHEEL_NEGATIVE as u16) != 0 {
-                                        flags | (0x100 - step)
-                                    } else {
-                                        flags | step
-                                    };
-                                let _ = state.command_tx.send(rdp::commands::RdpCommand::Input(
-                                    rdp::commands::InputEvent::Mouse {
-                                        flags: cflags,
-                                        x: 0,
-                                        y: 0,
-                                    },
-                                ));
-                                unsafe {
-                                    rdp::sys::SetEvent(state.command_event.as_handle());
-                                }
-                            }
-                        }
-                        _ => {}
-                    }
-                    if should_redraw {
-                        let _ = state.update_screen();
+                        self.popup = None;
                     }
                 }
+                WindowEvent::CursorMoved { position, .. } => {
+                    self.last_pointer = Some(*position);
+                }
+                _ => {}
+            }
+            if should_redraw && let Some(ref mut p) = self.popup {
+                p.paint();
+            }
+        } else if Some(wid) == self.about_window_id() {
+            match event {
+                WindowEvent::CloseRequested => {
+                    self.about = None;
+                }
+                WindowEvent::MouseInput { state, button, .. }
+                    if state.is_pressed() && button == winit::event::MouseButton::Left =>
+                {
+                    self.about = None;
+                }
+                _ => {}
+            }
+            if should_redraw && let Some(ref mut a) = self.about {
+                a.paint();
             }
         }
     }
 
-    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        // ── Test actions from launcher ──
-        if let Phase::Launcher(ref mut launcher) = self.phase
+    fn about_to_wait(&mut self, el: &ActiveEventLoop) {
+        // Process test action requests from launcher
+        if let Some(ref mut launcher) = self.launcher
             && let Some(action) = launcher.inner.take_request()
         {
             match action {
@@ -543,28 +563,15 @@ impl ApplicationHandler for AppHandler {
                         pct: 0,
                         message: String::new(),
                     };
-                    if let Some(w) = &launcher.window {
-                        w.set_visible(true);
-                        w.request_redraw();
-                    }
                 }
                 TestAction::GoInvisible => {
                     launcher.inner = LauncherInner::Invisible;
-                    if let Some(w) = &launcher.window {
-                        w.set_visible(false);
-                    }
                 }
                 TestAction::ShowWarning => {
                     launcher.inner = LauncherInner::Warning("This is a warning message.".into());
-                    if let Some(w) = &launcher.window {
-                        w.request_redraw();
-                    }
                 }
                 TestAction::ShowError => {
                     launcher.inner = LauncherInner::Error("This is an error message.".into());
-                    if let Some(w) = &launcher.window {
-                        w.request_redraw();
-                    }
                 }
                 TestAction::ShowYesNo => {
                     let (resp_tx, _) = tokio::sync::oneshot::channel::<bool>();
@@ -572,9 +579,6 @@ impl ApplicationHandler for AppHandler {
                         message: "Do you want to continue?".into(),
                         response: Arc::new(std::sync::RwLock::new(Some(resp_tx))),
                     };
-                    if let Some(w) = &launcher.window {
-                        w.request_redraw();
-                    }
                 }
                 TestAction::ConnectRdp
                 | TestAction::ConnectRdpPreconnection
@@ -592,103 +596,88 @@ impl ApplicationHandler for AppHandler {
                         },
                         ..Default::default()
                     };
-                    self.phase = Phase::Launcher(LauncherState::new());
-                    if let Err(e) = self.enter_rdp(event_loop, settings) {
-                        log::error!("Failed to enter RDP: {}", e);
+                    self.close_launcher();
+                    if let Err(e) = self.open_rdp(el, settings) {
+                        log::error!("Failed to enter RDP: {e}");
                         self.stop.trigger();
-                        event_loop.exit();
+                        el.exit();
                         return;
-                    }
-                    if let Phase::RdpSession(ref state) = self.phase {
-                        state.window.window.request_redraw();
                     }
                 }
             }
         }
 
-        // ── External GUI messages ──
+        // Process external GUI messages
         while let Ok(msg) = self.gui_messages_rx.try_recv() {
             match msg {
                 GuiMessage::Close => {
                     self.stop.trigger();
-                    event_loop.exit();
+                    el.exit();
                     return;
                 }
                 GuiMessage::Hide => {
-                    if let Phase::Launcher(ref mut launcher) = self.phase {
-                        launcher.inner = LauncherInner::Invisible;
-                        if let Some(w) = &launcher.window {
+                    if let Some(ref mut l) = self.launcher {
+                        l.inner = LauncherInner::Invisible;
+                        if let Some(w) = &l.window {
                             w.set_visible(false);
                         }
                     }
                 }
                 GuiMessage::ShowError(err) => {
-                    if let Phase::Launcher(ref mut launcher) = self.phase {
-                        launcher.inner = LauncherInner::Error(err);
-                        if let Some(w) = &launcher.window {
-                            w.set_visible(true);
-                            w.request_redraw();
-                        }
+                    if let Ok(p) = PopupState::new(el, PopupKind::Error(err)) {
+                        self.popup = Some(p);
                     }
                 }
                 GuiMessage::ShowWarning(msg) => {
-                    if let Phase::Launcher(ref mut launcher) = self.phase {
-                        launcher.inner = LauncherInner::Warning(msg);
-                        if let Some(w) = &launcher.window {
-                            w.set_visible(true);
-                            w.request_redraw();
-                        }
+                    if let Ok(p) = PopupState::new(el, PopupKind::Warning(msg)) {
+                        self.popup = Some(p);
                     }
                 }
                 GuiMessage::ShowYesNo(msg, resp) => {
-                    if let Phase::Launcher(ref mut launcher) = self.phase {
-                        launcher.inner = LauncherInner::YesNo {
+                    if let Ok(p) = PopupState::new(
+                        el,
+                        PopupKind::YesNo {
                             message: msg,
                             response: resp,
-                        };
-                        if let Some(w) = &launcher.window {
-                            w.set_visible(true);
-                            w.request_redraw();
-                        }
+                        },
+                    ) {
+                        self.popup = Some(p);
                     }
                 }
                 GuiMessage::ShowProgress => {
-                    if let Phase::Launcher(ref mut launcher) = self.phase {
-                        launcher.inner = LauncherInner::Progress {
+                    if let Some(ref mut l) = self.launcher {
+                        l.inner = LauncherInner::Progress {
                             pct: 0,
                             message: String::new(),
                         };
-                        if let Some(w) = &launcher.window {
+                        if let Some(w) = &l.window {
                             w.set_visible(true);
                             w.request_redraw();
                         }
                     }
                 }
                 GuiMessage::Progress(pct, msg) => {
-                    if let Phase::Launcher(ref mut launcher) = self.phase {
-                        launcher.inner = LauncherInner::Progress { pct, message: msg };
-                        if let Some(w) = &launcher.window {
+                    if let Some(ref mut l) = self.launcher {
+                        l.inner = LauncherInner::Progress { pct, message: msg };
+                        if let Some(w) = &l.window {
                             w.request_redraw();
                         }
                     }
                 }
                 GuiMessage::ConnectRdp(settings) => {
-                    self.phase = Phase::Launcher(LauncherState::new());
-                    if let Err(e) = self.enter_rdp(event_loop, settings) {
-                        log::error!("Failed to enter RDP: {}", e);
+                    self.close_launcher();
+                    if let Err(e) = self.open_rdp(el, settings) {
+                        log::error!("Failed to enter RDP: {e}");
                         self.stop.trigger();
-                        event_loop.exit();
+                        el.exit();
                         return;
-                    }
-                    if let Phase::RdpSession(ref state) = self.phase {
-                        state.window.window.request_redraw();
                     }
                 }
             }
         }
 
-        // ── RDP updates ──
-        if let Phase::RdpSession(ref mut state) = self.phase {
+        // Process RDP updates
+        if let Some(ref mut state) = self.rdp {
             while let Ok(message) = state.update_rx.try_recv() {
                 match handle_rdp_message(state, message) {
                     session::RdpActionResult::Continue if !state.is_rail => {
@@ -697,21 +686,20 @@ impl ApplicationHandler for AppHandler {
                     session::RdpActionResult::Disconnect => {
                         self.stop.trigger();
                         self.return_code = ReturnCode::Exit;
-                        self.processing_events.store(false, Ordering::Relaxed);
-                        event_loop.exit();
+                        self.close_rdp();
+                        el.exit();
                         return;
                     }
-                    session::RdpActionResult::Error(_err) => {
+                    session::RdpActionResult::Error(_) => {
                         self.stop.trigger();
                         self.return_code = ReturnCode::Exit;
-                        self.processing_events.store(false, Ordering::Relaxed);
-                        event_loop.exit();
+                        self.close_rdp();
+                        el.exit();
                         return;
                     }
                     _ => {}
                 }
             }
-
             while let Ok(raw_key) = state.keys_rx.try_recv() {
                 if let Some(sc) = keymap::RdpScanCode::get_from_key(Some(&raw_key.keycode)) {
                     let _ = state.command_tx.send(rdp::commands::RdpCommand::Input(
@@ -725,12 +713,19 @@ impl ApplicationHandler for AppHandler {
                     }
                 }
             }
-
             state.fps.record();
+        }
+
+        // Redraw popup if visible
+        if let Some(ref p) = self.popup {
+            p.window.request_redraw();
+        }
+        if let Some(ref a) = self.about {
+            a.window().request_redraw();
         }
     }
 
-    fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
+    fn exiting(&mut self, _el: &ActiveEventLoop) {
         self.stop.trigger();
     }
 }

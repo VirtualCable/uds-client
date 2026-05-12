@@ -17,6 +17,7 @@ use rdp::settings::RdpSettings;
 use shared::log;
 
 use crate::RawKey;
+use crate::monitor;
 
 const FRAMES_IN_FLIGHT: usize = 128;
 
@@ -66,6 +67,9 @@ pub struct RdpState {
     pub last_resize: std::time::Instant,
     pub pending_resize: bool,
     pub pinbar_visible: bool,
+    pub pinbar_rect: Option<(u32, u32)>,
+    pub pinbar_btn_fs_x: std::ops::Range<f32>,
+    pub pinbar_btn_close_x: std::ops::Range<f32>,
     pub keys_rx: Receiver<RawKey>,
     pub fps: Fps,
 
@@ -87,7 +91,7 @@ pub struct RdpState {
 #[allow(dead_code)]
 pub struct Fps {
     pub last_instant: std::time::Instant,
-    frames: Vec<f32>,
+    frames: Vec<std::time::Instant>,
     pub enabled: AtomicBool,
 }
 
@@ -100,24 +104,24 @@ impl Fps {
         }
     }
     pub fn record(&mut self) {
-        let delta = self.last_instant.elapsed().as_secs_f32();
-        self.last_instant = std::time::Instant::now();
-        self.frames.push(delta);
-        if self.frames.len() > 128 {
-            self.frames.remove(0);
-        }
+        let now = std::time::Instant::now();
+        // Discard frames older than 2 seconds
+        self.frames
+            .retain(|t| now.duration_since(*t).as_secs_f32() < 2.0);
+        self.frames.push(now);
     }
     pub fn toggle(&self) {
         let v = self.enabled.load(Ordering::Relaxed);
         self.enabled.store(!v, Ordering::Relaxed);
     }
     pub fn average(&self) -> f32 {
-        let count = self.frames.len();
-        if count < 2 {
-            return 0.0;
-        }
-        let sum: f32 = self.frames.iter().sum();
-        sum / count as f32
+        let now = std::time::Instant::now();
+        let recent: Vec<_> = self
+            .frames
+            .iter()
+            .filter(|t| now.duration_since(**t).as_secs_f32() < 1.0)
+            .collect();
+        recent.len() as f32
     }
 }
 
@@ -212,6 +216,9 @@ impl RdpState {
                 .unwrap_or(std::time::Instant::now()),
             pending_resize: false,
             pinbar_visible: false,
+            pinbar_rect: None,
+            pinbar_btn_fs_x: 0.0..0.0,
+            pinbar_btn_close_x: 0.0..0.0,
             keys_rx,
             fps: Fps::new(),
             rail: None,
@@ -280,48 +287,128 @@ impl RdpState {
             }
         } // lock dropped
 
-        // Build overlays: cursor, FPS, pinbar
+        // Build overlays: glass backgrounds
         let mut overlays: Vec<crate::wgpu_render::OverlayParams> = Vec::new();
 
-        if self.cursor_visible && !self.cursor_data.is_empty() {
-            let sf = self.scale_factor as f32;
-            overlays.push(crate::wgpu_render::OverlayParams {
+        // Cursor overlay (drawn on top of everything)
+        let cursor_overlay = if self.cursor_visible && !self.cursor_data.is_empty() {
+            let sf = self.scale_factor;
+            let (hot_x, hot_y) =
+                monitor::logic_2_phys_pos((self.cursor_hot_x as i32, self.cursor_hot_y as i32), sf);
+            Some(crate::wgpu_render::OverlayParams {
                 rgba: self.cursor_data.as_slice(),
                 width: self.cursor_w,
                 height: self.cursor_h,
-                x: self.cursor_x - self.cursor_hot_x as f32 * sf,
-                y: self.cursor_y - self.cursor_hot_y as f32 * sf,
-                scale: sf,
-            });
-        }
+                x: self.cursor_x - hot_x as f32,
+                y: self.cursor_y - hot_y as f32,
+                scale: sf as f32,
+            })
+        } else {
+            None
+        };
 
-        // Build text sections for FPS + pinbar
+        // Build text sections + backgrounds for FPS + pinbar
         let mut text_sections: Vec<crate::wgpu_render::OwnedSection> = Vec::new();
         let phys = self.window.window.inner_size();
+        let mut _ov_data: Vec<Vec<u8>> = Vec::new();
+        struct OvDesc {
+            data_idx: usize,
+            w: u32,
+            h: u32,
+            x: f32,
+            y: f32,
+            scale: f32,
+        }
+        let mut ov_descs: Vec<OvDesc> = Vec::new();
 
         if self.fps.enabled.load(Ordering::Relaxed) {
-            let fps_text = format!("FPS: {:.1}", self.fps.average());
-            let section = crate::wgpu_render::Section::default()
-                .add_text(
-                    crate::wgpu_render::Text::new(&fps_text)
-                        .with_scale(14.0)
-                        .with_color([1.0, 1.0, 1.0, 1.0]),
-                )
-                .with_screen_position(((phys.width - 100) as f32, 8.0))
-                .to_owned();
-            text_sections.push(section);
+            let fps_bg = include_bytes!("images/fps.png");
+            let (bg_rgba, bw, bh) = crate::draw::load_png_rgba(fps_bg);
+            // PNG at 2x → physical at monitor scale: (w/2)*scale, (h/2)*scale
+            let bg_w = monitor::scaled_val((bw as i32 / 2).max(1)) as u32;
+            let _bg_h = monitor::scaled_val((bh as i32 / 2).max(1)) as u32;
+            let margin = monitor::scaled_val(8) as u32;
+            let x = phys.width.saturating_sub(bg_w + margin) as f32;
+            let y = margin as f32;
+            let idx = _ov_data.len();
+            _ov_data.push(bg_rgba);
+            let scale = bg_w as f32 / bw as f32;
+            ov_descs.push(OvDesc {
+                data_idx: idx,
+                w: bw,
+                h: bh,
+                x,
+                y,
+                scale,
+            });
+            // FPS value at (26, 4) in 1x coords (PNG 52/2, 8/2)
+            let fps_text = format!("{:.0}", self.fps.average());
+            let font_size = monitor::scaled_val(12) as f32;
+            text_sections.push(
+                crate::wgpu_render::Section::default()
+                    .add_text(
+                        crate::wgpu_render::Text::new(&fps_text)
+                            .with_scale(font_size)
+                            .with_color([1.0, 1.0, 1.0, 1.0]),
+                    )
+                    .with_screen_position((
+                        x + monitor::scaled_val(26) as f32,
+                        y + monitor::scaled_val(4) as f32,
+                    ))
+                    .to_owned(),
+            );
         }
 
         if self.pinbar_visible {
-            let section = crate::wgpu_render::Section::default()
-                .add_text(
-                    crate::wgpu_render::Text::new("UDS Connection      [ \u{2B1C} ]  [ X ]")
-                        .with_scale(14.0)
-                        .with_color([1.0, 1.0, 1.0, 1.0]),
-                )
-                .with_screen_position(((phys.width / 2) as f32 - 100.0, 4.0))
-                .to_owned();
-            text_sections.push(section);
+            let pinbar_bg = include_bytes!("images/pinbar.png");
+            let (bg_rgba, bw, bh) = crate::draw::load_png_rgba(pinbar_bg);
+            let bg_w = monitor::scaled_val(bw as i32) as u32;
+            let bg_h = monitor::scaled_val(bh as i32) as u32;
+            let x = (phys.width.saturating_sub(bg_w) / 2) as f32;
+            let idx = _ov_data.len();
+            _ov_data.push(bg_rgba);
+            let scale = *monitor::SCALE_FACTOR as f32;
+            ov_descs.push(OvDesc {
+                data_idx: idx,
+                w: bw,
+                h: bh,
+                x,
+                y: 0.0,
+                scale,
+            });
+            // Label at (8, 8)
+            let font_size = monitor::scaled_val(16) as f32;
+            text_sections.push(
+                crate::wgpu_render::Section::default()
+                    .add_text(
+                        crate::wgpu_render::Text::new("UDS Connection")
+                            .with_scale(font_size)
+                            .with_color([1.0, 1.0, 1.0, 1.0]),
+                    )
+                    .with_screen_position((
+                        x + monitor::scaled_val(8) as f32,
+                        monitor::scaled_val(8) as f32,
+                    ))
+                    .to_owned(),
+            );
+            // Click areas from PNG coords: fs=(220,8)-(239,28), close=(243,8)-(262,28)
+            self.pinbar_btn_fs_x =
+                (x + monitor::scaled_val(220) as f32)..(x + monitor::scaled_val(239) as f32);
+            self.pinbar_btn_close_x =
+                (x + monitor::scaled_val(243) as f32)..(x + monitor::scaled_val(262) as f32);
+            self.pinbar_rect = Some((bg_w, bg_h));
+        }
+
+        // Phase 2: build overlays from stable data
+        for d in &ov_descs {
+            overlays.push(crate::wgpu_render::OverlayParams {
+                rgba: &_ov_data[d.data_idx],
+                width: d.w,
+                height: d.h,
+                x: d.x,
+                y: d.y,
+                scale: d.scale,
+            });
         }
 
         self.window.renderer.update_and_render(
@@ -330,6 +417,7 @@ impl RdpState {
             fb_h as u32,
             &overlays,
             &text_sections,
+            cursor_overlay.as_ref(),
         );
 
         Ok(())
@@ -344,8 +432,10 @@ impl RdpState {
         }
         let phys = self.window.window.inner_size();
         let sf = self.scale_factor.max(1.0);
-        let rdp_w = ((phys.width as f64 / sf) as u32).max(1) & !3;
-        let rdp_h = ((phys.height as f64 / sf) as u32).max(1) & !3;
+        let (rdp_w_raw, rdp_h_raw) =
+            monitor::phys_2_logic((phys.width as i32, phys.height as i32), sf);
+        let rdp_w = (rdp_w_raw as u32).max(1) & !3;
+        let rdp_h = (rdp_h_raw as u32).max(1) & !3;
 
         log::info!(
             "request_screen_resize: phys={}x{} → rdp={rdp_w}x{rdp_h} (scale={sf})",

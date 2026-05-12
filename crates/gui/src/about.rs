@@ -1,3 +1,4 @@
+use crate::monitor;
 // BSD 3-Clause License, Authors: Adolfo Gómez
 use crate::wgpu_render::{OverlayParams, WgpuRenderer};
 use anyhow::Result;
@@ -24,7 +25,8 @@ const ABOUT_LINES: &[&str] = &[
     "for any damages arising from the use of this software.",
 ];
 
-struct AboutState {
+pub struct AboutState {
+    window: Arc<Window>,
     renderer: WgpuRenderer,
     logo: crate::logo::LogoImage,
     start: Instant,
@@ -35,7 +37,7 @@ struct AboutState {
 }
 
 impl AboutState {
-    fn new(event_loop: &ActiveEventLoop) -> Result<Self> {
+    pub fn new(event_loop: &ActiveEventLoop) -> Result<Self> {
         let window = Arc::new(
             event_loop.create_window(
                 Window::default_attributes()
@@ -45,10 +47,11 @@ impl AboutState {
             )?,
         );
         let phys = window.inner_size();
-        let scale = window.scale_factor() as f32;
-        let renderer = WgpuRenderer::new(window, phys.width, phys.height)?;
+        let scale = *monitor::SCALE_FACTOR as f32;
+        let renderer = WgpuRenderer::new(window.clone(), phys.width, phys.height)?;
         let logo = crate::logo::load_logo();
         Ok(AboutState {
+            window,
             renderer,
             logo,
             start: Instant::now(),
@@ -59,7 +62,11 @@ impl AboutState {
         })
     }
 
-    fn paint(&mut self) {
+    pub fn window(&self) -> &Arc<Window> {
+        &self.window
+    }
+
+    pub fn paint(&mut self) {
         self.angle = (self.start.elapsed().as_secs_f32() * std::f32::consts::PI).sin() * 0.3;
         let s = self.scale;
         let pw = self.phys_w;
@@ -83,7 +90,7 @@ impl AboutState {
                 Section::default()
                     .add_text(
                         Text::new(line)
-                            .with_scale(14.0 * s)
+                            .with_scale(monitor::scaled_val(14) as f32)
                             .with_color([0.75, 0.75, 0.88, 1.0]),
                     )
                     .with_screen_position(((pw as f32 - line.len() as f32 * 8.0 * s) / 2.0, y))
@@ -91,8 +98,8 @@ impl AboutState {
             );
         }
         let close_y = base_y + ABOUT_LINES.len() as f32 * 22.0 * s + 20.0 * s;
-        let bw = (80.0 * s) as u32;
-        let bh = (35.0 * s) as u32;
+        let bw = monitor::scaled_val(80) as u32;
+        let bh = monitor::scaled_val(35) as u32;
         let mut btn = Vec::with_capacity((bw * bh * 4) as usize);
         for _ in 0..bw * bh {
             btn.extend_from_slice(&[0x50, 0x50, 0x70, 0xFF]);
@@ -109,7 +116,7 @@ impl AboutState {
             Section::default()
                 .add_text(
                     Text::new("Close")
-                        .with_scale(14.0 * s)
+                        .with_scale(monitor::scaled_val(14) as f32)
                         .with_color([1.0, 1.0, 1.0, 1.0]),
                 )
                 .with_screen_position(((pw as f32 - 40.0 * s) / 2.0, close_y + 8.0 * s))
@@ -117,7 +124,7 @@ impl AboutState {
         );
         let overlays = vec![ov, ovb];
         self.renderer
-            .update_and_render(&[], pw, ph, &overlays, &sections);
+            .update_and_render(&[], pw, ph, &overlays, &sections, None);
     }
 }
 
@@ -133,13 +140,11 @@ pub fn show_about_window() {
     let mut state: Option<AboutState> = None;
     let _ = event_loop.run_app(&mut AboutHandler {
         state: &mut state,
-        last_frame: Instant::now(),
     });
 }
 
 struct AboutHandler<'a> {
     state: &'a mut Option<AboutState>,
-    last_frame: Instant,
 }
 
 impl ApplicationHandler for AboutHandler<'_> {
@@ -175,13 +180,7 @@ impl ApplicationHandler for AboutHandler<'_> {
     }
     fn about_to_wait(&mut self, _: &ActiveEventLoop) {
         if let Some(s) = self.state.as_ref() {
-            s.renderer.window().request_redraw();
+            s.window.request_redraw();
         }
-    }
-}
-
-impl WgpuRenderer {
-    fn window(&self) -> &Arc<winit::window::Window> {
-        &self._window
     }
 }

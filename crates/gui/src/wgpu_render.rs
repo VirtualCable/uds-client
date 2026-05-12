@@ -258,6 +258,7 @@ impl WgpuRenderer {
         sh: u32,
         overlays: &[OverlayParams],
         sections: &[OwnedSection],
+        cursor: Option<&OverlayParams>,
     ) {
         if sw == 0 || sh == 0 {
             return;
@@ -454,6 +455,91 @@ impl WgpuRenderer {
                 rp.draw(0..4, 0..1);
             }
             self.text_brush.draw(&mut rp);
+
+            // Cursor on top
+            if let Some(cur) = cursor
+                && !cur.rgba.is_empty()
+                && cur.width > 0
+                && cur.height > 0
+            {
+                let key = (cur.width, cur.height);
+                let (tex, texv) = if let Some(c) = self.overlay_cache.get(&key) {
+                    (&c.0, &c.1)
+                } else {
+                    let t = self.device.create_texture(&wgpu::TextureDescriptor {
+                        label: Some("cur_tex"),
+                        size: wgpu::Extent3d {
+                            width: cur.width,
+                            height: cur.height,
+                            depth_or_array_layers: 1,
+                        },
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                        view_formats: &[],
+                    });
+                    let v = t.create_view(&wgpu::TextureViewDescriptor::default());
+                    self.overlay_cache.insert(key, (t, v));
+                    let e = self.overlay_cache.get(&key).unwrap();
+                    (&e.0, &e.1)
+                };
+                self.queue.write_texture(
+                    wgpu::TexelCopyTextureInfo {
+                        texture: tex,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    cur.rgba,
+                    wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(cur.width * 4),
+                        rows_per_image: Some(cur.height),
+                    },
+                    wgpu::Extent3d {
+                        width: cur.width,
+                        height: cur.height,
+                        depth_or_array_layers: 1,
+                    },
+                );
+                let u = OverlayUniforms {
+                    pos: [cur.x, cur.y],
+                    size: [cur.width as f32, cur.height as f32],
+                    scale: cur.scale,
+                    _pad: 0.0,
+                    screen: [pw as f32, ph as f32],
+                };
+                let ub = self.device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("cur_ub"),
+                    size: std::mem::size_of::<OverlayUniforms>() as u64,
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                });
+                self.queue.write_buffer(&ub, 0, bytemuck::bytes_of(&u));
+                let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("cur_bg"),
+                    layout: &self.overlay_bgl,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::Buffer(ub.as_entire_buffer_binding()),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::TextureView(texv),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: wgpu::BindingResource::Sampler(&self.overlay_sampler),
+                        },
+                    ],
+                });
+                rp.set_pipeline(&self.overlay_pipeline);
+                rp.set_bind_group(0, &bg, &[]);
+                rp.draw(0..4, 0..1);
+            }
         }
         self.queue.submit(std::iter::once(enc.finish()));
         output.present();

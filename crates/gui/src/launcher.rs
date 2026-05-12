@@ -1,3 +1,4 @@
+use crate::monitor;
 // BSD 3-Clause License, Authors: Adolfo Gómez
 use crate::wgpu_render::{OverlayParams, WgpuRenderer};
 use std::sync::{Arc, RwLock};
@@ -106,16 +107,6 @@ pub struct LauncherState {
     pub inner: LauncherInner,
     pub last_mouse_pos: Option<(f32, f32)>,
 }
-impl LauncherState {
-    pub fn new() -> Self {
-        LauncherState {
-            window: None,
-            renderer: None,
-            inner: LauncherInner::Invisible,
-            last_mouse_pos: None,
-        }
-    }
-}
 
 fn rect_rgba(w: u32, h: u32, r: u8, g: u8, b: u8, a: u8) -> Vec<u8> {
     let mut v = Vec::with_capacity((w * h * 4) as usize);
@@ -138,11 +129,7 @@ pub fn paint_launcher(state: &mut LauncherState) {
         .unwrap_or(winit::dpi::PhysicalSize::new(400, 300));
     let pw = phys.width;
     let ph = phys.height;
-    let s = state
-        .window
-        .as_ref()
-        .map(|w| w.scale_factor() as f32)
-        .unwrap_or(1.0);
+    let s = *monitor::SCALE_FACTOR as f32;
     let white = [1.0f32, 1.0, 1.0, 1.0];
     let warn = [1.0, 0.5, 0.5, 1.0];
     let mut sections: Vec<OwnedSection> = Vec::new();
@@ -178,7 +165,7 @@ pub fn paint_launcher(state: &mut LauncherState) {
                 Section::default()
                     .add_text(
                         Text::new(&format!("{}%", pct))
-                            .with_scale(16.0 * s)
+                            .with_scale(monitor::scaled_val(16) as f32)
                             .with_color(white),
                     )
                     .with_screen_position((pw as f32 / 2.0 - 40.0 * s, 200.0 * s))
@@ -188,14 +175,14 @@ pub fn paint_launcher(state: &mut LauncherState) {
                 Section::default()
                     .add_text(
                         Text::new(message.as_str())
-                            .with_scale(11.0 * s)
+                            .with_scale(monitor::scaled_val(11) as f32)
                             .with_color([0.8, 0.8, 1.0, 1.0]),
                     )
                     .with_screen_position((40.0 * s, 220.0 * s))
                     .to_owned(),
             );
-            let bw = (320.0 * s) as u32;
-            let bh = (18.0 * s) as u32;
+            let bw = monitor::scaled_val(320) as u32;
+            let bh = monitor::scaled_val(18) as u32;
             let fw = ((*pct as f32 / 100.0) * bw as f32) as u32;
             if fw > 0 {
                 let i = data.len();
@@ -228,7 +215,11 @@ pub fn paint_launcher(state: &mut LauncherState) {
             };
             sections.push(
                 Section::default()
-                    .add_text(Text::new(title).with_scale(14.0 * s).with_color(warn))
+                    .add_text(
+                        Text::new(title)
+                            .with_scale(monitor::scaled_val(14) as f32)
+                            .with_color(warn),
+                    )
                     .with_screen_position((140.0 * s, 50.0 * s))
                     .to_owned(),
             );
@@ -236,7 +227,7 @@ pub fn paint_launcher(state: &mut LauncherState) {
                 Section::default()
                     .add_text(
                         Text::new(msg.as_str())
-                            .with_scale(12.0 * s)
+                            .with_scale(monitor::scaled_val(12) as f32)
                             .with_color(white),
                     )
                     .with_screen_position((20.0 * s, 100.0 * s))
@@ -244,8 +235,8 @@ pub fn paint_launcher(state: &mut LauncherState) {
             );
             let i = data.len();
             data.push(rect_rgba(
-                (100.0 * s) as u32,
-                (35.0 * s) as u32,
+                monitor::scaled_val(100) as u32,
+                monitor::scaled_val(35) as u32,
                 0x50,
                 0x50,
                 0x70,
@@ -253,15 +244,19 @@ pub fn paint_launcher(state: &mut LauncherState) {
             ));
             ov_descs.push(OvDesc {
                 data_idx: i,
-                w: (100.0 * s) as u32,
-                h: (35.0 * s) as u32,
+                w: monitor::scaled_val(100) as u32,
+                h: monitor::scaled_val(35) as u32,
                 x: 150.0 * s,
                 y: 235.0 * s,
                 scale: 1.0,
             });
             sections.push(
                 Section::default()
-                    .add_text(Text::new("OK").with_scale(14.0 * s).with_color(white))
+                    .add_text(
+                        Text::new("OK")
+                            .with_scale(monitor::scaled_val(14) as f32)
+                            .with_color(white),
+                    )
                     .with_screen_position((180.0 * s, 240.0 * s))
                     .to_owned(),
             );
@@ -271,7 +266,7 @@ pub fn paint_launcher(state: &mut LauncherState) {
                 Section::default()
                     .add_text(
                         Text::new(message.as_str())
-                            .with_scale(12.0 * s)
+                            .with_scale(monitor::scaled_val(12) as f32)
                             .with_color(white),
                     )
                     .with_screen_position((20.0 * s, 80.0 * s))
@@ -279,8 +274,8 @@ pub fn paint_launcher(state: &mut LauncherState) {
             );
             let i = data.len();
             data.push(rect_rgba(
-                (80.0 * s) as u32,
-                (35.0 * s) as u32,
+                monitor::scaled_val(80) as u32,
+                monitor::scaled_val(35) as u32,
                 0x50,
                 0x50,
                 0x70,
@@ -288,16 +283,16 @@ pub fn paint_launcher(state: &mut LauncherState) {
             ));
             ov_descs.push(OvDesc {
                 data_idx: i,
-                w: (80.0 * s) as u32,
-                h: (35.0 * s) as u32,
+                w: monitor::scaled_val(80) as u32,
+                h: monitor::scaled_val(35) as u32,
                 x: 100.0 * s,
                 y: 235.0 * s,
                 scale: 1.0,
             });
             let i = data.len();
             data.push(rect_rgba(
-                (80.0 * s) as u32,
-                (35.0 * s) as u32,
+                monitor::scaled_val(80) as u32,
+                monitor::scaled_val(35) as u32,
                 0x50,
                 0x50,
                 0x70,
@@ -305,29 +300,37 @@ pub fn paint_launcher(state: &mut LauncherState) {
             ));
             ov_descs.push(OvDesc {
                 data_idx: i,
-                w: (80.0 * s) as u32,
-                h: (35.0 * s) as u32,
+                w: monitor::scaled_val(80) as u32,
+                h: monitor::scaled_val(35) as u32,
                 x: 220.0 * s,
                 y: 235.0 * s,
                 scale: 1.0,
             });
             sections.push(
                 Section::default()
-                    .add_text(Text::new("Yes").with_scale(14.0 * s).with_color(white))
+                    .add_text(
+                        Text::new("Yes")
+                            .with_scale(monitor::scaled_val(14) as f32)
+                            .with_color(white),
+                    )
                     .with_screen_position((120.0 * s, 240.0 * s))
                     .to_owned(),
             );
             sections.push(
                 Section::default()
-                    .add_text(Text::new("No").with_scale(14.0 * s).with_color(white))
+                    .add_text(
+                        Text::new("No")
+                            .with_scale(monitor::scaled_val(14) as f32)
+                            .with_color(white),
+                    )
                     .with_screen_position((240.0 * s, 240.0 * s))
                     .to_owned(),
             );
         }
     }
     if let LauncherInner::Test { buttons, .. } = &state.inner {
-        let bh = (28.0 * s) as u32;
-        let bw = (260.0 * s) as u32;
+        let bh = monitor::scaled_val(28) as u32;
+        let bw = monitor::scaled_val(260) as u32;
         let sy = 42.0 * s;
         let bx = 70.0 * s;
         for (i, (label, _)) in buttons.iter().enumerate() {
@@ -344,7 +347,11 @@ pub fn paint_launcher(state: &mut LauncherState) {
             });
             sections.push(
                 Section::default()
-                    .add_text(Text::new(label).with_scale(14.0 * s).with_color(white))
+                    .add_text(
+                        Text::new(label)
+                            .with_scale(monitor::scaled_val(14) as f32)
+                            .with_color(white),
+                    )
                     .with_screen_position((bx + 8.0 * s, y + 4.0 * s))
                     .to_owned(),
             );
@@ -364,5 +371,5 @@ pub fn paint_launcher(state: &mut LauncherState) {
         });
     }
 
-    renderer.update_and_render(&[], pw, ph, &overlays, &sections);
+    renderer.update_and_render(&[], pw, ph, &overlays, &sections, None);
 }

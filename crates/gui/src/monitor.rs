@@ -65,12 +65,23 @@ pub fn scale(index: usize) -> f64 {
 /// Cached scale factor from monitor 0. Populated after `populate()` is called.
 pub static SCALE_FACTOR: LazyLock<f64> = LazyLock::new(|| scale(0));
 
-/// Convert logical (GDI) pixels to physical (screen) pixels using cached scale factor.
-pub fn logical_to_physical(logical: u32) -> u32 {
-    (logical as f64 * *SCALE_FACTOR).round() as u32
+/// DPI-scaled integer value (logical → physical using cached scale factor).
+pub fn scaled_val(val: i32) -> i32 {
+    (val as f64 * *SCALE_FACTOR).round() as i32
 }
 
-/// Convert physical (screen) pixels to logical (GDI) pixels using cached scale factor.
-pub fn physical_to_logical(physical: u32) -> u32 {
-    (physical as f64 / *SCALE_FACTOR).round() as u32
+/// Convert logical (GDI) pixel pair to physical (screen) pixels.
+pub fn logic_2_phys_pos(logical: (i32, i32), sf: f64) -> (i32, i32) {
+    (
+        (logical.0 as f64 * sf).round() as i32,
+        (logical.1 as f64 * sf).round() as i32,
+    )
+}
+
+/// Convert physical (screen) pixel pair to logical (GDI) pixels.
+pub fn phys_2_logic(physical: (i32, i32), sf: f64) -> (i32, i32) {
+    (
+        (physical.0 as f64 / sf).round() as i32,
+        (physical.1 as f64 / sf).round() as i32,
+    )
 }
