@@ -150,14 +150,17 @@ impl Rdp {
                         FreeRDP_Settings_Keys_UInt32_FreeRDP_OffscreenSupportLevel,
                         1,
                     ),
+                    // Between 100 and 500
                     (FreeRDP_Settings_Keys_UInt32_FreeRDP_FrameAcknowledge, 0),
                     (
                         FreeRDP_Settings_Keys_UInt32_FreeRDP_DesktopScaleFactor,
                         (self.config.settings.scale_factor * 100.0) as u32,
                     ),
+                    // 100% device = use desktop scale factor
+                    // DeviceScaleFactor only allows 100, 140 y 180.. O.o
                     (
                         FreeRDP_Settings_Keys_UInt32_FreeRDP_DeviceScaleFactor,
-                        (self.config.settings.scale_factor * 100.0) as u32,
+                        100,
                     ),
                 ]
                 .iter()

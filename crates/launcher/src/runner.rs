@@ -35,7 +35,7 @@ use flume::Sender;
 use tokio::sync::oneshot;
 
 use connection::{broker::api, consts, tasks};
-use gui::window::types::GuiMessage;
+use gui::types::GuiMessage;
 use shared::{appdata, log};
 
 async fn approve_host(

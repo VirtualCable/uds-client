@@ -96,8 +96,8 @@ fn main() {
 
     let stop = Trigger::new();
     let (messages_tx, messages_rx): (
-        Sender<gui::window::types::GuiMessage>,
-        Receiver<gui::window::types::GuiMessage>,
+        Sender<gui::types::GuiMessage>,
+        Receiver<gui::types::GuiMessage>,
     ) = bounded(32);
 
     js::gui::set_sender(messages_tx.clone());

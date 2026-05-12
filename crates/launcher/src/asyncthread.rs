@@ -31,7 +31,7 @@
 use flume::Sender;
 use shared::system::trigger::Trigger;
 
-use gui::window::types::GuiMessage;
+use gui::types::GuiMessage;
 use shared::log;
 
 use crate::runner;

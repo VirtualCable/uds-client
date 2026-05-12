@@ -216,8 +216,8 @@ mod tests {
     async fn test_init_ctx() -> Result<()> {
         log::setup_logging("debug", log::LogType::Test);
         let (messages_tx, messages_rx): (
-            Sender<gui::window::types::GuiMessage>,
-            Receiver<gui::window::types::GuiMessage>,
+            Sender<gui::types::GuiMessage>,
+            Receiver<gui::types::GuiMessage>,
         ) = bounded(32);
 
         crate::gui::set_sender(messages_tx);
@@ -280,8 +280,8 @@ mod tests {
     async fn test_defaults() -> Result<()> {
         log::setup_logging("debug", log::LogType::Test);
         let (messages_tx, messages_rx): (
-            Sender<gui::window::types::GuiMessage>,
-            Receiver<gui::window::types::GuiMessage>,
+            Sender<gui::types::GuiMessage>,
+            Receiver<gui::types::GuiMessage>,
         ) = bounded(32);
 
         crate::gui::set_sender(messages_tx);

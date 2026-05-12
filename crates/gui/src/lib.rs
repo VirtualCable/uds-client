@@ -23,7 +23,6 @@ pub mod logo;
 mod monitor;
 mod popup;
 pub mod types;
-pub mod window;
 
 mod draw;
 mod launcher;
@@ -236,7 +235,7 @@ impl AppHandler {
                 rdp_window,
                 settings,
                 false,
-                monitor_scale,
+                1.0,  // Fixed, scale managed locally
                 (rdp_w, rdp_h),
                 self.keys_rx.clone(),
                 use_rgba,
@@ -586,25 +585,18 @@ impl AppHandler {
 
 impl AppHandler {
     fn handle_rail_redraw(&mut self, rail_id: u32) {
-        if let Some(ref mut state) = self.rdp {
-            if let Some(rw) = state.rail_windows.get_mut(&rail_id) {
-                // Force position every frame to prevent Windows cascading offset
-                let sf = state.scale_factor.max(1.0);
-                let _ = rw.window.set_outer_position(winit::dpi::PhysicalPosition::new(
+        if let Some(ref mut state) = self.rdp
+            && let Some(rw) = state.rail_windows.get_mut(&rail_id)
+        {
+            // Force position every frame to prevent Windows cascading offset
+            let sf = state.scale_factor.max(1.0);
+            rw.window
+                .set_outer_position(winit::dpi::PhysicalPosition::new(
                     (rw.rect.x as f64 * sf) as i32,
                     (rw.rect.y as f64 * sf) as i32,
                 ));
-                if let (Some(rgba), Some(ref mut renderer)) = (&rw.rgba_data, rw.renderer.as_mut())
-                {
-                    let _ = renderer.update_and_render(
-                        rgba.as_slice(),
-                        rw.width,
-                        rw.height,
-                        &[],
-                        &[],
-                        None,
-                    );
-                }
+            if let (Some(rgba), Some(ref mut renderer)) = (&rw.rgba_data, rw.renderer.as_mut()) {
+                renderer.update_and_render(rgba.as_slice(), rw.width, rw.height, &[], &[], None);
             }
         }
     }
@@ -640,7 +632,11 @@ impl AppHandler {
                 }
             }
             WindowEvent::CursorMoved { ref position, .. } => {
-                shared::log::trace!("RAIL[{rail_id}] CursorMoved({:.0},{:.0})", position.x, position.y);
+                shared::log::trace!(
+                    "RAIL[{rail_id}] CursorMoved({:.0},{:.0})",
+                    position.x,
+                    position.y
+                );
                 self.last_pointer = Some(*position);
                 if let Some(rw) = state.rail_windows.get(&rail_id) {
                     let sf = state.scale_factor;
@@ -663,46 +659,55 @@ impl AppHandler {
             WindowEvent::CursorLeft { .. } => {
                 // Do NOT synthesize release — Windows SetCapture will deliver
                 // the real MouseInput release even when cursor is outside.
-                shared::log::debug!("RAIL[{rail_id}] CursorLeft (button_down={})", self.rail_button_down.is_some());
+                shared::log::debug!(
+                    "RAIL[{rail_id}] CursorLeft (button_down={})",
+                    self.rail_button_down.is_some()
+                );
             }
             WindowEvent::MouseInput {
                 button, state: btn, ..
             } => {
-                shared::log::debug!("RAIL[{rail_id}] MouseInput({button:?} pressed={})", btn.is_pressed());
+                shared::log::debug!(
+                    "RAIL[{rail_id}] MouseInput({button:?} pressed={})",
+                    btn.is_pressed()
+                );
                 if btn.is_pressed()
-                    && state.rail_windows.get(&rail_id).is_some_and(|rw| rw.show_in_taskbar)
+                    && state
+                        .rail_windows
+                        .get(&rail_id)
+                        .is_some_and(|rw| rw.show_in_taskbar)
                 {
                     rail_channel.send_activate(rail_id, true);
                 }
-                if let Some(pos) = self.last_pointer {
-                    if let Some(rw) = state.rail_windows.get(&rail_id) {
-                        let bm = match button {
-                            winit::event::MouseButton::Left => rdp::sys::PTR_FLAGS_BUTTON1,
-                            winit::event::MouseButton::Right => rdp::sys::PTR_FLAGS_BUTTON2,
-                            winit::event::MouseButton::Middle => rdp::sys::PTR_FLAGS_BUTTON3,
-                            _ => return,
-                        } as u16;
-                        let f = bm
-                            | if btn.is_pressed() {
-                                rdp::sys::PTR_FLAGS_DOWN as u16
-                            } else {
-                                0
-                            };
-                        let sf = state.scale_factor;
-                        let dw = state.desktop_size.0.saturating_sub(1) as f64;
-                        let dh = state.desktop_size.1.saturating_sub(1) as f64;
-                        let gx = (pos.x + rw.rect.x as f64 * sf).round().clamp(0.0, dw) as u16;
-                        let gy = (pos.y + rw.rect.y as f64 * sf).round().clamp(0.0, dh) as u16;
-                        let _ = cmd_tx.send(rdp::commands::RdpCommand::Input(
-                            rdp::commands::InputEvent::Mouse {
-                                flags: f,
-                                x: gx,
-                                y: gy,
-                            },
-                        ));
-                        unsafe {
-                            rdp::sys::SetEvent(cmd_ev.as_handle());
-                        }
+                if let Some(pos) = self.last_pointer
+                    && let Some(rw) = state.rail_windows.get(&rail_id)
+                {
+                    let bm = match button {
+                        winit::event::MouseButton::Left => rdp::sys::PTR_FLAGS_BUTTON1,
+                        winit::event::MouseButton::Right => rdp::sys::PTR_FLAGS_BUTTON2,
+                        winit::event::MouseButton::Middle => rdp::sys::PTR_FLAGS_BUTTON3,
+                        _ => return,
+                    } as u16;
+                    let f = bm
+                        | if btn.is_pressed() {
+                            rdp::sys::PTR_FLAGS_DOWN as u16
+                        } else {
+                            0
+                        };
+                    let sf = state.scale_factor;
+                    let dw = state.desktop_size.0.saturating_sub(1) as f64;
+                    let dh = state.desktop_size.1.saturating_sub(1) as f64;
+                    let gx = (pos.x + rw.rect.x as f64 * sf).round().clamp(0.0, dw) as u16;
+                    let gy = (pos.y + rw.rect.y as f64 * sf).round().clamp(0.0, dh) as u16;
+                    let _ = cmd_tx.send(rdp::commands::RdpCommand::Input(
+                        rdp::commands::InputEvent::Mouse {
+                            flags: f,
+                            x: gx,
+                            y: gy,
+                        },
+                    ));
+                    unsafe {
+                        rdp::sys::SetEvent(cmd_ev.as_handle());
                     }
                 }
             }
@@ -739,7 +744,7 @@ impl AppHandler {
                     let wid = window.id();
                     // Position window at server-specified coordinates
                     let sf = state.scale_factor.max(1.0);
-                    let _ = window.set_outer_position(winit::dpi::PhysicalPosition::new(
+                    window.set_outer_position(winit::dpi::PhysicalPosition::new(
                         (rect.x as f64 * sf) as i32,
                         (rect.y as f64 * sf) as i32,
                     ));
@@ -773,18 +778,25 @@ impl AppHandler {
                 }
                 RailAction::UpdatePosition(id, rect) => {
                     if let Some(rw) = state.rail_windows.get_mut(id) {
-                        shared::log::debug!("RAIL[{id}] UpdatePosition rect=({},{}) {}x{} button_down={}",
-                            rect.x, rect.y, rect.w, rect.h, self.rail_button_down.is_some());
+                        shared::log::debug!(
+                            "RAIL[{id}] UpdatePosition rect=({},{}) {}x{} button_down={}",
+                            rect.x,
+                            rect.y,
+                            rect.w,
+                            rect.h,
+                            self.rail_button_down.is_some()
+                        );
                         rw.rect = *rect;
                         let _ = rw.window.request_inner_size(winit::dpi::LogicalSize::new(
                             rect.w as f64,
                             rect.h as f64,
                         ));
                         let sf = state.scale_factor.max(1.0);
-                        let _ = rw.window.set_outer_position(winit::dpi::PhysicalPosition::new(
-                            (rect.x as f64 * sf) as i32,
-                            (rect.y as f64 * sf) as i32,
-                        ));
+                        rw.window
+                            .set_outer_position(winit::dpi::PhysicalPosition::new(
+                                (rect.x as f64 * sf) as i32,
+                                (rect.y as f64 * sf) as i32,
+                            ));
                     }
                 }
             }
@@ -1001,10 +1013,8 @@ impl ApplicationHandler<UserEvent> for AppHandler {
                     Some(WindowKind::Launcher) => {
                         self.handle_launcher_event(el, WindowEvent::RedrawRequested)
                     }
-                    Some(WindowKind::Rdp) => {
-                        if !self.rdp.as_ref().is_some_and(|s| s.is_rail) {
-                            let _ = self.rdp.as_mut().map(|s| s.update_screen());
-                        }
+                    Some(WindowKind::Rdp) if !self.rdp.as_ref().is_some_and(|s| s.is_rail) => {
+                        let _ = self.rdp.as_mut().map(|s| s.update_screen());
                     }
                     Some(&WindowKind::RdpRail(id)) => {
                         self.handle_rail_redraw(id);

@@ -37,15 +37,15 @@ fn main() {
     let fake_catalog = gettext::Catalog::empty(); // Empty catalog for now
     log::setup_logging("trace", log::LogType::Test);
     let (_messages_tx, messages_rx): (
-        Sender<gui::window::types::GuiMessage>,
-        Receiver<gui::window::types::GuiMessage>,
+        Sender<gui::types::GuiMessage>,
+        Receiver<gui::types::GuiMessage>,
     ) = bounded(32);
 
     let stop_trigger = Trigger::new();
 
     gui::run_gui(
         fake_catalog,
-        Some(gui::window::types::AppState::Test),
+        Some(gui::types::AppState::Test),
         messages_rx,
         stop_trigger.clone(),
         None,

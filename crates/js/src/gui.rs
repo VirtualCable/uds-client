@@ -33,7 +33,7 @@ use std::sync::{LazyLock, Mutex};
 
 use shared::log;
 
-pub use gui::window::types::GuiMessage;
+pub use gui::types::GuiMessage;
 
 // We need a Sender<GuiMessage> to be able to use any gui related functionality in JS
 // So ensure to register it
