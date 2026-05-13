@@ -45,6 +45,7 @@ pub struct RdpState {
     pub command_event: rdp_ffi::utils::SafeHandle,
     pub is_rail: bool,
     pub coords_scale: f64,
+    pub monitor_scale: f64,
     pub desktop_size: (u32, u32),
     pub full_screen: Arc<AtomicBool>,
     pub last_windowed_size: Option<(u32, u32)>,
@@ -60,6 +61,7 @@ pub struct RdpState {
     pub rail_windows: HashMap<u32, RailWindow>, // id → RailWindow
 
     pub cursor: Cursor,
+    pub pending_pixels: HashMap<u32, (u32, u32, Vec<u8>)>,
 }
 
 #[allow(dead_code)]
@@ -78,6 +80,7 @@ impl RdpState {
         is_rail: bool,
         coords_scale: f64,
         cursor_scale: f64,
+        monitor_scale: f64,
         desktop_size: (u32, u32),
         keys_rx: Receiver<RawKey>,
         use_rgba: bool,
@@ -147,6 +150,7 @@ impl RdpState {
             command_event,
             is_rail,
             coords_scale,
+            monitor_scale,
             desktop_size,
             full_screen: Arc::new(AtomicBool::new(false)),
             last_windowed_size: None,
@@ -165,6 +169,7 @@ impl RdpState {
             rail_actions: Vec::new(),
             rail_windows: HashMap::new(),
             cursor: Cursor::new(cursor_scale),
+            pending_pixels: HashMap::new(),
         })
     }
 }

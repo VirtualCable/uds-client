@@ -173,9 +173,9 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
             data,
         } => {
             if let Some(rw) = state.rail_windows.get_mut(&window_id) {
-                let sf = state.coords_scale.max(1.0);
-                let lw = ((width as f64 / sf) as u32).min(state.desktop_size.0);
-                let lh = ((height as f64 / sf) as u32).min(state.desktop_size.1);
+                let msf = state.monitor_scale.max(1.0);
+                let lw = ((width as f64 / msf) as u32).min(state.desktop_size.0);
+                let lh = ((height as f64 / msf) as u32).min(state.desktop_size.1);
                 if rw.rect.w != lw || rw.rect.h != lh {
                     rw.rect.w = lw;
                     rw.rect.h = lh;
@@ -191,6 +191,11 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                 rw.width = width;
                 rw.height = height;
                 rw.window.request_redraw();
+            } else {
+                // Window not created yet — buffer pixels for when RailAction::Create is processed
+                state
+                    .pending_pixels
+                    .insert(window_id, (width, height, data));
             }
             RdpActionResult::Continue
         }

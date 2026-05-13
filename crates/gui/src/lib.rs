@@ -115,8 +115,6 @@ pub fn run_gui(
     Ok(app.return_code)
 }
 
-// ── Window management ─────────────────────────────────────
-
 impl AppHandler {
     fn register_window(&mut self, wid: WindowId, kind: WindowKind) {
         self.windows.insert(wid, kind);
@@ -216,9 +214,10 @@ impl AppHandler {
                 rdp_window,
                 settings,
                 true,
-                monitor_scale,
+                coords_scale,
                 cursor_scale,
-                (desktop_w, desktop_h),
+                monitor_scale,
+                (rdp_w, rdp_h),
                 self.keys_rx.clone(),
                 use_rgba,
             )?;
@@ -251,6 +250,7 @@ impl AppHandler {
                 false,
                 coords_scale,
                 cursor_scale,
+                monitor_scale,
                 desktop_size,
                 self.keys_rx.clone(),
                 use_rgba,
@@ -376,8 +376,6 @@ impl AppHandler {
         }
     }
 }
-
-// ── Per‑window event handlers ─────────────────────────────
 
 impl AppHandler {
     fn handle_launcher_event(&mut self, el: &ActiveEventLoop, event: WindowEvent) {
@@ -801,15 +799,24 @@ impl AppHandler {
                     let window = Arc::new(window);
                     let renderer =
                         crate::wgpu_render::WgpuRenderer::new(window.clone(), rect.w, rect.h).ok();
+                    let (rgba_data, pw, ph) =
+                        if let Some((w, h, data)) = state.pending_pixels.remove(id) {
+                            (Some(data), w, h)
+                        } else {
+                            (None, rect.w, rect.h)
+                        };
+                    if rgba_data.is_some() {
+                        window.request_redraw();
+                    }
                     state.rail_windows.insert(
                         *id,
                         RailWindow {
                             id: *id,
                             window,
                             renderer,
-                            rgba_data: None,
-                            width: rect.w,
-                            height: rect.h,
+                            rgba_data,
+                            width: pw,
+                            height: ph,
                             rect: *rect,
                             title: String::new(),
                             show_in_taskbar: *taskbar,
