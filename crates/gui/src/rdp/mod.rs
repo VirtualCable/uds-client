@@ -7,15 +7,18 @@
 mod cursor;
 mod fps;
 mod pinbar;
+mod rail;
+mod session;
 
 pub use cursor::Cursor;
 pub use fps::Fps;
 pub use pinbar::Pinbar;
+pub use rail::{RailAction, RailState, RailWindow};
 
 use std::collections::HashMap;
 use std::sync::{
     Arc, RwLock,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool},
 };
 
 use anyhow::Result;
@@ -25,11 +28,8 @@ use rdp_ffi::settings::RdpSettings;
 use shared::log;
 
 use crate::RawKey;
-use crate::monitor;
 
 const FRAMES_IN_FLIGHT: usize = 128;
-
-// ── RDP Window ──────────────────────────────────────────────
 
 #[allow(dead_code)]
 pub struct RdpWindow {
@@ -37,40 +37,6 @@ pub struct RdpWindow {
     pub renderer: crate::wgpu_render::WgpuRenderer,
     pub scratch: Vec<u8>,
 }
-
-// ── RAIL State ──────────────────────────────────────────────
-
-#[allow(dead_code)]
-pub struct RailWindow {
-    pub id: u32,
-    pub window: Arc<winit::window::Window>,
-    pub renderer: Option<crate::wgpu_render::WgpuRenderer>,
-    pub rgba_data: Option<Vec<u8>>,
-    pub width: u32,
-    pub height: u32,
-    pub rect: rdp_ffi::geom::Rect,
-    pub title: String,
-    pub show_in_taskbar: bool,
-    pub has_decorations: bool,
-    pub last_focused: bool,
-    pub offscreen: bool,
-}
-
-#[allow(dead_code)]
-pub struct RailState {
-    pub windows: HashMap<winit::window::WindowId, u32>, // WindowId → rail window_id
-    pub mouse_capture: Option<u32>,
-}
-
-/// Pending RAIL action to be executed by the event loop
-pub enum RailAction {
-    Create(u32, String, rdp_ffi::geom::Rect, bool, bool), // id, title, rect, taskbar, decorations
-    Delete(u32),                                      // window_id
-    UpdatePosition(u32, rdp_ffi::geom::Rect),
-}
-
-// ── RDP State ───────────────────────────────────────────────
-
 #[allow(dead_code)]
 pub struct RdpState {
     pub window: RdpWindow,
@@ -99,8 +65,6 @@ pub struct RdpState {
     pub cursor: Cursor,
 }
 
-// ── RDP Action Result ───────────────────────────────────────
-
 #[allow(dead_code)]
 pub enum RdpActionResult {
     Continue,
@@ -108,8 +72,6 @@ pub enum RdpActionResult {
     Disconnect,
     Error(String),
 }
-
-// ── RdpState impl ───────────────────────────────────────────
 
 impl RdpState {
     #[allow(clippy::too_many_arguments)]
@@ -204,177 +166,6 @@ impl RdpState {
             cursor: Cursor::new(cursor_scale),
         })
     }
-
-    pub fn update_screen(&mut self) -> Result<()> {
-        let gdi = self.gdi;
-
-        let (stride, fb_h, fb_w) = {
-            let _lock = self.gdi_lock.read().unwrap();
-            unsafe {
-                (
-                    (*gdi).stride as usize,
-                    (*gdi).height as usize,
-                    (*gdi).width as usize,
-                )
-            }
-        };
-
-        if fb_w == 0 || fb_h == 0 {
-            log::warn!("update_screen: GDI dimensions are 0, skipping");
-            return Ok(());
-        }
-
-        let need_swizzle = !cfg!(target_os = "macos");
-        let total = fb_w * fb_h * 4;
-        self.window.scratch.resize(total, 0);
-
-        {
-            let _lock = self.gdi_lock.read().unwrap();
-            let framebuffer = unsafe {
-                std::slice::from_raw_parts((*gdi).primary_buffer as *const u8, stride * fb_h)
-            };
-
-            // Copy GDI → scratch with optional swizzle
-            for row in 0..fb_h {
-                let src_start = row * stride;
-                let dst_start = row * fb_w * 4;
-                let row_bytes = (fb_w * 4).min(framebuffer.len().saturating_sub(src_start));
-                let dst_end = (dst_start + row_bytes).min(self.window.scratch.len());
-                if need_swizzle {
-                    for col in 0..fb_w {
-                        let si = src_start + col * 4;
-                        let di = dst_start + col * 4;
-                        if si + 3 < framebuffer.len() && di + 3 < self.window.scratch.len() {
-                            self.window.scratch[di] = framebuffer[si + 2];
-                            self.window.scratch[di + 1] = framebuffer[si + 1];
-                            self.window.scratch[di + 2] = framebuffer[si];
-                            self.window.scratch[di + 3] = framebuffer[si + 3];
-                        }
-                    }
-                } else {
-                    self.window.scratch[dst_start..dst_end]
-                        .copy_from_slice(&framebuffer[src_start..src_start + row_bytes]);
-                }
-            }
-        } // lock dropped
-
-        // Build overlays: glass backgrounds
-        let mut overlays: Vec<crate::wgpu_render::OverlayParams> = Vec::new();
-
-        // Cursor overlay (drawn on top of everything)
-        // Sync cursor position from lib.rs tracking
-        let cursor_overlay = self.cursor.build_overlay();
-
-        // Build text sections + backgrounds for FPS + pinbar
-        let mut text_sections: Vec<crate::wgpu_render::OwnedSection> = Vec::new();
-        let phys = self.window.window.inner_size();
-        let mut _ov_data: Vec<Vec<u8>> = Vec::new();
-        let mut ov_descs: Vec<crate::wgpu_render::OverlayDesc> = Vec::new();
-
-        if self.fps.enabled.load(Ordering::Relaxed) {
-            let fps_bg = include_bytes!("../images/fps.png");
-            let (bg_rgba, bw, bh) = crate::draw::load_png_rgba(fps_bg);
-            // PNG at 2x → physical at monitor scale: (w/2)*scale, (h/2)*scale
-            let bg_w = monitor::scaled_val((bw as i32 / 2).max(1)) as u32;
-            let _bg_h = monitor::scaled_val((bh as i32 / 2).max(1)) as u32;
-            let margin = monitor::scaled_val(8) as u32;
-            let x = phys.width.saturating_sub(bg_w + margin) as f32;
-            let y = margin as f32;
-            let idx = _ov_data.len();
-            _ov_data.push(bg_rgba);
-            let scale = bg_w as f32 / bw as f32;
-            ov_descs.push(crate::wgpu_render::OverlayDesc {
-                data_idx: idx,
-                w: bw,
-                h: bh,
-                x,
-                y,
-                scale,
-            });
-            // FPS value at (26, 4) in 1x coords (PNG 52/2, 8/2)
-            let fps_text = format!("{:.0}", self.fps.average());
-            let font_size = monitor::scaled_val(12) as f32;
-            text_sections.push(
-                crate::wgpu_render::Section::default()
-                    .add_text(
-                        crate::wgpu_render::Text::new(&fps_text)
-                            .with_scale(font_size)
-                            .with_color([1.0, 1.0, 1.0, 1.0]),
-                    )
-                    .with_screen_position((
-                        x + monitor::scaled_val(26) as f32,
-                        y + monitor::scaled_val(4) as f32,
-                    ))
-                    .to_owned(),
-            );
-        }
-
-        if let Some(desc) = self.pinbar.build(phys.width, &mut text_sections, &mut _ov_data) {
-            ov_descs.push(desc);
-        }
-
-        // Phase 2: build overlays from stable data
-        for d in &ov_descs {
-            overlays.push(crate::wgpu_render::OverlayParams {
-                rgba: &_ov_data[d.data_idx],
-                width: d.w,
-                height: d.h,
-                x: d.x,
-                y: d.y,
-                scale: d.scale,
-            });
-        }
-
-        self.window.renderer.update_and_render(
-            &self.window.scratch,
-            fb_w as u32,
-            fb_h as u32,
-            &overlays,
-            &text_sections,
-            cursor_overlay.as_ref(),
-        );
-
-        Ok(())
-    }
-
-    /// Called when window size changes (fullscreen toggle, manual resize).
-    /// Sends the new logical resolution to the RDP server.
-    /// The server responds with DesktopResize when done.
-    pub fn request_screen_resize(&mut self) {
-        if self.last_resize.elapsed().as_millis() < 500 {
-            return;
-        }
-        let phys = self.window.window.inner_size();
-        let sf = self.coords_scale.max(1.0);
-        let (rdp_w_raw, rdp_h_raw) =
-            monitor::phys_2_logic((phys.width as i32, phys.height as i32), sf);
-        let rdp_w = (rdp_w_raw as u32).max(1) & !3;
-        let rdp_h = (rdp_h_raw as u32).max(1) & !3;
-
-        log::info!(
-            "request_screen_resize: phys={}x{} → rdp={rdp_w}x{rdp_h} (scale={sf})",
-            phys.width,
-            phys.height
-        );
-
-        self.window.renderer.reconfigure(phys.width, phys.height);
-        self.last_resize = std::time::Instant::now();
-        self.pending_resize = true;
-
-        if let Some(disp) = self.channels.write().unwrap().disp() {
-            disp.send_monitor_layout(rdp_ffi::geom::Rect::new(0, 0, rdp_w, rdp_h), 0, 100, 100);
-        }
-    }
-
-    /// Called when the server acknowledges the resize via DesktopResize message
-    pub fn on_desktop_resize(&mut self, _width: u32, _height: u32) {
-        log::info!("DesktopResize acknowledged: {_width}x{_height}");
-        self.pending_resize = false;
-        // The GDI has already been updated by FreeRDP internally
-        // Just reconfigure the wgpu surface in case it changed
-        let phys = self.window.window.inner_size();
-        self.window.renderer.reconfigure(phys.width, phys.height);
-    }
 }
 
 /// Process an RDP message, returning the action to take
@@ -391,122 +182,16 @@ pub fn handle_rdp_message(state: &mut RdpState, message: RdpMessage) -> RdpActio
             log::error!("RDP Error: {}", e);
             RdpActionResult::Error(e)
         }
-        RdpMessage::WindowCreate {
-            window_id,
-            owner_id,
-            title,
-            pos,
-            size,
-            taskbar_button,
-            ext_style,
-            is_offscreen,
-            show_state,
-            ..
-        } if state.is_rail => {
-            // Skip transparent overlay/shadow windows (WS_EX_TRANSPARENT = 0x20)
-            if ext_style.is_some_and(|s| (s & 0x20) != 0) {
-                return RdpActionResult::Continue;
-            }
-            let sf = state.coords_scale.max(1.0);
-            let (x, y) = pos.unwrap_or((0, 0));
-            let (w, h) = size.unwrap_or((0, 0));
-            let rect = rdp_ffi::geom::Rect::new(
-                (x as f64 / sf) as i32,
-                (y as f64 / sf) as i32,
-                (w as f64 / sf) as u32,
-                (h as f64 / sf) as u32,
-            );
-            let is_tool = ext_style.is_some_and(|s| (s & 0x80) != 0);
-            let has_owner = owner_id.is_some() && owner_id != Some(0);
-            let show_taskbar = taskbar_button.unwrap_or(!is_tool && !has_owner);
-            let hidden = show_state == Some(0);
-            if !hidden && rect.w > 0 && rect.h > 0 && !is_offscreen.unwrap_or(false) {
-                state.rail_actions.push(RailAction::Create(
-                    window_id,
-                    title,
-                    rect,
-                    show_taskbar,
-                    false,
-                ));
-            }
-            RdpActionResult::Continue
-        }
-        RdpMessage::WindowUpdate {
-            window_id,
-            pos,
-            size,
-            is_offscreen,
-            show_state,
-            ..
-        } if state.is_rail => {
-            if is_offscreen.unwrap_or(false) || show_state == Some(0) {
-                state.rail_actions.push(RailAction::Delete(window_id));
-            } else if pos.is_some() || size.is_some() {
-                let sf = state.coords_scale.max(1.0);
-                let default_rect = state
-                    .rail_windows
-                    .get(&window_id)
-                    .map(|rw| rw.rect)
-                    .unwrap_or(rdp_ffi::geom::Rect::new(0, 0, 0, 0));
-                let x = match pos {
-                    Some((x, _)) => (x as f64 / sf) as i32,
-                    None => default_rect.x,
-                };
-                let y = match pos {
-                    Some((_, y)) => (y as f64 / sf) as i32,
-                    None => default_rect.y,
-                };
-                let w = match size {
-                    Some((w, _)) => (w as f64 / sf) as u32,
-                    None => default_rect.w,
-                };
-                let h = match size {
-                    Some((_, h)) => (h as f64 / sf) as u32,
-                    None => default_rect.h,
-                };
-                let rect = rdp_ffi::geom::Rect::new(x, y, w, h);
-                state
-                    .rail_actions
-                    .push(RailAction::UpdatePosition(window_id, rect));
-            }
-            RdpActionResult::Continue
-        }
-        RdpMessage::WindowDelete(window_id) if state.is_rail => {
-            state.rail_actions.push(RailAction::Delete(window_id));
-            RdpActionResult::Continue
-        }
-        RdpMessage::WindowPixels {
-            window_id,
-            width,
-            height,
-            data,
-        } if state.is_rail => {
-            if let Some(rw) = state.rail_windows.get_mut(&window_id) {
-                let sf = state.coords_scale.max(1.0);
-                let lw = ((width as f64 / sf) as u32).min(state.desktop_size.0);
-                let lh = ((height as f64 / sf) as u32).min(state.desktop_size.1);
-                if rw.rect.w != lw || rw.rect.h != lh {
-                    rw.rect.w = lw;
-                    rw.rect.h = lh;
-                    let _ = rw.window.request_inner_size(winit::dpi::LogicalSize::new(
-                        lw as f64,
-                        lh as f64,
-                    ));
-                    if let Some(ref mut renderer) = rw.renderer {
-                        let phys = rw.window.inner_size();
-                        renderer.reconfigure(phys.width, phys.height);
-                    }
-                }
-                rw.rgba_data = Some(data);
-                rw.width = width;
-                rw.height = height;
-                rw.window.request_redraw();
-            }
-            RdpActionResult::Continue
-        }
         RdpMessage::SetCursorIcon(data, x, y, width, height) => {
             state.cursor.set_icon(data, x, y, width, height);
             RdpActionResult::Continue
+        }
+        // Delegate RAIL-specific messages
+        ref msg if state.is_rail => {
+            match rail::handle_rail_message(state, msg.clone()) {
+                RdpActionResult::Skip => RdpActionResult::Skip,
+                other => other,
+            }
         }
         _ => RdpActionResult::Skip,
     }
