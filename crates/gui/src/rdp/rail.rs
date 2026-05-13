@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
+use shared::log;
 use rdp_ffi::messaging::RdpMessage;
-
-// ── RAIL Window ─────────────────────────────────────────────
 
 #[allow(dead_code)]
 pub struct RailWindow {
@@ -66,6 +65,7 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
             size,
         } => {
             if ext_style.is_some_and(|s| (s & 0x20) != 0) {
+                log::debug!("Skipping RAIL window {} with style 0x20 (probably a menu)", window_id);
                 return RdpActionResult::Continue;
             }
             let sf = state.coords_scale.max(1.0);

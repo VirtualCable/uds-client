@@ -188,10 +188,7 @@ pub fn handle_rdp_message(state: &mut RdpState, message: RdpMessage) -> RdpActio
             RdpActionResult::Continue
         }
         // Delegate RAIL-specific messages
-        ref msg if state.is_rail => match rail::handle_rail_message(state, msg.clone()) {
-            RdpActionResult::Skip => RdpActionResult::Skip,
-            other => other,
-        },
+        ref msg if state.is_rail => rail::handle_rail_message(state, msg.clone()),
         _ => RdpActionResult::Skip,
     }
 }

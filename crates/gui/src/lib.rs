@@ -977,7 +977,7 @@ impl AppHandler {
                             None
                         },
                         best_experience: true,
-                        use_local_scaler: false,
+                        use_local_scaler: true,
                         ..Default::default()
                     };
                     self.close_launcher();
