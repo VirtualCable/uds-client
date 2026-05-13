@@ -117,7 +117,7 @@ impl Rdp {
                     FreeRDP_Settings_Keys_Bool_FreeRDP_DynamicResolutionUpdate,
                     // From proper client settings
                     FreeRDP_Settings_Keys_Bool_FreeRDP_FastPathOutput,
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_FrameMarkerCommandEnabled,
+                    // FreeRDP_Settings_Keys_Bool_FreeRDP_FrameMarkerCommandEnabled,
                     // FreeRDP_Settings_Keys_Bool_FreeRDP_AsyncUpdate,  // Note: currently works badly
                     FreeRDP_Settings_Keys_Bool_FreeRDP_AsyncChannels,
                     // Compression
@@ -401,38 +401,20 @@ impl Rdp {
                     FreeRDP_Settings_Keys_Bool_FreeRDP_DisableFullWindowDrag,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_GfxH264,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_SupportGraphicsPipeline,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_Workarea,
+                    // Explicitly enable markers
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_FrameMarkerCommandEnabled,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_SurfaceFrameMarkerEnabled,
+                    // If enabled this, stops working :)
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_HiDefRemoteApp,
                 ] {
                     freerdp_settings_set_bool(settings, key, true.into());
                 }
 
-            //     // If enabled this, stops working :)
-            //     freerdp_settings_set_bool(
-            //         settings,
-            //         FreeRDP_Settings_Keys_Bool_FreeRDP_HiDefRemoteApp,
-            //         false.into(),
-            //     );
-                freerdp_settings_set_bool(
-                    settings,
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_Workarea,
-                    true.into(),
-                );
+                for key in [FreeRDP_Settings_Keys_Bool_FreeRDP_GfxH264] {
+                    freerdp_settings_set_bool(settings, key, false.into());
+                }
 
-                // Explicitly enable markers
-                // freerdp_settings_set_bool(
-                //     settings,
-                //     FreeRDP_Settings_Keys_Bool_FreeRDP_FrameMarkerCommandEnabled,
-                //     true.into(),
-                // );
-                // freerdp_settings_set_bool(
-                //     settings,
-                //     FreeRDP_Settings_Keys_Bool_FreeRDP_SurfaceFrameMarkerEnabled,
-                //     true.into(),
-                // );
-                freerdp_settings_set_uint32(
-                    settings,
-                    FreeRDP_Settings_Keys_UInt32_FreeRDP_RemoteApplicationSupportLevel,
-                    1,
-                );
                 // Enable Frame Acknowledge for GFX flow control
                 // Increasing this value reduces the number of ACKs sent, which can lower CPU usage
                 freerdp_settings_set_uint32(
