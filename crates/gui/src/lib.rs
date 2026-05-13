@@ -814,7 +814,7 @@ impl AppHandler {
                         },
                     );
                     regs.push((wid, *id));
-                    log::info!("RAIL window created: id={id} {rect:?}");
+                    log::debug!("RAIL window created: id={id} {rect:?}");
                 }
                 RailAction::Delete(id) => {
                     if let Some(rw) = state.rail_windows.remove(id) {

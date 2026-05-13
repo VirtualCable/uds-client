@@ -43,79 +43,82 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
         RdpMessage::WindowCreate {
             window_id,
             owner_id,
+            style: _,
+            ext_style,
+            taskbar_button,
             title,
+            show_state,
+            is_offscreen,
             pos,
             size,
-            taskbar_button,
+        }
+        | RdpMessage::WindowUpdate {
+            window_id,
+            owner_id,
+            style: _,
             ext_style,
-            is_offscreen,
+            taskbar_button,
+            title,
             show_state,
-            ..
+            is_offscreen,
+            pos,
+            size,
         } => {
             if ext_style.is_some_and(|s| (s & 0x20) != 0) {
                 return RdpActionResult::Continue;
             }
             let sf = state.coords_scale.max(1.0);
-            let (x, y) = pos.unwrap_or((0, 0));
-            let (w, h) = size.unwrap_or((0, 0));
-            let rect = rdp_ffi::geom::Rect::new(
-                (x as f64 / sf) as i32,
-                (y as f64 / sf) as i32,
-                (w as f64 / sf) as u32,
-                (h as f64 / sf) as u32,
-            );
-            let is_tool = ext_style.is_some_and(|s| (s & 0x80) != 0);
-            let has_owner = owner_id.is_some() && owner_id != Some(0);
-            let show_taskbar = taskbar_button.unwrap_or(!is_tool && !has_owner);
-            let hidden = show_state == Some(0);
-            if !hidden && rect.w > 0 && rect.h > 0 && !is_offscreen.unwrap_or(false) {
-                state.rail_actions.push(RailAction::Create(
-                    window_id,
-                    title,
-                    rect,
-                    show_taskbar,
-                    false,
-                ));
-            }
-            RdpActionResult::Continue
-        }
-        RdpMessage::WindowUpdate {
-            window_id,
-            pos,
-            size,
-            is_offscreen,
-            show_state,
-            ..
-        } => {
-            if is_offscreen.unwrap_or(false) || show_state == Some(0) {
-                state.rail_actions.push(RailAction::Delete(window_id));
-            } else if pos.is_some() || size.is_some() {
-                let sf = state.coords_scale.max(1.0);
-                let default_rect = state
-                    .rail_windows
-                    .get(&window_id)
-                    .map(|rw| rw.rect)
-                    .unwrap_or(rdp_ffi::geom::Rect::new(0, 0, 0, 0));
-                let x = match pos {
-                    Some((x, _)) => (x as f64 / sf) as i32,
-                    None => default_rect.x,
-                };
-                let y = match pos {
-                    Some((_, y)) => (y as f64 / sf) as i32,
-                    None => default_rect.y,
-                };
-                let w = match size {
-                    Some((w, _)) => (w as f64 / sf) as u32,
-                    None => default_rect.w,
-                };
-                let h = match size {
-                    Some((_, h)) => (h as f64 / sf) as u32,
-                    None => default_rect.h,
-                };
-                let rect = rdp_ffi::geom::Rect::new(x, y, w, h);
-                state
-                    .rail_actions
-                    .push(RailAction::UpdatePosition(window_id, rect));
+            let is_off = is_offscreen.unwrap_or(false);
+            let hidden = show_state == Some(0) || is_off;
+
+            if let Some(rw) = state.rail_windows.get(&window_id) {
+                if hidden {
+                    state.rail_actions.push(RailAction::Delete(window_id));
+                } else if pos.is_some() || size.is_some() {
+                    let default_rect = rw.rect;
+                    let x = match pos {
+                        Some((x, _)) => (x as f64 / sf) as i32,
+                        None => default_rect.x,
+                    };
+                    let y = match pos {
+                        Some((_, y)) => (y as f64 / sf) as i32,
+                        None => default_rect.y,
+                    };
+                    let w = match size {
+                        Some((w, _)) => (w as f64 / sf) as u32,
+                        None => default_rect.w,
+                    };
+                    let h = match size {
+                        Some((_, h)) => (h as f64 / sf) as u32,
+                        None => default_rect.h,
+                    };
+                    let rect = rdp_ffi::geom::Rect::new(x, y, w, h);
+                    state
+                        .rail_actions
+                        .push(RailAction::UpdatePosition(window_id, rect));
+                }
+            } else if !hidden {
+                let (w, h) = size.unwrap_or((0, 0));
+                if w > 0 && h > 0 {
+                    let (x, y) = pos.unwrap_or((0, 0));
+                    let rect = rdp_ffi::geom::Rect::new(
+                        (x as f64 / sf) as i32,
+                        (y as f64 / sf) as i32,
+                        (w as f64 / sf) as u32,
+                        (h as f64 / sf) as u32,
+                    );
+                    let is_tool = ext_style.is_some_and(|s| (s & 0x80) != 0);
+                    let has_owner = owner_id.is_some() && owner_id != Some(0);
+                    let show_taskbar = taskbar_button.unwrap_or(!is_tool && !has_owner);
+
+                    state.rail_actions.push(RailAction::Create(
+                        window_id,
+                        title,
+                        rect,
+                        show_taskbar,
+                        false,
+                    ));
+                }
             }
             RdpActionResult::Continue
         }
@@ -136,10 +139,9 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                 if rw.rect.w != lw || rw.rect.h != lh {
                     rw.rect.w = lw;
                     rw.rect.h = lh;
-                    let _ = rw.window.request_inner_size(winit::dpi::LogicalSize::new(
-                        lw as f64,
-                        lh as f64,
-                    ));
+                    let _ = rw
+                        .window
+                        .request_inner_size(winit::dpi::LogicalSize::new(lw as f64, lh as f64));
                     if let Some(ref mut renderer) = rw.renderer {
                         let phys = rw.window.inner_size();
                         renderer.reconfigure(phys.width, phys.height);
