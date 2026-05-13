@@ -315,13 +315,14 @@ impl AppHandler {
 
         // Hotkeys
         if self.alt_held && key_ev.state.is_pressed() && !key_ev.repeat {
+            let is_rail = self.rdp.as_ref().is_some_and(|s| s.is_rail);
             match code {
-                winit::keyboard::KeyCode::Enter => {
+                winit::keyboard::KeyCode::Enter if !is_rail => {
                     log::debug!("Alt+Enter → fullscreen");
                     self.toggle_fullscreen();
                     return true;
                 }
-                winit::keyboard::KeyCode::KeyF => {
+                winit::keyboard::KeyCode::KeyF if !is_rail => {
                     if let Some(ref s) = self.rdp {
                         s.fps.toggle();
                     }
