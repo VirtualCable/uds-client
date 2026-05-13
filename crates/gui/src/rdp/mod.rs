@@ -87,11 +87,7 @@ impl RdpState {
     ) -> Result<Self> {
         let (tx, rx) = bounded::<RdpMessage>(FRAMES_IN_FLIGHT);
 
-        let mut rdp_settings = settings;
-
-        if is_rail {
-            rdp_settings.screen_size = rdp_ffi::geom::ScreenSize::Fixed(desktop_size.0, desktop_size.1);
-        }
+        let rdp_settings = settings;
 
         let (mut rdp_instance, command_tx) = rdp_ffi::Rdp::new(rdp_settings, tx, use_rgba);
         let command_event = rdp_instance.get_command_event();

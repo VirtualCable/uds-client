@@ -190,7 +190,9 @@ impl AppHandler {
         );
 
         if is_rail {
-            settings.screen_size = rdp_ffi::geom::ScreenSize::Fixed(rdp_w, rdp_h);
+            // Screen size shoud be the real one for rail, with all consecuences
+            settings.screen_size = rdp_ffi::geom::ScreenSize::Fixed(desktop_w, desktop_h);
+            settings.scale_factor = monitor_scale;
             let window = Arc::new(
                 el.create_window(
                     Window::default_attributes()
@@ -210,9 +212,9 @@ impl AppHandler {
                 rdp_window,
                 settings,
                 true,
-                coords_scale,
-                cursor_scale,
-                desktop_size,
+                monitor_scale,
+                monitor_scale,
+                (desktop_w, desktop_h),
                 self.keys_rx.clone(),
                 use_rgba,
             )?;
@@ -713,6 +715,39 @@ impl AppHandler {
                             flags: f,
                             x: gx,
                             y: gy,
+                        },
+                    ));
+                    unsafe {
+                        rdp_ffi::sys::SetEvent(cmd_ev.as_handle());
+                    }
+                }
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                let dy = match delta {
+                    winit::event::MouseScrollDelta::LineDelta(_, y) => y as i32,
+                    winit::event::MouseScrollDelta::PixelDelta(pos) => pos.y as i32,
+                };
+                let mut wd = (dy as f32 * 120.0) as i32;
+                let flags = (rdp_ffi::sys::PTR_FLAGS_WHEEL as u16)
+                    | if wd < 0 {
+                        wd = -wd;
+                        rdp_ffi::sys::PTR_FLAGS_WHEEL_NEGATIVE as u16
+                    } else {
+                        0
+                    };
+                while wd > 0 {
+                    let step: u16 = if wd > 0xFF { 0xFF } else { (wd & 0xFF) as u16 };
+                    wd -= step as i32;
+                    let cflags = if flags & (rdp_ffi::sys::PTR_FLAGS_WHEEL_NEGATIVE as u16) != 0 {
+                        flags | (0x100 - step)
+                    } else {
+                        flags | step
+                    };
+                    let _ = cmd_tx.send(rdp_ffi::commands::RdpCommand::Input(
+                        rdp_ffi::commands::InputEvent::Mouse {
+                            flags: cflags,
+                            x: 0,
+                            y: 0,
                         },
                     ));
                     unsafe {

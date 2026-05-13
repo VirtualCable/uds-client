@@ -64,6 +64,7 @@ struct RdpSettings {
     pub rail_app: Option<String>,
     pub rail_args: Option<String>,
     pub rail_working_dir: Option<String>,
+    pub use_local_scaler: Option<bool>,
 }
 
 impl Default for RdpSettings {
@@ -88,6 +89,7 @@ impl Default for RdpSettings {
             rail_app: None,
             rail_args: None,
             rail_working_dir: None,
+            use_local_scaler: None,
         }
     }
 }
@@ -152,8 +154,8 @@ fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
         rail_app: rdp_settings.rail_app.or(defs.rail_app),
         rail_args: rdp_settings.rail_args.or(defs.rail_args),
         rail_working_dir: rdp_settings.rail_working_dir.or(defs.rail_working_dir),
-        scale_factor: 1.0,
-        use_local_scaler: true,
+        scale_factor: 1.0,  // Will be overrided by local monitor scale factor in gui
+        use_local_scaler: rdp_settings.use_local_scaler.unwrap_or(true),
     };
 
     log::debug!("Starting RDP with settings: {:?}", settings);
