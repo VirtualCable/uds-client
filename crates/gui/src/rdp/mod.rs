@@ -4,6 +4,14 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
+mod cursor;
+mod fps;
+mod pinbar;
+
+pub use cursor::Cursor;
+pub use fps::Fps;
+pub use pinbar::Pinbar;
+
 use std::collections::HashMap;
 use std::sync::{
     Arc, RwLock,
@@ -12,8 +20,8 @@ use std::sync::{
 
 use anyhow::Result;
 use flume::{Receiver, bounded};
-use rdp::messaging::RdpMessage;
-use rdp::settings::RdpSettings;
+use rdp_ffi::messaging::RdpMessage;
+use rdp_ffi::settings::RdpSettings;
 use shared::log;
 
 use crate::RawKey;
@@ -40,7 +48,7 @@ pub struct RailWindow {
     pub rgba_data: Option<Vec<u8>>,
     pub width: u32,
     pub height: u32,
-    pub rect: rdp::geom::Rect,
+    pub rect: rdp_ffi::geom::Rect,
     pub title: String,
     pub show_in_taskbar: bool,
     pub has_decorations: bool,
@@ -56,9 +64,9 @@ pub struct RailState {
 
 /// Pending RAIL action to be executed by the event loop
 pub enum RailAction {
-    Create(u32, String, rdp::geom::Rect, bool, bool), // id, title, rect, taskbar, decorations
+    Create(u32, String, rdp_ffi::geom::Rect, bool, bool), // id, title, rect, taskbar, decorations
     Delete(u32),                                      // window_id
-    UpdatePosition(u32, rdp::geom::Rect),
+    UpdatePosition(u32, rdp_ffi::geom::Rect),
 }
 
 // ── RDP State ───────────────────────────────────────────────
@@ -67,77 +75,28 @@ pub enum RailAction {
 pub struct RdpState {
     pub window: RdpWindow,
     pub update_rx: Receiver<RdpMessage>,
-    pub gdi: *mut rdp::sys::rdpGdi,
+    pub gdi: *mut rdp_ffi::sys::rdpGdi,
     pub gdi_lock: Arc<RwLock<()>>,
-    pub channels: Arc<RwLock<rdp::channels::RdpChannels>>,
-    pub command_tx: rdp::commands::Sender,
-    pub command_event: rdp::utils::SafeHandle,
+    pub channels: Arc<RwLock<rdp_ffi::channels::RdpChannels>>,
+    pub command_tx: rdp_ffi::commands::Sender,
+    pub command_event: rdp_ffi::utils::SafeHandle,
     pub is_rail: bool,
-    pub scale_factor: f64,
+    pub coords_scale: f64,
     pub desktop_size: (u32, u32),
     pub full_screen: Arc<AtomicBool>,
     pub last_windowed_size: Option<(u32, u32)>,
     pub last_resize: std::time::Instant,
     pub pending_resize: bool,
-    pub pinbar_visible: bool,
-    pub pinbar_rect: Option<(u32, u32)>,
-    pub pinbar_btn_fs_x: std::ops::Range<f32>,
-    pub pinbar_btn_close_x: std::ops::Range<f32>,
+    pub pinbar: Pinbar,
     pub keys_rx: Receiver<RawKey>,
     pub fps: Fps,
 
     pub rail: RailState,
-    pub rail_channel: Option<rdp::channels::rail::RailChannel>,
+    pub rail_channel: Option<rdp_ffi::channels::rail::RailChannel>,
     pub rail_actions: Vec<RailAction>,
     pub rail_windows: HashMap<u32, RailWindow>, // id → RailWindow
 
-    pub cursor_data: Vec<u8>,
-    pub cursor_hot_x: u32,
-    pub cursor_hot_y: u32,
-    pub cursor_w: u32,
-    pub cursor_h: u32,
-    pub cursor_visible: bool,
-    pub cursor_x: f32,
-    pub cursor_y: f32,
-}
-
-// ── FPS Counter ─────────────────────────────────────────────
-
-#[allow(dead_code)]
-pub struct Fps {
-    pub last_instant: std::time::Instant,
-    frames: Vec<std::time::Instant>,
-    pub enabled: AtomicBool,
-}
-
-impl Fps {
-    pub fn new() -> Self {
-        Self {
-            last_instant: std::time::Instant::now(),
-            frames: Vec::new(),
-            enabled: AtomicBool::new(false),
-        }
-    }
-    pub fn record(&mut self) {
-        let now = std::time::Instant::now();
-        // Discard frames older than 2 seconds
-        self.frames
-            .retain(|t| now.duration_since(*t).as_secs_f32() < 2.0);
-        self.frames.push(now);
-    }
-    pub fn toggle(&self) {
-        let v = self.enabled.load(Ordering::Relaxed);
-        self.enabled.store(!v, Ordering::Relaxed);
-    }
-    pub fn average(&self) -> f32 {
-        let now = std::time::Instant::now();
-        let recent: Vec<_> = self
-            .frames
-            .iter()
-            .filter(|t| now.duration_since(**t).as_secs_f32() < 1.0)
-            .collect();
-        recent.len() as f32
-    }
+    pub cursor: Cursor,
 }
 
 // ── RDP Action Result ───────────────────────────────────────
@@ -153,11 +112,13 @@ pub enum RdpActionResult {
 // ── RdpState impl ───────────────────────────────────────────
 
 impl RdpState {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         window: RdpWindow,
         settings: RdpSettings,
         is_rail: bool,
-        scale_factor: f64,
+        coords_scale: f64,
+        cursor_scale: f64,
         desktop_size: (u32, u32),
         keys_rx: Receiver<RawKey>,
         use_rgba: bool,
@@ -165,20 +126,19 @@ impl RdpState {
         let (tx, rx) = bounded::<RdpMessage>(FRAMES_IN_FLIGHT);
 
         let mut rdp_settings = settings;
-        rdp_settings.scale_factor = scale_factor;
 
         if is_rail {
-            rdp_settings.screen_size = rdp::geom::ScreenSize::Fixed(desktop_size.0, desktop_size.1);
+            rdp_settings.screen_size = rdp_ffi::geom::ScreenSize::Fixed(desktop_size.0, desktop_size.1);
         }
 
-        let (mut rdp_instance, command_tx) = rdp::Rdp::new(rdp_settings, tx, use_rgba);
+        let (mut rdp_instance, command_tx) = rdp_ffi::Rdp::new(rdp_settings, tx, use_rgba);
         let command_event = rdp_instance.get_command_event();
 
         if is_rail {
             rdp_instance.set_window_callbacks(vec![
-                rdp::callbacks::window_c::Callbacks::Create,
-                rdp::callbacks::window_c::Callbacks::Update,
-                rdp::callbacks::window_c::Callbacks::Delete,
+                rdp_ffi::callbacks::window_c::Callbacks::Create,
+                rdp_ffi::callbacks::window_c::Callbacks::Update,
+                rdp_ffi::callbacks::window_c::Callbacks::Delete,
             ]);
         }
 
@@ -223,7 +183,7 @@ impl RdpState {
             command_tx,
             command_event,
             is_rail,
-            scale_factor,
+            coords_scale,
             desktop_size,
             full_screen: Arc::new(AtomicBool::new(false)),
             last_windowed_size: None,
@@ -231,10 +191,7 @@ impl RdpState {
                 .checked_sub(std::time::Duration::from_secs(60))
                 .unwrap_or(std::time::Instant::now()),
             pending_resize: false,
-            pinbar_visible: false,
-            pinbar_rect: None,
-            pinbar_btn_fs_x: 0.0..0.0,
-            pinbar_btn_close_x: 0.0..0.0,
+            pinbar: Pinbar::new(),
             keys_rx,
             fps: Fps::new(),
             rail: RailState {
@@ -244,14 +201,7 @@ impl RdpState {
             rail_channel,
             rail_actions: Vec::new(),
             rail_windows: HashMap::new(),
-            cursor_data: Vec::new(),
-            cursor_hot_x: 0,
-            cursor_hot_y: 0,
-            cursor_w: 0,
-            cursor_h: 0,
-            cursor_visible: false,
-            cursor_x: 0.0,
-            cursor_y: 0.0,
+            cursor: Cursor::new(cursor_scale),
         })
     }
 
@@ -312,38 +262,17 @@ impl RdpState {
         let mut overlays: Vec<crate::wgpu_render::OverlayParams> = Vec::new();
 
         // Cursor overlay (drawn on top of everything)
-        let cursor_overlay = if self.cursor_visible && !self.cursor_data.is_empty() {
-            let sf = self.scale_factor;
-            let (hot_x, hot_y) =
-                monitor::logic_2_phys_pos((self.cursor_hot_x as i32, self.cursor_hot_y as i32), sf);
-            Some(crate::wgpu_render::OverlayParams {
-                rgba: self.cursor_data.as_slice(),
-                width: self.cursor_w,
-                height: self.cursor_h,
-                x: self.cursor_x - hot_x as f32,
-                y: self.cursor_y - hot_y as f32,
-                scale: sf as f32,
-            })
-        } else {
-            None
-        };
+        // Sync cursor position from lib.rs tracking
+        let cursor_overlay = self.cursor.build_overlay();
 
         // Build text sections + backgrounds for FPS + pinbar
         let mut text_sections: Vec<crate::wgpu_render::OwnedSection> = Vec::new();
         let phys = self.window.window.inner_size();
         let mut _ov_data: Vec<Vec<u8>> = Vec::new();
-        struct OvDesc {
-            data_idx: usize,
-            w: u32,
-            h: u32,
-            x: f32,
-            y: f32,
-            scale: f32,
-        }
-        let mut ov_descs: Vec<OvDesc> = Vec::new();
+        let mut ov_descs: Vec<crate::wgpu_render::OverlayDesc> = Vec::new();
 
         if self.fps.enabled.load(Ordering::Relaxed) {
-            let fps_bg = include_bytes!("images/fps.png");
+            let fps_bg = include_bytes!("../images/fps.png");
             let (bg_rgba, bw, bh) = crate::draw::load_png_rgba(fps_bg);
             // PNG at 2x → physical at monitor scale: (w/2)*scale, (h/2)*scale
             let bg_w = monitor::scaled_val((bw as i32 / 2).max(1)) as u32;
@@ -354,7 +283,7 @@ impl RdpState {
             let idx = _ov_data.len();
             _ov_data.push(bg_rgba);
             let scale = bg_w as f32 / bw as f32;
-            ov_descs.push(OvDesc {
+            ov_descs.push(crate::wgpu_render::OverlayDesc {
                 data_idx: idx,
                 w: bw,
                 h: bh,
@@ -380,44 +309,8 @@ impl RdpState {
             );
         }
 
-        if self.pinbar_visible {
-            let pinbar_bg = include_bytes!("images/pinbar.png");
-            let (bg_rgba, bw, bh) = crate::draw::load_png_rgba(pinbar_bg);
-            let bg_w = monitor::scaled_val(bw as i32) as u32;
-            let bg_h = monitor::scaled_val(bh as i32) as u32;
-            let x = (phys.width.saturating_sub(bg_w) / 2) as f32;
-            let idx = _ov_data.len();
-            _ov_data.push(bg_rgba);
-            let scale = *monitor::SCALE_FACTOR as f32;
-            ov_descs.push(OvDesc {
-                data_idx: idx,
-                w: bw,
-                h: bh,
-                x,
-                y: 0.0,
-                scale,
-            });
-            // Label at (8, 8)
-            let font_size = monitor::scaled_val(16) as f32;
-            text_sections.push(
-                crate::wgpu_render::Section::default()
-                    .add_text(
-                        crate::wgpu_render::Text::new("UDS Connection")
-                            .with_scale(font_size)
-                            .with_color([1.0, 1.0, 1.0, 1.0]),
-                    )
-                    .with_screen_position((
-                        x + monitor::scaled_val(8) as f32,
-                        monitor::scaled_val(8) as f32,
-                    ))
-                    .to_owned(),
-            );
-            // Click areas from PNG coords: fs=(220,8)-(239,28), close=(243,8)-(262,28)
-            self.pinbar_btn_fs_x =
-                (x + monitor::scaled_val(220) as f32)..(x + monitor::scaled_val(239) as f32);
-            self.pinbar_btn_close_x =
-                (x + monitor::scaled_val(243) as f32)..(x + monitor::scaled_val(262) as f32);
-            self.pinbar_rect = Some((bg_w, bg_h));
+        if let Some(desc) = self.pinbar.build(phys.width, &mut text_sections, &mut _ov_data) {
+            ov_descs.push(desc);
         }
 
         // Phase 2: build overlays from stable data
@@ -452,7 +345,7 @@ impl RdpState {
             return;
         }
         let phys = self.window.window.inner_size();
-        let sf = self.scale_factor.max(1.0);
+        let sf = self.coords_scale.max(1.0);
         let (rdp_w_raw, rdp_h_raw) =
             monitor::phys_2_logic((phys.width as i32, phys.height as i32), sf);
         let rdp_w = (rdp_w_raw as u32).max(1) & !3;
@@ -469,7 +362,7 @@ impl RdpState {
         self.pending_resize = true;
 
         if let Some(disp) = self.channels.write().unwrap().disp() {
-            disp.send_monitor_layout(rdp::geom::Rect::new(0, 0, rdp_w, rdp_h), 0, 100, 100);
+            disp.send_monitor_layout(rdp_ffi::geom::Rect::new(0, 0, rdp_w, rdp_h), 0, 100, 100);
         }
     }
 
@@ -514,10 +407,10 @@ pub fn handle_rdp_message(state: &mut RdpState, message: RdpMessage) -> RdpActio
             if ext_style.is_some_and(|s| (s & 0x20) != 0) {
                 return RdpActionResult::Continue;
             }
-            let sf = state.scale_factor.max(1.0);
+            let sf = state.coords_scale.max(1.0);
             let (x, y) = pos.unwrap_or((0, 0));
             let (w, h) = size.unwrap_or((0, 0));
-            let rect = rdp::geom::Rect::new(
+            let rect = rdp_ffi::geom::Rect::new(
                 (x as f64 / sf) as i32,
                 (y as f64 / sf) as i32,
                 (w as f64 / sf) as u32,
@@ -549,12 +442,12 @@ pub fn handle_rdp_message(state: &mut RdpState, message: RdpMessage) -> RdpActio
             if is_offscreen.unwrap_or(false) || show_state == Some(0) {
                 state.rail_actions.push(RailAction::Delete(window_id));
             } else if pos.is_some() || size.is_some() {
-                let sf = state.scale_factor.max(1.0);
+                let sf = state.coords_scale.max(1.0);
                 let default_rect = state
                     .rail_windows
                     .get(&window_id)
                     .map(|rw| rw.rect)
-                    .unwrap_or(rdp::geom::Rect::new(0, 0, 0, 0));
+                    .unwrap_or(rdp_ffi::geom::Rect::new(0, 0, 0, 0));
                 let x = match pos {
                     Some((x, _)) => (x as f64 / sf) as i32,
                     None => default_rect.x,
@@ -571,7 +464,7 @@ pub fn handle_rdp_message(state: &mut RdpState, message: RdpMessage) -> RdpActio
                     Some((_, h)) => (h as f64 / sf) as u32,
                     None => default_rect.h,
                 };
-                let rect = rdp::geom::Rect::new(x, y, w, h);
+                let rect = rdp_ffi::geom::Rect::new(x, y, w, h);
                 state
                     .rail_actions
                     .push(RailAction::UpdatePosition(window_id, rect));
@@ -589,7 +482,7 @@ pub fn handle_rdp_message(state: &mut RdpState, message: RdpMessage) -> RdpActio
             data,
         } if state.is_rail => {
             if let Some(rw) = state.rail_windows.get_mut(&window_id) {
-                let sf = state.scale_factor.max(1.0);
+                let sf = state.coords_scale.max(1.0);
                 let lw = ((width as f64 / sf) as u32).min(state.desktop_size.0);
                 let lh = ((height as f64 / sf) as u32).min(state.desktop_size.1);
                 if rw.rect.w != lw || rw.rect.h != lh {
@@ -612,12 +505,7 @@ pub fn handle_rdp_message(state: &mut RdpState, message: RdpMessage) -> RdpActio
             RdpActionResult::Continue
         }
         RdpMessage::SetCursorIcon(data, x, y, width, height) => {
-            state.cursor_data = data;
-            state.cursor_hot_x = x;
-            state.cursor_hot_y = y;
-            state.cursor_w = width;
-            state.cursor_h = height;
-            state.cursor_visible = width > 0 && height > 0;
+            state.cursor.set_icon(data, x, y, width, height);
             RdpActionResult::Continue
         }
         _ => RdpActionResult::Skip,

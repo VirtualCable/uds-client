@@ -15,6 +15,17 @@ use wgpu_text::{BrushBuilder, TextBrush};
 
 pub use overlay::{OverlayParams, OverlayRenderer};
 
+/// Lightweight descriptor for an overlay queued for rendering.
+#[derive(Debug, Clone)]
+pub struct OverlayDesc {
+    pub data_idx: usize,
+    pub w: u32,
+    pub h: u32,
+    pub x: f32,
+    pub y: f32,
+    pub scale: f32,
+}
+
 pub struct TextRenderer {
     pub brush: TextBrush<FontRef<'static>>,
 }

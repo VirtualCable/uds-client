@@ -25,14 +25,14 @@ mod popup;
 pub mod types;
 
 mod draw;
-mod launcher;
-mod session;
+mod testing;
+mod rdp;
 mod wgpu_render;
 
 use crate::wgpu_render::WgpuRenderer;
-use launcher::{LauncherInner, LauncherState, TestAction, paint_launcher};
+use testing::{LauncherInner, LauncherState, TestAction, paint_launcher};
 use popup::{PopupKind, PopupState};
-use session::{RailAction, RailWindow, RdpState, RdpWindow, handle_rdp_message};
+use rdp::{RailAction, RailWindow, RdpState, RdpWindow, handle_rdp_message};
 use types::{AppState, GuiMessage, ReturnCode};
 
 #[derive(Debug)]
@@ -160,21 +160,28 @@ impl AppHandler {
     fn open_rdp(
         &mut self,
         el: &ActiveEventLoop,
-        mut settings: rdp::settings::RdpSettings,
+        mut settings: rdp_ffi::settings::RdpSettings,
     ) -> Result<()> {
         let is_rail = settings.rail_app.is_some();
         let use_rgba = cfg!(target_os = "macos");
         let (desktop_w, desktop_h) = monitor::size(0).unwrap_or((1920, 1080));
         let monitor_scale = monitor::scale(0);
         let (rdp_w, rdp_h) = match settings.screen_size {
-            rdp::geom::ScreenSize::Full => {
+            rdp_ffi::geom::ScreenSize::Full => {
                 let (lw, lh) =
                     monitor::phys_2_logic((desktop_w as i32, desktop_h as i32), monitor_scale);
                 (lw as u32, lh as u32)
             }
-            rdp::geom::ScreenSize::Fixed(w, h) => (w, h),
+            rdp_ffi::geom::ScreenSize::Fixed(w, h) => (w, h),
         };
-        settings.scale_factor = monitor_scale;
+        let (coords_scale, cursor_scale) = if settings.use_local_scaler {
+            settings.scale_factor = 1.0;
+            (monitor_scale, monitor_scale)
+        } else {
+            settings.scale_factor = monitor_scale;
+            (1.0, monitor_scale)
+        };
+        let desktop_size = (rdp_w, rdp_h);
         let is_fullscreen = settings.screen_size.is_fullscreen() && !is_rail;
         let (window_logical_w, window_logical_h) =
             monitor::phys_2_logic((desktop_w as i32, desktop_h as i32), monitor_scale);
@@ -183,7 +190,7 @@ impl AppHandler {
         );
 
         if is_rail {
-            settings.screen_size = rdp::geom::ScreenSize::Fixed(rdp_w, rdp_h);
+            settings.screen_size = rdp_ffi::geom::ScreenSize::Fixed(rdp_w, rdp_h);
             let window = Arc::new(
                 el.create_window(
                     Window::default_attributes()
@@ -203,15 +210,16 @@ impl AppHandler {
                 rdp_window,
                 settings,
                 true,
-                monitor_scale,
-                (rdp_w, rdp_h),
+                coords_scale,
+                cursor_scale,
+                desktop_size,
                 self.keys_rx.clone(),
                 use_rgba,
             )?;
             self.rdp = Some(Box::new(rdp_state));
             self.register_window(wid, WindowKind::Rdp);
         } else {
-            settings.screen_size = rdp::geom::ScreenSize::Fixed(rdp_w, rdp_h);
+            settings.screen_size = rdp_ffi::geom::ScreenSize::Fixed(rdp_w, rdp_h);
             let window = Arc::new(
                 el.create_window(
                     Window::default_attributes()
@@ -235,8 +243,9 @@ impl AppHandler {
                 rdp_window,
                 settings,
                 false,
-                1.0,  // Fixed, scale managed locally
-                (rdp_w, rdp_h),
+                coords_scale,
+                cursor_scale,
+                desktop_size,
                 self.keys_rx.clone(),
                 use_rgba,
             )?;
@@ -409,8 +418,8 @@ impl AppHandler {
             }
             WindowEvent::CursorMoved { position, .. } => {
                 self.last_pointer = Some(*position);
-                s.cursor_x = position.x as f32;
-                s.cursor_y = position.y as f32;
+                s.cursor.x = position.x as f32;
+                s.cursor.y = position.y as f32;
                 s.window.window.request_redraw();
                 let gdi_w = unsafe { (*s.gdi).width as u32 };
                 let gdi_h = unsafe { (*s.gdi).height as u32 };
@@ -422,15 +431,15 @@ impl AppHandler {
                 let y = ((position.y * gdi_h as f64) / phys_h as f64)
                     .round()
                     .clamp(0.0, (gdi_h - 1) as f64) as u16;
-                let _ = s.command_tx.send(rdp::commands::RdpCommand::Input(
-                    rdp::commands::InputEvent::Mouse {
-                        flags: rdp::sys::PTR_FLAGS_MOVE as u16,
+                let _ = s.command_tx.send(rdp_ffi::commands::RdpCommand::Input(
+                    rdp_ffi::commands::InputEvent::Mouse {
+                        flags: rdp_ffi::sys::PTR_FLAGS_MOVE as u16,
                         x,
                         y,
                     },
                 ));
                 unsafe {
-                    rdp::sys::SetEvent(s.command_event.as_handle());
+                    rdp_ffi::sys::SetEvent(s.command_event.as_handle());
                 }
                 // Pinbar
                 let is_fs = s.full_screen.load(Ordering::Relaxed);
@@ -438,10 +447,10 @@ impl AppHandler {
                     && position.x > std::cmp::max(phys_w, 1) as f64 * 0.4
                     && position.x < phys_w as f64 * 0.6
                 {
-                    s.pinbar_visible = is_fs;
+                    s.pinbar.visible = is_fs;
                 }
                 if position.y > 32.0 {
-                    s.pinbar_visible = false;
+                    s.pinbar.visible = false;
                 }
             }
             WindowEvent::MouseInput {
@@ -450,15 +459,15 @@ impl AppHandler {
                 // Pinbar click — only on press
                 if btn.is_pressed()
                     && let Some(pos) = self.last_pointer
-                    && s.pinbar_visible
+                    && s.pinbar.visible
                     && *button == winit::event::MouseButton::Left
                 {
                     let px = pos.x as f32;
-                    if s.pinbar_btn_fs_x.contains(&px) {
+                    if s.pinbar.btn_fs_x.contains(&px) {
                         self.toggle_fullscreen();
                         return true;
                     }
-                    if s.pinbar_btn_close_x.contains(&px) {
+                    if s.pinbar.btn_close_x.contains(&px) {
                         return false;
                     }
                 }
@@ -475,23 +484,23 @@ impl AppHandler {
                         .round()
                         .clamp(0.0, (gdi_h - 1) as f64) as u16;
                     let flags = match *button {
-                        winit::event::MouseButton::Left => rdp::sys::PTR_FLAGS_BUTTON1,
-                        winit::event::MouseButton::Right => rdp::sys::PTR_FLAGS_BUTTON2,
-                        winit::event::MouseButton::Middle => rdp::sys::PTR_FLAGS_BUTTON3,
+                        winit::event::MouseButton::Left => rdp_ffi::sys::PTR_FLAGS_BUTTON1,
+                        winit::event::MouseButton::Right => rdp_ffi::sys::PTR_FLAGS_BUTTON2,
+                        winit::event::MouseButton::Middle => rdp_ffi::sys::PTR_FLAGS_BUTTON3,
                         _ => 0,
                     } as u16;
                     if flags != 0 {
                         let f = flags
                             | if btn.is_pressed() {
-                                rdp::sys::PTR_FLAGS_DOWN as u16
+                                rdp_ffi::sys::PTR_FLAGS_DOWN as u16
                             } else {
                                 0
                             };
-                        let _ = s.command_tx.send(rdp::commands::RdpCommand::Input(
-                            rdp::commands::InputEvent::Mouse { flags: f, x, y },
+                        let _ = s.command_tx.send(rdp_ffi::commands::RdpCommand::Input(
+                            rdp_ffi::commands::InputEvent::Mouse { flags: f, x, y },
                         ));
                         unsafe {
-                            rdp::sys::SetEvent(s.command_event.as_handle());
+                            rdp_ffi::sys::SetEvent(s.command_event.as_handle());
                         }
                     }
                 }
@@ -502,30 +511,30 @@ impl AppHandler {
                     winit::event::MouseScrollDelta::PixelDelta(pos) => pos.y as i32,
                 };
                 let mut wd = (dy as f32 * 120.0) as i32;
-                let flags = (rdp::sys::PTR_FLAGS_WHEEL as u16)
+                let flags = (rdp_ffi::sys::PTR_FLAGS_WHEEL as u16)
                     | if wd < 0 {
                         wd = -wd;
-                        rdp::sys::PTR_FLAGS_WHEEL_NEGATIVE as u16
+                        rdp_ffi::sys::PTR_FLAGS_WHEEL_NEGATIVE as u16
                     } else {
                         0
                     };
                 while wd > 0 {
                     let step: u16 = if wd > 0xFF { 0xFF } else { (wd & 0xFF) as u16 };
                     wd -= step as i32;
-                    let cflags = if flags & (rdp::sys::PTR_FLAGS_WHEEL_NEGATIVE as u16) != 0 {
+                    let cflags = if flags & (rdp_ffi::sys::PTR_FLAGS_WHEEL_NEGATIVE as u16) != 0 {
                         flags | (0x100 - step)
                     } else {
                         flags | step
                     };
-                    let _ = s.command_tx.send(rdp::commands::RdpCommand::Input(
-                        rdp::commands::InputEvent::Mouse {
+                    let _ = s.command_tx.send(rdp_ffi::commands::RdpCommand::Input(
+                        rdp_ffi::commands::InputEvent::Mouse {
                             flags: cflags,
                             x: 0,
                             y: 0,
                         },
                     ));
                     unsafe {
-                        rdp::sys::SetEvent(s.command_event.as_handle());
+                        rdp_ffi::sys::SetEvent(s.command_event.as_handle());
                     }
                 }
             }
@@ -589,7 +598,7 @@ impl AppHandler {
             && let Some(rw) = state.rail_windows.get_mut(&rail_id)
         {
             // Force position every frame to prevent Windows cascading offset
-            let sf = state.scale_factor.max(1.0);
+            let sf = state.coords_scale.max(1.0);
             rw.window
                 .set_outer_position(winit::dpi::PhysicalPosition::new(
                     (rw.rect.x as f64 * sf) as i32,
@@ -621,7 +630,7 @@ impl AppHandler {
 
         match event {
             WindowEvent::CloseRequested => {
-                rail_channel.send_system_command(rail_id, rdp::consts::SC_CLOSE as u16);
+                rail_channel.send_system_command(rail_id, rdp_ffi::consts::SC_CLOSE as u16);
             }
             WindowEvent::Focused(focused) => {
                 if let Some(rw) = state.rail_windows.get_mut(&rail_id) {
@@ -639,20 +648,20 @@ impl AppHandler {
                 );
                 self.last_pointer = Some(*position);
                 if let Some(rw) = state.rail_windows.get(&rail_id) {
-                    let sf = state.scale_factor;
+                    let sf = state.coords_scale;
                     let dw = state.desktop_size.0.saturating_sub(1) as f64;
                     let dh = state.desktop_size.1.saturating_sub(1) as f64;
                     let gx = (position.x + rw.rect.x as f64 * sf).round().clamp(0.0, dw) as u16;
                     let gy = (position.y + rw.rect.y as f64 * sf).round().clamp(0.0, dh) as u16;
-                    let _ = cmd_tx.send(rdp::commands::RdpCommand::Input(
-                        rdp::commands::InputEvent::Mouse {
-                            flags: rdp::sys::PTR_FLAGS_MOVE as u16,
+                    let _ = cmd_tx.send(rdp_ffi::commands::RdpCommand::Input(
+                        rdp_ffi::commands::InputEvent::Mouse {
+                            flags: rdp_ffi::sys::PTR_FLAGS_MOVE as u16,
                             x: gx,
                             y: gy,
                         },
                     ));
                     unsafe {
-                        rdp::sys::SetEvent(cmd_ev.as_handle());
+                        rdp_ffi::sys::SetEvent(cmd_ev.as_handle());
                     }
                 }
             }
@@ -683,31 +692,31 @@ impl AppHandler {
                     && let Some(rw) = state.rail_windows.get(&rail_id)
                 {
                     let bm = match button {
-                        winit::event::MouseButton::Left => rdp::sys::PTR_FLAGS_BUTTON1,
-                        winit::event::MouseButton::Right => rdp::sys::PTR_FLAGS_BUTTON2,
-                        winit::event::MouseButton::Middle => rdp::sys::PTR_FLAGS_BUTTON3,
+                        winit::event::MouseButton::Left => rdp_ffi::sys::PTR_FLAGS_BUTTON1,
+                        winit::event::MouseButton::Right => rdp_ffi::sys::PTR_FLAGS_BUTTON2,
+                        winit::event::MouseButton::Middle => rdp_ffi::sys::PTR_FLAGS_BUTTON3,
                         _ => return,
                     } as u16;
                     let f = bm
                         | if btn.is_pressed() {
-                            rdp::sys::PTR_FLAGS_DOWN as u16
+                            rdp_ffi::sys::PTR_FLAGS_DOWN as u16
                         } else {
                             0
                         };
-                    let sf = state.scale_factor;
+                    let sf = state.coords_scale;
                     let dw = state.desktop_size.0.saturating_sub(1) as f64;
                     let dh = state.desktop_size.1.saturating_sub(1) as f64;
                     let gx = (pos.x + rw.rect.x as f64 * sf).round().clamp(0.0, dw) as u16;
                     let gy = (pos.y + rw.rect.y as f64 * sf).round().clamp(0.0, dh) as u16;
-                    let _ = cmd_tx.send(rdp::commands::RdpCommand::Input(
-                        rdp::commands::InputEvent::Mouse {
+                    let _ = cmd_tx.send(rdp_ffi::commands::RdpCommand::Input(
+                        rdp_ffi::commands::InputEvent::Mouse {
                             flags: f,
                             x: gx,
                             y: gy,
                         },
                     ));
                     unsafe {
-                        rdp::sys::SetEvent(cmd_ev.as_handle());
+                        rdp_ffi::sys::SetEvent(cmd_ev.as_handle());
                     }
                 }
             }
@@ -743,7 +752,7 @@ impl AppHandler {
                     };
                     let wid = window.id();
                     // Position window at server-specified coordinates
-                    let sf = state.scale_factor.max(1.0);
+                    let sf = state.coords_scale.max(1.0);
                     window.set_outer_position(winit::dpi::PhysicalPosition::new(
                         (rect.x as f64 * sf) as i32,
                         (rect.y as f64 * sf) as i32,
@@ -791,7 +800,7 @@ impl AppHandler {
                             rect.w as f64,
                             rect.h as f64,
                         ));
-                        let sf = state.scale_factor.max(1.0);
+                        let sf = state.coords_scale.max(1.0);
                         rw.window
                             .set_outer_position(winit::dpi::PhysicalPosition::new(
                                 (rect.x as f64 * sf) as i32,
@@ -910,11 +919,11 @@ impl AppHandler {
                 | TestAction::ConnectRdpPreconnection
                 | TestAction::ConnectRail => {
                     let is_rail = matches!(action, TestAction::ConnectRail);
-                    let settings = rdp::settings::RdpSettings {
+                    let settings = rdp_ffi::settings::RdpSettings {
                         server: "172.27.247.161".to_string(),
                         user: "user".to_string(),
                         password: "temporal".to_string(),
-                        screen_size: rdp::geom::ScreenSize::Full,
+                        screen_size: rdp_ffi::geom::ScreenSize::Full,
                         rail_app: if is_rail {
                             Some("c:\\windows\\notepad.exe".to_string())
                         } else {
@@ -939,18 +948,18 @@ impl AppHandler {
         };
         while let Ok(message) = state.update_rx.try_recv() {
             match handle_rdp_message(state, message) {
-                session::RdpActionResult::Continue if !state.is_rail => {
+                rdp::RdpActionResult::Continue if !state.is_rail => {
                     state.window.window.request_redraw();
                 }
 
-                session::RdpActionResult::Disconnect => {
+                rdp::RdpActionResult::Disconnect => {
                     self.stop.trigger();
                     self.return_code = ReturnCode::Exit;
                     self.close_rdp();
                     el.exit();
                     return;
                 }
-                session::RdpActionResult::Error(_) => {
+                rdp::RdpActionResult::Error(_) => {
                     self.stop.trigger();
                     self.return_code = ReturnCode::Exit;
                     self.close_rdp();
@@ -962,14 +971,14 @@ impl AppHandler {
         }
         while let Ok(raw_key) = state.keys_rx.try_recv() {
             if let Some(sc) = keymap::RdpScanCode::get_from_key(Some(&raw_key.keycode)) {
-                let _ = state.command_tx.send(rdp::commands::RdpCommand::Input(
-                    rdp::commands::InputEvent::Keyboard {
+                let _ = state.command_tx.send(rdp_ffi::commands::RdpCommand::Input(
+                    rdp_ffi::commands::InputEvent::Keyboard {
                         scancode: sc as u16,
                         pressed: raw_key.pressed,
                     },
                 ));
                 unsafe {
-                    rdp::sys::SetEvent(state.command_event.as_handle());
+                    rdp_ffi::sys::SetEvent(state.command_event.as_handle());
                 }
             }
         }

@@ -153,6 +153,7 @@ fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
         rail_args: rdp_settings.rail_args.or(defs.rail_args),
         rail_working_dir: rdp_settings.rail_working_dir.or(defs.rail_working_dir),
         scale_factor: 1.0,
+        use_local_scaler: true,
     };
 
     log::debug!("Starting RDP with settings: {:?}", settings);
