@@ -361,7 +361,12 @@ impl Rdp {
                     settings,
                     FreeRDP_Settings_Keys_UInt32_FreeRDP_RemoteApplicationSupportLevel,
                     (freerdp_sys::RAIL_LEVEL_SUPPORTED
-                        | freerdp_sys::RAIL_LEVEL_HANDSHAKE_EX_SUPPORTED)
+                        | freerdp_sys::RAIL_LEVEL_HANDSHAKE_EX_SUPPORTED
+                        | freerdp_sys::RAIL_LEVEL_SHELL_INTEGRATION_SUPPORTED
+                        | freerdp_sys::RAIL_LEVEL_LANGUAGE_IME_SYNC_SUPPORTED
+                        | freerdp_sys::RAIL_LEVEL_SERVER_TO_CLIENT_IME_SYNC_SUPPORTED
+                        | freerdp_sys::RAIL_LEVEL_HIDE_MINIMIZED_APPS_SUPPORTED
+                        | freerdp_sys::RAIL_LEVEL_WINDOW_CLOAKING_SUPPORTED)
                         as u32,
                 );
                 freerdp_settings_set_uint32(
