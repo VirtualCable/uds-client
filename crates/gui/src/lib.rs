@@ -770,7 +770,7 @@ impl AppHandler {
         for action in &actions {
             let Some(ref mut state) = self.rdp else { break };
             match action {
-                RailAction::Create(id, title, rect, taskbar, decorations) => {
+                RailAction::Create(id, title, rect, taskbar, decorations, visible) => {
                     if state.rail_windows.contains_key(id) {
                         continue;
                     }
@@ -782,7 +782,8 @@ impl AppHandler {
                             .with_inner_size(winit::dpi::LogicalSize::new(
                                 rect.w as f64,
                                 rect.h as f64,
-                            )),
+                            ))
+                            .with_visible(*visible),
                     ) else {
                         continue;
                     };
@@ -842,6 +843,12 @@ impl AppHandler {
                                 (rect.x as f64 * sf) as i32,
                                 (rect.y as f64 * sf) as i32,
                             ));
+                    }
+                }
+                RailAction::SetVisible(id, visible) => {
+                    if let Some(rw) = state.rail_windows.get_mut(id) {
+                        rw.window.set_visible(*visible);
+                        rw.offscreen = !*visible;
                     }
                 }
             }

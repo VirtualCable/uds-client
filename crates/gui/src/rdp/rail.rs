@@ -28,9 +28,10 @@ pub struct RailState {
 
 /// Pending RAIL action to be executed by the event loop
 pub enum RailAction {
-    Create(u32, String, rdp_ffi::geom::Rect, bool, bool),
+    Create(u32, String, rdp_ffi::geom::Rect, bool, bool, bool),
     Delete(u32),
     UpdatePosition(u32, rdp_ffi::geom::Rect),
+    SetVisible(u32, bool),
 }
 
 // ── RAIL Message Dispatcher ─────────────────────────────────
@@ -69,35 +70,60 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
             }
             let sf = state.coords_scale.max(1.0);
             let is_off = is_offscreen.unwrap_or(false);
-            let hidden = show_state == Some(0) || is_off;
 
-            if let Some(rw) = state.rail_windows.get(&window_id) {
-                if hidden {
-                    state.rail_actions.push(RailAction::Delete(window_id));
-                } else if pos.is_some() || size.is_some() {
-                    let default_rect = rw.rect;
+            let mut exists = state.rail_windows.contains_key(&window_id);
+            if !exists {
+                for action in &state.rail_actions {
+                    if let RailAction::Create(id, ..) = action {
+                        if *id == window_id {
+                            exists = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if exists {
+                if let Some(s) = show_state {
+                    let hidden = s == 0 || is_off;
+                    state.rail_actions.push(RailAction::SetVisible(window_id, !hidden));
+                } else if is_offscreen.is_some() {
+                    state.rail_actions.push(RailAction::SetVisible(window_id, !is_off));
+                }
+
+                if pos.is_some() || size.is_some() {
+                    let default_rect = state.rail_windows.get(&window_id).map(|rw| rw.rect).unwrap_or_else(|| rdp_ffi::geom::Rect::new(0, 0, 0, 0));
+                    let mut rect = default_rect;
+                    if !state.rail_windows.contains_key(&window_id) {
+                        for action in &state.rail_actions {
+                            if let RailAction::Create(id, _, r, ..) = action {
+                                if *id == window_id {
+                                    rect = *r;
+                                }
+                            }
+                        }
+                    }
+
                     let x = match pos {
                         Some((x, _)) => (x as f64 / sf) as i32,
-                        None => default_rect.x,
+                        None => rect.x,
                     };
                     let y = match pos {
                         Some((_, y)) => (y as f64 / sf) as i32,
-                        None => default_rect.y,
+                        None => rect.y,
                     };
                     let w = match size {
                         Some((w, _)) => (w as f64 / sf) as u32,
-                        None => default_rect.w,
+                        None => rect.w,
                     };
                     let h = match size {
                         Some((_, h)) => (h as f64 / sf) as u32,
-                        None => default_rect.h,
+                        None => rect.h,
                     };
-                    let rect = rdp_ffi::geom::Rect::new(x, y, w, h);
-                    state
-                        .rail_actions
-                        .push(RailAction::UpdatePosition(window_id, rect));
+                    let new_rect = rdp_ffi::geom::Rect::new(x, y, w, h);
+                    state.rail_actions.push(RailAction::UpdatePosition(window_id, new_rect));
                 }
-            } else if !hidden {
+            } else {
                 let (w, h) = size.unwrap_or((0, 0));
                 if w > 0 && h > 0 {
                     let (x, y) = pos.unwrap_or((0, 0));
@@ -111,15 +137,19 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                     let has_owner = owner_id.is_some() && owner_id != Some(0);
                     let show_taskbar = taskbar_button.unwrap_or(!is_tool && !has_owner);
 
+                    let hidden = show_state == Some(0) || is_off;
+
                     state.rail_actions.push(RailAction::Create(
                         window_id,
                         title,
                         rect,
                         show_taskbar,
                         false,
+                        !hidden,
                     ));
                 }
             }
+
             RdpActionResult::Continue
         }
         RdpMessage::WindowDelete(window_id) => {
