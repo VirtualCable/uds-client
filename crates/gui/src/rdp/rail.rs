@@ -74,11 +74,11 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
             let mut exists = state.rail_windows.contains_key(&window_id);
             if !exists {
                 for action in &state.rail_actions {
-                    if let RailAction::Create(id, ..) = action {
-                        if *id == window_id {
-                            exists = true;
-                            break;
-                        }
+                    if let RailAction::Create(id, ..) = action
+                        && *id == window_id
+                    {
+                        exists = true;
+                        break;
                     }
                 }
             }
@@ -86,20 +86,28 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
             if exists {
                 if let Some(s) = show_state {
                     let hidden = s == 0 || is_off;
-                    state.rail_actions.push(RailAction::SetVisible(window_id, !hidden));
+                    state
+                        .rail_actions
+                        .push(RailAction::SetVisible(window_id, !hidden));
                 } else if is_offscreen.is_some() {
-                    state.rail_actions.push(RailAction::SetVisible(window_id, !is_off));
+                    state
+                        .rail_actions
+                        .push(RailAction::SetVisible(window_id, !is_off));
                 }
 
                 if pos.is_some() || size.is_some() {
-                    let default_rect = state.rail_windows.get(&window_id).map(|rw| rw.rect).unwrap_or_else(|| rdp_ffi::geom::Rect::new(0, 0, 0, 0));
+                    let default_rect = state
+                        .rail_windows
+                        .get(&window_id)
+                        .map(|rw| rw.rect)
+                        .unwrap_or_else(|| rdp_ffi::geom::Rect::new(0, 0, 0, 0));
                     let mut rect = default_rect;
                     if !state.rail_windows.contains_key(&window_id) {
                         for action in &state.rail_actions {
-                            if let RailAction::Create(id, _, r, ..) = action {
-                                if *id == window_id {
-                                    rect = *r;
-                                }
+                            if let RailAction::Create(id, _, r, ..) = action
+                                && *id == window_id
+                            {
+                                rect = *r;
                             }
                         }
                     }
@@ -121,7 +129,9 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                         None => rect.h,
                     };
                     let new_rect = rdp_ffi::geom::Rect::new(x, y, w, h);
-                    state.rail_actions.push(RailAction::UpdatePosition(window_id, new_rect));
+                    state
+                        .rail_actions
+                        .push(RailAction::UpdatePosition(window_id, new_rect));
                 }
             } else {
                 let (w, h) = size.unwrap_or((0, 0));

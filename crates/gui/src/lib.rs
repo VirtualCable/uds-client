@@ -30,7 +30,7 @@ mod rdp;
 mod wgpu_render;
 
 use crate::wgpu_render::WgpuRenderer;
-use testing::{LauncherInner, LauncherState, TestAction, paint_launcher};
+use testing::{LauncherInner, TestingLauncherState, TestAction, paint_launcher};
 use popup::{PopupKind, PopupState};
 use rdp::{RailAction, RailWindow, RdpState, RdpWindow, handle_rdp_message};
 use types::{AppState, GuiMessage, ReturnCode};
@@ -58,7 +58,7 @@ enum WindowKind {
 }
 
 pub struct AppHandler {
-    launcher: Option<LauncherState>,
+    launcher: Option<TestingLauncherState>,
     rdp: Option<Box<RdpState>>,
     popup: Option<PopupState>,
     about: Option<crate::about::AboutState>,
@@ -138,7 +138,7 @@ impl AppHandler {
         let wid = window.id();
         let phys = window.inner_size();
         let renderer = WgpuRenderer::new(window.clone(), phys.width, phys.height)?;
-        self.launcher = Some(LauncherState {
+        self.launcher = Some(TestingLauncherState {
             window: Some(window),
             renderer: Some(renderer),
             inner,
@@ -972,6 +972,7 @@ impl AppHandler {
                         } else {
                             None
                         },
+                        best_experience: true,
                         ..Default::default()
                     };
                     self.close_launcher();

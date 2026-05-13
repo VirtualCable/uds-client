@@ -101,7 +101,7 @@ impl LauncherInner {
     }
 }
 
-pub struct LauncherState {
+pub struct TestingLauncherState {
     pub window: Option<Arc<winit::window::Window>>,
     pub renderer: Option<WgpuRenderer>,
     pub inner: LauncherInner,
@@ -116,7 +116,7 @@ fn rect_rgba(w: u32, h: u32, r: u8, g: u8, b: u8, a: u8) -> Vec<u8> {
     v
 }
 
-pub fn paint_launcher(state: &mut LauncherState) {
+pub fn paint_launcher(state: &mut TestingLauncherState) {
     let renderer = match &mut state.renderer {
         Some(r) => r,
         None => return,
