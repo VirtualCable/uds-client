@@ -25,14 +25,14 @@ mod popup;
 pub mod types;
 
 mod draw;
-mod testing;
 mod rdp;
+mod testing;
 mod wgpu_render;
 
 use crate::wgpu_render::WgpuRenderer;
-use testing::{LauncherInner, TestingLauncherState, TestAction, paint_launcher};
 use popup::{PopupKind, PopupState};
 use rdp::{RailAction, RailWindow, RdpState, RdpWindow, handle_rdp_message};
+use testing::{LauncherInner, TestAction, TestingLauncherState, paint_launcher};
 use types::{AppState, GuiMessage, ReturnCode};
 
 #[derive(Debug)]
@@ -164,17 +164,22 @@ impl AppHandler {
     ) -> Result<()> {
         let is_rail = settings.rail_app.is_some();
         let use_rgba = cfg!(target_os = "macos");
+
+        let monitor_scale =  monitor::scale(0);
         let (desktop_w, desktop_h) = monitor::size(0).unwrap_or((1920, 1080));
-        let monitor_scale = monitor::scale(0);
-        let (rdp_w, rdp_h) = match settings.screen_size {
-            rdp_ffi::geom::ScreenSize::Full => {
+        let use_local_scaler = settings.use_local_scaler;
+        let local_scale = if use_local_scaler { monitor_scale } else { 1.0 };
+
+        // If full screen size or rail, use full monitor size as RDP desktop, otherwise use fixed size or monitor size as specified
+        let (rdp_w, rdp_h) = match (settings.screen_size, is_rail) {
+            (rdp_ffi::geom::ScreenSize::Full, _) | (_, true) => {
                 let (lw, lh) =
-                    monitor::phys_2_logic((desktop_w as i32, desktop_h as i32), monitor_scale);
+                    monitor::phys_2_logic((desktop_w as i32, desktop_h as i32), local_scale);
                 (lw as u32, lh as u32)
             }
-            rdp_ffi::geom::ScreenSize::Fixed(w, h) => (w, h),
+            (rdp_ffi::geom::ScreenSize::Fixed(w, h), _) => (w, h),
         };
-        let (coords_scale, cursor_scale) = if settings.use_local_scaler {
+        let (coords_scale, cursor_scale) = if use_local_scaler {
             settings.scale_factor = 1.0;
             (monitor_scale, monitor_scale)
         } else {
@@ -191,8 +196,7 @@ impl AppHandler {
 
         if is_rail {
             // Screen size shoud be the real one for rail, with all consecuences
-            settings.screen_size = rdp_ffi::geom::ScreenSize::Fixed(desktop_w, desktop_h);
-            settings.scale_factor = monitor_scale;
+            settings.screen_size = rdp_ffi::geom::ScreenSize::Fixed(rdp_w, rdp_h);
             let window = Arc::new(
                 el.create_window(
                     Window::default_attributes()
@@ -973,6 +977,7 @@ impl AppHandler {
                             None
                         },
                         best_experience: true,
+                        use_local_scaler: false,
                         ..Default::default()
                     };
                     self.close_launcher();

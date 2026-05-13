@@ -16,10 +16,7 @@ pub use pinbar::Pinbar;
 pub use rail::{RailAction, RailState, RailWindow};
 
 use std::collections::HashMap;
-use std::sync::{
-    Arc, RwLock,
-    atomic::{AtomicBool},
-};
+use std::sync::{Arc, RwLock, atomic::AtomicBool};
 
 use anyhow::Result;
 use flume::{Receiver, bounded};
@@ -85,6 +82,14 @@ impl RdpState {
         keys_rx: Receiver<RawKey>,
         use_rgba: bool,
     ) -> Result<Self> {
+        log::debug!(
+            "RdpState::new: is_rail={}, coords_scale={}, cursor_scale={}, desktop_size={:?}, use_rgba={}",
+            is_rail,
+            coords_scale,
+            cursor_scale,
+            desktop_size,
+            use_rgba
+        );
         let (tx, rx) = bounded::<RdpMessage>(FRAMES_IN_FLIGHT);
 
         let rdp_settings = settings;
@@ -183,12 +188,10 @@ pub fn handle_rdp_message(state: &mut RdpState, message: RdpMessage) -> RdpActio
             RdpActionResult::Continue
         }
         // Delegate RAIL-specific messages
-        ref msg if state.is_rail => {
-            match rail::handle_rail_message(state, msg.clone()) {
-                RdpActionResult::Skip => RdpActionResult::Skip,
-                other => other,
-            }
-        }
+        ref msg if state.is_rail => match rail::handle_rail_message(state, msg.clone()) {
+            RdpActionResult::Skip => RdpActionResult::Skip,
+            other => other,
+        },
         _ => RdpActionResult::Skip,
     }
 }

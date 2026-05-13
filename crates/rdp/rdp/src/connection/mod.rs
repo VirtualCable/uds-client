@@ -416,6 +416,8 @@ impl Rdp {
                     freerdp_settings_set_bool(settings, key, true.into());
                 }
 
+                // Allow for now single element, will include more in a future
+                #[allow(clippy::single_element_loop)]
                 for key in [FreeRDP_Settings_Keys_Bool_FreeRDP_GfxH264] {
                     freerdp_settings_set_bool(settings, key, false.into());
                 }
