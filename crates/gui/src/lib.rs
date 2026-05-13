@@ -184,7 +184,7 @@ impl AppHandler {
             (monitor_scale, monitor_scale)
         } else {
             settings.scale_factor = monitor_scale;
-            (1.0, monitor_scale)
+            (1.0, 1.0)
         };
         let desktop_size = (rdp_w, rdp_h);
         let is_fullscreen = settings.screen_size.is_fullscreen() && !is_rail;
@@ -217,7 +217,7 @@ impl AppHandler {
                 settings,
                 true,
                 monitor_scale,
-                monitor_scale,
+                cursor_scale,
                 (desktop_w, desktop_h),
                 self.keys_rx.clone(),
                 use_rgba,
