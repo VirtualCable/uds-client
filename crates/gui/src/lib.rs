@@ -598,11 +598,9 @@ impl AppHandler {
         {
             // Force position every frame to prevent Windows cascading offset
             let sf = state.coords_scale.max(1.0);
+            let (px, py) = monitor::logic_2_phys_pos((rw.rect.x, rw.rect.y), sf);
             rw.window
-                .set_outer_position(winit::dpi::PhysicalPosition::new(
-                    (rw.rect.x as f64 * sf) as i32,
-                    (rw.rect.y as f64 * sf) as i32,
-                ));
+                .set_outer_position(winit::dpi::PhysicalPosition::new(px, py));
             if let (Some(rgba), Some(ref mut renderer)) = (&rw.rgba_data, rw.renderer.as_mut()) {
                 renderer.update_and_render(rgba.as_slice(), rw.width, rw.height, &[], &[], None);
             }
@@ -643,10 +641,17 @@ impl AppHandler {
                 self.last_pointer = Some(*position);
                 if let Some(rw) = state.rail_windows.get(&rail_id) {
                     let sf = state.coords_scale;
-                    let dw = state.desktop_size.0.saturating_sub(1) as f64;
-                    let dh = state.desktop_size.1.saturating_sub(1) as f64;
-                    let gx = (position.x / sf + rw.rect.x as f64).round().clamp(0.0, dw) as u16;
-                    let gy = (position.y / sf + rw.rect.y as f64).round().clamp(0.0, dh) as u16;
+                    let (gx, gy) = monitor::phys_2_logic(
+                        (
+                            (position.x + rw.rect.x as f64 * sf).round() as i32,
+                            (position.y + rw.rect.y as f64 * sf).round() as i32,
+                        ),
+                        sf,
+                    );
+                    let dw = state.desktop_size.0.saturating_sub(1) as i32;
+                    let dh = state.desktop_size.1.saturating_sub(1) as i32;
+                    let gx = gx.clamp(0, dw) as u16;
+                    let gy = gy.clamp(0, dh) as u16;
                     shared::log::debug!(
                         "RAIL[{rail_id}] MoveSend pos=({:.0},{:.0}) sf={sf} rect=({},{})+{}x{} → g=({gx},{gy}) clamp=({dw:.0},{dh:.0})",
                         position.x, position.y,
@@ -703,10 +708,17 @@ impl AppHandler {
                             0
                         };
                     let sf = state.coords_scale;
-                    let dw = state.desktop_size.0.saturating_sub(1) as f64;
-                    let dh = state.desktop_size.1.saturating_sub(1) as f64;
-                    let gx = (pos.x / sf + rw.rect.x as f64).round().clamp(0.0, dw) as u16;
-                    let gy = (pos.y / sf + rw.rect.y as f64).round().clamp(0.0, dh) as u16;
+                    let (gx, gy) = monitor::phys_2_logic(
+                        (
+                            (pos.x + rw.rect.x as f64 * sf).round() as i32,
+                            (pos.y + rw.rect.y as f64 * sf).round() as i32,
+                        ),
+                        sf,
+                    );
+                    let dw = state.desktop_size.0.saturating_sub(1) as i32;
+                    let dh = state.desktop_size.1.saturating_sub(1) as i32;
+                    let gx = gx.clamp(0, dw) as u16;
+                    let gy = gy.clamp(0, dh) as u16;
                     log::debug!(
                         "RAIL[{rail_id}] MouseClick → flags={f} x={gx} y={gy} (phys=({:.0},{:.0}) sf={sf} rect=({},{})+{}x{})",
                         pos.x,
@@ -795,10 +807,8 @@ impl AppHandler {
                     let wid = window.id();
                     // Position window at server-specified coordinates
                     let sf = state.coords_scale.max(1.0);
-                    window.set_outer_position(winit::dpi::PhysicalPosition::new(
-                        (rect.x as f64 * sf) as i32,
-                        (rect.y as f64 * sf) as i32,
-                    ));
+                    let (px, py) = monitor::logic_2_phys_pos((rect.x, rect.y), sf);
+                    window.set_outer_position(winit::dpi::PhysicalPosition::new(px, py));
                     let window = Arc::new(window);
                     let renderer =
                         crate::wgpu_render::WgpuRenderer::new(window.clone(), rect.w, rect.h).ok();
@@ -852,11 +862,9 @@ impl AppHandler {
                             rect.h as f64,
                         ));
                         let sf = state.coords_scale.max(1.0);
+                        let (px, py) = monitor::logic_2_phys_pos((rect.x, rect.y), sf);
                         rw.window
-                            .set_outer_position(winit::dpi::PhysicalPosition::new(
-                                (rect.x as f64 * sf) as i32,
-                                (rect.y as f64 * sf) as i32,
-                            ));
+                            .set_outer_position(winit::dpi::PhysicalPosition::new(px, py));
                     }
                 }
                 RailAction::SetVisible(id, visible) => {
@@ -982,7 +990,8 @@ impl AppHandler {
                         password: "temporal".to_string(),
                         screen_size: rdp_ffi::geom::ScreenSize::Full,
                         rail_app: if is_rail {
-                            Some("c:\\windows\\notepad.exe".to_string())
+                            //Some("c:\\windows\\notepad.exe".to_string())
+                            Some("c:\\windows\\system32\\mspaint.exe".to_string())
                         } else {
                             None
                         },
