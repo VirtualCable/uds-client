@@ -77,6 +77,7 @@ pub struct AppHandler {
     last_pointer: Option<winit::dpi::PhysicalPosition<f64>>,
     rail_button_down: Option<u32>,
     rail_ipc: Option<crate::ipc::IpcListener>,
+    pacing_started: bool,
     return_code: ReturnCode,
     initial_state: Option<AppState>,
     first_resume: bool,
@@ -111,6 +112,7 @@ pub fn run_gui(
         last_pointer: None,
         rail_button_down: None,
         rail_ipc: None,
+        pacing_started: false,
         return_code: ReturnCode::Exit,
         initial_state,
         first_resume: true,
@@ -137,10 +139,25 @@ impl ApplicationHandler<UserEvent> for AppHandler {
         if self.first_resume {
             self.first_resume = false;
             let inner = match self.initial_state.take().unwrap_or_default() {
+                #[cfg(feature = "test-ui")]
                 AppState::Test => LauncherInner::new_test(),
                 AppState::Invisible => LauncherInner::Invisible,
             };
             let _ = self.open_launcher(el, inner);
+        }
+        // Start frame pacing once
+        if !self.pacing_started {
+            self.pacing_started = true;
+            let proxy = self.proxy.clone();
+            let fps = self.fps_limit;
+            let stop = self.stop.clone();
+            std::thread::spawn(move || {
+                let interval = Duration::from_secs_f64(1.0 / fps as f64);
+                while !stop.is_triggered() {
+                    std::thread::sleep(interval);
+                    let _ = proxy.send_event(UserEvent::Tick);
+                }
+            });
         }
         el.set_control_flow(ControlFlow::WaitUntil(
             Instant::now() + Duration::from_millis(16),
@@ -207,6 +224,11 @@ impl ApplicationHandler<UserEvent> for AppHandler {
                 }
                 if let Some(ref p) = self.popup {
                     p.window.request_redraw();
+                }
+                if let Some(ref l) = self.launcher
+                    && let Some(ref w) = l.window
+                {
+                    w.request_redraw();
                 }
             }
         }

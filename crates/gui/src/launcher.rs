@@ -9,9 +9,11 @@ use wgpu_text::glyph_brush::{OwnedSection, Section, Text};
 use crate::draw::ui::{button::{self, ButtonStyle}, progress, text};
 
 #[derive(Default)]
+#[allow(dead_code)]
 pub enum LauncherInner {
     #[default]
     Invisible,
+    #[cfg(feature = "test-ui")]
     Test {
         buttons: Vec<(&'static str, LaunchAction)>,
         request: Option<LaunchAction>,
@@ -31,13 +33,14 @@ pub enum LauncherInner {
         response: Arc<RwLock<Option<oneshot::Sender<bool>>>>,
     },
 }
-#[derive(Default, PartialEq)]
+#[derive(Default, PartialEq, Debug)]
 pub enum ProgressPhase {
     #[default]
     Connecting,
     Connected,
 }
 
+#[cfg(feature = "test-ui")]
 #[derive(Clone)]
 pub enum LaunchAction {
     ShowProgress,
@@ -50,6 +53,7 @@ pub enum LaunchAction {
 }
 
 impl LauncherInner {
+    #[cfg(feature = "test-ui")]
     pub fn new_test() -> Self {
         LauncherInner::Test {
             buttons: vec![
@@ -64,13 +68,12 @@ impl LauncherInner {
             request: None,
         }
     }
-    pub fn handle_click(&mut self, x: f32, y: f32) -> Option<LaunchAction> {
+    pub fn handle_click(&mut self, x: f32, y: f32) {
         match self {
             LauncherInner::Error(_) | LauncherInner::Warning(_) => {
                 if y > 230.0 && y < 270.0 && x > 140.0 && x < 260.0 {
                     *self = LauncherInner::Invisible;
                 }
-                None
             }
             LauncherInner::YesNo { response, .. } => {
                 let r = response.clone();
@@ -90,21 +93,21 @@ impl LauncherInner {
                 if c {
                     *self = LauncherInner::Invisible;
                 }
-                None
             }
+            #[cfg(feature = "test-ui")]
             LauncherInner::Test { buttons, request } => {
                 for (i, _) in buttons.iter().enumerate() {
                     let by = 42.0 + i as f32 * 34.0;
                     if y >= by && y <= by + 28.0 && (70.0..=330.0).contains(&x) {
                         *request = Some(buttons[i].1.clone());
-                        return buttons[i].1.clone().into();
+                        break;
                     }
                 }
-                None
             }
-            _ => None,
+            _ => {}
         }
     }
+    #[cfg(feature = "test-ui")]
     pub fn take_request(&mut self) -> Option<LaunchAction> {
         match self {
             LauncherInner::Test { request, .. } => request.take(),
@@ -120,6 +123,7 @@ pub struct TestingLauncherState {
     pub last_mouse_pos: Option<(f32, f32)>,
 }
 
+#[cfg(feature = "test-ui")]
 fn test_button_style() -> ButtonStyle {
     ButtonStyle {
         font_scale: monitor::scaled_val(14) as f32,
@@ -176,12 +180,12 @@ pub fn paint_launcher(state: &mut TestingLauncherState) {
 
     match &state.inner {
         LauncherInner::Invisible => {}
+        #[cfg(feature = "test-ui")]
         LauncherInner::Test { .. } => {}
         LauncherInner::Progress { pct, message, start, progress_duration_secs, phase, auto_animate } => {
+            let elapsed = start.elapsed().as_secs_f32();
             let pct = if *auto_animate {
-                let elapsed = start.elapsed().as_secs_f32();
-                let total = *progress_duration_secs as f32;
-                (elapsed / total * 100.0).min(100.0)
+                (elapsed / *progress_duration_secs as f32 * 100.0).min(100.0)
             } else {
                 *pct as f32
             };
@@ -314,6 +318,7 @@ pub fn paint_launcher(state: &mut TestingLauncherState) {
     }
 
     // Test buttons
+    #[cfg(feature = "test-ui")]
     if let LauncherInner::Test { buttons, .. } = &state.inner {
         let bh = monitor::scaled_val(28) as u32;
         let bw = monitor::scaled_val(260) as u32;

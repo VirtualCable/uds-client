@@ -32,6 +32,7 @@ pub enum ReturnCode {
 pub enum AppState {
     #[default]
     Invisible,
+    #[cfg(feature = "test-ui")]
     Test,
 }
 

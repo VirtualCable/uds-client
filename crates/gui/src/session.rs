@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use anyhow::Result;
 use winit::event_loop::ActiveEventLoop;
@@ -10,7 +10,9 @@ use shared::log;
 
 use super::{AppHandler, WindowKind};
 use crate::keymap;
-use crate::launcher::{LaunchAction, LauncherInner, ProgressPhase};
+use crate::launcher::{LauncherInner, ProgressPhase};
+#[cfg(feature = "test-ui")]
+use crate::launcher::LaunchAction;
 use crate::logo;
 use crate::monitor;
 use crate::popup::{PopupKind, PopupState};
@@ -151,17 +153,6 @@ impl AppHandler {
             state.window.window.set_cursor_visible(false);
         }
 
-        // Spawn frame pacing thread
-        let proxy = self.proxy.clone();
-        let fps = self.fps_limit;
-        let stop = self.stop.clone();
-        std::thread::spawn(move || {
-            let interval = Duration::from_secs_f64(1.0 / fps as f64);
-            while !stop.is_triggered() {
-                std::thread::sleep(interval);
-                let _ = proxy.send_event(super::UserEvent::Tick);
-            }
-        });
         Ok(())
     }
 
@@ -367,6 +358,7 @@ impl AppHandler {
         }
 
         // Launcher test actions
+        #[cfg(feature = "test-ui")]
         if let Some(ref mut launcher) = self.launcher
             && let Some(action) = launcher.inner.take_request()
         {
