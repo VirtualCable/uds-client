@@ -163,7 +163,7 @@ impl AppHandler {
         let is_rail = settings.rail_app.is_some();
         let use_rgba = cfg!(target_os = "macos");
 
-        let monitor_scale =  monitor::scale(0);
+        let monitor_scale = monitor::scale(0);
         let (desktop_w, desktop_h) = monitor::size(0).unwrap_or((1920, 1080));
         let use_local_scaler = settings.use_local_scaler;
         let local_scale = if use_local_scaler { monitor_scale } else { 1.0 };
@@ -177,12 +177,12 @@ impl AppHandler {
             }
             (rdp_ffi::geom::ScreenSize::Fixed(w, h), _) => (w, h),
         };
-        let (coords_scale, cursor_scale) = if use_local_scaler {
+        let coords_scale = if use_local_scaler {
             settings.scale_factor = 1.0;
-            (monitor_scale, monitor_scale)
+            monitor_scale
         } else {
             settings.scale_factor = monitor_scale;
-            (1.0, 1.0)
+            1.0
         };
         let desktop_size = (rdp_w, rdp_h);
         let is_fullscreen = settings.screen_size.is_fullscreen() && !is_rail;
@@ -215,8 +215,6 @@ impl AppHandler {
                 settings,
                 true,
                 coords_scale,
-                cursor_scale,
-                monitor_scale,
                 (rdp_w, rdp_h),
                 self.keys_rx.clone(),
                 use_rgba,
@@ -249,8 +247,6 @@ impl AppHandler {
                 settings,
                 false,
                 coords_scale,
-                cursor_scale,
-                monitor_scale,
                 desktop_size,
                 self.keys_rx.clone(),
                 use_rgba,
@@ -293,8 +289,6 @@ impl AppHandler {
         self.rdp = None;
     }
 }
-
-// ── Input handlers ────────────────────────────────────────
 
 impl AppHandler {
     fn handle_keyboard(&mut self, el: &ActiveEventLoop, event: &WindowEvent) -> bool {
@@ -646,18 +640,18 @@ impl AppHandler {
                 }
             }
             WindowEvent::CursorMoved { ref position, .. } => {
-                shared::log::trace!(
-                    "RAIL[{rail_id}] CursorMoved({:.0},{:.0})",
-                    position.x,
-                    position.y
-                );
                 self.last_pointer = Some(*position);
                 if let Some(rw) = state.rail_windows.get(&rail_id) {
                     let sf = state.coords_scale;
                     let dw = state.desktop_size.0.saturating_sub(1) as f64;
                     let dh = state.desktop_size.1.saturating_sub(1) as f64;
-                    let gx = (position.x + rw.rect.x as f64 * sf).round().clamp(0.0, dw) as u16;
-                    let gy = (position.y + rw.rect.y as f64 * sf).round().clamp(0.0, dh) as u16;
+                    let gx = (position.x / sf + rw.rect.x as f64).round().clamp(0.0, dw) as u16;
+                    let gy = (position.y / sf + rw.rect.y as f64).round().clamp(0.0, dh) as u16;
+                    shared::log::debug!(
+                        "RAIL[{rail_id}] MoveSend pos=({:.0},{:.0}) sf={sf} rect=({},{})+{}x{} → g=({gx},{gy}) clamp=({dw:.0},{dh:.0})",
+                        position.x, position.y,
+                        rw.rect.x, rw.rect.y, rw.rect.w, rw.rect.h,
+                    );
                     let _ = cmd_tx.send(rdp_ffi::commands::RdpCommand::Input(
                         rdp_ffi::commands::InputEvent::Mouse {
                             flags: rdp_ffi::sys::PTR_FLAGS_MOVE as u16,
@@ -711,8 +705,17 @@ impl AppHandler {
                     let sf = state.coords_scale;
                     let dw = state.desktop_size.0.saturating_sub(1) as f64;
                     let dh = state.desktop_size.1.saturating_sub(1) as f64;
-                    let gx = (pos.x + rw.rect.x as f64 * sf).round().clamp(0.0, dw) as u16;
-                    let gy = (pos.y + rw.rect.y as f64 * sf).round().clamp(0.0, dh) as u16;
+                    let gx = (pos.x / sf + rw.rect.x as f64).round().clamp(0.0, dw) as u16;
+                    let gy = (pos.y / sf + rw.rect.y as f64).round().clamp(0.0, dh) as u16;
+                    log::debug!(
+                        "RAIL[{rail_id}] MouseClick → flags={f} x={gx} y={gy} (phys=({:.0},{:.0}) sf={sf} rect=({},{})+{}x{})",
+                        pos.x,
+                        pos.y,
+                        rw.rect.x,
+                        rw.rect.y,
+                        rw.rect.w,
+                        rw.rect.h
+                    );
                     let _ = cmd_tx.send(rdp_ffi::commands::RdpCommand::Input(
                         rdp_ffi::commands::InputEvent::Mouse {
                             flags: f,

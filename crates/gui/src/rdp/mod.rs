@@ -45,7 +45,6 @@ pub struct RdpState {
     pub command_event: rdp_ffi::utils::SafeHandle,
     pub is_rail: bool,
     pub coords_scale: f64,
-    pub monitor_scale: f64,
     pub desktop_size: (u32, u32),
     pub full_screen: Arc<AtomicBool>,
     pub last_windowed_size: Option<(u32, u32)>,
@@ -79,25 +78,22 @@ impl RdpState {
         settings: RdpSettings,
         is_rail: bool,
         coords_scale: f64,
-        cursor_scale: f64,
-        monitor_scale: f64,
         desktop_size: (u32, u32),
         keys_rx: Receiver<RawKey>,
         use_rgba: bool,
     ) -> Result<Self> {
         log::debug!(
-            "RdpState::new: is_rail={}, coords_scale={}, cursor_scale={}, desktop_size={:?}, use_rgba={}",
+            "RdpState::new: is_rail={}, coords_scale={}, desktop_size={:?}, use_rgba={}",
             is_rail,
             coords_scale,
-            cursor_scale,
             desktop_size,
             use_rgba
         );
         let (tx, rx) = bounded::<RdpMessage>(FRAMES_IN_FLIGHT);
 
-        let rdp_settings = settings;
+        let scale_factor = settings.scale_factor;
 
-        let (mut rdp_instance, command_tx) = rdp_ffi::Rdp::new(rdp_settings, tx, use_rgba);
+        let (mut rdp_instance, command_tx) = rdp_ffi::Rdp::new(settings, tx, use_rgba);
         let command_event = rdp_instance.get_command_event();
 
         if is_rail {
@@ -119,9 +115,10 @@ impl RdpState {
         let channels = rdp.channels().clone();
 
         log::info!(
-            "RDP connected: GDI={}x{} stride={}",
+            "RDP connected: GDI={}x{}, scale={}, stride={}",
             unsafe { (*gdi).width },
             unsafe { (*gdi).height },
+            scale_factor,
             unsafe { (*gdi).stride }
         );
 
@@ -150,7 +147,6 @@ impl RdpState {
             command_event,
             is_rail,
             coords_scale,
-            monitor_scale,
             desktop_size,
             full_screen: Arc::new(AtomicBool::new(false)),
             last_windowed_size: None,
@@ -168,7 +164,7 @@ impl RdpState {
             rail_channel,
             rail_actions: Vec::new(),
             rail_windows: HashMap::new(),
-            cursor: Cursor::new(cursor_scale),
+            cursor: Cursor::new(coords_scale),
             pending_pixels: HashMap::new(),
         })
     }

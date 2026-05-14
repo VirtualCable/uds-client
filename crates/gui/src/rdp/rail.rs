@@ -38,6 +38,7 @@ pub enum RailAction {
 
 use super::{RdpActionResult, RdpState};
 
+#[allow(clippy::unnecessary_cast)]
 pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActionResult {
     match message {
         RdpMessage::WindowCreate {
@@ -69,6 +70,7 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                 return RdpActionResult::Continue;
             }
             let sf = state.coords_scale.max(1.0);
+            let msf = state.window.window.scale_factor().max(1.0);
             let is_off = is_offscreen.unwrap_or(false);
 
             let mut exists = state.rail_windows.contains_key(&window_id);
@@ -113,19 +115,19 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                     }
 
                     let x = match pos {
-                        Some((x, _)) => (x as f64 / sf) as i32,
+                        Some((x, _)) => x,
                         None => rect.x,
                     };
                     let y = match pos {
-                        Some((_, y)) => (y as f64 / sf) as i32,
+                        Some((_, y)) => y,
                         None => rect.y,
                     };
                     let w = match size {
-                        Some((w, _)) => (w as f64 / sf) as u32,
+                        Some((w, _)) => (w as f64 * sf / msf) as u32,
                         None => rect.w,
                     };
                     let h = match size {
-                        Some((_, h)) => (h as f64 / sf) as u32,
+                        Some((_, h)) => (h as f64 * sf / msf) as u32,
                         None => rect.h,
                     };
                     let new_rect = rdp_ffi::geom::Rect::new(x, y, w, h);
@@ -138,10 +140,10 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                 if w > 0 && h > 0 {
                     let (x, y) = pos.unwrap_or((0, 0));
                     let rect = rdp_ffi::geom::Rect::new(
-                        (x as f64 / sf) as i32,
-                        (y as f64 / sf) as i32,
-                        (w as f64 / sf) as u32,
-                        (h as f64 / sf) as u32,
+                        x as i32,
+                        y as i32,
+                        (w as f64 * sf / msf) as u32,
+                        (h as f64 * sf / msf) as u32,
                     );
                     let is_tool = ext_style.is_some_and(|s| (s & 0x80) != 0);
                     let has_owner = owner_id.is_some() && owner_id != Some(0);
@@ -173,9 +175,10 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
             data,
         } => {
             if let Some(rw) = state.rail_windows.get_mut(&window_id) {
-                let msf = state.monitor_scale.max(1.0);
-                let lw = ((width as f64 / msf) as u32).min(state.desktop_size.0);
-                let lh = ((height as f64 / msf) as u32).min(state.desktop_size.1);
+                let sf = state.coords_scale.max(1.0);
+                let msf = rw.window.scale_factor().max(1.0);
+                let lw = ((width as f64 * sf / msf) as u32).min(state.desktop_size.0);
+                let lh = ((height as f64 * sf / msf) as u32).min(state.desktop_size.1);
                 if rw.rect.w != lw || rw.rect.h != lh {
                     rw.rect.w = lw;
                     rw.rect.h = lh;
