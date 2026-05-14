@@ -39,6 +39,7 @@ rand = "0.10"
 
 # Concurrency channels and utilities
 flume = { version = "0.12", features = ["async"] }
+interprocess = "2"
 
 
 # SSL/TLS
@@ -85,6 +86,8 @@ winit = { version = "0.30.13" }
 wgpu = "29"
 pollster = "0.4"
 wgpu_text = "29"
+bytemuck = { version = "1", features = ["derive"] }
+tiny-skia = "0.12"
 
 # Sound
 cpal = "0.17.2"

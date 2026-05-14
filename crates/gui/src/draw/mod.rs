@@ -3,6 +3,8 @@
 // All rights reserved.
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
+pub mod ui;
+
 pub const INTER_FONT_DATA: &[u8] = include_bytes!("fonts/Inter-Regular.ttf");
 
 /// Load a PNG file (embedded via include_bytes!) and return RGBA pixel data + dimensions.
