@@ -652,7 +652,7 @@ impl AppHandler {
                     let dh = state.desktop_size.1.saturating_sub(1) as i32;
                     let gx = gx.clamp(0, dw) as u16;
                     let gy = gy.clamp(0, dh) as u16;
-                    shared::log::debug!(
+                    shared::log::trace!(
                         "RAIL[{rail_id}] MoveSend pos=({:.0},{:.0}) sf={sf} rect=({},{})+{}x{} → g=({gx},{gy}) clamp=({dw:.0},{dh:.0})",
                         position.x, position.y,
                         rw.rect.x, rw.rect.y, rw.rect.w, rw.rect.h,
@@ -672,7 +672,7 @@ impl AppHandler {
             WindowEvent::CursorLeft { .. } => {
                 // Do NOT synthesize release — Windows SetCapture will deliver
                 // the real MouseInput release even when cursor is outside.
-                shared::log::debug!(
+                shared::log::trace!(
                     "RAIL[{rail_id}] CursorLeft (button_down={})",
                     self.rail_button_down.is_some()
                 );
@@ -680,7 +680,7 @@ impl AppHandler {
             WindowEvent::MouseInput {
                 button, state: btn, ..
             } => {
-                shared::log::debug!(
+                shared::log::trace!(
                     "RAIL[{rail_id}] MouseInput({button:?} pressed={})",
                     btn.is_pressed()
                 );
@@ -719,7 +719,7 @@ impl AppHandler {
                     let dh = state.desktop_size.1.saturating_sub(1) as i32;
                     let gx = gx.clamp(0, dw) as u16;
                     let gy = gy.clamp(0, dh) as u16;
-                    log::debug!(
+                    log::trace!(
                         "RAIL[{rail_id}] MouseClick → flags={f} x={gx} y={gy} (phys=({:.0},{:.0}) sf={sf} rect=({},{})+{}x{})",
                         pos.x,
                         pos.y,
@@ -848,7 +848,7 @@ impl AppHandler {
                 }
                 RailAction::UpdatePosition(id, rect) => {
                     if let Some(rw) = state.rail_windows.get_mut(id) {
-                        shared::log::debug!(
+                    shared::log::trace!(
                             "RAIL[{id}] UpdatePosition rect=({},{}) {}x{} button_down={}",
                             rect.x,
                             rect.y,

@@ -142,7 +142,7 @@ impl WindowCallbacks for Rdp {
         }
 
         unsafe {
-            log::debug!(
+            log::trace!(
                 "WindowCallbacks::on_window_create: order_info={:?}, window_state={:?}",
                 *order_info,
                 *window_state
@@ -186,7 +186,7 @@ impl WindowCallbacks for Rdp {
         window_state: *const WINDOW_STATE_ORDER,
     ) -> bool {
         unsafe {
-            log::debug!(
+            log::trace!(
                 "WindowCallbacks::on_window_update: order_info={:?}, window_state={:?}",
                 *order_info,
                 *window_state

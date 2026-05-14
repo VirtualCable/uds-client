@@ -108,7 +108,7 @@ impl RailChannel {
             };
             unsafe {
                 if let Some(client_win_move) = (*context).ClientWindowMove {
-                    log::debug!("RAIL: Sending Window Move for window {}", window_id);
+                    log::trace!("RAIL: Sending Window Move for window {}", window_id);
                     client_win_move(context, &movecmd);
                 }
             }
@@ -127,7 +127,7 @@ impl RailChannel {
             };
             unsafe {
                 if let Some(client_activate) = (*context).ClientActivate {
-                    log::debug!(
+                    log::trace!(
                         "RAIL: Sending ClientActivate(enabled={}) for window {}",
                         enabled,
                         window_id

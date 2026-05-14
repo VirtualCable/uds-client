@@ -65,6 +65,11 @@ declare module "runtime" {
       printer_redirection?: boolean;
       drives_to_redirect?: string[];
       sound_latency_threshold?: number;
+      best_experience?: boolean;
+      rail_app?: string;
+      rail_args?: string;
+      rail_working_dir?: string;
+      use_local_scaler?: boolean;
     }): void;
     function sign(rdp_string: string, ticket: string): Promise<string>;
   }

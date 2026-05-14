@@ -7,7 +7,7 @@ This document describes the JavaScript modules and functions available in the ru
 | Module   | Description | Functions |
 |----------|-------------|-----------|
 | Utils    | Utility functions for environment variables, registry (Windows), encryption, and network testing | 8 |
-| File     | File operations, temporary files, and directory access | 8 |
+| File     | File operations, temporary files, and directory access | 9 |
 | Logger   | Logging functions at different levels | 5 |
 | Process  | Executable finding, process launching, and management | 8 |
 | Tasks    | Task management, cleanup files, and tunnel connections | 4 |
@@ -466,6 +466,11 @@ Starts an RDP connection with the specified settings.
   - `printer_redirection` (boolean, optional): Whether to enable printer redirection (default: false).
   - `drives_to_redirect` (array of strings, optional): List of drive letters to redirect. Valid special values include `"all"` (all drives).
   - `sound_latency_threshold` (number, optional): Threshold in ms for sound latency (default: 400).
+  - `best_experience` (boolean, optional): Whether to enable best experience optimizations (default: true).
+  - `rail_app` (string, optional): RemoteApp program path (e.g., `"c:\\windows\\notepad.exe"`). Enables RAIL (RemoteApp) mode.
+  - `rail_args` (string, optional): Command-line arguments for the RemoteApp program.
+  - `rail_working_dir` (string, optional): Working directory for the RemoteApp program.
+  - `use_local_scaler` (boolean, optional): If true (default), the local client handles all DPI scaling and the server renders at 100% DPI, reducing bandwidth. If false, the server handles scaling at the native monitor DPI.
 
 **Returns:** undefined
 
@@ -495,6 +500,28 @@ RDP.start({
     screen_height: 1080,
     clipboard_redirection: true,
     drives_to_redirect: ["C", "D"]
+});
+
+// Start a RemoteApp (RAIL) connection
+RDP.start({
+    server: "192.168.1.100",
+    user: "username",
+    password: "password",
+    rail_app: "c:\\windows\\notepad.exe",
+    rail_args: "c:\\temp\\file.txt",
+    rail_working_dir: "c:\\temp",
+    // With local scaler (default): server renders at 100% DPI, client upscales
+    use_local_scaler: true
+});
+
+// Start full desktop with server-side scaling
+RDP.start({
+    server: "192.168.1.100",
+    user: "username",
+    password: "password",
+    screen_width: 0,   // fullscreen
+    screen_height: 0,  // fullscreen
+    use_local_scaler: false  // server handles DPI scaling
 });
 
   // Sign an RDP file/string through the broker
