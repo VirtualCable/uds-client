@@ -93,6 +93,12 @@ pub enum RdpMessage {
         height: u32,
         data: Vec<u8>,
     },
+    WindowIcon {
+        window_id: u32,
+        rgba: Vec<u8>,
+        width: u32,
+        height: u32,
+    },
     DesktopResize(u32, u32),
 }
 
@@ -157,6 +163,14 @@ impl core::fmt::Debug for RdpMessage {
                 ..
             } => f
                 .debug_struct("WindowPixels")
+                .field("window_id", window_id)
+                .field("width", width)
+                .field("height", height)
+                .finish(),
+            RdpMessage::WindowIcon {
+                window_id, width, height, ..
+            } => f
+                .debug_struct("WindowIcon")
                 .field("window_id", window_id)
                 .field("width", width)
                 .field("height", height)

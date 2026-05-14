@@ -10,13 +10,15 @@ use shared::log;
 
 use super::{AppHandler, WindowKind};
 use crate::keymap;
-use crate::launcher::{LauncherInner, ProgressPhase};
 #[cfg(feature = "test-ui")]
 use crate::launcher::LaunchAction;
+use crate::launcher::{LauncherInner, ProgressPhase};
 use crate::logo;
 use crate::monitor;
 use crate::popup::{PopupKind, PopupState};
-use crate::rdp::{RailAction, RailWindow, RdpActionResult, RdpState, RdpWindow, handle_rdp_message};
+use crate::rdp::{
+    RailAction, RailWindow, RdpActionResult, RdpState, RdpWindow, handle_rdp_message,
+};
 use crate::types::{GuiMessage, ReturnCode};
 use crate::wgpu_render::WgpuRenderer;
 
@@ -76,7 +78,7 @@ impl AppHandler {
                 renderer,
                 scratch: Vec::new(),
             };
-            let server_id = settings.server_id.clone();
+            let server_auth = settings.server_auth.clone();
             let rdp_state = RdpState::new(
                 rdp_window,
                 settings,
@@ -89,13 +91,13 @@ impl AppHandler {
             self.rdp = Some(Box::new(rdp_state));
             self.register_window(wid, WindowKind::Rdp);
 
-            // If this is a RAIL session with a server_id, start IPC listener
-            if let Some(ref server_id) = server_id
+            // If this is a RAIL session with a server config, start IPC listener
+            if let Some(ref srv) = server_auth
                 && let Some(ref state) = self.rdp
             {
                 let cmd_tx = state.command_tx.clone();
                 let cmd_ev = state.command_event;
-                self.rail_ipc = crate::ipc::bind(server_id, move |msg| {
+                self.rail_ipc = crate::ipc::bind(&srv.id, &srv.token, move |msg| {
                     let _ = cmd_tx.send(rdp_ffi::commands::RdpCommand::LaunchRailApp {
                         app: msg.rail_app,
                         args: msg.rail_args,
@@ -226,6 +228,14 @@ impl AppHandler {
                             offscreen: false,
                         },
                     );
+                    // Apply any buffered icon for this window
+                    if let Some((rgba, w, h)) = state.pending_icons.remove(id)
+                        && let Ok(icon) = winit::window::Icon::from_rgba(rgba, w, h)
+                        && let Some(rw) = state.rail_windows.get(id)
+                    {
+                        rw.window.set_window_icon(Some(icon));
+                    }
+
                     regs.push((wid, *id));
                     log::debug!("RAIL window created: id={id} {rect:?}");
                 }
@@ -331,7 +341,10 @@ impl AppHandler {
                     if let Some(ref mut l) = self.launcher {
                         let done = val >= 100;
                         if let LauncherInner::Progress {
-                            ref mut pct, ref mut message, ref mut phase, ..
+                            ref mut pct,
+                            ref mut message,
+                            ref mut phase,
+                            ..
                         } = l.inner
                         {
                             *pct = val;
@@ -402,8 +415,11 @@ impl AppHandler {
                         },
                         best_experience: true,
                         use_local_scaler: true,
-                        server_id: if is_rail {
-                            Some("test-uds-rail".to_string())
+                        server_auth: if is_rail {
+                            Some(rdp_ffi::settings::ServerAuth {
+                                id: "test-uds-rail".to_string(),
+                                token: "test-token".to_string(),
+                            })
                         } else {
                             None
                         },
@@ -423,6 +439,7 @@ impl AppHandler {
                                 rail_app: "c:\\windows\\notepad.exe".to_string(),
                                 rail_args: String::new(),
                                 rail_working_dir: String::new(),
+                                server_token: "test-token".to_string(),
                             };
                             let ok = crate::ipc::try_send("test-uds-rail", &msg);
                             log::info!("IPC test: sent notepad.exe via IPC → {ok}");

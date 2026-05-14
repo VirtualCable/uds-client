@@ -202,6 +202,24 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
             }
             RdpActionResult::Continue
         }
+        RdpMessage::WindowIcon {
+            window_id,
+            rgba,
+            width,
+            height,
+        } => {
+            if let Some(rw) = state.rail_windows.get(&window_id) {
+                if let Ok(icon) = winit::window::Icon::from_rgba(rgba, width, height) {
+                    rw.window.set_window_icon(Some(icon));
+                }
+            } else {
+                // Buffer icon for pending window (same pattern as pending_pixels)
+                state
+                    .pending_icons
+                    .insert(window_id, (rgba, width, height));
+            }
+            RdpActionResult::Continue
+        }
         _ => RdpActionResult::Skip,
     }
 }

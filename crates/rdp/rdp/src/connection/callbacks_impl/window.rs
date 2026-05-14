@@ -33,6 +33,7 @@ use crate::callbacks::window::WindowCallbacks;
 use crate::consts::*;
 use crate::messaging::RdpMessage;
 use freerdp_sys::{
+    WINDOW_CACHED_ICON_ORDER, WINDOW_ICON_ORDER,
     WINDOW_ORDER_FIELD_OWNER, WINDOW_ORDER_FIELD_SHOW, WINDOW_ORDER_FIELD_STYLE,
     WINDOW_ORDER_FIELD_TASKBAR_BUTTON, WINDOW_ORDER_FIELD_WND_OFFSET, WINDOW_ORDER_FIELD_WND_SIZE,
     WINDOW_ORDER_INFO, WINDOW_STATE_ORDER,
@@ -251,6 +252,53 @@ impl WindowCallbacks for Rdp {
             flags
         );
 
+        true
+    }
+
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
+    fn on_window_icon(
+        &self,
+        order_info: *const WINDOW_ORDER_INFO,
+        icon: *const WINDOW_ICON_ORDER,
+    ) -> bool {
+        let window_id = unsafe { (*order_info).windowId };
+        if icon.is_null() || unsafe { (*icon).iconInfo.is_null() } {
+            return true;
+        }
+        let icon_info = unsafe { &*(*icon).iconInfo };
+        if icon_info.bpp != 32 || icon_info.bitsColor.is_null() {
+            return true; // Only handle 32-bpp icons
+        }
+        let w = icon_info.width;
+        let h = icon_info.height;
+        let len = (w * h * 4) as usize;
+        let src = unsafe { std::slice::from_raw_parts(icon_info.bitsColor, len) };
+        // BGRA → RGBA swizzle (same as GDI path for non-macOS)
+        let mut rgba = Vec::with_capacity(len);
+        for chunk in src.chunks_exact(4) {
+            rgba.push(chunk[2]); // R ← B
+            rgba.push(chunk[1]); // G
+            rgba.push(chunk[0]); // B ← R
+            rgba.push(chunk[3]); // A
+        }
+        if let Some(tx) = &self.update_tx {
+            let _ = tx.send(RdpMessage::WindowIcon {
+                window_id,
+                rgba,
+                width: w,
+                height: h,
+            });
+        }
+        true
+    }
+
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
+    fn on_window_cached_icon(
+        &self,
+        _order_info: *const WINDOW_ORDER_INFO,
+        _cached: *const WINDOW_CACHED_ICON_ORDER,
+    ) -> bool {
+        // Acknowledge without action — the server will send full icons periodically
         true
     }
 }

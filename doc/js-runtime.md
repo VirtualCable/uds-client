@@ -471,7 +471,7 @@ Starts an RDP connection with the specified settings.
   - `rail_args` (string, optional): Command-line arguments for the RemoteApp program.
   - `rail_working_dir` (string, optional): Working directory for the RemoteApp program.
   - `use_local_scaler` (boolean, optional): If true (default), the local client handles all DPI scaling and the server renders at 100% DPI, reducing bandwidth. If false, the server handles scaling at the native monitor DPI.
-  - `server_id` (string, optional): A unique identifier for the server session. When combined with `rail_app`, allows launching new RemoteApps into an already-running RAIL session via local IPC. If an existing session with this `server_id` is found, the new app is sent to it instead of starting a new RDP connection.
+  - `server_auth` (object, optional): `{ id: string, token: string }`. When combined with `rail_app`, allows launching new RemoteApps into an already-running RAIL session via local IPC. The `token` is verified by the listener to prevent unauthorized app launches from other processes on the same machine.
 
 **Returns:** undefined
 

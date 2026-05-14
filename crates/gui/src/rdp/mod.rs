@@ -61,6 +61,7 @@ pub struct RdpState {
 
     pub cursor: Cursor,
     pub pending_pixels: HashMap<u32, (u32, u32, Vec<u8>)>,
+    pub pending_icons: HashMap<u32, (Vec<u8>, u32, u32)>,
 }
 
 #[allow(dead_code)]
@@ -101,6 +102,8 @@ impl RdpState {
                 rdp_ffi::callbacks::window_c::Callbacks::Create,
                 rdp_ffi::callbacks::window_c::Callbacks::Update,
                 rdp_ffi::callbacks::window_c::Callbacks::Delete,
+                rdp_ffi::callbacks::window_c::Callbacks::Icon,
+                rdp_ffi::callbacks::window_c::Callbacks::CachedIcon,
             ]);
         }
 
@@ -166,6 +169,7 @@ impl RdpState {
             rail_windows: HashMap::new(),
             cursor: Cursor::new(coords_scale),
             pending_pixels: HashMap::new(),
+            pending_icons: HashMap::new(),
         })
     }
 }

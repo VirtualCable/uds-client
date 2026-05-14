@@ -6,7 +6,10 @@ use std::time::Instant;
 use tokio::sync::oneshot;
 use wgpu_text::glyph_brush::{OwnedSection, Section, Text};
 
-use crate::draw::ui::{button::{self, ButtonStyle}, progress, text};
+use crate::draw::ui::{
+    button::{self, ButtonStyle},
+    progress, text,
+};
 
 #[derive(Default)]
 #[allow(dead_code)]
@@ -70,10 +73,10 @@ impl LauncherInner {
     }
     pub fn handle_click(&mut self, x: f32, y: f32) {
         match self {
-            LauncherInner::Error(_) | LauncherInner::Warning(_) => {
-                if y > 230.0 && y < 270.0 && x > 140.0 && x < 260.0 {
-                    *self = LauncherInner::Invisible;
-                }
+            LauncherInner::Error(_) | LauncherInner::Warning(_)
+                if y > 230.0 && y < 270.0 && x > 140.0 && x < 260.0 =>
+            {
+                *self = LauncherInner::Invisible;
             }
             LauncherInner::YesNo { response, .. } => {
                 let r = response.clone();
@@ -182,7 +185,14 @@ pub fn paint_launcher(state: &mut TestingLauncherState) {
         LauncherInner::Invisible => {}
         #[cfg(feature = "test-ui")]
         LauncherInner::Test { .. } => {}
-        LauncherInner::Progress { pct, message, start, progress_duration_secs, phase, auto_animate } => {
+        LauncherInner::Progress {
+            pct,
+            message,
+            start,
+            progress_duration_secs,
+            phase,
+            auto_animate,
+        } => {
             let elapsed = start.elapsed().as_secs_f32();
             let pct = if *auto_animate {
                 (elapsed / *progress_duration_secs as f32 * 100.0).min(100.0)
@@ -218,7 +228,14 @@ pub fn paint_launcher(state: &mut TestingLauncherState) {
             let by = 190.0 * s;
             let i = data.len();
             data.push(progress::render(pct, bw, bh));
-            ov_descs.push(OvDesc { data_idx: i, w: bw, h: bh, x: bx, y: by, scale: 1.0 });
+            ov_descs.push(OvDesc {
+                data_idx: i,
+                w: bw,
+                h: bh,
+                x: bx,
+                y: by,
+                scale: 1.0,
+            });
 
             // Status message below the bar
             let msg_fs = monitor::scaled_val(11) as f32;
@@ -242,11 +259,7 @@ pub fn paint_launcher(state: &mut TestingLauncherState) {
             let fs = monitor::scaled_val(14) as f32;
             sections.push(
                 Section::default()
-                    .add_text(
-                        Text::new(title)
-                            .with_scale(fs)
-                            .with_color(warn_color),
-                    )
+                    .add_text(Text::new(title).with_scale(fs).with_color(warn_color))
                     .with_screen_position((140.0 * s, 40.0 * s))
                     .to_owned(),
             );
@@ -254,8 +267,13 @@ pub fn paint_launcher(state: &mut TestingLauncherState) {
             let msg_fs = monitor::scaled_val(12) as f32;
             let max_chars = (300.0 / (msg_fs * 0.5)) as usize;
             sections.extend(text::wrap(
-                msg, max_chars, msg_fs, [1.0, 1.0, 1.0, 1.0],
-                20.0 * s, 80.0 * s, msg_fs * 1.4,
+                msg,
+                max_chars,
+                msg_fs,
+                [1.0, 1.0, 1.0, 1.0],
+                20.0 * s,
+                80.0 * s,
+                msg_fs * 1.4,
             ));
             let style = dialog_button_style();
             let bw = monitor::scaled_val(100) as u32;
@@ -279,8 +297,13 @@ pub fn paint_launcher(state: &mut TestingLauncherState) {
             let msg_fs = monitor::scaled_val(12) as f32;
             let max_chars = (300.0 / (msg_fs * 0.5)) as usize;
             sections.extend(text::wrap(
-                message, max_chars, msg_fs, [1.0, 1.0, 1.0, 1.0],
-                20.0 * s, 70.0 * s, msg_fs * 1.4,
+                message,
+                max_chars,
+                msg_fs,
+                [1.0, 1.0, 1.0, 1.0],
+                20.0 * s,
+                70.0 * s,
+                msg_fs * 1.4,
             ));
             let style = dialog_button_style();
             let bw = monitor::scaled_val(80) as u32;
@@ -329,7 +352,14 @@ pub fn paint_launcher(state: &mut TestingLauncherState) {
             let (btn_data, btn_text) = button::render(bx, y, bw, bh, label, &test_button_style());
             let di = data.len();
             data.push(btn_data);
-            ov_descs.push(OvDesc { data_idx: di, w: bw, h: bh, x: bx, y, scale: 1.0 });
+            ov_descs.push(OvDesc {
+                data_idx: di,
+                w: bw,
+                h: bh,
+                x: bx,
+                y,
+                scale: 1.0,
+            });
             sections.push(btn_text);
         }
     }

@@ -2,10 +2,10 @@ use std::io;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use interprocess::local_socket::prelude::*;
 use interprocess::local_socket::{
     GenericFilePath, GenericNamespaced, Listener, ListenerNonblockingMode, ListenerOptions, Stream,
 };
-use interprocess::local_socket::prelude::*;
 use serde::{Deserialize, Serialize};
 
 fn socket_name(server_id: &str) -> io::Result<interprocess::local_socket::Name<'static>> {
@@ -24,6 +24,7 @@ pub struct RailLaunchMsg {
     pub rail_app: String,
     pub rail_args: String,
     pub rail_working_dir: String,
+    pub server_token: String,
 }
 
 /// Handle to a running IPC listener. Drop it to stop listening.
@@ -51,9 +52,11 @@ pub fn try_send(server_id: &str, msg: &RailLaunchMsg) -> bool {
 }
 
 /// Bind an IPC listener and spawn a background thread that calls `on_launch` for
-/// each received message. Returns an `IpcListener` handle — drop it to stop.
+/// each received message that passes token verification.
+/// If `expected_token` is set, messages without a matching `server_token` are silently dropped.
 pub fn bind(
     server_id: &str,
+    expected_token: &str,
     on_launch: impl Fn(RailLaunchMsg) + Send + 'static,
 ) -> io::Result<IpcListener> {
     // Clean up stale socket file from a previous crash (macOS only — no-op elsewhere)
@@ -69,29 +72,38 @@ pub fn bind(
     let listener = Arc::new(Mutex::new(Some(listener)));
 
     let listener_clone = listener.clone();
-    let handle = std::thread::spawn(move || loop {
-        let maybe_stream = {
-            let guard = listener_clone.lock().unwrap();
-            match guard.as_ref() {
-                Some(listener) => listener.accept(),
-                None => break,
+    let handle = std::thread::spawn({
+        let expected_token = expected_token.to_string();
+        move || {
+            loop {
+                let maybe_stream = {
+                    let guard = listener_clone.lock().unwrap();
+                    match guard.as_ref() {
+                        Some(listener) => listener.accept(),
+                        None => break,
+                    }
+                };
+                match maybe_stream {
+                    Ok(stream) => {
+                        let _ = serde_json::from_reader::<_, RailLaunchMsg>(stream).map(|msg| {
+                            // Token verification
+                            if msg.server_token != expected_token {
+                                shared::log::warn!(
+                                    "IPC: rejected RAIL app launch — token mismatch for {}",
+                                    msg.rail_app,
+                                );
+                                return;
+                            }
+                            shared::log::info!("IPC: received RAIL app launch: {}", msg.rail_app,);
+                            on_launch(msg);
+                        });
+                    }
+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(100));
+                    }
+                    Err(_) => break,
+                }
             }
-        };
-        match maybe_stream {
-            Ok(stream) => {
-                let _ =
-                    serde_json::from_reader::<_, RailLaunchMsg>(stream).map(|msg| {
-                        shared::log::info!(
-                            "IPC: received RAIL app launch: {}",
-                            msg.rail_app,
-                        );
-                        on_launch(msg);
-                    });
-            }
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                std::thread::sleep(Duration::from_millis(100));
-            }
-            Err(_) => break,
         }
     });
 
