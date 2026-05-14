@@ -27,4 +27,8 @@ image.workspace = true
 
 open.workspace = true
 
+serde.workspace = true
+serde_json.workspace = true
+interprocess = "2"
+
 gettext.workspace = true

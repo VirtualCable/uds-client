@@ -32,7 +32,6 @@ pub enum TestAction {
     ShowError,
     ShowYesNo,
     ConnectRdp,
-    ConnectRdpPreconnection,
     ConnectRail,
 }
 
@@ -40,7 +39,6 @@ impl LauncherInner {
     pub fn new_test() -> Self {
         LauncherInner::Test {
             buttons: vec![
-                ("RDP Connecting", TestAction::ConnectRdpPreconnection),
                 ("RDP Connect", TestAction::ConnectRdp),
                 ("RDP RAIL Notepad", TestAction::ConnectRail),
                 ("Progress", TestAction::ShowProgress),

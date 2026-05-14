@@ -76,6 +76,8 @@ pub struct RdpSettings {
     pub scale_factor: f64,
     #[zeroize(skip)]
     pub use_local_scaler: bool,
+    #[zeroize(skip)]
+    pub server_id: Option<String>,
 }
 
 impl Default for RdpSettings {
@@ -101,6 +103,7 @@ impl Default for RdpSettings {
             rail_working_dir: None,
             scale_factor: 1.0,
             use_local_scaler: true,
+            server_id: None,
         }
     }
 }
@@ -135,6 +138,7 @@ impl fmt::Debug for RdpSettings {
             .field("rail_working_dir", &self.rail_working_dir)
             .field("scale_factor", &self.scale_factor)
             .field("use_local_scaler", &self.use_local_scaler)
+            .field("server_id", &self.server_id)
             .finish()
     }
 }

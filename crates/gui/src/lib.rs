@@ -25,6 +25,7 @@ mod popup;
 pub mod types;
 
 mod draw;
+pub mod ipc;
 mod rdp;
 mod testing;
 mod wgpu_render;
@@ -73,6 +74,7 @@ pub struct AppHandler {
     alt_held: bool,
     last_pointer: Option<winit::dpi::PhysicalPosition<f64>>,
     rail_button_down: Option<u32>,
+    rail_ipc: Option<crate::ipc::IpcListener>,
     return_code: ReturnCode,
     initial_state: Option<AppState>,
     first_resume: bool,
@@ -106,6 +108,7 @@ pub fn run_gui(
         alt_held: false,
         last_pointer: None,
         rail_button_down: None,
+        rail_ipc: None,
         return_code: ReturnCode::Exit,
         initial_state,
         first_resume: true,
@@ -210,6 +213,7 @@ impl AppHandler {
                 renderer,
                 scratch: Vec::new(),
             };
+            let server_id = settings.server_id.clone();
             let rdp_state = RdpState::new(
                 rdp_window,
                 settings,
@@ -221,6 +225,24 @@ impl AppHandler {
             )?;
             self.rdp = Some(Box::new(rdp_state));
             self.register_window(wid, WindowKind::Rdp);
+
+            // If this is a RAIL session with a server_id, start IPC listener
+            if let Some(ref server_id) = server_id
+                && let Some(ref state) = self.rdp
+            {
+                let cmd_tx = state.command_tx.clone();
+                let cmd_ev = state.command_event;
+                self.rail_ipc = crate::ipc::bind(server_id, move |msg| {
+                    let _ = cmd_tx.send(rdp_ffi::commands::RdpCommand::LaunchRailApp {
+                        app: msg.rail_app,
+                        args: msg.rail_args,
+                        dir: msg.rail_working_dir,
+                    });
+                    unsafe {
+                        rdp_ffi::sys::SetEvent(cmd_ev.as_handle());
+                    }
+                }).ok();
+            }
         } else {
             settings.screen_size = rdp_ffi::geom::ScreenSize::Fixed(rdp_w, rdp_h);
             let window = Arc::new(
@@ -287,6 +309,7 @@ impl AppHandler {
             self.unregister_window(r.window.window.id());
         }
         self.rdp = None;
+        self.rail_ipc = None;
     }
 }
 
@@ -588,8 +611,6 @@ impl AppHandler {
         }
     }
 }
-
-// ── Message processing ────────────────────────────────────
 
 impl AppHandler {
     fn handle_rail_redraw(&mut self, rail_id: u32) {
@@ -945,7 +966,7 @@ impl AppHandler {
                 }
                 GuiMessage::ConnectRdp(settings) => {
                     self.close_launcher();
-                    if let Err(e) = self.open_rdp(el, settings) {
+                    if let Err(e) = self.open_rdp(el, *settings) {
                         log::error!("Failed to enter RDP: {e}");
                         self.stop.trigger();
                         el.exit();
@@ -981,7 +1002,6 @@ impl AppHandler {
                     };
                 }
                 TestAction::ConnectRdp
-                | TestAction::ConnectRdpPreconnection
                 | TestAction::ConnectRail => {
                     let is_rail = matches!(action, TestAction::ConnectRail);
                     let settings = rdp_ffi::settings::RdpSettings {
@@ -997,6 +1017,11 @@ impl AppHandler {
                         },
                         best_experience: true,
                         use_local_scaler: true,
+                        server_id: if is_rail {
+                            Some("test-uds-rail".to_string())
+                        } else {
+                            None
+                        },
                         ..Default::default()
                     };
                     self.close_launcher();
@@ -1004,6 +1029,19 @@ impl AppHandler {
                         log::error!("Failed to enter RDP: {e}");
                         self.stop.trigger();
                         el.exit();
+                    }
+                    // Test: after 4s, send notepad.exe via IPC to the same RAIL session
+                    if is_rail {
+                        std::thread::spawn(|| {
+                            std::thread::sleep(std::time::Duration::from_secs(4));
+                            let msg = crate::ipc::RailLaunchMsg {
+                                rail_app: "c:\\windows\\notepad.exe".to_string(),
+                                rail_args: String::new(),
+                                rail_working_dir: String::new(),
+                            };
+                            let ok = crate::ipc::try_send("test-uds-rail", &msg);
+                            log::info!("IPC test: sent notepad.exe via IPC → {ok}");
+                        });
                     }
                 }
             }

@@ -65,6 +65,7 @@ struct RdpSettings {
     pub rail_args: Option<String>,
     pub rail_working_dir: Option<String>,
     pub use_local_scaler: Option<bool>,
+    pub server_id: Option<String>,
 }
 
 impl Default for RdpSettings {
@@ -90,6 +91,7 @@ impl Default for RdpSettings {
             rail_args: None,
             rail_working_dir: None,
             use_local_scaler: None,
+            server_id: None,
         }
     }
 }
@@ -156,11 +158,25 @@ fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
         rail_working_dir: rdp_settings.rail_working_dir.or(defs.rail_working_dir),
         scale_factor: 1.0,  // Will be overrided by local monitor scale factor in gui
         use_local_scaler: rdp_settings.use_local_scaler.unwrap_or(true),
+        server_id: rdp_settings.server_id,
     };
 
     log::debug!("Starting RDP with settings: {:?}", settings);
 
-    send_message(GuiMessage::ConnectRdp(settings));
+    // If we have a server_id and a rail_app, try sending via IPC to an existing session first
+    if let (Some(server_id), Some(rail_app)) = (&settings.server_id, &settings.rail_app) {
+        let msg = gui::ipc::RailLaunchMsg {
+            rail_app: rail_app.clone(),
+            rail_args: settings.rail_args.clone().unwrap_or_default(),
+            rail_working_dir: settings.rail_working_dir.clone().unwrap_or_default(),
+        };
+        if gui::ipc::try_send(server_id, &msg) {
+            log::info!("Sent RAIL app via IPC channel: {} (server_id={})", rail_app, server_id);
+            return Ok(JsValue::undefined());
+        }
+    }
+
+    send_message(GuiMessage::ConnectRdp(Box::new(settings)));
     // Launcher needs to know that RDP client is running
     // so it doesn't close the GUI immediately
     connection::tasks::mark_internal_rdp_as_running();

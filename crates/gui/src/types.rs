@@ -17,7 +17,7 @@ pub enum GuiMessage {
     ShowYesNo(String, Arc<RwLock<Option<oneshot::Sender<bool>>>>),
     ShowProgress,
     Progress(u8, String),
-    ConnectRdp(rdp_ffi::settings::RdpSettings),
+    ConnectRdp(Box<rdp_ffi::settings::RdpSettings>),
 }
 
 /// Return code from run_gui()

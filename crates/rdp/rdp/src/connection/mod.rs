@@ -593,6 +593,11 @@ impl Rdp {
                                 rail.send_window_move(window_id, left, top, right, bottom);
                             }
                         }
+                        crate::commands::RdpCommand::LaunchRailApp { app, args, dir } => {
+                            if let Some(rail) = self.channels.read().unwrap().rail() {
+                                rail.send_execute(&app, &args, &dir);
+                            }
+                        }
                         crate::commands::RdpCommand::Close => {
                             unsafe {
                                 freerdp_set_last_error_ex(

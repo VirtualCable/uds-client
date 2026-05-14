@@ -20,6 +20,11 @@ pub enum RdpCommand {
         right: i16,
         bottom: i16,
     },
+    LaunchRailApp {
+        app: String,
+        args: String,
+        dir: String,
+    },
     Close,
 }
 

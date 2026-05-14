@@ -137,6 +137,30 @@ impl RailChannel {
             }
         }
     }
+
+    /// Send a ClientExecute PDU to launch a new RemoteApp on an already-running session.
+    pub fn send_execute(&self, app: &str, args: &str, dir: &str) {
+        if let Some(ptr) = &self.ptr {
+            let context = ptr.as_mut_ptr();
+            let capp = std::ffi::CString::new(app).unwrap();
+            let cdir = std::ffi::CString::new(
+                if dir.is_empty() { "C:\\" } else { dir }
+            ).unwrap();
+            let cargs = std::ffi::CString::new(args).unwrap();
+            let exec = RAIL_EXEC_ORDER {
+                flags: RAIL_EXEC_FLAG_EXPAND_ARGUMENTS as u16,
+                RemoteApplicationProgram: capp.as_ptr(),
+                RemoteApplicationWorkingDir: cdir.as_ptr(),
+                RemoteApplicationArguments: cargs.as_ptr(),
+            };
+            unsafe {
+                if let Some(execute_fn) = (*context).ClientExecute {
+                    log::info!("RAIL: Sending ClientExecute for {}", app);
+                    execute_fn(context, &exec);
+                }
+            }
+        }
+    }
 }
 
 fn complete_handshake(context: *mut RailClientContext) -> UINT {
