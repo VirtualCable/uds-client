@@ -3,9 +3,12 @@ use std::sync::Arc;
 use std::time::Instant;
 use wgpu_text::glyph_brush::{OwnedSection, Section, Text};
 
+use crate::draw::ui::{
+    progress,
+    waves::{self, Wave},
+};
 use crate::monitor;
 use crate::wgpu_render::{OverlayParams, WgpuRenderer};
-use crate::draw::ui::{button::{self, ButtonStyle}, progress, waves::{self, Wave}};
 
 #[derive(Default, PartialEq, Debug)]
 pub enum ProgressPhase {
@@ -39,19 +42,21 @@ impl ProgressState {
         let px = (dw as f32 - ww * sf) / 2.0;
         let py = (dh as f32 - wh * sf) / 2.0;
 
-        let window = Arc::new(el.create_window(
-            winit::window::Window::default_attributes()
-                .with_title("UDS Launcher")
-                .with_inner_size(winit::dpi::LogicalSize::new(ww, wh))
-                .with_window_icon(Some(crate::logo::load_icon()))
-                .with_resizable(false)
-                .with_decorations(false)
-                .with_position(winit::dpi::PhysicalPosition::new(px as i32, py as i32)),
-        )?);
-        
+        let window = Arc::new(
+            el.create_window(
+                winit::window::Window::default_attributes()
+                    .with_title("UDS Launcher")
+                    .with_inner_size(winit::dpi::LogicalSize::new(ww, wh))
+                    .with_window_icon(Some(crate::logo::load_icon()))
+                    .with_resizable(false)
+                    .with_decorations(false)
+                    .with_position(winit::dpi::PhysicalPosition::new(px as i32, py as i32)),
+            )?,
+        );
+
         let phys = window.inner_size();
         let renderer = WgpuRenderer::new(window.clone(), phys.width, phys.height)?;
-        
+
         let pw = phys.width as f32;
         let ph = phys.height as f32;
         let s = *crate::monitor::SCALE_FACTOR as f32;
@@ -61,7 +66,10 @@ impl ProgressState {
         let by = ph - bh - 25.0 * s;
 
         let cancel_btn = crate::draw::ui::button::Button::new(
-            bx, by, bw as u32, bh as u32,
+            bx,
+            by,
+            bw as u32,
+            bh as u32,
             "CANCEL".to_string(),
             crate::draw::ui::button::ButtonStyle {
                 font_scale: crate::monitor::scaled_val(13) as f32,
@@ -70,7 +78,7 @@ impl ProgressState {
                 hover_bg_color: [80, 45, 45, 255],
                 hover_border_color: [150, 80, 80, 255],
                 ..Default::default()
-            }
+            },
         );
 
         Ok(Self {
@@ -86,9 +94,30 @@ impl ProgressState {
             cancelled: false,
             animation_time: 0.0,
             waves: vec![
-                Wave { y_base: 0.4, amplitude: 25.0, speed: 0.04, offset: 0.0, thickness: 5.0, opacity: 0.5 },
-                Wave { y_base: 0.42, amplitude: 20.0, speed: 0.06, offset: 2.0, thickness: 3.5, opacity: 0.3 },
-                Wave { y_base: 0.38, amplitude: 22.0, speed: 0.03, offset: 4.0, thickness: 6.0, opacity: 0.25 },
+                Wave {
+                    y_base: 0.4,
+                    amplitude: 25.0,
+                    speed: 0.04,
+                    offset: 0.0,
+                    thickness: 5.0,
+                    opacity: 0.5,
+                },
+                Wave {
+                    y_base: 0.42,
+                    amplitude: 20.0,
+                    speed: 0.06,
+                    offset: 2.0,
+                    thickness: 3.5,
+                    opacity: 0.3,
+                },
+                Wave {
+                    y_base: 0.38,
+                    amplitude: 22.0,
+                    speed: 0.03,
+                    offset: 4.0,
+                    thickness: 6.0,
+                    opacity: 0.25,
+                },
             ],
             last_mouse_pos: None,
         })
@@ -115,7 +144,7 @@ impl ProgressState {
 
         let mut sections: Vec<OwnedSection> = Vec::new();
         let mut data: Vec<Vec<u8>> = Vec::new();
-        
+
         let logo_idx = data.len();
         data.push(logo.rgba);
 
@@ -151,30 +180,58 @@ impl ProgressState {
             let mut paint = tiny_skia::Paint::default();
             paint.set_color(tiny_skia::Color::from_rgba8(30, 30, 35, 255));
             pixmap.fill_rect(rect, &paint, tiny_skia::Transform::identity(), None);
-            
+
             // Draw Waves using component
             let wave_data = waves::render(pw, ph, self.animation_time, s, &self.waves);
-            if let Some(wave_pix) = tiny_skia::Pixmap::from_vec(wave_data, tiny_skia::IntSize::from_wh(pw, ph).unwrap()) {
-                pixmap.draw_pixmap(0, 0, wave_pix.as_ref(), &tiny_skia::PixmapPaint::default(), tiny_skia::Transform::identity(), None);
+            if let Some(wave_pix) =
+                tiny_skia::Pixmap::from_vec(wave_data, tiny_skia::IntSize::from_wh(pw, ph).unwrap())
+            {
+                pixmap.draw_pixmap(
+                    0,
+                    0,
+                    wave_pix.as_ref(),
+                    &tiny_skia::PixmapPaint::default(),
+                    tiny_skia::Transform::identity(),
+                    None,
+                );
             }
 
             // Subtle border
             let mut border = tiny_skia::Paint::default();
             border.set_color(tiny_skia::Color::from_rgba8(60, 60, 75, 255));
-            let stroke = tiny_skia::Stroke { width: 2.0, ..Default::default() };
+            let stroke = tiny_skia::Stroke {
+                width: 2.0,
+                ..Default::default()
+            };
             let path = tiny_skia::PathBuilder::from_rect(rect);
-            pixmap.stroke_path(&path, &border, &stroke, tiny_skia::Transform::identity(), None);
+            pixmap.stroke_path(
+                &path,
+                &border,
+                &stroke,
+                tiny_skia::Transform::identity(),
+                None,
+            );
             pixmap.take()
         };
         let panel_idx = data.len();
         data.push(panel_data);
-        ov_descs.push(OvDesc { data_idx: panel_idx, w: pw, h: ph, x: 0.0, y: 0.0, scale: 1.0 });
+        ov_descs.push(OvDesc {
+            data_idx: panel_idx,
+            w: pw,
+            h: ph,
+            x: 0.0,
+            y: 0.0,
+            scale: 1.0,
+        });
 
         // 2. Percentage text
         let fs = monitor::scaled_val(32) as f32;
         sections.push(
             Section::default()
-                .with_layout(wgpu_text::glyph_brush::Layout::default().h_align(wgpu_text::glyph_brush::HorizontalAlign::Center))
+                .with_layout(
+                    wgpu_text::glyph_brush::Layout::default()
+                        .h_align(wgpu_text::glyph_brush::HorizontalAlign::Center),
+                )
                 .add_text(
                     Text::new(&format!("{}%", pct as u8))
                         .with_scale(fs)
@@ -191,13 +248,23 @@ impl ProgressState {
         let by = 190.0 * s;
         let i = data.len();
         data.push(progress::render(pct, bw, bh));
-        ov_descs.push(OvDesc { data_idx: i, w: bw, h: bh, x: bx, y: by, scale: 1.0 });
+        ov_descs.push(OvDesc {
+            data_idx: i,
+            w: bw,
+            h: bh,
+            x: bx,
+            y: by,
+            scale: 1.0,
+        });
 
         // 4. Status message
         let msg_fs = monitor::scaled_val(13) as f32;
         sections.push(
             Section::default()
-                .with_layout(wgpu_text::glyph_brush::Layout::default().h_align(wgpu_text::glyph_brush::HorizontalAlign::Center))
+                .with_layout(
+                    wgpu_text::glyph_brush::Layout::default()
+                        .h_align(wgpu_text::glyph_brush::HorizontalAlign::Center),
+                )
                 .add_text(
                     Text::new(message)
                         .with_scale(msg_fs)
@@ -211,7 +278,14 @@ impl ProgressState {
         let (btn_data, btn_text) = self.cancel_btn.render();
         let b_idx = data.len();
         data.push(btn_data);
-        ov_descs.push(OvDesc { data_idx: b_idx, w: self.cancel_btn.w, h: self.cancel_btn.h, x: self.cancel_btn.x, y: self.cancel_btn.y, scale: 1.0 });
+        ov_descs.push(OvDesc {
+            data_idx: b_idx,
+            w: self.cancel_btn.w,
+            h: self.cancel_btn.h,
+            x: self.cancel_btn.x,
+            y: self.cancel_btn.y,
+            scale: 1.0,
+        });
         sections.push(btn_text);
 
         // 6. Logo (Top)
@@ -236,6 +310,7 @@ impl ProgressState {
             });
         }
 
-        self.renderer.update_and_render(&[], pw, ph, &overlays, &sections, None);
+        self.renderer
+            .update_and_render(&[], pw, ph, &overlays, &sections, None);
     }
 }

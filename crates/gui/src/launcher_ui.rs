@@ -8,7 +8,6 @@ use winit::window::Window;
 use super::{AppHandler, WindowKind};
 use crate::launcher::{LauncherInner, TestingLauncherState, paint_launcher};
 use crate::logo;
-use crate::monitor;
 use crate::wgpu_render::WgpuRenderer;
 
 impl AppHandler {
@@ -128,10 +127,10 @@ impl AppHandler {
                 let px = position.x as f32;
                 let py = position.y as f32;
                 l.last_mouse_pos = Some((px, py));
-                if l.inner.handle_mouse_move(px, py) {
-                    if let Some(w) = &l.window {
-                        w.request_redraw();
-                    }
+                if l.inner.handle_mouse_move(px, py)
+                    && let Some(w) = &l.window
+                {
+                    w.request_redraw();
                 }
             }
             _ => {}

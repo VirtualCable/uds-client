@@ -81,14 +81,14 @@ pub enum ScreenSize {
 impl ScreenSize {
     pub fn width(&self) -> u32 {
         match self {
-            ScreenSize::Full => 1200,  // Fallback value, not too small and not too large
+            ScreenSize::Full => 1200, // Fallback value, not too small and not too large
             ScreenSize::Fixed(w, _) => *w,
         }
     }
 
     pub fn height(&self) -> u32 {
         match self {
-            ScreenSize::Full => 675,  // Fallback value, not too small and not too large
+            ScreenSize::Full => 675, // Fallback value, not too small and not too large
             ScreenSize::Fixed(_, h) => *h,
         }
     }

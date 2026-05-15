@@ -187,7 +187,11 @@ mod tests {
     #[tokio::test]
     async fn trigger_wait_timeout_async_timeout() {
         let t = Trigger::new();
-        assert!(t.wait_timeout_async(Duration::from_millis(10)).await.is_err());
+        assert!(
+            t.wait_timeout_async(Duration::from_millis(10))
+                .await
+                .is_err()
+        );
     }
 
     #[tokio::test]

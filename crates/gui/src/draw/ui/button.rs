@@ -62,13 +62,16 @@ impl Button {
     }
 
     pub fn contains(&self, phys_x: f32, phys_y: f32) -> bool {
-        phys_x >= self.x && phys_x <= self.x + self.w as f32 &&
-        phys_y >= self.y && phys_y <= self.y + self.h as f32
+        phys_x >= self.x
+            && phys_x <= self.x + self.w as f32
+            && phys_y >= self.y
+            && phys_y <= self.y + self.h as f32
     }
 
     pub fn render(&self) -> (Vec<u8>, OwnedSection) {
         let mut pixmap = Pixmap::new(self.w, self.h).unwrap();
-        let rect_path = rounded_rect_path(0.0, 0.0, self.w as f32, self.h as f32, self.style.radius);
+        let rect_path =
+            rounded_rect_path(0.0, 0.0, self.w as f32, self.h as f32, self.style.radius);
 
         let mut fill = Paint::default();
         let bg = if self.is_hovered {
@@ -77,7 +80,13 @@ impl Button {
             self.style.bg_color
         };
         fill.set_color(Color::from_rgba8(bg[0], bg[1], bg[2], bg[3]));
-        pixmap.fill_path(&rect_path, &fill, FillRule::Winding, Transform::identity(), None);
+        pixmap.fill_path(
+            &rect_path,
+            &fill,
+            FillRule::Winding,
+            Transform::identity(),
+            None,
+        );
 
         let mut stroke_paint = Paint::default();
         let border = if self.is_hovered {
@@ -85,9 +94,20 @@ impl Button {
         } else {
             self.style.border_color
         };
-        stroke_paint.set_color(Color::from_rgba8(border[0], border[1], border[2], border[3]));
-        let stroke = Stroke { width: 1.5, ..Default::default() };
-        pixmap.stroke_path(&rect_path, &stroke_paint, &stroke, Transform::identity(), None);
+        stroke_paint.set_color(Color::from_rgba8(
+            border[0], border[1], border[2], border[3],
+        ));
+        let stroke = Stroke {
+            width: 1.5,
+            ..Default::default()
+        };
+        pixmap.stroke_path(
+            &rect_path,
+            &stroke_paint,
+            &stroke,
+            Transform::identity(),
+            None,
+        );
 
         let tx = self.x + self.w as f32 / 2.0;
         let ty = self.y + self.h as f32 / 2.0;
@@ -108,21 +128,6 @@ impl Button {
         (pixmap.take(), section)
     }
 }
-
-pub fn render(x: f32, y: f32, w: u32, h: u32, label: &str, style: &ButtonStyle) -> (Vec<u8>, OwnedSection) {
-    let mut btn = Button::new(x, y, w, h, label.to_string(), ButtonStyle {
-        bg_color: style.bg_color,
-        border_color: style.border_color,
-        hover_bg_color: style.hover_bg_color,
-        hover_border_color: style.hover_border_color,
-        radius: style.radius,
-        font_scale: style.font_scale,
-        text_color: style.text_color,
-    });
-    btn.is_hovered = false; // The old render didn't support hover state directly in this call
-    btn.render()
-}
-
 
 pub fn rounded_rect_path(x: f32, y: f32, w: f32, h: f32, r: f32) -> tiny_skia::Path {
     let r = r.min(w / 2.0).min(h / 2.0);
@@ -192,7 +197,8 @@ mod tests {
     #[test]
     fn render_output_dimensions() {
         let style = ButtonStyle::default();
-        let (rgba, _section) = render(0.0, 0.0, 100, 30, "Test", &style);
+        let btn = Button::new(0.0, 0.0, 100, 30, "Test".to_string(), style);
+        let (rgba, _section) = btn.render();
         assert_eq!(rgba.len(), (100 * 30 * 4) as usize);
         // Label text should be present in the section
         assert!(!rgba.is_empty());

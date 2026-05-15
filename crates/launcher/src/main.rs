@@ -133,7 +133,10 @@ mod tests {
 
     #[test]
     fn valid_url() {
-        let url = format!("udssv2://myhost.example.com/{}/scrambler123", valid_ticket());
+        let url = format!(
+            "udssv2://myhost.example.com/{}/scrambler123",
+            valid_ticket()
+        );
         let result = parse_udssv2_url(&url);
         assert!(result.is_some());
         let (host, ticket, scrambler) = result.unwrap();

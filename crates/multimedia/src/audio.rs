@@ -474,8 +474,7 @@ mod tests {
 
     #[test]
     fn pcm_16bit_stereo() {
-        let samples: Vec<u8> = [100i16.to_le_bytes(), (-100i16).to_le_bytes()]
-            .concat();
+        let samples: Vec<u8> = [100i16.to_le_bytes(), (-100i16).to_le_bytes()].concat();
         let data: Vec<f32> = pcm_to_f32(&samples, 16).collect();
         assert_eq!(data.len(), 2);
         assert!(data[0] > 0.0);
@@ -533,7 +532,10 @@ mod tests {
         let in_len = input.len();
         let resampler = ResamplerIterator::new(input.into_iter(), 48000, 24000);
         let output: Vec<f32> = resampler.collect();
-        assert!(output.len() < in_len, "downsampling should produce fewer samples");
+        assert!(
+            output.len() < in_len,
+            "downsampling should produce fewer samples"
+        );
     }
 
     #[test]

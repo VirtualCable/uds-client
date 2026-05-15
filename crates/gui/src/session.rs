@@ -11,10 +11,10 @@ use super::{AppHandler, WindowKind};
 use crate::keymap;
 #[cfg(feature = "test-ui")]
 use crate::launcher::LaunchAction;
-use crate::progress_window::{ProgressPhase, ProgressState};
 use crate::logo;
 use crate::monitor;
 use crate::popup::{PopupKind, PopupState};
+use crate::progress_window::{ProgressPhase, ProgressState};
 use crate::rdp::{
     RailAction, RailWindow, RdpActionResult, RdpState, RdpWindow, handle_rdp_message,
 };
@@ -365,14 +365,20 @@ impl AppHandler {
                     }
                 }
                 LaunchAction::ShowWarning => {
-                    if let Ok(p) = PopupState::new(el, PopupKind::Warning("This is a test warning message.".into())) {
+                    if let Ok(p) = PopupState::new(
+                        el,
+                        PopupKind::Warning("This is a test warning message.".into()),
+                    ) {
                         let wid = p.window.id();
                         self.register_window(wid, WindowKind::Popup);
                         self.popup = Some(p);
                     }
                 }
                 LaunchAction::ShowError => {
-                    if let Ok(p) = PopupState::new(el, PopupKind::Error("This is a test error message.".into())) {
+                    if let Ok(p) = PopupState::new(
+                        el,
+                        PopupKind::Error("This is a test error message.".into()),
+                    ) {
                         let wid = p.window.id();
                         self.register_window(wid, WindowKind::Popup);
                         self.popup = Some(p);
@@ -380,10 +386,15 @@ impl AppHandler {
                 }
                 LaunchAction::ShowYesNo => {
                     let (rtx, _) = tokio::sync::oneshot::channel::<bool>();
-                    if let Ok(p) = PopupState::new(el, PopupKind::YesNo {
-                        message: "This is a test confirmation message. Do you want to continue?".into(),
-                        response: Arc::new(std::sync::RwLock::new(Some(rtx))),
-                    }) {
+                    if let Ok(p) = PopupState::new(
+                        el,
+                        PopupKind::YesNo {
+                            message:
+                                "This is a test confirmation message. Do you want to continue?"
+                                    .into(),
+                            response: Arc::new(std::sync::RwLock::new(Some(rtx))),
+                        },
+                    ) {
                         let wid = p.window.id();
                         self.register_window(wid, WindowKind::Popup);
                         self.popup = Some(p);

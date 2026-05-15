@@ -143,7 +143,10 @@ mod tests {
 
     #[test]
     fn hex_to_bytes_deadbeef() {
-        assert_eq!(hex_to_bytes::<4>("deadbeef").unwrap(), [0xDE, 0xAD, 0xBE, 0xEF]);
+        assert_eq!(
+            hex_to_bytes::<4>("deadbeef").unwrap(),
+            [0xDE, 0xAD, 0xBE, 0xEF]
+        );
     }
 
     #[test]

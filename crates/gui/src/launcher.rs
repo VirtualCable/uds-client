@@ -4,9 +4,6 @@ use crate::wgpu_render::{OverlayParams, WgpuRenderer};
 use std::sync::Arc;
 use wgpu_text::glyph_brush::OwnedSection;
 
-#[cfg(feature = "test-ui")]
-use crate::draw::ui::button::{self, ButtonStyle};
-
 #[derive(Default)]
 #[allow(dead_code)]
 pub enum LauncherInner {
@@ -39,7 +36,7 @@ impl LauncherInner {
         let bw = crate::monitor::scaled_val(260) as u32;
         let sy = 42.0 * s;
         let bx = 70.0 * s;
-        
+
         let mut buttons = Vec::new();
         let labels_and_actions = vec![
             ("RDP Connect", LaunchAction::ConnectRdp),
@@ -50,16 +47,19 @@ impl LauncherInner {
             ("Error", LaunchAction::ShowError),
             ("Yes/No", LaunchAction::ShowYesNo),
         ];
-        
+
         for (i, (label, action)) in labels_and_actions.into_iter().enumerate() {
             let by = sy + i as f32 * (bh as f32 + 6.0 * s);
             let btn = crate::draw::ui::button::Button::new(
-                bx, by, bw, bh,
+                bx,
+                by,
+                bw,
+                bh,
                 label.to_string(),
                 crate::draw::ui::button::ButtonStyle {
                     font_scale: crate::monitor::scaled_val(14) as f32,
                     ..Default::default()
-                }
+                },
             );
             buttons.push((btn, action));
         }
@@ -89,7 +89,9 @@ impl LauncherInner {
     pub fn handle_click(&mut self, phys_x: f32, phys_y: f32) {
         match self {
             #[cfg(feature = "test-ui")]
-            LauncherInner::Test { buttons, request, .. } => {
+            LauncherInner::Test {
+                buttons, request, ..
+            } => {
                 for (btn, action) in buttons.iter() {
                     if btn.contains(phys_x, phys_y) {
                         *request = Some(action.clone());

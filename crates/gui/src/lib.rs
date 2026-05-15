@@ -196,7 +196,7 @@ impl ApplicationHandler<UserEvent> for AppHandler {
                     Some(&WindowKind::RdpRail(id)) => {
                         self.handle_rail_redraw(id);
                     }
-                     Some(WindowKind::About) => {
+                    Some(WindowKind::About) => {
                         self.handle_about_event(WindowEvent::RedrawRequested)
                     }
                     Some(WindowKind::Popup) => {

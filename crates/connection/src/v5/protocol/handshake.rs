@@ -114,7 +114,9 @@ mod tests {
     fn test_handshake_open_to_bytes() {
         log::setup_logging("debug", log::LogType::Test);
         let ticket = Ticket::new_random();
-        let handshake = Handshake::Open { ticket: ticket.clone() };
+        let handshake = Handshake::Open {
+            ticket: ticket.clone(),
+        };
         let bytes = handshake.to_bytes();
         assert!(bytes.starts_with(HANDSHAKE_V2_SIGNATURE));
         assert_eq!(

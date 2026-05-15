@@ -277,7 +277,10 @@ impl WindowCallbacks for Rdp {
             return true;
         }
 
-        let len = match (w as usize).checked_mul(h as usize).and_then(|m| m.checked_mul(4)) {
+        let len = match (w as usize)
+            .checked_mul(h as usize)
+            .and_then(|m| m.checked_mul(4))
+        {
             Some(l) => l,
             None => {
                 log::error!("RAIL: Icon size overflow: {}x{}", w, h);

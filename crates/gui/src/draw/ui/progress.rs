@@ -15,7 +15,13 @@ pub fn render(pct: f32, w: u32, h: u32) -> Vec<u8> {
     let bg_path = rounded_rect(0.0, 0.0, w as f32, h as f32, h as f32 / 2.0);
     let mut bg_paint = Paint::default();
     bg_paint.set_color(Color::from_rgba8(0x25, 0x25, 0x35, 0xFF));
-    pixmap.fill_path(&bg_path, &bg_paint, FillRule::Winding, Transform::identity(), None);
+    pixmap.fill_path(
+        &bg_path,
+        &bg_paint,
+        FillRule::Winding,
+        Transform::identity(),
+        None,
+    );
 
     // Track Border
     let mut border_paint = Paint::default();
@@ -24,13 +30,25 @@ pub fn render(pct: f32, w: u32, h: u32) -> Vec<u8> {
         width: 1.0 * s,
         ..Default::default()
     };
-    pixmap.stroke_path(&bg_path, &border_paint, &stroke, Transform::identity(), None);
+    pixmap.stroke_path(
+        &bg_path,
+        &border_paint,
+        &stroke,
+        Transform::identity(),
+        None,
+    );
 
     // Filled portion
     let fw = (w as f32 * pct / 100.0).clamp(0.0, w as f32);
     if fw > (h as f32 / 2.0) {
-        let fill_path = rounded_rect(1.0 * s, 1.0 * s, fw - 2.0 * s, h as f32 - 2.0 * s, (h as f32 - 2.0 * s) / 2.0);
-        
+        let fill_path = rounded_rect(
+            1.0 * s,
+            1.0 * s,
+            fw - 2.0 * s,
+            h as f32 - 2.0 * s,
+            (h as f32 - 2.0 * s) / 2.0,
+        );
+
         // Gradient fill
         let mut fill_paint = Paint::default();
         let grad = tiny_skia::LinearGradient::new(
@@ -42,10 +60,17 @@ pub fn render(pct: f32, w: u32, h: u32) -> Vec<u8> {
             ],
             tiny_skia::SpreadMode::Pad,
             Transform::identity(),
-        ).unwrap();
+        )
+        .unwrap();
         fill_paint.shader = grad;
-        
-        pixmap.fill_path(&fill_path, &fill_paint, FillRule::Winding, Transform::identity(), None);
+
+        pixmap.fill_path(
+            &fill_path,
+            &fill_paint,
+            FillRule::Winding,
+            Transform::identity(),
+            None,
+        );
     }
 
     pixmap.take()

@@ -1,11 +1,11 @@
 use crate::monitor;
 // BSD 3-Clause License, Authors: Adolfo Gómez
+use crate::draw::ui::{button, text};
 use crate::wgpu_render::{OverlayParams, WgpuRenderer};
 use std::sync::{Arc, RwLock};
+use tiny_skia::{Color, FillRule, Paint, PathBuilder, Pixmap, Stroke, Transform};
 use tokio::sync::oneshot;
 use wgpu_text::glyph_brush::{OwnedSection, Section, Text};
-use crate::draw::ui::{button::{self, ButtonStyle}, text};
-use tiny_skia::{Color, Paint, Pixmap, Stroke, Transform, PathBuilder, FillRule};
 
 pub enum PopupKind {
     YesNo {
@@ -64,7 +64,10 @@ impl PopupState {
                 let bx_no = (pw / 2.0) + 10.0 * scale;
 
                 buttons.push(crate::draw::ui::button::Button::new(
-                    bx_yes, by, bw as u32, bh as u32,
+                    bx_yes,
+                    by,
+                    bw as u32,
+                    bh as u32,
                     "YES".to_string(),
                     crate::draw::ui::button::ButtonStyle {
                         font_scale: monitor::scaled_val(15) as f32,
@@ -74,10 +77,13 @@ impl PopupState {
                         hover_bg_color: [65, 65, 80, 255],
                         hover_border_color: [120, 120, 150, 255],
                         ..Default::default()
-                    }
+                    },
                 ));
                 buttons.push(crate::draw::ui::button::Button::new(
-                    bx_no, by, bw as u32, bh as u32,
+                    bx_no,
+                    by,
+                    bw as u32,
+                    bh as u32,
                     "NO".to_string(),
                     crate::draw::ui::button::ButtonStyle {
                         font_scale: monitor::scaled_val(15) as f32,
@@ -87,14 +93,17 @@ impl PopupState {
                         hover_bg_color: [65, 65, 80, 255],
                         hover_border_color: [120, 120, 150, 255],
                         ..Default::default()
-                    }
+                    },
                 ));
             }
             PopupKind::Warning(_) | PopupKind::Error(_) => {
                 let bw = monitor::scaled_val(120) as f32;
                 let bx = pw / 2.0 - bw / 2.0;
                 buttons.push(crate::draw::ui::button::Button::new(
-                    bx, by, bw as u32, bh as u32,
+                    bx,
+                    by,
+                    bw as u32,
+                    bh as u32,
                     "GOT IT".to_string(),
                     crate::draw::ui::button::ButtonStyle {
                         font_scale: monitor::scaled_val(15) as f32,
@@ -104,7 +113,7 @@ impl PopupState {
                         hover_bg_color: [65, 65, 80, 255],
                         hover_border_color: [120, 120, 150, 255],
                         ..Default::default()
-                    }
+                    },
                 ));
             }
         }
@@ -161,7 +170,9 @@ impl PopupState {
         let (title, message, is_yesno, color) = match &self.kind {
             PopupKind::Error(msg) => ("ERROR", msg.as_str(), false, [0.9, 0.2, 0.2, 1.0]),
             PopupKind::Warning(msg) => ("WARNING", msg.as_str(), false, [1.0, 0.7, 0.1, 1.0]),
-            PopupKind::YesNo { message, .. } => ("CONFIRM", message.as_str(), true, [0.2, 0.6, 1.0, 1.0]),
+            PopupKind::YesNo { message, .. } => {
+                ("CONFIRM", message.as_str(), true, [0.2, 0.6, 1.0, 1.0])
+            }
         };
 
         let mut sections: Vec<OwnedSection> = Vec::new();
@@ -171,18 +182,24 @@ impl PopupState {
         // 1. Draw Background Panel
         let mut panel_pixmap = Pixmap::new(pw, ph).unwrap();
         let rect = button::rounded_rect_path(2.0, 2.0, pw as f32 - 4.0, ph as f32 - 4.0, 10.0 * s);
-        
+
         let mut paint = Paint::default();
         paint.set_color(Color::from_rgba8(30, 30, 35, 255));
-        panel_pixmap.fill_path(&rect, &paint, FillRule::Winding, Transform::identity(), None);
-        
+        panel_pixmap.fill_path(
+            &rect,
+            &paint,
+            FillRule::Winding,
+            Transform::identity(),
+            None,
+        );
+
         let stroke = Stroke {
             width: 2.0 * s,
             ..Default::default()
         };
         paint.set_color(Color::from_rgba(color[0], color[1], color[2], 0.6).unwrap());
         panel_pixmap.stroke_path(&rect, &paint, &stroke, Transform::identity(), None);
-        
+
         data.push(panel_pixmap.take());
         ov_descs.push((0, pw, ph, 0.0, 0.0));
 
@@ -191,23 +208,43 @@ impl PopupState {
         let mut icon_pixmap = Pixmap::new(icon_size_px, icon_size_px).unwrap();
         let icon_center = icon_size_px as f32 / 2.0;
         let icon_radius = icon_center - 2.0 * s;
-        
+
         let mut pb = PathBuilder::new();
         pb.push_circle(icon_center, icon_center, icon_radius);
         let icon_path = pb.finish().unwrap();
-        
+
         paint.set_color(Color::from_rgba(color[0], color[1], color[2], 0.15).unwrap());
-        icon_pixmap.fill_path(&icon_path, &paint, FillRule::Winding, Transform::identity(), None);
+        icon_pixmap.fill_path(
+            &icon_path,
+            &paint,
+            FillRule::Winding,
+            Transform::identity(),
+            None,
+        );
         paint.set_color(Color::from_rgba(color[0], color[1], color[2], 1.0).unwrap());
         icon_pixmap.stroke_path(&icon_path, &paint, &stroke, Transform::identity(), None);
-        
+
         // Symbol inside icon
         let mut sym_pb = PathBuilder::new();
         if is_yesno {
             // Draw a bold '?'
             sym_pb.move_to(icon_center - 4.0 * s, icon_center - 6.0 * s);
-            sym_pb.cubic_to(icon_center - 4.0 * s, icon_center - 12.0 * s, icon_center + 6.0 * s, icon_center - 12.0 * s, icon_center + 6.0 * s, icon_center - 6.0 * s);
-            sym_pb.cubic_to(icon_center + 6.0 * s, icon_center - 2.0 * s, icon_center, icon_center - 2.0 * s, icon_center, icon_center + 2.0 * s);
+            sym_pb.cubic_to(
+                icon_center - 4.0 * s,
+                icon_center - 12.0 * s,
+                icon_center + 6.0 * s,
+                icon_center - 12.0 * s,
+                icon_center + 6.0 * s,
+                icon_center - 6.0 * s,
+            );
+            sym_pb.cubic_to(
+                icon_center + 6.0 * s,
+                icon_center - 2.0 * s,
+                icon_center,
+                icon_center - 2.0 * s,
+                icon_center,
+                icon_center + 2.0 * s,
+            );
             sym_pb.move_to(icon_center, icon_center + 6.0 * s);
             sym_pb.push_circle(icon_center, icon_center + 7.0 * s, 1.5 * s);
         } else {
@@ -272,6 +309,7 @@ impl PopupState {
             });
         }
 
-        self.renderer.update_and_render(&[], pw, ph, &overlays, &sections, None);
+        self.renderer
+            .update_and_render(&[], pw, ph, &overlays, &sections, None);
     }
 }

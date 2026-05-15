@@ -244,7 +244,7 @@ mod tests {
             .try_js_into(&mut ctx)
             .unwrap();
         assert!(!home_dir.is_empty());
-        
+
         let list_script = format!(
             r#"
             const entries = File.listFolder("{}");

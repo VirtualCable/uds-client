@@ -67,14 +67,17 @@ impl AboutState {
         let bh = monitor::scaled_val(35) as f32;
         let bx = (pw - bw) / 2.0;
         let by = ph - bh - 20.0 * scale;
-        
+
         let close_btn = crate::draw::ui::button::Button::new(
-            bx, by, bw as u32, bh as u32,
+            bx,
+            by,
+            bw as u32,
+            bh as u32,
             "Close".to_string(),
             crate::draw::ui::button::ButtonStyle {
                 font_scale: monitor::scaled_val(14) as f32,
                 ..Default::default()
-            }
+            },
         );
 
         Ok(AboutState {
@@ -117,19 +120,38 @@ impl AboutState {
             let mut paint = tiny_skia::Paint::default();
             paint.set_color(tiny_skia::Color::from_rgba8(30, 30, 35, 255));
             pixmap.fill_rect(rect, &paint, tiny_skia::Transform::identity(), None);
-            
+
             // Draw Waves
-            let wave_data = crate::draw::ui::waves::render(pw, ph, self.animation_time, s, &self.waves);
-            if let Some(wave_pix) = tiny_skia::Pixmap::from_vec(wave_data, tiny_skia::IntSize::from_wh(pw, ph).unwrap()) {
-                pixmap.draw_pixmap(0, 0, wave_pix.as_ref(), &tiny_skia::PixmapPaint::default(), tiny_skia::Transform::identity(), None);
+            let wave_data =
+                crate::draw::ui::waves::render(pw, ph, self.animation_time, s, &self.waves);
+            if let Some(wave_pix) =
+                tiny_skia::Pixmap::from_vec(wave_data, tiny_skia::IntSize::from_wh(pw, ph).unwrap())
+            {
+                pixmap.draw_pixmap(
+                    0,
+                    0,
+                    wave_pix.as_ref(),
+                    &tiny_skia::PixmapPaint::default(),
+                    tiny_skia::Transform::identity(),
+                    None,
+                );
             }
 
             // Subtle border
             let mut border = tiny_skia::Paint::default();
             border.set_color(tiny_skia::Color::from_rgba8(60, 60, 75, 255));
-            let stroke = tiny_skia::Stroke { width: 2.0, ..Default::default() };
+            let stroke = tiny_skia::Stroke {
+                width: 2.0,
+                ..Default::default()
+            };
             let path = tiny_skia::PathBuilder::from_rect(rect);
-            pixmap.stroke_path(&path, &border, &stroke, tiny_skia::Transform::identity(), None);
+            pixmap.stroke_path(
+                &path,
+                &border,
+                &stroke,
+                tiny_skia::Transform::identity(),
+                None,
+            );
             pixmap.take()
         };
         data.push(panel_data);
@@ -147,7 +169,7 @@ impl AboutState {
                 Section::default()
                     .with_layout(
                         wgpu_text::glyph_brush::Layout::default()
-                            .h_align(wgpu_text::glyph_brush::HorizontalAlign::Center)
+                            .h_align(wgpu_text::glyph_brush::HorizontalAlign::Center),
                     )
                     .add_text(
                         Text::new(line)
@@ -234,10 +256,10 @@ impl ApplicationHandler for AboutHandler<'_> {
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
-                if let Some(s) = self.state.as_mut() {
-                    if s.handle_mouse_move(position.x as f32, position.y as f32) {
-                        s.window.request_redraw();
-                    }
+                if let Some(s) = self.state.as_mut()
+                    && s.handle_mouse_move(position.x as f32, position.y as f32)
+                {
+                    s.window.request_redraw();
                 }
             }
             WindowEvent::MouseInput {

@@ -69,7 +69,8 @@ impl AppData {
     }
 
     pub fn save(&self) {
-        if let Some(proj_dirs) = ProjectDirs::from(APP_QUALIFIER, APP_ORGANIZATION, APP_APPLICATION) {
+        if let Some(proj_dirs) = ProjectDirs::from(APP_QUALIFIER, APP_ORGANIZATION, APP_APPLICATION)
+        {
             let data_dir = proj_dirs.data_dir();
             if let Err(e) = std::fs::create_dir_all(data_dir) {
                 log::error!("Failed to create data directory: {}", e);

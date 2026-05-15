@@ -87,19 +87,23 @@ pub fn bind(
                 };
                 match maybe_stream {
                     Ok(stream) => {
-                        let _ = serde_json::from_reader::<_, RailLaunchMsg>(stream).map(|mut msg| {
-                            // Token verification
-                            if msg.server_token != *expected_token {
-                                shared::log::warn!(
-                                    "IPC: rejected RAIL app launch — token mismatch for {}",
+                        let _ =
+                            serde_json::from_reader::<_, RailLaunchMsg>(stream).map(|mut msg| {
+                                // Token verification
+                                if msg.server_token != *expected_token {
+                                    shared::log::warn!(
+                                        "IPC: rejected RAIL app launch — token mismatch for {}",
+                                        msg.rail_app,
+                                    );
+                                    msg.zeroize();
+                                    return;
+                                }
+                                shared::log::info!(
+                                    "IPC: received RAIL app launch: {}",
                                     msg.rail_app,
                                 );
-                                msg.zeroize();
-                                return;
-                            }
-                            shared::log::info!("IPC: received RAIL app launch: {}", msg.rail_app,);
-                            on_launch(msg);
-                        });
+                                on_launch(msg);
+                            });
                     }
                     Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
                         std::thread::sleep(Duration::from_millis(100));

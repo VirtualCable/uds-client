@@ -38,7 +38,17 @@ use shared::utils::hex_to_bytes;
 use super::consts::TICKET_LENGTH;
 
 // Hard type for shared secret
-#[derive(Default, Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Zeroize, ZeroizeOnDrop)]
+#[derive(
+    Default,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    Zeroize,
+    ZeroizeOnDrop,
+)]
 pub struct SharedSecret([u8; 32]);
 
 /// This code block is implementing functionality for the `SharedSecret` struct in Rust. Here's a

@@ -47,14 +47,25 @@ impl graphics::GraphicsCallbacks for Rdp {
 
         // Sanity check for cursor size
         if pointer.width > 256 || pointer.height > 256 {
-            log::warn!("RAIL: Ignoring too large cursor: {}x{}", pointer.width, pointer.height);
+            log::warn!(
+                "RAIL: Ignoring too large cursor: {}x{}",
+                pointer.width,
+                pointer.height
+            );
             return true;
         }
 
-        let size = match (pointer.width as usize).checked_mul(pointer.height as usize).and_then(|m| m.checked_mul(4)) {
+        let size = match (pointer.width as usize)
+            .checked_mul(pointer.height as usize)
+            .and_then(|m| m.checked_mul(4))
+        {
             Some(s) => s,
             None => {
-                log::error!("RAIL: Pointer size overflow: {}x{}", pointer.width, pointer.height);
+                log::error!(
+                    "RAIL: Pointer size overflow: {}x{}",
+                    pointer.width,
+                    pointer.height
+                );
                 return true;
             }
         };

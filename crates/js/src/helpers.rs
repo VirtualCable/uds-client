@@ -160,19 +160,29 @@ mod tests {
     #[test]
     fn expand_vars_defined() {
         // SAFETY: test runs single-threaded, no other threads access env
-        unsafe { std::env::set_var("JS_TEST_VAR", "value123"); }
+        unsafe {
+            std::env::set_var("JS_TEST_VAR", "value123");
+        }
         #[cfg(windows)]
         {
             assert_eq!(expand_vars("%JS_TEST_VAR%").unwrap(), "value123");
-            assert_eq!(expand_vars("pre_%JS_TEST_VAR%_post").unwrap(), "pre_value123_post");
+            assert_eq!(
+                expand_vars("pre_%JS_TEST_VAR%_post").unwrap(),
+                "pre_value123_post"
+            );
         }
         #[cfg(not(windows))]
         {
             assert_eq!(expand_vars("$JS_TEST_VAR").unwrap(), "value123");
             assert_eq!(expand_vars("${JS_TEST_VAR}").unwrap(), "value123");
-            assert_eq!(expand_vars("pre_$JS_TEST_VAR/post").unwrap(), "pre_value123/post");
+            assert_eq!(
+                expand_vars("pre_$JS_TEST_VAR/post").unwrap(),
+                "pre_value123/post"
+            );
         }
-        unsafe { std::env::remove_var("JS_TEST_VAR"); }
+        unsafe {
+            std::env::remove_var("JS_TEST_VAR");
+        }
     }
 
     #[test]

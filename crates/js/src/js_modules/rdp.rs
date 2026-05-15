@@ -128,16 +128,16 @@ impl RdpSettings {
     }
 
     pub fn to_core_settings(&self) -> settings::RdpSettings {
-        let screen_size = if let (Some(width), Some(height)) = (self.screen_width, self.screen_height)
-        {
-            if width == 0 || height == 0 {
-                ScreenSize::Full
+        let screen_size =
+            if let (Some(width), Some(height)) = (self.screen_width, self.screen_height) {
+                if width == 0 || height == 0 {
+                    ScreenSize::Full
+                } else {
+                    ScreenSize::Fixed(width, height)
+                }
             } else {
-                ScreenSize::Fixed(width, height)
-            }
-        } else {
-            ScreenSize::Full
-        };
+                ScreenSize::Full
+            };
 
         let defs = settings::RdpSettings::default();
         settings::RdpSettings {
@@ -149,9 +149,13 @@ impl RdpSettings {
             verify_cert: self.verify_cert.unwrap_or(defs.verify_cert),
             use_nla: self.use_nla.unwrap_or(defs.use_nla),
             screen_size,
-            clipboard_redirection: self.clipboard_redirection.unwrap_or(defs.clipboard_redirection),
+            clipboard_redirection: self
+                .clipboard_redirection
+                .unwrap_or(defs.clipboard_redirection),
             audio_redirection: self.audio_redirection.unwrap_or(defs.audio_redirection),
-            microphone_redirection: self.microphone_redirection.unwrap_or(defs.microphone_redirection),
+            microphone_redirection: self
+                .microphone_redirection
+                .unwrap_or(defs.microphone_redirection),
             printer_redirection: self.printer_redirection.unwrap_or(defs.printer_redirection),
             drives_to_redirect: self
                 .drives_to_redirect
