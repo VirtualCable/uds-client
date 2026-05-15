@@ -170,9 +170,14 @@ impl AppHandler {
             _ => {}
         }
         if close {
+            // If it was an error popup, trigger stop (fatal — same as Cancel on progress)
+            let is_error = matches!(popup.kind, crate::popup::PopupKind::Error(_));
             let wid = popup.window.id();
             self.unregister_window(wid);
             self.popup = None;
+            if is_error {
+                self.stop.trigger();
+            }
         }
     }
 
