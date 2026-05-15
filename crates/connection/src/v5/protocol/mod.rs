@@ -155,3 +155,53 @@ pub fn payload_with_channel_pair() -> (PayloadWithChannelSender, PayloadWithChan
     let (tx, rx) = flume::bounded(consts::CHANNEL_SIZE);
     (tx, rx)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn from_bytes_valid() {
+        let p = PayloadWithChannel::from_bytes(&[0x00, 0x01, 0xAA, 0xBB]).unwrap();
+        assert_eq!(p.channel_id, 1);
+        assert_eq!(&p.payload[..], &[0xAA, 0xBB]);
+    }
+
+    #[test]
+    fn from_bytes_empty() {
+        assert!(PayloadWithChannel::from_bytes(&[]).is_err());
+    }
+
+    #[test]
+    fn from_bytes_too_short() {
+        assert!(PayloadWithChannel::from_bytes(&[0x00]).is_err());
+    }
+
+    #[test]
+    fn from_bytes_min_channel() {
+        let p = PayloadWithChannel::from_bytes(&[0x00, 0x00]).unwrap();
+        assert_eq!(p.channel_id, 0);
+        assert!(p.payload.is_empty());
+    }
+
+    #[test]
+    fn from_bytes_max_channel() {
+        let p = PayloadWithChannel::from_bytes(&[0xFF, 0xFF, 0x42]).unwrap();
+        assert_eq!(p.channel_id, 65535);
+        assert_eq!(&p.payload[..], &[0x42]);
+    }
+
+    #[test]
+    fn len_includes_channel_header() {
+        let p = PayloadWithChannel::new(0, &[1, 2, 3]);
+        assert_eq!(p.len(), 5); // 3 + 2
+    }
+
+    #[test]
+    fn is_empty_delegates_to_payload() {
+        let p = PayloadWithChannel::new(0, &[]);
+        assert!(p.is_empty());
+        let p = PayloadWithChannel::new(0, &[1]);
+        assert!(!p.is_empty());
+    }
+}

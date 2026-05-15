@@ -295,4 +295,71 @@ mod tests {
             panic!("expected ChannelError");
         }
     }
+
+    // ── New tests ────────────────────────────────────────
+
+    #[test]
+    fn is_close_command_true() {
+        assert!(Command::CloseChannel { channel_id: 1 }.is_close_command());
+        assert!(Command::ConnectionError {
+            message: "x".into()
+        }
+        .is_close_command());
+        assert!(Command::ChannelError {
+            channel_id: 1,
+            message: "x".into()
+        }
+        .is_close_command());
+    }
+
+    #[test]
+    fn is_close_command_false() {
+        assert!(!Command::Ok.is_close_command());
+        assert!(!Command::OpenChannel { channel_id: 1 }.is_close_command());
+        assert!(!Command::Close.is_close_command());
+        assert!(!Command::Nop.is_close_command());
+    }
+
+    #[test]
+    fn try_from_nonzero_channel_fails() {
+        let pwc = PayloadWithChannel::new(1, &[CommandType::Nop as u8]);
+        assert!(Command::try_from(pwc).is_err());
+    }
+
+    #[test]
+    fn try_from_channel_zero_succeeds() {
+        let cmd = Command::Nop;
+        let pwc = cmd.to_message();
+        assert_eq!(pwc.channel_id, 0);
+        let parsed = Command::try_from(pwc).unwrap();
+        assert_eq!(parsed, Command::Nop);
+    }
+
+    #[test]
+    fn to_message_channel_zero() {
+        let cmd = Command::OpenChannel { channel_id: 42 };
+        let pwc = cmd.to_message();
+        assert_eq!(pwc.channel_id, 0);
+    }
+
+    #[test]
+    fn to_message_all_variants_channel_zero() {
+        let variants = [
+            Command::Ok,
+            Command::Close,
+            Command::Nop,
+            Command::OpenChannel { channel_id: 1 },
+            Command::CloseChannel { channel_id: 1 },
+            Command::ConnectionError {
+                message: "err".into(),
+            },
+            Command::ChannelError {
+                channel_id: 1,
+                message: "err".into(),
+            },
+        ];
+        for cmd in &variants {
+            assert_eq!(cmd.to_message().channel_id, 0, "failed for {cmd:?}");
+        }
+    }
 }

@@ -396,4 +396,83 @@ mod tests {
         let result = script.verify_signature();
         assert!(result.is_err(), "Signature verification should have failed");
     }
+
+    // ── New tests ────────────────────────────────────────
+
+    #[test]
+    fn broker_response_into_result_ok() {
+        let resp = BrokerResponse {
+            result: Some(42),
+            error: None,
+        };
+        assert_eq!(resp.into_result().unwrap(), 42);
+    }
+
+    #[test]
+    fn broker_response_into_result_err() {
+        let resp: BrokerResponse<i32> = BrokerResponse {
+            result: None,
+            error: Some(Error {
+                message: "fail".into(),
+                is_retryable: true,
+                percent: 50,
+            }),
+        };
+        assert!(resp.into_result().is_err());
+    }
+
+    #[test]
+    fn broker_response_into_result_neither() {
+        let resp: BrokerResponse<i32> = BrokerResponse {
+            result: None,
+            error: None,
+        };
+        let err = resp.into_result().unwrap_err();
+        assert!(err.message.contains("No result or error"));
+    }
+
+    #[test]
+    fn broker_response_error_takes_precedence() {
+        let resp = BrokerResponse {
+            result: Some(1),
+            error: Some(Error {
+                message: "err".into(),
+                is_retryable: false,
+                percent: 0,
+            }),
+        };
+        assert!(resp.into_result().is_err());
+    }
+
+    #[test]
+    fn script_type_from_str_javascript() {
+        let st: ScriptType = "javascript".into();
+        assert_eq!(st, ScriptType::Javascript);
+    }
+
+    #[test]
+    fn script_type_from_str_default() {
+        assert_eq!(ScriptType::from(""), ScriptType::Javascript);
+        assert_eq!(ScriptType::from("unknown"), ScriptType::Javascript);
+    }
+
+    #[test]
+    fn error_is_retryable() {
+        let e = Error {
+            message: "".into(),
+            is_retryable: true,
+            percent: 0,
+        };
+        assert!(e.is_retryable());
+    }
+
+    #[test]
+    fn error_is_not_retryable() {
+        let e = Error {
+            message: "".into(),
+            is_retryable: false,
+            percent: 0,
+        };
+        assert!(!e.is_retryable());
+    }
 }
