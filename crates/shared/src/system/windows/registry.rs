@@ -138,7 +138,7 @@ fn read_key_str(key_type: KeyType, key: &str, value_name: &str) -> anyhow::Resul
 
         // Allocate buffer (size in bytes, but we want u16 units)
         // Ensure we have enough space even if data_len is odd
-        let mut buffer: Vec<u16> = vec![0; (data_len as usize + 1) / 2];
+        let mut buffer: Vec<u16> = vec![0; (data_len as usize).div_ceil(2)];
 
         // Second call: read the actual value
         RegGetValueW(
