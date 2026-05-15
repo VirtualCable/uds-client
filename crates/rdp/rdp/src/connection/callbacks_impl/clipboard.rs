@@ -223,7 +223,7 @@ impl ClipboardHandler for Rdp {
             data
         );
         // Assume data is UTF-16LE encoded text
-        if data.len() % 2 != 0 {
+        if !data.len().is_multiple_of(2) {
             log::warn!("Received clipboard data length is not even, cannot be valid UTF-16");
             return freerdp_sys::CHANNEL_RC_OK;
         }
