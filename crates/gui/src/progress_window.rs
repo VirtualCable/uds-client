@@ -23,7 +23,7 @@ pub struct ProgressState {
     pub progress_duration_secs: u32,
     pub phase: ProgressPhase,
     pub auto_animate: bool,
-    pub hover_idx: Option<usize>,
+    pub cancel_btn: crate::draw::ui::button::Button,
     pub cancelled: bool,
     pub animation_time: f32,
     pub waves: Vec<Wave>,
@@ -52,6 +52,27 @@ impl ProgressState {
         let phys = window.inner_size();
         let renderer = WgpuRenderer::new(window.clone(), phys.width, phys.height)?;
         
+        let pw = phys.width as f32;
+        let ph = phys.height as f32;
+        let s = *crate::monitor::SCALE_FACTOR as f32;
+        let bw = crate::monitor::scaled_val(120) as f32;
+        let bh = crate::monitor::scaled_val(32) as f32;
+        let bx = (pw - bw) / 2.0;
+        let by = ph - bh - 25.0 * s;
+
+        let cancel_btn = crate::draw::ui::button::Button::new(
+            bx, by, bw as u32, bh as u32,
+            "CANCEL".to_string(),
+            crate::draw::ui::button::ButtonStyle {
+                font_scale: crate::monitor::scaled_val(13) as f32,
+                bg_color: [60, 35, 35, 255],
+                border_color: [100, 60, 60, 255],
+                hover_bg_color: [80, 45, 45, 255],
+                hover_border_color: [150, 80, 80, 255],
+                ..Default::default()
+            }
+        );
+
         Ok(Self {
             window,
             renderer,
@@ -61,7 +82,7 @@ impl ProgressState {
             progress_duration_secs: 30,
             phase: ProgressPhase::Connecting,
             auto_animate: false,
-            hover_idx: None,
+            cancel_btn,
             cancelled: false,
             animation_time: 0.0,
             waves: vec![
@@ -73,35 +94,12 @@ impl ProgressState {
         })
     }
 
-    pub fn handle_mouse_move(&mut self, logical_x: f32, logical_y: f32) -> bool {
-        let old_hover = self.hover_idx;
-        self.hover_idx = None;
-        let s = *crate::monitor::SCALE_FACTOR as f32;
-        let x = logical_x * s;
-        let y = logical_y * s;
-        
-        // Cancel button position (same logic as in paint)
-        let bw = crate::monitor::scaled_val(120) as f32;
-        let bh = crate::monitor::scaled_val(32) as f32;
-        let bx = (400.0 * s - bw) / 2.0;
-        let by = (300.0 * s) - bh - 25.0 * s;
-
-        if x >= bx && x <= bx + bw && y >= by && y <= by + bh {
-            self.hover_idx = Some(0);
-        }
-        self.hover_idx != old_hover
+    pub fn handle_mouse_move(&mut self, phys_x: f32, phys_y: f32) -> bool {
+        self.cancel_btn.handle_mouse_move(phys_x, phys_y)
     }
 
-    pub fn handle_click(&mut self, logical_x: f32, logical_y: f32) {
-        let s = *crate::monitor::SCALE_FACTOR as f32;
-        let x = logical_x * s;
-        let y = logical_y * s;
-        let bw = crate::monitor::scaled_val(120) as f32;
-        let bh = crate::monitor::scaled_val(32) as f32;
-        let bx = (400.0 * s - bw) / 2.0;
-        let by = (300.0 * s) - bh - 25.0 * s;
-
-        if x >= bx && x <= bx + bw && y >= by && y <= by + bh {
+    pub fn handle_click(&mut self, phys_x: f32, phys_y: f32) {
+        if self.cancel_btn.contains(phys_x, phys_y) {
             self.cancelled = true;
         }
     }
@@ -210,21 +208,10 @@ impl ProgressState {
         );
 
         // 5. CANCEL Button
-        let btn_w = monitor::scaled_val(120) as u32;
-        let btn_h = monitor::scaled_val(32) as u32;
-        let btn_x = (pw as f32 - btn_w as f32) / 2.0;
-        let btn_y = (ph as f32) - btn_h as f32 - 25.0 * s;
-        
-        let btn_style = ButtonStyle {
-            font_scale: monitor::scaled_val(13) as f32,
-            bg_color: if self.hover_idx == Some(0) { [80, 45, 45, 255] } else { [60, 35, 35, 255] },
-            border_color: if self.hover_idx == Some(0) { [150, 80, 80, 255] } else { [100, 60, 60, 255] },
-            ..ButtonStyle::default()
-        };
-        let (btn_data, btn_text) = button::render(btn_x, btn_y, btn_w, btn_h, "CANCEL", &btn_style);
+        let (btn_data, btn_text) = self.cancel_btn.render();
         let b_idx = data.len();
         data.push(btn_data);
-        ov_descs.push(OvDesc { data_idx: b_idx, w: btn_w, h: btn_h, x: btn_x, y: btn_y, scale: 1.0 });
+        ov_descs.push(OvDesc { data_idx: b_idx, w: self.cancel_btn.w, h: self.cancel_btn.h, x: self.cancel_btn.x, y: self.cancel_btn.y, scale: 1.0 });
         sections.push(btn_text);
 
         // 6. Logo (Top)

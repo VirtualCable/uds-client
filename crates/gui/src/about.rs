@@ -36,7 +36,7 @@ pub struct AboutState {
     pub scale: f32,
     pub animation_time: f32,
     pub waves: Vec<crate::draw::ui::waves::Wave>,
-    pub is_hovered: bool,
+    pub close_btn: crate::draw::ui::button::Button,
 }
 
 impl AboutState {
@@ -61,6 +61,22 @@ impl AboutState {
         let scale = *monitor::SCALE_FACTOR as f32;
         let renderer = WgpuRenderer::new(window.clone(), phys.width, phys.height)?;
         let logo = crate::logo::load_logo();
+        let pw = phys.width as f32;
+        let ph = phys.height as f32;
+        let bw = monitor::scaled_val(80) as f32;
+        let bh = monitor::scaled_val(35) as f32;
+        let bx = (pw - bw) / 2.0;
+        let by = ph - bh - 20.0 * scale;
+        
+        let close_btn = crate::draw::ui::button::Button::new(
+            bx, by, bw as u32, bh as u32,
+            "Close".to_string(),
+            crate::draw::ui::button::ButtonStyle {
+                font_scale: monitor::scaled_val(14) as f32,
+                ..Default::default()
+            }
+        );
+
         Ok(AboutState {
             window,
             renderer,
@@ -72,7 +88,7 @@ impl AboutState {
             scale,
             animation_time: 0.0,
             waves: crate::draw::ui::waves::Wave::default_set(),
-            is_hovered: false,
+            close_btn,
         })
     }
 
@@ -81,26 +97,7 @@ impl AboutState {
     }
 
     pub fn handle_mouse_move(&mut self, logical_x: f32, logical_y: f32) -> bool {
-        let old_hover = self.is_hovered;
-        self.is_hovered = false;
-        let s = self.scale;
-        let pw = self.phys_w as f32;
-        let ph = self.phys_h as f32;
-        
-        let bw = monitor::scaled_val(80) as f32;
-        let bh = monitor::scaled_val(35) as f32;
-        
-        let bx = (pw - bw) / 2.0;
-        let by = ph - bh - 20.0 * s;
-
-        let x = logical_x * s;
-        let y = logical_y * s;
-
-        if x >= bx && x <= bx + bw && y >= by && y <= by + bh {
-            self.is_hovered = true;
-        }
-        
-        self.is_hovered != old_hover
+        self.close_btn.handle_mouse_move(logical_x, logical_y)
     }
 
     pub fn paint(&mut self) {
@@ -161,21 +158,9 @@ impl AboutState {
                     .to_owned(),
             );
         }
-        let bw = monitor::scaled_val(80) as u32;
-        let bh = monitor::scaled_val(35) as u32;
-        let close_y = (ph as f32) - (bh as f32) - 20.0 * s;
-        
-        let style = crate::draw::ui::button::ButtonStyle {
-            font_scale: monitor::scaled_val(14) as f32,
-            bg_color: if self.is_hovered { [0x70, 0x70, 0x90, 0xFF] } else { [0x50, 0x50, 0x70, 0xFF] },
-            border_color: if self.is_hovered { [0x90, 0x90, 0xB0, 0xFF] } else { [0x70, 0x70, 0x90, 0xFF] },
-            ..crate::draw::ui::button::ButtonStyle::default()
-        };
-        
-        let close_x = (pw as f32 - bw as f32) / 2.0;
-        let (close_data, close_text) = crate::draw::ui::button::render(close_x, close_y, bw, bh, "Close", &style);
+        let (close_data, close_text) = self.close_btn.render();
         data.push(close_data);
-        sections.push(close_text.to_owned());
+        sections.push(close_text);
 
         let overlays = vec![
             OverlayParams {
@@ -196,10 +181,10 @@ impl AboutState {
             },
             OverlayParams {
                 rgba: &data[1],
-                width: bw,
-                height: bh,
-                x: (pw as f32 - bw as f32) / 2.0,
-                y: close_y,
+                width: self.close_btn.w,
+                height: self.close_btn.h,
+                x: self.close_btn.x,
+                y: self.close_btn.y,
                 scale: 1.0,
             },
         ];
@@ -250,8 +235,7 @@ impl ApplicationHandler for AboutHandler<'_> {
             }
             WindowEvent::CursorMoved { position, .. } => {
                 if let Some(s) = self.state.as_mut() {
-                    let logical = position.to_logical::<f32>(s.scale as f64);
-                    if s.handle_mouse_move(logical.x, logical.y) {
+                    if s.handle_mouse_move(position.x as f32, position.y as f32) {
                         s.window.request_redraw();
                     }
                 }

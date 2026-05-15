@@ -63,10 +63,10 @@ impl AppHandler {
 
         match event {
             WindowEvent::CursorMoved { position, .. } => {
-                let sf = p.window.scale_factor() as f32;
-                let (lx, ly) = (position.x as f32 / sf, position.y as f32 / sf);
-                p.last_mouse_pos = Some((lx, ly));
-                if p.handle_mouse_move(lx, ly) {
+                let px = position.x as f32;
+                let py = position.y as f32;
+                p.last_mouse_pos = Some((px, py));
+                if p.handle_mouse_move(px, py) {
                     p.window.request_redraw();
                 }
             }
@@ -125,14 +125,13 @@ impl AppHandler {
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
-                let sf = *monitor::SCALE_FACTOR as f32;
-                let lx = position.x as f32 / sf;
-                let ly = position.y as f32 / sf;
-                l.last_mouse_pos = Some((lx, ly));
-                if l.inner.handle_mouse_move(lx, ly)
-                    && let Some(w) = &l.window
-                {
-                    w.request_redraw();
+                let px = position.x as f32;
+                let py = position.y as f32;
+                l.last_mouse_pos = Some((px, py));
+                if l.inner.handle_mouse_move(px, py) {
+                    if let Some(w) = &l.window {
+                        w.request_redraw();
+                    }
                 }
             }
             _ => {}
@@ -161,11 +160,10 @@ impl AppHandler {
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
-                let sf = popup.scale;
-                let lx = position.x as f32 / sf;
-                let ly = position.y as f32 / sf;
-                popup.last_mouse_pos = Some((lx, ly));
-                if popup.handle_mouse_move(lx, ly) {
+                let px = position.x as f32;
+                let py = position.y as f32;
+                popup.last_mouse_pos = Some((px, py));
+                if popup.handle_mouse_move(px, py) {
                     popup.window.request_redraw();
                 }
             }

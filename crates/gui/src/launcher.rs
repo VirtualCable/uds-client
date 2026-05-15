@@ -14,9 +14,8 @@ pub enum LauncherInner {
     None,
     #[cfg(feature = "test-ui")]
     Test {
-        buttons: Vec<(&'static str, LaunchAction)>,
+        buttons: Vec<(crate::draw::ui::button::Button, LaunchAction)>,
         request: Option<LaunchAction>,
-        hover_idx: Option<usize>,
     },
 }
 
@@ -35,78 +34,70 @@ pub enum LaunchAction {
 impl LauncherInner {
     #[cfg(feature = "test-ui")]
     pub fn new_test() -> Self {
+        let s = *crate::monitor::SCALE_FACTOR as f32;
+        let bh = crate::monitor::scaled_val(28) as u32;
+        let bw = crate::monitor::scaled_val(260) as u32;
+        let sy = 42.0 * s;
+        let bx = 70.0 * s;
+        
+        let mut buttons = Vec::new();
+        let labels_and_actions = vec![
+            ("RDP Connect", LaunchAction::ConnectRdp),
+            ("RDP RAIL Notepad", LaunchAction::ConnectRail),
+            ("Progress", LaunchAction::ShowProgress),
+            ("About", LaunchAction::ShowAbout),
+            ("Warning", LaunchAction::ShowWarning),
+            ("Error", LaunchAction::ShowError),
+            ("Yes/No", LaunchAction::ShowYesNo),
+        ];
+        
+        for (i, (label, action)) in labels_and_actions.into_iter().enumerate() {
+            let by = sy + i as f32 * (bh as f32 + 6.0 * s);
+            let btn = crate::draw::ui::button::Button::new(
+                bx, by, bw, bh,
+                label.to_string(),
+                crate::draw::ui::button::ButtonStyle {
+                    font_scale: crate::monitor::scaled_val(14) as f32,
+                    ..Default::default()
+                }
+            );
+            buttons.push((btn, action));
+        }
+
         LauncherInner::Test {
-            buttons: vec![
-                ("RDP Connect", LaunchAction::ConnectRdp),
-                ("RDP RAIL Notepad", LaunchAction::ConnectRail),
-                ("Progress", LaunchAction::ShowProgress),
-                ("About", LaunchAction::ShowAbout),
-                ("Warning", LaunchAction::ShowWarning),
-                ("Error", LaunchAction::ShowError),
-                ("Yes/No", LaunchAction::ShowYesNo),
-            ],
+            buttons,
             request: None,
-            hover_idx: None,
         }
     }
 
-    pub fn handle_mouse_move(&mut self, logical_x: f32, logical_y: f32) -> bool {
+    pub fn handle_mouse_move(&mut self, phys_x: f32, phys_y: f32) -> bool {
         match self {
             #[cfg(feature = "test-ui")]
-            LauncherInner::Test {
-                buttons, hover_idx, ..
-            } => {
-                let old_hover = *hover_idx;
-                *hover_idx = None;
-                let s = *crate::monitor::SCALE_FACTOR as f32;
-                let x = logical_x * s;
-                let y = logical_y * s;
-                let bh = crate::monitor::scaled_val(28) as f32;
-                let bw = crate::monitor::scaled_val(260) as f32;
-                let sy = 42.0 * s;
-                let bx = 70.0 * s;
-
-                for (i, _) in buttons.iter().enumerate() {
-                    let by = sy + i as f32 * (bh + 6.0 * s);
-                    if y >= by && y <= by + bh && x >= bx && x <= bx + bw {
-                        *hover_idx = Some(i);
-                        break;
+            LauncherInner::Test { buttons, .. } => {
+                let mut changed = false;
+                for (btn, _) in buttons.iter_mut() {
+                    if btn.handle_mouse_move(phys_x, phys_y) {
+                        changed = true;
                     }
                 }
-                *hover_idx != old_hover
+                changed
             }
-            _ => {
-                let _ = (logical_x, logical_y);
-                false
-            }
+            _ => false,
         }
     }
 
-    pub fn handle_click(&mut self, logical_x: f32, logical_y: f32) {
+    pub fn handle_click(&mut self, phys_x: f32, phys_y: f32) {
         match self {
             #[cfg(feature = "test-ui")]
-            LauncherInner::Test {
-                buttons, request, ..
-            } => {
-                let s = *crate::monitor::SCALE_FACTOR as f32;
-                let x = logical_x * s;
-                let y = logical_y * s;
-                let bh = crate::monitor::scaled_val(28) as f32;
-                let bw = crate::monitor::scaled_val(260) as f32;
-                let sy = 42.0 * s;
-                let bx = 70.0 * s;
-
-                for (i, _) in buttons.iter().enumerate() {
-                    let by = sy + i as f32 * (bh + 6.0 * s);
-                    if y >= by && y <= by + bh && x >= bx && x <= bx + bw {
-                        *request = Some(buttons[i].1.clone());
+            LauncherInner::Test { buttons, request, .. } => {
+                for (btn, action) in buttons.iter() {
+                    if btn.contains(phys_x, phys_y) {
+                        *request = Some(action.clone());
                         break;
                     }
                 }
             }
-            _ => {
-                let _ = (logical_x, logical_y);
-            }
+            _ => {}
         }
     }
     #[cfg(feature = "test-ui")]
@@ -159,50 +150,6 @@ pub fn paint_launcher(state: &mut TestingLauncherState) {
         scale: f32,
     }
     let mut ov_descs: Vec<OvDesc> = Vec::new();
-
-    match &state.inner {
-        LauncherInner::None => {}
-        #[cfg(feature = "test-ui")]
-        LauncherInner::Test {
-            buttons, hover_idx, ..
-        } => {
-            let bh = monitor::scaled_val(28) as u32;
-            let bw = monitor::scaled_val(260) as u32;
-            let sy = 42.0 * s;
-            let bx = 70.0 * s;
-            for (i, (label, _)) in buttons.iter().enumerate() {
-                let y = sy + i as f32 * (bh as f32 + 6.0 * s);
-                let style = ButtonStyle {
-                    font_scale: monitor::scaled_val(14) as f32,
-                    bg_color: if hover_idx == &Some(i) {
-                        [0x70, 0x70, 0x90, 0xFF]
-                    } else {
-                        [0x50, 0x50, 0x70, 0xFF]
-                    },
-                    border_color: if hover_idx == &Some(i) {
-                        [0x90, 0x90, 0xB0, 0xFF]
-                    } else {
-                        [0x70, 0x70, 0x90, 0xFF]
-                    },
-                    ..ButtonStyle::default()
-                };
-                let (btn_data, btn_text) = button::render(bx, y, bw, bh, label, &style);
-                let di = data.len();
-                data.push(btn_data);
-                ov_descs.push(OvDesc {
-                    data_idx: di,
-                    w: bw,
-                    h: bh,
-                    x: bx,
-                    y,
-                    scale: 1.0,
-                });
-                sections.push(btn_text);
-            }
-        }
-    }
-
-    // Logo (ALWAYS on top)
     ov_descs.push(OvDesc {
         data_idx: logo_idx,
         w: logo.width,
@@ -211,6 +158,27 @@ pub fn paint_launcher(state: &mut TestingLauncherState) {
         y: (35.0 * s).min(ph as f32 - logo.height as f32 * s),
         scale: s,
     });
+
+    match &state.inner {
+        LauncherInner::None => {}
+        #[cfg(feature = "test-ui")]
+        LauncherInner::Test { buttons, .. } => {
+            for (btn, _) in buttons.iter() {
+                let (btn_data, btn_text) = btn.render();
+                let di = data.len();
+                data.push(btn_data);
+                ov_descs.push(OvDesc {
+                    data_idx: di,
+                    w: btn.w,
+                    h: btn.h,
+                    x: btn.x,
+                    y: btn.y,
+                    scale: 1.0,
+                });
+                sections.push(btn_text);
+            }
+        }
+    }
 
     // Phase 2: build overlays from stable data
     let mut overlays = Vec::with_capacity(ov_descs.len());

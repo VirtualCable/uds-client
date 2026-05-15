@@ -23,7 +23,7 @@ pub struct PopupState {
     pub phys_w: u32,
     pub phys_h: u32,
     pub scale: f32,
-    pub hover_idx: Option<usize>,
+    pub buttons: Vec<crate::draw::ui::button::Button>,
     pub last_mouse_pos: Option<(f32, f32)>,
 }
 
@@ -51,6 +51,64 @@ impl PopupState {
         let phys = window.inner_size();
         let scale = *monitor::SCALE_FACTOR as f32;
         let renderer = WgpuRenderer::new(window.clone(), phys.width, phys.height)?;
+        let pw = phys.width as f32;
+        let ph = phys.height as f32;
+        let bh = monitor::scaled_val(40) as f32;
+        let by = ph - bh - 20.0 * scale;
+
+        let mut buttons = Vec::new();
+        match &kind {
+            PopupKind::YesNo { .. } => {
+                let bw = monitor::scaled_val(100) as f32;
+                let bx_yes = (pw / 2.0) - bw - 10.0 * scale;
+                let bx_no = (pw / 2.0) + 10.0 * scale;
+
+                buttons.push(crate::draw::ui::button::Button::new(
+                    bx_yes, by, bw as u32, bh as u32,
+                    "YES".to_string(),
+                    crate::draw::ui::button::ButtonStyle {
+                        font_scale: monitor::scaled_val(15) as f32,
+                        radius: 8.0,
+                        bg_color: [45, 45, 55, 255],
+                        border_color: [80, 80, 100, 255],
+                        hover_bg_color: [65, 65, 80, 255],
+                        hover_border_color: [120, 120, 150, 255],
+                        ..Default::default()
+                    }
+                ));
+                buttons.push(crate::draw::ui::button::Button::new(
+                    bx_no, by, bw as u32, bh as u32,
+                    "NO".to_string(),
+                    crate::draw::ui::button::ButtonStyle {
+                        font_scale: monitor::scaled_val(15) as f32,
+                        radius: 8.0,
+                        bg_color: [45, 45, 55, 255],
+                        border_color: [80, 80, 100, 255],
+                        hover_bg_color: [65, 65, 80, 255],
+                        hover_border_color: [120, 120, 150, 255],
+                        ..Default::default()
+                    }
+                ));
+            }
+            PopupKind::Warning(_) | PopupKind::Error(_) => {
+                let bw = monitor::scaled_val(120) as f32;
+                let bx = pw / 2.0 - bw / 2.0;
+                buttons.push(crate::draw::ui::button::Button::new(
+                    bx, by, bw as u32, bh as u32,
+                    "GOT IT".to_string(),
+                    crate::draw::ui::button::ButtonStyle {
+                        font_scale: monitor::scaled_val(15) as f32,
+                        radius: 8.0,
+                        bg_color: [45, 45, 55, 255],
+                        border_color: [80, 80, 100, 255],
+                        hover_bg_color: [65, 65, 80, 255],
+                        hover_border_color: [120, 120, 150, 255],
+                        ..Default::default()
+                    }
+                ));
+            }
+        }
+
         Ok(PopupState {
             window,
             renderer,
@@ -58,81 +116,34 @@ impl PopupState {
             phys_w: phys.width,
             phys_h: phys.height,
             scale,
-            hover_idx: None,
+            buttons,
             last_mouse_pos: None,
         })
     }
 
     pub fn handle_mouse_move(&mut self, x: f32, y: f32) -> bool {
-        let old_hover = self.hover_idx;
-        self.hover_idx = None;
-
-        let s = self.scale;
-        let px = x * s;
-        let py = y * s;
-
-        let bh = 40.0 * s;
-        let by = self.phys_h as f32 - bh - 20.0 * s;
-
-        match &self.kind {
-            PopupKind::YesNo { .. } => {
-                let bw = 100.0 * s;
-                let bx_yes = (self.phys_w as f32 / 2.0) - bw - 10.0 * s;
-                let bx_no = (self.phys_w as f32 / 2.0) + 10.0 * s;
-
-                if py >= by && py <= by + bh {
-                    if px >= bx_yes && px <= bx_yes + bw {
-                        self.hover_idx = Some(0);
-                    } else if px >= bx_no && px <= bx_no + bw {
-                        self.hover_idx = Some(1);
-                    }
-                }
-            }
-            PopupKind::Warning(_) | PopupKind::Error(_) => {
-                let bw = 120.0 * s;
-                let bx = self.phys_w as f32 / 2.0 - bw / 2.0;
-                if py >= by && py <= by + bh && px >= bx && px <= bx + bw {
-                    self.hover_idx = Some(0);
-                }
+        let mut changed = false;
+        for btn in &mut self.buttons {
+            if btn.handle_mouse_move(x, y) {
+                changed = true;
             }
         }
-        self.hover_idx != old_hover
+        changed
     }
 
     pub fn handle_click(&mut self, x: f32, y: f32) -> bool {
-        let s = self.scale;
-        let px = x * s;
-        let py = y * s;
-
-        let bh = 40.0 * s;
-        let by = self.phys_h as f32 - bh - 20.0 * s;
-
-        match &self.kind {
-            PopupKind::YesNo { response, .. } => {
-                let bw_yn = 100.0 * s;
-                let bx_yes = (self.phys_w as f32 / 2.0) - bw_yn - 10.0 * s;
-                let bx_no = (self.phys_w as f32 / 2.0) + 10.0 * s;
-
-                if py >= by && py <= by + bh {
-                    if px >= bx_yes && px <= bx_yes + bw_yn {
+        for (i, btn) in self.buttons.iter().enumerate() {
+            if btn.contains(x, y) {
+                match &self.kind {
+                    PopupKind::YesNo { response, .. } => {
                         if let Some(tx) = response.write().unwrap().take() {
-                            let _ = tx.send(true);
+                            let _ = tx.send(i == 0); // 0 is YES, 1 is NO
                         }
                         return true;
                     }
-                    if px >= bx_no && px <= bx_no + bw_yn {
-                        if let Some(tx) = response.write().unwrap().take() {
-                            let _ = tx.send(false);
-                        }
+                    PopupKind::Warning(_) | PopupKind::Error(_) => {
                         return true;
                     }
-                }
-            }
-            PopupKind::Warning(_) | PopupKind::Error(_) => {
-                let bw_ok = 120.0 * s;
-                let bx_ok = self.phys_w as f32 / 2.0 - bw_ok / 2.0;
-                if py >= by && py <= by + bh && px >= bx_ok && px <= bx_ok + bw_ok {
-                    return true;
                 }
             }
         }
@@ -242,48 +253,11 @@ impl PopupState {
         ));
 
         // 4. Buttons
-        let h_idx = self.hover_idx;
-        let bh = monitor::scaled_val(40) as u32;
-        let by = ph as f32 - bh as f32 - 20.0 * s;
-
-        if is_yesno {
-            let bw = monitor::scaled_val(100) as u32;
-            let bx1 = (pw as f32 / 2.0) - bw as f32 - 10.0 * s;
-            let style1 = ButtonStyle {
-                font_scale: monitor::scaled_val(15) as f32,
-                bg_color: if h_idx == Some(0) { [65, 65, 80, 255] } else { [45, 45, 55, 255] },
-                border_color: if h_idx == Some(0) { [120, 120, 150, 255] } else { [80, 80, 100, 255] },
-                radius: 8.0,
-                ..ButtonStyle::default()
-            };
-            let (yes_data, yes_text) = button::render(bx1, by, bw, bh, "YES", &style1);
-            data.push(yes_data);
-            ov_descs.push((data.len() - 1, bw, bh, bx1, by));
-            sections.push(yes_text);
-
-            let bx2 = (pw as f32 / 2.0) + 10.0 * s;
-            let mut style2 = style1;
-            style2.bg_color = if h_idx == Some(1) { [65, 65, 80, 255] } else { [45, 45, 55, 255] };
-            style2.border_color = if h_idx == Some(1) { [120, 120, 150, 255] } else { [80, 80, 100, 255] };
-            
-            let (no_data, no_text) = button::render(bx2, by, bw, bh, "NO", &style2);
-            data.push(no_data);
-            ov_descs.push((data.len() - 1, bw, bh, bx2, by));
-            sections.push(no_text);
-        } else {
-            let bw = monitor::scaled_val(120) as u32;
-            let bx = pw as f32 / 2.0 - bw as f32 / 2.0;
-            let style = ButtonStyle {
-                font_scale: monitor::scaled_val(15) as f32,
-                bg_color: if h_idx == Some(0) { [65, 65, 80, 255] } else { [45, 45, 55, 255] },
-                border_color: if h_idx == Some(0) { [120, 120, 150, 255] } else { [80, 80, 100, 255] },
-                radius: 8.0,
-                ..ButtonStyle::default()
-            };
-            let (ok_data, ok_text) = button::render(bx, by, bw, bh, "GOT IT", &style);
-            data.push(ok_data);
-            ov_descs.push((data.len() - 1, bw, bh, bx, by));
-            sections.push(ok_text);
+        for btn in &self.buttons {
+            let (btn_data, btn_text) = btn.render();
+            data.push(btn_data);
+            ov_descs.push((data.len() - 1, btn.w, btn.h, btn.x, btn.y));
+            sections.push(btn_text);
         }
 
         let mut overlays = Vec::with_capacity(ov_descs.len());
