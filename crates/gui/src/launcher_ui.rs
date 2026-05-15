@@ -129,10 +129,10 @@ impl AppHandler {
                 let lx = position.x as f32 / sf;
                 let ly = position.y as f32 / sf;
                 l.last_mouse_pos = Some((lx, ly));
-                if l.inner.handle_mouse_move(lx, ly) {
-                    if let Some(w) = &l.window {
-                        w.request_redraw();
-                    }
+                if l.inner.handle_mouse_move(lx, ly)
+                    && let Some(w) = &l.window
+                {
+                    w.request_redraw();
                 }
             }
             _ => {}

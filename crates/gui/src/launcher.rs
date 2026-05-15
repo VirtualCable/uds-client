@@ -53,7 +53,9 @@ impl LauncherInner {
     pub fn handle_mouse_move(&mut self, logical_x: f32, logical_y: f32) -> bool {
         match self {
             #[cfg(feature = "test-ui")]
-            LauncherInner::Test { buttons, hover_idx, .. } => {
+            LauncherInner::Test {
+                buttons, hover_idx, ..
+            } => {
                 let old_hover = *hover_idx;
                 *hover_idx = None;
                 let s = *crate::monitor::SCALE_FACTOR as f32;
@@ -63,7 +65,7 @@ impl LauncherInner {
                 let bw = crate::monitor::scaled_val(260) as f32;
                 let sy = 42.0 * s;
                 let bx = 70.0 * s;
-                
+
                 for (i, _) in buttons.iter().enumerate() {
                     let by = sy + i as f32 * (bh + 6.0 * s);
                     if y >= by && y <= by + bh && x >= bx && x <= bx + bw {
@@ -83,7 +85,9 @@ impl LauncherInner {
     pub fn handle_click(&mut self, logical_x: f32, logical_y: f32) {
         match self {
             #[cfg(feature = "test-ui")]
-            LauncherInner::Test { buttons, request, .. } => {
+            LauncherInner::Test {
+                buttons, request, ..
+            } => {
                 let s = *crate::monitor::SCALE_FACTOR as f32;
                 let x = logical_x * s;
                 let y = logical_y * s;
@@ -91,7 +95,7 @@ impl LauncherInner {
                 let bw = crate::monitor::scaled_val(260) as f32;
                 let sy = 42.0 * s;
                 let bx = 70.0 * s;
-                
+
                 for (i, _) in buttons.iter().enumerate() {
                     let by = sy + i as f32 * (bh + 6.0 * s);
                     if y >= by && y <= by + bh && x >= bx && x <= bx + bw {
@@ -114,22 +118,12 @@ impl LauncherInner {
     }
 }
 
+#[derive(Default)]
 pub struct TestingLauncherState {
     pub window: Option<Arc<winit::window::Window>>,
     pub renderer: Option<WgpuRenderer>,
     pub inner: LauncherInner,
     pub last_mouse_pos: Option<(f32, f32)>,
-}
-
-impl Default for TestingLauncherState {
-    fn default() -> Self {
-        Self {
-            window: None,
-            renderer: None,
-            inner: LauncherInner::default(),
-            last_mouse_pos: None,
-        }
-    }
 }
 
 #[cfg(feature = "test-ui")]
@@ -169,7 +163,9 @@ pub fn paint_launcher(state: &mut TestingLauncherState) {
     match &state.inner {
         LauncherInner::None => {}
         #[cfg(feature = "test-ui")]
-        LauncherInner::Test { buttons, hover_idx, .. } => {
+        LauncherInner::Test {
+            buttons, hover_idx, ..
+        } => {
             let bh = monitor::scaled_val(28) as u32;
             let bw = monitor::scaled_val(260) as u32;
             let sy = 42.0 * s;
@@ -178,8 +174,16 @@ pub fn paint_launcher(state: &mut TestingLauncherState) {
                 let y = sy + i as f32 * (bh as f32 + 6.0 * s);
                 let style = ButtonStyle {
                     font_scale: monitor::scaled_val(14) as f32,
-                    bg_color: if hover_idx == &Some(i) { [0x70, 0x70, 0x90, 0xFF] } else { [0x50, 0x50, 0x70, 0xFF] },
-                    border_color: if hover_idx == &Some(i) { [0x90, 0x90, 0xB0, 0xFF] } else { [0x70, 0x70, 0x90, 0xFF] },
+                    bg_color: if hover_idx == &Some(i) {
+                        [0x70, 0x70, 0x90, 0xFF]
+                    } else {
+                        [0x50, 0x50, 0x70, 0xFF]
+                    },
+                    border_color: if hover_idx == &Some(i) {
+                        [0x90, 0x90, 0xB0, 0xFF]
+                    } else {
+                        [0x70, 0x70, 0x90, 0xFF]
+                    },
                     ..ButtonStyle::default()
                 };
                 let (btn_data, btn_text) = button::render(bx, y, bw, bh, label, &style);

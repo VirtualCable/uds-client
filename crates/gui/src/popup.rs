@@ -165,8 +165,10 @@ impl PopupState {
         paint.set_color(Color::from_rgba8(30, 30, 35, 255));
         panel_pixmap.fill_path(&rect, &paint, FillRule::Winding, Transform::identity(), None);
         
-        let mut stroke = Stroke::default();
-        stroke.width = 2.0 * s;
+        let stroke = Stroke {
+            width: 2.0 * s,
+            ..Default::default()
+        };
         paint.set_color(Color::from_rgba(color[0], color[1], color[2], 0.6).unwrap());
         panel_pixmap.stroke_path(&rect, &paint, &stroke, Transform::identity(), None);
         
@@ -205,9 +207,11 @@ impl PopupState {
             sym_pb.push_circle(icon_center, icon_center + 7.0 * s, 1.5 * s);
         }
         if let Some(sym_path) = sym_pb.finish() {
-            let mut sym_stroke = Stroke::default();
-            sym_stroke.width = 3.0 * s;
-            sym_stroke.line_cap = tiny_skia::LineCap::Round;
+            let sym_stroke = Stroke {
+                width: 3.0 * s,
+                line_cap: tiny_skia::LineCap::Round,
+                ..Default::default()
+            };
             icon_pixmap.stroke_path(&sym_path, &paint, &sym_stroke, Transform::identity(), None);
         }
 

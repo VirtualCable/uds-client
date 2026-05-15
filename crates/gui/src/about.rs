@@ -116,7 +116,7 @@ impl AboutState {
         // Overlay index 0 is background
         // We'll push logo and others after
         let mut sections: Vec<OwnedSection> = Vec::new();
-        let base_y = self.logo.height as f32 * s + 80.0 * s;
+        let base_y = self.logo.height as f32 * s + 60.0 * s;
         for (i, line) in ABOUT_LINES.iter().enumerate() {
             let y = base_y + i as f32 * (22.0 * s);
             sections.push(
