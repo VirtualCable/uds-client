@@ -39,6 +39,17 @@ mod asyncthread;
 mod intl;
 mod runner;
 
+fn parse_udssv2_url(raw: &str) -> Option<(String, String, String)> {
+    // Expects format: udssv2://host/ticket/scrambler
+    let payload = raw.strip_prefix("udssv2://")?;
+    let (host, rest) = payload.split_once('/')?;
+    let (ticket, scrambler) = rest.split_once('/')?;
+    if ticket.len() != crypt::consts::TICKET_LENGTH {
+        return None;
+    }
+    Some((host.to_string(), ticket.to_string(), scrambler.to_string()))
+}
+
 fn collect_arguments() -> Option<(String, String, String)> {
     let args: Vec<String> = std::env::args().collect();
 
@@ -51,20 +62,10 @@ fn collect_arguments() -> Option<(String, String, String)> {
     };
 
     // Should have only 1 argument, "udssv2://host/ticket/scrambler"
-    if args.len() != 2 || !args[1].starts_with("udssv2://") {
+    if args.len() != 2 {
         return None;
     }
-
-    let host_ticket_and_scrambler = &args[1]["udssv2://".len()..];
-    match host_ticket_and_scrambler.split_once('/') {
-        Some((host, rest)) => match rest.split_once('/') {
-            Some((ticket, scrambler)) if ticket.len() == crypt::consts::TICKET_LENGTH => {
-                Some((host.to_string(), ticket.to_string(), scrambler.to_string()))
-            }
-            _ => None,
-        },
-        _ => None,
-    }
+    parse_udssv2_url(&args[1])
 }
 
 fn main() {
@@ -120,4 +121,54 @@ fn main() {
 
     // Gui closed, wait for app to finish also
     stop.wait();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn valid_ticket() -> String {
+        "A".repeat(crypt::consts::TICKET_LENGTH)
+    }
+
+    #[test]
+    fn valid_url() {
+        let url = format!("udssv2://myhost.example.com/{}/scrambler123", valid_ticket());
+        let result = parse_udssv2_url(&url);
+        assert!(result.is_some());
+        let (host, ticket, scrambler) = result.unwrap();
+        assert_eq!(host, "myhost.example.com");
+        assert_eq!(ticket.len(), crypt::consts::TICKET_LENGTH);
+        assert_eq!(scrambler, "scrambler123");
+    }
+
+    #[test]
+    fn no_prefix() {
+        assert!(parse_udssv2_url("https://host/ticket/scrambler").is_none());
+    }
+
+    #[test]
+    fn missing_scrambler() {
+        let url = format!("udssv2://host/{}", valid_ticket());
+        assert!(parse_udssv2_url(&url).is_none());
+    }
+
+    #[test]
+    fn ticket_wrong_length() {
+        let url = "udssv2://host/short/scrambler";
+        assert!(parse_udssv2_url(url).is_none());
+    }
+
+    #[test]
+    fn extra_segments() {
+        let url = format!("udssv2://host/{}/scrambler/extra", valid_ticket());
+        // split_once only splits at the first /, so extra segments become part of scrambler
+        let result = parse_udssv2_url(&url);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn host_only() {
+        assert!(parse_udssv2_url("udssv2://host").is_none());
+    }
 }

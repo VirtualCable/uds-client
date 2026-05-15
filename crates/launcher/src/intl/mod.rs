@@ -68,3 +68,36 @@ pub static CATALOG: LazyLock<Catalog> = LazyLock::new(|| {
 pub fn get_catalog() -> &'static Catalog {
     &CATALOG
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn zh_simplified_variants() {
+        assert_eq!(normalize_lang("zh"), "zh_CN");
+        assert_eq!(normalize_lang("zh-CN"), "zh_CN");
+        assert_eq!(normalize_lang("zh_Hans"), "zh_CN");
+    }
+
+    #[test]
+    fn zh_traditional_variants() {
+        assert_eq!(normalize_lang("zh-TW"), "zh_TW");
+        assert_eq!(normalize_lang("zh_Hant"), "zh_TW");
+    }
+
+    #[test]
+    fn other_languages_passthrough() {
+        assert_eq!(normalize_lang("en"), "en");
+        assert_eq!(normalize_lang("es"), "es");
+        assert_eq!(normalize_lang("fr"), "fr");
+        assert_eq!(normalize_lang("de"), "de");
+        assert_eq!(normalize_lang("ja"), "ja");
+        assert_eq!(normalize_lang("pt-BR"), "pt-BR");
+    }
+
+    #[test]
+    fn empty_passthrough() {
+        assert_eq!(normalize_lang(""), "");
+    }
+}
