@@ -105,7 +105,7 @@ fn copy_windows_dlls() {
 
     // vcpkg DLLs
     let vcpkg_dlls = [
-        "zlib1.dll",
+        // "zlib1.dll",
         // "bz2.dll",
         "libssl-3-x64.dll",
         "libcrypto-3-x64.dll",
@@ -122,7 +122,7 @@ fn copy_windows_dlls() {
         "avcodec-*.dll",
         "avutil-*.dll",
         "swscale-*.dll",
-        "openh264-*.dll",
+        //"openh264-*.dll",
         "swresample-*.dll",
         "cjson.dll",
     ];

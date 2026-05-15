@@ -38,6 +38,26 @@ pub fn interpolate(raw: &str, args: &[&dyn std::fmt::Display]) -> String {
     result
 }
 
+#[macro_export]
+macro_rules! tr {
+    // Simple translation
+    ($msg:expr) => {
+        $crate::intl::CATALOG.gettext($msg)
+    };
+
+    // Translation with parameters
+    ($msg:expr, $($arg:expr),+ $(,)?) => {{
+        let raw = $crate::intl::CATALOG.gettext($msg);
+        $crate::intl::macros::interpolate(&raw, &[ $( &$arg ),+ ])
+    }};
+
+    // Plural translation
+    ($sing:expr, $plur:expr, $n:expr) => {{
+        let raw = $crate::intl::CATALOG.ngettext($sing, $plur, $n);
+        $crate::intl::macros::interpolate(&raw, &[ &$n ])
+    }};
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -59,10 +79,7 @@ mod tests {
 
     #[test]
     fn multiple_replacements() {
-        assert_eq!(
-            interpolate("{} + {} = {}", &[&1, &2, &3]),
-            "1 + 2 = 3"
-        );
+        assert_eq!(interpolate("{} + {} = {}", &[&1, &2, &3]), "1 + 2 = 3");
     }
 
     #[test]
@@ -88,27 +105,7 @@ mod tests {
     #[test]
     fn display_types() {
         assert_eq!(interpolate("{}", &[&42i32]), "42");
-        assert_eq!(interpolate("{}", &[&3.14f64]), "3.14");
+        assert_eq!(interpolate("{}", &[&3.22f64]), "3.22");
         assert_eq!(interpolate("{}", &[&true]), "true");
     }
-}
-
-#[macro_export]
-macro_rules! tr {
-    // Simple translation
-    ($msg:expr) => {
-        $crate::intl::CATALOG.gettext($msg)
-    };
-
-    // Translation with parameters
-    ($msg:expr, $($arg:expr),+ $(,)?) => {{
-        let raw = $crate::intl::CATALOG.gettext($msg);
-        $crate::intl::macros::interpolate(&raw, &[ $( &$arg ),+ ])
-    }};
-
-    // Plural translation
-    ($sing:expr, $plur:expr, $n:expr) => {{
-        let raw = $crate::intl::CATALOG.ngettext($sing, $plur, $n);
-        $crate::intl::macros::interpolate(&raw, &[ &$n ])
-    }};
 }

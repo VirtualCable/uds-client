@@ -95,9 +95,11 @@ impl TunnelParams {
         Ok(TunnelConnectInfo {
             addr: self.addr.clone(),
             port: self.port,
-            ticket: self.ticket.as_bytes().try_into().map_err(|_| {
-                anyhow::anyhow!("Invalid ticket length, must be 32 bytes")
-            })?,
+            ticket: self
+                .ticket
+                .as_bytes()
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("Invalid ticket length, must be 32 bytes"))?,
             check_certificate: self
                 .check_certificate
                 .unwrap_or(check_cert_default.unwrap_or(true)),
@@ -109,9 +111,9 @@ impl TunnelParams {
                 .shared_secret
                 .as_ref()
                 .map(|s| {
-                    s.as_slice().try_into().map_err(|_| {
-                        anyhow::anyhow!("Invalid shared secret length")
-                    })
+                    s.as_slice()
+                        .try_into()
+                        .map_err(|_| anyhow::anyhow!("Invalid shared secret length"))
                 })
                 .transpose()?,
         })
@@ -124,9 +126,10 @@ async fn start_tunel_fn(
     ctx: &std::cell::RefCell<&mut Context>,
 ) -> JsResult<JsValue> {
     let appdata = appdata::AppData::load();
-    let mut ctx_borrow = ctx.borrow_mut();
-    let params = extract_js_args!(args, &mut *ctx_borrow, TunnelParams);
-    drop(ctx_borrow); // release before await
+    let params = {
+        let mut ctx_borrow = ctx.borrow_mut();
+        extract_js_args!(args, &mut *ctx_borrow, TunnelParams)
+    };
     log::debug!(
         "Starting tunnel to {}:{} with ticket {}, check_certificate: {:?}, listen_timeout_ms: {:?}, local_port: {:?}, keep_listening_after_timeout: {:?}, enable_ipv6: {:?}, shared_secret: {:?}",
         params.addr,
@@ -139,11 +142,9 @@ async fn start_tunel_fn(
         params.enable_ipv6,
         params.shared_secret,
     );
-    let tunnel_info = params.to_connect_info(appdata.verify_ssl).map_err(|e| {
-        JsError::from_native(
-            JsNativeError::error().with_message(e.to_string())
-        )
-    })?;
+    let tunnel_info = params
+        .to_connect_info(appdata.verify_ssl)
+        .map_err(|e| JsError::from_native(JsNativeError::error().with_message(e.to_string())))?;
 
     let port = connection::start_tunnel(tunnel_info)
         .await
@@ -184,6 +185,26 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
         [("startTunnel", start_tunel_fn, 8),],
     );
     Ok(())
+}
+
+#[macro_export]
+macro_rules! tr {
+    // Simple translation
+    ($msg:expr) => {
+        $crate::intl::CATALOG.gettext($msg)
+    };
+
+    // Translation with parameters
+    ($msg:expr, $($arg:expr),+ $(,)?) => {{
+        let raw = $crate::intl::CATALOG.gettext($msg);
+        $crate::intl::macros::interpolate(&raw, &[ $( &$arg ),+ ])
+    }};
+
+    // Plural translation
+    ($sing:expr, $plur:expr, $n:expr) => {{
+        let raw = $crate::intl::CATALOG.ngettext($sing, $plur, $n);
+        $crate::intl::macros::interpolate(&raw, &[ &$n ])
+    }};
 }
 
 #[cfg(test)]
