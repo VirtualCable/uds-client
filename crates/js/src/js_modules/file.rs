@@ -244,19 +244,19 @@ mod tests {
             .try_js_into(&mut ctx)
             .unwrap();
         assert!(!home_dir.is_empty());
-
+        
         let list_script = format!(
             r#"
             const entries = File.listFolder("{}");
             entries;
         "#,
-            temp_dir
+            temp_dir.replace("\\", "\\\\")
         );
         let list_result = exec_script_with_result(&mut ctx, &list_script)
             .await
             .unwrap();
 
-        // Convertir directamente el JsValue a Vec<String>
+        // convert JsValue to Vec<String>
         let entries_vec: Vec<String> = list_result.try_js_into(&mut ctx).unwrap();
         log::info!("Entries in temp directory: {:?}", entries_vec);
     }
