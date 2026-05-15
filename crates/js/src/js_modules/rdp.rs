@@ -164,13 +164,13 @@ fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
         rail_working_dir: rdp_settings.rail_working_dir.or(defs.rail_working_dir),
         scale_factor: 1.0,  // Will be overrided by local monitor scale factor in gui
         use_local_scaler: rdp_settings.use_local_scaler.unwrap_or(true),
-        server_auth: rdp_settings.server_info.map(|s| settings::ServerAuth { id: s.id, token: s.token }),
+        server_info: rdp_settings.server_info.map(|s| settings::ServerInfo { id: s.id, token: s.token }),
     };
 
     log::debug!("Starting RDP with settings: {:?}", settings);
 
     // If we have a server config and a rail_app, try sending via IPC to an existing session
-    if let (Some(srv), Some(rail_app)) = (&settings.server_auth, &settings.rail_app) {
+    if let (Some(srv), Some(rail_app)) = (&settings.server_info, &settings.rail_app) {
         let msg = gui::ipc::RailLaunchMsg {
             rail_app: rail_app.clone(),
             rail_args: settings.rail_args.clone().unwrap_or_default(),

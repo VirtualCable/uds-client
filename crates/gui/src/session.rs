@@ -78,7 +78,7 @@ impl AppHandler {
                 renderer,
                 scratch: Vec::new(),
             };
-            let server_auth = settings.server_auth.clone();
+            let server_info = settings.server_info.clone();
             let rdp_state = RdpState::new(
                 rdp_window,
                 settings,
@@ -92,7 +92,7 @@ impl AppHandler {
             self.register_window(wid, WindowKind::Rdp);
 
             // If this is a RAIL session with a server config, start IPC listener
-            if let Some(ref srv) = server_auth
+            if let Some(ref srv) = server_info
                 && let Some(ref state) = self.rdp
             {
                 let cmd_tx = state.command_tx.clone();
@@ -415,8 +415,8 @@ impl AppHandler {
                         },
                         best_experience: true,
                         use_local_scaler: true,
-                        server_auth: if is_rail {
-                            Some(rdp_ffi::settings::ServerAuth {
+                        server_info: if is_rail {
+                            Some(rdp_ffi::settings::ServerInfo {
                                 id: "test-uds-rail".to_string(),
                                 token: "test-token".to_string(),
                             })

@@ -34,10 +34,9 @@ use zeroize::Zeroize;
 use super::geom::ScreenSize;
 
 #[derive(Debug, Clone, Default, Zeroize)]
-pub struct ServerAuth {
+pub struct ServerInfo {
     #[zeroize(skip)]
     pub id: String,
-    #[zeroize(skip)]
     pub token: String,
 }
 
@@ -85,7 +84,7 @@ pub struct RdpSettings {
     #[zeroize(skip)]
     pub use_local_scaler: bool,
     #[zeroize(skip)]
-    pub server_auth: Option<ServerAuth>,
+    pub server_info: Option<ServerInfo>,
 }
 
 impl Default for RdpSettings {
@@ -111,7 +110,7 @@ impl Default for RdpSettings {
             rail_working_dir: None,
             scale_factor: 1.0,
             use_local_scaler: true,
-            server_auth: None,
+            server_info: None,
         }
     }
 }
@@ -146,7 +145,7 @@ impl fmt::Debug for RdpSettings {
             .field("rail_working_dir", &self.rail_working_dir)
             .field("scale_factor", &self.scale_factor)
             .field("use_local_scaler", &self.use_local_scaler)
-            .field("server_auth", &self.server_auth.as_ref().map(|s| format!("id={}, token=****", s.id)))
+            .field("server_info", &self.server_info.as_ref().map(|s| format!("id={}, token=****", s.id)))
             .finish()
     }
 }

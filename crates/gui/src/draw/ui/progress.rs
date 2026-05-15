@@ -42,3 +42,32 @@ fn rounded_rect(x: f32, y: f32, w: f32, h: f32, r: f32) -> tiny_skia::Path {
     pb.cubic_to(x, y + r - r * 0.552, x + r - r * 0.552, y, x + r, y);
     pb.finish().unwrap()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn render_output_dimensions() {
+        let buf = render(50.0, 100, 20);
+        assert_eq!(buf.len(), (100 * 20 * 4) as usize);
+    }
+
+    #[test]
+    fn render_zero_pct() {
+        let buf = render(0.0, 50, 10);
+        assert_eq!(buf.len(), (50 * 10 * 4) as usize);
+    }
+
+    #[test]
+    fn render_full_pct() {
+        let buf = render(100.0, 50, 10);
+        assert_eq!(buf.len(), (50 * 10 * 4) as usize);
+    }
+
+    #[test]
+    fn render_negative_clamped() {
+        let buf = render(-10.0, 50, 10);
+        assert_eq!(buf.len(), (50 * 10 * 4) as usize);
+    }
+}

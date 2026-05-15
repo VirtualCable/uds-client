@@ -85,3 +85,53 @@ pub fn phys_2_logic(physical: (i32, i32), sf: f64) -> (i32, i32) {
         (physical.1 as f64 / sf).round() as i32,
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn phys_to_logic_identity() {
+        assert_eq!(phys_2_logic((100, 200), 1.0), (100, 200));
+    }
+
+    #[test]
+    fn phys_to_logic_scale_2() {
+        assert_eq!(phys_2_logic((100, 50), 2.0), (50, 25));
+    }
+
+    #[test]
+    fn phys_to_logic_rounding() {
+        // 5 / 2.0 = 2.5, round = 3
+        assert_eq!(phys_2_logic((5, 5), 2.0), (3, 3));
+        // 4 / 2.0 = 2.0, exact
+        assert_eq!(phys_2_logic((4, 4), 2.0), (2, 2));
+    }
+
+    #[test]
+    fn logic_to_phys_identity() {
+        assert_eq!(logic_2_phys_pos((50, 100), 1.0), (50, 100));
+    }
+
+    #[test]
+    fn logic_to_phys_scale_2() {
+        assert_eq!(logic_2_phys_pos((50, 25), 2.0), (100, 50));
+    }
+
+    #[test]
+    fn logic_to_phys_rounding() {
+        // 3 * 1.5 = 4.5, round = 5
+        assert_eq!(logic_2_phys_pos((3, 3), 1.5), (5, 5));
+    }
+
+    #[test]
+    fn round_trip() {
+        let phys = (3840, 2160);
+        let sf = 2.0;
+        let logical = phys_2_logic(phys, sf);
+        let back = logic_2_phys_pos(logical, sf);
+        // May differ by 1 due to rounding
+        assert!((back.0 - phys.0).abs() <= 1);
+        assert!((back.1 - phys.1).abs() <= 1);
+    }
+}

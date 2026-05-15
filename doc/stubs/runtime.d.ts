@@ -70,7 +70,7 @@ declare module "runtime" {
       rail_args?: string;
       rail_working_dir?: string;
       use_local_scaler?: boolean;
-      server_auth?: { id: string; token: string };
+      server_info?: { id: string; token: string };
     }): void;
     function sign(rdp_string: string, ticket: string): Promise<string>;
   }

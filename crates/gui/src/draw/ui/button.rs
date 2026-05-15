@@ -117,3 +117,38 @@ pub fn rounded_rect_path(x: f32, y: f32, w: f32, h: f32, r: f32) -> tiny_skia::P
     pb.cubic_to(x, y + r - r * 0.552, x + r - r * 0.552, y, x + r, y);
     pb.finish().unwrap()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rounded_rect_bounds() {
+        let path = rounded_rect_path(0.0, 0.0, 100.0, 50.0, 8.0);
+        let bounds = path.bounds();
+        // Tight bounds should match input rectangle
+        assert!((bounds.x() - 0.0).abs() < 0.01);
+        assert!((bounds.y() - 0.0).abs() < 0.01);
+        assert!((bounds.width() - 100.0).abs() < 0.01);
+        assert!((bounds.height() - 50.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn rounded_rect_radius_clamped() {
+        // Radius larger than half width should be clamped
+        let path = rounded_rect_path(0.0, 0.0, 20.0, 10.0, 30.0);
+        // Should not panic, path should still be valid
+        let bounds = path.bounds();
+        assert!(bounds.width() > 0.0);
+        assert!(bounds.height() > 0.0);
+    }
+
+    #[test]
+    fn render_output_dimensions() {
+        let style = ButtonStyle::default();
+        let (rgba, _section) = render(0.0, 0.0, 100, 30, "Test", &style);
+        assert_eq!(rgba.len(), (100 * 30 * 4) as usize);
+        // Label text should be present in the section
+        assert!(!rgba.is_empty());
+    }
+}

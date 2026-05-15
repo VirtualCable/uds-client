@@ -112,3 +112,41 @@ pub fn bind(
         _thread: Some(handle),
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rail_launch_msg_round_trip() {
+        let msg = RailLaunchMsg {
+            rail_app: "notepad.exe".into(),
+            rail_args: "file.txt".into(),
+            rail_working_dir: "C:\\temp".into(),
+            server_token: "secret123".into(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let back: RailLaunchMsg = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.rail_app, msg.rail_app);
+        assert_eq!(back.rail_args, msg.rail_args);
+        assert_eq!(back.rail_working_dir, msg.rail_working_dir);
+        assert_eq!(back.server_token, msg.server_token);
+    }
+
+    #[test]
+    fn rail_launch_msg_json_fields() {
+        let msg = RailLaunchMsg {
+            rail_app: "app".into(),
+            rail_args: "".into(),
+            rail_working_dir: "".into(),
+            server_token: "tok".into(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"rail_app\""));
+        assert!(json.contains("\"rail_args\""));
+        assert!(json.contains("\"rail_working_dir\""));
+        assert!(json.contains("\"server_token\""));
+        assert!(json.contains("\"app\""));
+        assert!(json.contains("\"tok\""));
+    }
+}

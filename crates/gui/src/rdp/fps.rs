@@ -89,3 +89,27 @@ impl Fps {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_fps_loads_png() {
+        let fps = Fps::new();
+        assert!(fps.bg_w > 0);
+        assert!(fps.bg_h > 0);
+        assert!(!fps.bg_rgba.is_empty());
+        assert_eq!(fps.bg_rgba.len(), (fps.bg_w * fps.bg_h * 4) as usize);
+    }
+
+    #[test]
+    fn toggle_flips_bool() {
+        let fps = Fps::new();
+        assert!(!fps.enabled.load(Ordering::Relaxed));
+        fps.toggle();
+        assert!(fps.enabled.load(Ordering::Relaxed));
+        fps.toggle();
+        assert!(!fps.enabled.load(Ordering::Relaxed));
+    }
+}
