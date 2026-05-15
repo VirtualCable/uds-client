@@ -72,9 +72,17 @@ impl Callbacks {
 /// This function is unsafe because it dereferences raw pointers to set callback functions.
 pub unsafe fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
     unsafe {
+        if context.is_null() {
+            debug!("secondary_c::set_callbacks: context is null");
+            return;
+        }
         let update = (*context).update;
+        if update.is_null() {
+            debug!(" **** Update not initialized, cannot override callbacks.");
+            return;
+        }
         let secondary = (*update).secondary;
-        if update.is_null() || secondary.is_null() {
+        if secondary.is_null() {
             debug!(" **** Secondary not initialized, cannot override callbacks.");
             return;
         }

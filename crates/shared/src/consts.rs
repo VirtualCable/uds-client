@@ -43,3 +43,33 @@ pub const URL_TEMPLATE: &str = "https://{host}/uds/rest/client";
 
 pub const TICKET_LENGTH: usize = 48;
 pub const MAX_STARTUP_TIME_MS: u64 = 120_000; // 2 minutes
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ticket_length_is_48() {
+        assert_eq!(TICKET_LENGTH, 48);
+    }
+
+    #[test]
+    fn max_startup_time_is_2_minutes() {
+        assert_eq!(MAX_STARTUP_TIME_MS, 120_000);
+    }
+
+    #[test]
+    fn version_is_semver() {
+        assert_eq!(UDS_CLIENT_VERSION, "5.0.0");
+    }
+
+    #[test]
+    fn url_template_contains_host() {
+        assert!(URL_TEMPLATE.contains("{host}"));
+    }
+
+    #[test]
+    fn client_agent_is_non_empty() {
+        assert!(!UDS_CLIENT_AGENT.is_empty());
+    }
+}

@@ -339,4 +339,10 @@ mod tests {
         let meta = fs::metadata(&log_file).unwrap();
         assert!(meta.len() < 16 * 1024 * 1024); // Current log file should be less than 16MB
     }
+
+    #[test]
+    fn log_type_display() {
+        assert_eq!(LogType::Launcher.to_string(), "launcher");
+        assert_eq!(LogType::Test.to_string(), "launcher-tests");
+    }
 }

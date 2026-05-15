@@ -69,6 +69,10 @@ impl Callbacks {
 /// This function is unsafe because it dereferences raw pointers to set callback functions.
 pub unsafe fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
     unsafe {
+        if context.is_null() {
+            debug!("input_c::set_callbacks: context is null");
+            return;
+        }
         let input = (*context).input;
         if input.is_null() {
             debug!(" ⁉️ **** Input not initialized, cannot override callbacks.");

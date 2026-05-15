@@ -148,4 +148,52 @@ mod tests {
         trigger.wait(); // Should return immediately
         assert!(trigger.is_triggered());
     }
+
+    #[test]
+    fn trigger_default_is_unset() {
+        let t = Trigger::default();
+        assert!(!t.is_triggered());
+    }
+
+    #[test]
+    fn trigger_multiple_calls_idempotent() {
+        let t = Trigger::new();
+        t.trigger();
+        t.trigger();
+        assert!(t.is_triggered());
+        t.wait();
+    }
+
+    #[test]
+    fn trigger_wait_timeout_zero_unset() {
+        let t = Trigger::new();
+        assert!(t.wait_timeout(Duration::ZERO).is_err());
+    }
+
+    #[test]
+    fn trigger_wait_timeout_zero_set() {
+        let t = Trigger::new();
+        t.trigger();
+        assert!(t.wait_timeout(Duration::ZERO).is_ok());
+    }
+
+    #[tokio::test]
+    async fn trigger_wait_async_already_set() {
+        let t = Trigger::new();
+        t.trigger();
+        t.wait_async().await; // Should not block
+    }
+
+    #[tokio::test]
+    async fn trigger_wait_timeout_async_timeout() {
+        let t = Trigger::new();
+        assert!(t.wait_timeout_async(Duration::from_millis(10)).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn trigger_wait_timeout_async_already_set() {
+        let t = Trigger::new();
+        t.trigger();
+        assert!(t.wait_timeout_async(Duration::ZERO).await.is_ok());
+    }
 }

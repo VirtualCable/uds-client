@@ -96,26 +96,36 @@ impl Rdp {
 
                 let hwnd = (*hdc).hwnd;
                 let rgn = (*hwnd).invalid;
-                let ninvalid = (*hwnd).ninvalid;
+                let mut ninvalid = (*hwnd).ninvalid;
+
+                // Sanity check: limit the number of invalid rectangles to prevent DoS/OOB
+                if ninvalid > 256 {
+                    log::warn!("RAIL: Too many invalid rectangles: {}, capping to 256", ninvalid);
+                    ninvalid = 256;
+                }
 
                 #[allow(clippy::unnecessary_cast)]
                 // Needed beceuse windows/linux differ in the expected type of the flags parameter
                 if !rgn.is_null() && ((*rgn).null == 0 || ninvalid > 0) {
                     let mut rects = vec![];
                     if (*rgn).null == 0 {
-                        rects.push(crate::geom::Rect::new(
-                            (*rgn).x as i32,
-                            (*rgn).y as i32,
-                            (*rgn).w as u32,
-                            (*rgn).h as u32,
-                        ));
+                        let r = &*rgn;
+                        // Basic dimension check
+                        if r.w > 0 && r.h > 0 && r.w < 16384 && r.h < 16384 {
+                            rects.push(crate::geom::Rect::new(
+                                r.x as i32,
+                                r.y as i32,
+                                r.w as u32,
+                                r.h as u32,
+                            ));
+                        }
                     }
                     if ninvalid > 0 {
                         let cinvalid = (*hwnd).cinvalid;
                         if !cinvalid.is_null() {
                             let slice = std::slice::from_raw_parts(cinvalid, ninvalid as usize);
                             for crgn in slice.iter() {
-                                if crgn.null == 0 {
+                                if crgn.null == 0 && crgn.w > 0 && crgn.h > 0 && crgn.w < 16384 && crgn.h < 16384 {
                                     rects.push(crate::geom::Rect::new(
                                         crgn.x as i32,
                                         crgn.y as i32,

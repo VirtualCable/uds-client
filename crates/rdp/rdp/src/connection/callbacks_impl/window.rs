@@ -270,7 +270,21 @@ impl WindowCallbacks for Rdp {
         }
         let w = icon_info.width;
         let h = icon_info.height;
-        let len = (w * h * 4) as usize;
+
+        // Sanity check for icon size to prevent DoS
+        if w > 256 || h > 256 {
+            log::warn!("RAIL: Ignoring too large icon: {}x{}", w, h);
+            return true;
+        }
+
+        let len = match (w as usize).checked_mul(h as usize).and_then(|m| m.checked_mul(4)) {
+            Some(l) => l,
+            None => {
+                log::error!("RAIL: Icon size overflow: {}x{}", w, h);
+                return true;
+            }
+        };
+
         let src = unsafe { std::slice::from_raw_parts(icon_info.bitsColor, len) };
         // BGRA → RGBA swizzle (same as GDI path for non-macOS)
         let mut rgba = Vec::with_capacity(len);
