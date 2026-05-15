@@ -33,17 +33,27 @@ pub struct AboutState {
     angle: f32,
     phys_w: u32,
     phys_h: u32,
-    scale: f32,
+    pub scale: f32,
+    pub animation_time: f32,
+    pub waves: Vec<crate::draw::ui::waves::Wave>,
 }
 
 impl AboutState {
     pub fn new(event_loop: &ActiveEventLoop) -> Result<Self> {
+        let (dw, dh) = crate::monitor::size(0).unwrap_or((1920, 1080));
+        let ww = 420.0;
+        let wh = 440.0;
+        let sf = crate::monitor::scale(0) as f32;
+        let px = (dw as f32 - ww * sf) / 2.0;
+        let py = (dh as f32 - wh * sf) / 2.0;
+
         let window = Arc::new(
             event_loop.create_window(
                 Window::default_attributes()
                     .with_title("About UDS Launcher")
-                    .with_inner_size(winit::dpi::LogicalSize::new(420.0, 440.0))
-                    .with_resizable(false),
+                    .with_inner_size(winit::dpi::LogicalSize::new(ww, wh))
+                    .with_resizable(false)
+                    .with_position(winit::dpi::PhysicalPosition::new(px as i32, py as i32)),
             )?,
         );
         let phys = window.inner_size();
@@ -59,6 +69,8 @@ impl AboutState {
             phys_w: phys.width,
             phys_h: phys.height,
             scale,
+            animation_time: 0.0,
+            waves: crate::draw::ui::waves::Wave::default_set(),
         })
     }
 
@@ -71,17 +83,38 @@ impl AboutState {
         let s = self.scale;
         let pw = self.phys_w;
         let ph = self.phys_h;
+
+        let mut data: Vec<Vec<u8>> = Vec::new();
+
+        // 1. Draw Panel Background + Waves
+        let panel_data = {
+            let mut pixmap = tiny_skia::Pixmap::new(pw, ph).unwrap();
+            let rect = tiny_skia::Rect::from_xywh(0.0, 0.0, pw as f32, ph as f32).unwrap();
+            let mut paint = tiny_skia::Paint::default();
+            paint.set_color(tiny_skia::Color::from_rgba8(30, 30, 35, 255));
+            pixmap.fill_rect(rect, &paint, tiny_skia::Transform::identity(), None);
+            
+            // Draw Waves
+            let wave_data = crate::draw::ui::waves::render(pw, ph, self.animation_time, s, &self.waves);
+            if let Some(wave_pix) = tiny_skia::Pixmap::from_vec(wave_data, tiny_skia::IntSize::from_wh(pw, ph).unwrap()) {
+                pixmap.draw_pixmap(0, 0, wave_pix.as_ref(), &tiny_skia::PixmapPaint::default(), tiny_skia::Transform::identity(), None);
+            }
+
+            // Subtle border
+            let mut border = tiny_skia::Paint::default();
+            border.set_color(tiny_skia::Color::from_rgba8(60, 60, 75, 255));
+            let stroke = tiny_skia::Stroke { width: 2.0, ..Default::default() };
+            let path = tiny_skia::PathBuilder::from_rect(rect);
+            pixmap.stroke_path(&path, &border, &stroke, tiny_skia::Transform::identity(), None);
+            pixmap.take()
+        };
+        data.push(panel_data);
+
         let logo_x = (pw as f32 - self.logo.width as f32 * s) / 2.0;
         let logo_y = 30.0 * s;
-        // Logo has rotation applied, but for simplicity just show it centered
-        let ov = OverlayParams {
-            rgba: &self.logo.rgba,
-            width: self.logo.width,
-            height: self.logo.height,
-            x: logo_x,
-            y: logo_y,
-            scale: s,
-        };
+
+        // Overlay index 0 is background
+        // We'll push logo and others after
         let mut sections: Vec<OwnedSection> = Vec::new();
         let base_y = self.logo.height as f32 * s + 80.0 * s;
         for (i, line) in ABOUT_LINES.iter().enumerate() {
@@ -100,29 +133,45 @@ impl AboutState {
         let close_y = base_y + ABOUT_LINES.len() as f32 * 22.0 * s + 20.0 * s;
         let bw = monitor::scaled_val(80) as u32;
         let bh = monitor::scaled_val(35) as u32;
-        let mut btn = Vec::with_capacity((bw * bh * 4) as usize);
-        for _ in 0..bw * bh {
-            btn.extend_from_slice(&[0x50, 0x50, 0x70, 0xFF]);
-        }
-        let ovb = OverlayParams {
-            rgba: &btn,
-            width: bw,
-            height: bh,
-            x: (pw as f32 - bw as f32) / 2.0,
-            y: close_y,
-            scale: 1.0,
+        
+        let style = crate::draw::ui::button::ButtonStyle {
+            font_scale: monitor::scaled_val(14) as f32,
+            bg_color: [0x50, 0x50, 0x70, 0xFF],
+            border_color: [0x70, 0x70, 0x90, 0xFF],
+            ..crate::draw::ui::button::ButtonStyle::default()
         };
-        sections.push(
-            Section::default()
-                .add_text(
-                    Text::new("Close")
-                        .with_scale(monitor::scaled_val(14) as f32)
-                        .with_color([1.0, 1.0, 1.0, 1.0]),
-                )
-                .with_screen_position(((pw as f32 - 40.0 * s) / 2.0, close_y + 8.0 * s))
-                .to_owned(),
-        );
-        let overlays = vec![ov, ovb];
+        
+        let close_x = (pw as f32 - bw as f32) / 2.0;
+        let (close_data, close_text) = crate::draw::ui::button::render(close_x, close_y, bw, bh, "Close", &style);
+        data.push(close_data);
+        sections.push(close_text.to_owned());
+
+        let overlays = vec![
+            OverlayParams {
+                rgba: &data[0],
+                width: pw,
+                height: ph,
+                x: 0.0,
+                y: 0.0,
+                scale: 1.0,
+            },
+            OverlayParams {
+                rgba: &self.logo.rgba,
+                width: self.logo.width,
+                height: self.logo.height,
+                x: logo_x,
+                y: logo_y,
+                scale: s,
+            },
+            OverlayParams {
+                rgba: &data[1],
+                width: bw,
+                height: bh,
+                x: (pw as f32 - bw as f32) / 2.0,
+                y: close_y,
+                scale: 1.0,
+            },
+        ];
         self.renderer
             .update_and_render(&[], pw, ph, &overlays, &sections, None);
     }

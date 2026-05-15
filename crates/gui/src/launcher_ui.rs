@@ -17,13 +17,21 @@ impl AppHandler {
         el: &ActiveEventLoop,
         inner: LauncherInner,
     ) -> Result<()> {
+        let (dw, dh) = crate::monitor::size(0).unwrap_or((1920, 1080));
+        let ww = 400.0;
+        let wh = 300.0;
+        let sf = crate::monitor::scale(0) as f32;
+        let px = (dw as f32 - ww * sf) / 2.0;
+        let py = (dh as f32 - wh * sf) / 2.0;
+
         let window = Arc::new(
             el.create_window(
                 Window::default_attributes()
                     .with_title("UDS Launcher")
-                    .with_inner_size(winit::dpi::LogicalSize::new(400.0, 300.0))
+                    .with_inner_size(winit::dpi::LogicalSize::new(ww, wh))
                     .with_window_icon(Some(logo::load_icon()))
-                    .with_resizable(false),
+                    .with_resizable(false)
+                    .with_position(winit::dpi::PhysicalPosition::new(px as i32, py as i32)),
             )?,
         );
         let wid = window.id();
@@ -80,21 +88,28 @@ impl AppHandler {
                 p.paint();
             }
             WindowEvent::CloseRequested => {
+                self.close_progress();
                 self.stop.trigger();
-                self.progress = None;
             }
             _ => {}
         }
     }
 
-    pub(crate) fn handle_launcher_event(&mut self, el: &ActiveEventLoop, event: WindowEvent) {
+    pub(crate) fn close_progress(&mut self) {
+        if let Some(ref p) = self.progress {
+            self.unregister_window(p.window.id());
+        }
+        self.progress = None;
+    }
+
+    pub(crate) fn handle_launcher_event(&mut self, _el: &ActiveEventLoop, event: WindowEvent) {
         let Some(ref mut l) = self.launcher else {
             return;
         };
         match event {
             WindowEvent::CloseRequested => {
+                self.close_launcher();
                 self.stop.trigger();
-                el.exit();
             }
             WindowEvent::RedrawRequested => {
                 paint_launcher(l);
@@ -164,18 +179,27 @@ impl AppHandler {
     }
 
     pub(crate) fn handle_about_event(&mut self, event: WindowEvent) {
-        let Some(ref mut a) = self.about else { return };
+        let Some(_) = self.about else { return };
         match event {
             WindowEvent::CloseRequested => {
-                self.about = None;
+                self.close_about();
             }
             WindowEvent::MouseInput { state, .. } if state.is_pressed() => {
-                self.about = None;
+                self.close_about();
             }
             WindowEvent::RedrawRequested => {
-                a.paint();
+                if let Some(ref mut a) = self.about {
+                    a.paint();
+                }
             }
             _ => {}
         }
+    }
+
+    pub(crate) fn close_about(&mut self) {
+        if let Some(ref a) = self.about {
+            self.unregister_window(a.window().id());
+        }
+        self.about = None;
     }
 }

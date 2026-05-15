@@ -32,12 +32,20 @@ impl PopupState {
         event_loop: &winit::event_loop::ActiveEventLoop,
         kind: PopupKind,
     ) -> anyhow::Result<Self> {
+        let (dw, dh) = crate::monitor::size(0).unwrap_or((1920, 1080));
+        let ww = 400.0;
+        let wh = 200.0;
+        let sf = crate::monitor::scale(0) as f32;
+        let px = (dw as f32 - ww * sf) / 2.0;
+        let py = (dh as f32 - wh * sf) / 2.0;
+
         let window = Arc::new(
             event_loop.create_window(
                 winit::window::Window::default_attributes()
                     .with_title("UDS Alert")
-                    .with_inner_size(winit::dpi::LogicalSize::new(400.0, 200.0))
-                    .with_resizable(false),
+                    .with_inner_size(winit::dpi::LogicalSize::new(ww, wh))
+                    .with_resizable(false)
+                    .with_position(winit::dpi::PhysicalPosition::new(px as i32, py as i32)),
             )?,
         );
         let phys = window.inner_size();

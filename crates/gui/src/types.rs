@@ -11,13 +11,13 @@ use tokio::sync::oneshot;
 #[derive(Debug)]
 pub enum GuiMessage {
     Close,
-    Hide,
     ShowError(String),
     ShowWarning(String),
     ShowYesNo(String, Arc<RwLock<Option<oneshot::Sender<bool>>>>),
     ShowProgress,
     Progress(u8, String),
     ConnectRdp(Box<rdp_ffi::settings::RdpSettings>),
+    CloseProgress,
 }
 
 /// Return code from run_gui()
@@ -30,10 +30,12 @@ pub enum ReturnCode {
 /// Initial state for the GUI
 #[derive(Debug, Clone, Default)]
 pub enum AppState {
-    #[default]
-    Invisible,
     #[cfg(feature = "test-ui")]
+    #[default]
     Test,
+    #[cfg(not(feature = "test-ui"))]
+    #[default]
+    Progress,
 }
 
 /// Hotkeys recognized during RDP session

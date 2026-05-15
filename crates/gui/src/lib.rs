@@ -145,7 +145,8 @@ impl ApplicationHandler<UserEvent> for AppHandler {
             let inner = match self.initial_state.take().unwrap_or_default() {
                 #[cfg(feature = "test-ui")]
                 AppState::Test => LauncherInner::new_test(),
-                AppState::Invisible => LauncherInner::Invisible,
+                #[cfg(not(feature = "test-ui"))]
+                AppState::Progress => LauncherInner::default(),
             };
             let _ = self.open_launcher(el, inner);
         }
@@ -242,14 +243,29 @@ impl ApplicationHandler<UserEvent> for AppHandler {
                     w.request_redraw();
                 }
                 if let Some(ref mut p) = self.progress {
-                    p.animation_time += 0.25;
+                    p.animation_time += 0.3; // Slightly faster waves
+                    // Simulación de progreso solo en modo testing
+                    if self.launcher.is_some() && p.pct < 100 {
+                        p.pct += 1;
+                        if p.pct >= 100 {
+                            p.phase = crate::progress_window::ProgressPhase::Connected;
+                        }
+                    }
                     p.window.request_redraw();
+                }
+                if let Some(ref mut a) = self.about {
+                    a.animation_time += 0.3;
+                    a.window().request_redraw();
                 }
             }
         }
     }
 
-    fn about_to_wait(&mut self, _el: &ActiveEventLoop) {}
+    fn about_to_wait(&mut self, el: &ActiveEventLoop) {
+        if self.stop.is_triggered() {
+            el.exit();
+        }
+    }
 
     fn exiting(&mut self, _el: &ActiveEventLoop) {
         self.stop.trigger();

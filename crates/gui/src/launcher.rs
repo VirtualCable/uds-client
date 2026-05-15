@@ -11,7 +11,7 @@ use crate::draw::ui::button::{self, ButtonStyle};
 #[allow(dead_code)]
 pub enum LauncherInner {
     #[default]
-    Invisible,
+    None,
     #[cfg(feature = "test-ui")]
     Test {
         buttons: Vec<(&'static str, LaunchAction)>,
@@ -20,18 +20,11 @@ pub enum LauncherInner {
     },
 }
 
-#[derive(Default, PartialEq, Debug)]
-pub enum ProgressPhase {
-    #[default]
-    Connecting,
-    Connected,
-}
-
 #[cfg(feature = "test-ui")]
 #[derive(Clone)]
 pub enum LaunchAction {
     ShowProgress,
-    GoInvisible,
+    ShowAbout,
     ShowWarning,
     ShowError,
     ShowYesNo,
@@ -47,7 +40,7 @@ impl LauncherInner {
                 ("RDP Connect", LaunchAction::ConnectRdp),
                 ("RDP RAIL Notepad", LaunchAction::ConnectRail),
                 ("Progress", LaunchAction::ShowProgress),
-                ("Invisible", LaunchAction::GoInvisible),
+                ("About", LaunchAction::ShowAbout),
                 ("Warning", LaunchAction::ShowWarning),
                 ("Error", LaunchAction::ShowError),
                 ("Yes/No", LaunchAction::ShowYesNo),
@@ -121,15 +114,6 @@ impl LauncherInner {
     }
 }
 
-pub struct Wave {
-    pub y_base: f32,
-    pub amplitude: f32,
-    pub speed: f32,
-    pub offset: f32,
-    pub thickness: f32,
-    pub opacity: f32,
-}
-
 pub struct TestingLauncherState {
     pub window: Option<Arc<winit::window::Window>>,
     pub renderer: Option<WgpuRenderer>,
@@ -142,7 +126,7 @@ impl Default for TestingLauncherState {
         Self {
             window: None,
             renderer: None,
-            inner: LauncherInner::Invisible,
+            inner: LauncherInner::default(),
             last_mouse_pos: None,
         }
     }
@@ -183,7 +167,7 @@ pub fn paint_launcher(state: &mut TestingLauncherState) {
     let mut ov_descs: Vec<OvDesc> = Vec::new();
 
     match &state.inner {
-        LauncherInner::Invisible => {}
+        LauncherInner::None => {}
         #[cfg(feature = "test-ui")]
         LauncherInner::Test { buttons, hover_idx, .. } => {
             let bh = monitor::scaled_val(28) as u32;

@@ -182,8 +182,8 @@ pub async fn run(
     if tasks::is_internal_rdp_running() {
         log::debug!("Internal RDP is running.");
     } else {
-        log::debug!("No internal RDP is running. Hiding GUI.");
-        tx.send(GuiMessage::Hide).ok();
+        log::debug!("No internal RDP is running. Closing Progress window.");
+        tx.send(GuiMessage::CloseProgress).ok();
     }
 
     // Execute the tasks in background, and wait with cleanup

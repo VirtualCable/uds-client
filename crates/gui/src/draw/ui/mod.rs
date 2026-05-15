@@ -7,3 +7,4 @@ pub mod button;
 pub mod image;
 pub mod progress;
 pub mod text;
+pub mod waves;

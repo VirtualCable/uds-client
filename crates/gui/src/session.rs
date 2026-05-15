@@ -11,7 +11,7 @@ use super::{AppHandler, WindowKind};
 use crate::keymap;
 #[cfg(feature = "test-ui")]
 use crate::launcher::LaunchAction;
-use crate::launcher::{LauncherInner, ProgressPhase};
+use crate::progress_window::{ProgressPhase, ProgressState};
 use crate::logo;
 use crate::monitor;
 use crate::popup::{PopupKind, PopupState};
@@ -27,6 +27,7 @@ impl AppHandler {
         el: &ActiveEventLoop,
         mut settings: rdp_ffi::settings::RdpSettings,
     ) -> Result<()> {
+        self.close_progress();
         let is_rail = settings.rail_app.is_some();
         let use_rgba = cfg!(target_os = "macos");
 
@@ -285,13 +286,8 @@ impl AppHandler {
                     el.exit();
                     return;
                 }
-                GuiMessage::Hide => {
-                    if let Some(ref mut l) = self.launcher {
-                        l.inner = LauncherInner::Invisible;
-                        if let Some(w) = &l.window {
-                            w.set_visible(false);
-                        }
-                    }
+                GuiMessage::CloseProgress => {
+                    self.close_progress();
                 }
                 GuiMessage::ShowError(err) => {
                     if let Ok(p) = PopupState::new(el, PopupKind::Error(err)) {
@@ -321,7 +317,7 @@ impl AppHandler {
                     }
                 }
                 GuiMessage::ShowProgress => {
-                    if let Ok(p) = crate::progress_window::ProgressState::new(el) {
+                    if let Ok(p) = ProgressState::new(el) {
                         let wid = p.window.id();
                         self.register_window(wid, WindowKind::Progress);
                         self.progress = Some(p);
@@ -342,7 +338,6 @@ impl AppHandler {
                     if let Err(e) = self.open_rdp(el, *settings) {
                         log::error!("Failed to enter RDP: {e}");
                         self.stop.trigger();
-                        el.exit();
                         return;
                     }
                 }
@@ -356,13 +351,19 @@ impl AppHandler {
         {
             match action {
                 LaunchAction::ShowProgress => {
-                    if let Ok(p) = crate::progress_window::ProgressState::new(el) {
+                    if let Ok(p) = ProgressState::new(el) {
                         let wid = p.window.id();
                         self.register_window(wid, WindowKind::Progress);
                         self.progress = Some(p);
                     }
                 }
-                LaunchAction::GoInvisible => launcher.inner = LauncherInner::Invisible,
+                LaunchAction::ShowAbout => {
+                    if let Ok(a) = crate::about::AboutState::new(el) {
+                        let wid = a.window().id();
+                        self.register_window(wid, WindowKind::About);
+                        self.about = Some(a);
+                    }
+                }
                 LaunchAction::ShowWarning => {
                     if let Ok(p) = PopupState::new(el, PopupKind::Warning("This is a test warning message.".into())) {
                         let wid = p.window.id();
@@ -417,7 +418,6 @@ impl AppHandler {
                     if let Err(e) = self.open_rdp(el, settings) {
                         log::error!("Failed to enter RDP: {e}");
                         self.stop.trigger();
-                        el.exit();
                     }
                     // Test: after 4s, send notepad.exe via IPC to the same RAIL session
                     if is_rail {
@@ -438,7 +438,7 @@ impl AppHandler {
         }
     }
 
-    pub(crate) fn process_rdp_updates(&mut self, el: &ActiveEventLoop) {
+    pub(crate) fn process_rdp_updates(&mut self, _el: &ActiveEventLoop) {
         let Some(ref mut state) = self.rdp else {
             return;
         };
@@ -452,14 +452,12 @@ impl AppHandler {
                     self.stop.trigger();
                     self.return_code = ReturnCode::Exit;
                     self.close_rdp();
-                    el.exit();
                     return;
                 }
                 RdpActionResult::Error(_) => {
                     self.stop.trigger();
                     self.return_code = ReturnCode::Exit;
                     self.close_rdp();
-                    el.exit();
                     return;
                 }
                 _ => {}

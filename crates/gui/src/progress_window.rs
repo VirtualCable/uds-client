@@ -5,8 +5,14 @@ use wgpu_text::glyph_brush::{OwnedSection, Section, Text};
 
 use crate::monitor;
 use crate::wgpu_render::{OverlayParams, WgpuRenderer};
-use crate::draw::ui::{button::{self, ButtonStyle}, progress};
-use crate::launcher::{ProgressPhase, Wave};
+use crate::draw::ui::{button::{self, ButtonStyle}, progress, waves::{self, Wave}};
+
+#[derive(Default, PartialEq, Debug)]
+pub enum ProgressPhase {
+    #[default]
+    Connecting,
+    Connected,
+}
 
 pub struct ProgressState {
     pub window: Arc<winit::window::Window>,
@@ -26,12 +32,21 @@ pub struct ProgressState {
 
 impl ProgressState {
     pub fn new(el: &winit::event_loop::ActiveEventLoop) -> anyhow::Result<Self> {
+        let (dw, dh) = crate::monitor::size(0).unwrap_or((1920, 1080));
+        let ww = 400.0;
+        let wh = 300.0;
+        let sf = crate::monitor::scale(0) as f32;
+        let px = (dw as f32 - ww * sf) / 2.0;
+        let py = (dh as f32 - wh * sf) / 2.0;
+
         let window = Arc::new(el.create_window(
             winit::window::Window::default_attributes()
                 .with_title("UDS Launcher")
-                .with_inner_size(winit::dpi::LogicalSize::new(400.0, 300.0))
+                .with_inner_size(winit::dpi::LogicalSize::new(ww, wh))
                 .with_window_icon(Some(crate::logo::load_icon()))
-                .with_resizable(false),
+                .with_resizable(false)
+                .with_decorations(false)
+                .with_position(winit::dpi::PhysicalPosition::new(px as i32, py as i32)),
         )?);
         
         let phys = window.inner_size();
@@ -139,48 +154,10 @@ impl ProgressState {
             paint.set_color(tiny_skia::Color::from_rgba8(30, 30, 35, 255));
             pixmap.fill_rect(rect, &paint, tiny_skia::Transform::identity(), None);
             
-            // Draw Waves
-            let time = self.animation_time;
-            for (idx, wave) in self.waves.iter().enumerate() {
-                let mut pb = tiny_skia::PathBuilder::new();
-                let step = 15.0 * s;
-                let y_base = wave.y_base * ph as f32;
-                
-                let mut first = true;
-                let mut x = -step;
-                while x <= pw as f32 + step {
-                    let val = x * 0.005 + time * wave.speed + wave.offset;
-                    let y = y_base + 
-                            (val).sin() * wave.amplitude * s + 
-                            (val * 0.3).cos() * (wave.amplitude * 0.4 * s);
-                    
-                    if first {
-                        pb.move_to(x, y);
-                        first = false;
-                    } else {
-                        pb.line_to(x, y);
-                    }
-                    x += step;
-                }
-                
-                if let Some(path) = pb.finish() {
-                    let mut stroke_paint = tiny_skia::Paint::default();
-                    let main_color = if idx % 2 == 0 { [100, 140, 255] } else { [160, 100, 255] };
-                    let grad = tiny_skia::LinearGradient::new(
-                        tiny_skia::Point::from_xy(0.0, 0.0),
-                        tiny_skia::Point::from_xy(pw as f32, 0.0),
-                        vec![
-                            tiny_skia::GradientStop::new(0.0, tiny_skia::Color::from_rgba8(main_color[0], main_color[1], main_color[2], 0)),
-                            tiny_skia::GradientStop::new(0.5, tiny_skia::Color::from_rgba8(main_color[0], main_color[1], main_color[2], (wave.opacity * 255.0) as u8)),
-                            tiny_skia::GradientStop::new(1.0, tiny_skia::Color::from_rgba8(main_color[0], main_color[1], main_color[2], 0)),
-                        ],
-                        tiny_skia::SpreadMode::Pad,
-                        tiny_skia::Transform::identity(),
-                    ).unwrap();
-                    stroke_paint.shader = grad;
-                    let stroke = tiny_skia::Stroke { width: wave.thickness * s, ..Default::default() };
-                    pixmap.stroke_path(&path, &stroke_paint, &stroke, tiny_skia::Transform::identity(), None);
-                }
+            // Draw Waves using component
+            let wave_data = waves::render(pw, ph, self.animation_time, s, &self.waves);
+            if let Some(wave_pix) = tiny_skia::Pixmap::from_vec(wave_data, tiny_skia::IntSize::from_wh(pw, ph).unwrap()) {
+                pixmap.draw_pixmap(0, 0, wave_pix.as_ref(), &tiny_skia::PixmapPaint::default(), tiny_skia::Transform::identity(), None);
             }
 
             // Subtle border
