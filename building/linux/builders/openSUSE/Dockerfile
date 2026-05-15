@@ -16,7 +16,7 @@ RUN zypper refresh && zypper install -y \
 ENV FREERDP_ROOT="/usr/local"
 
 WORKDIR /freerdp-build
-RUN git clone https://github.com/FreeRDP/FreeRDP.git
+RUN git clone --branch 3.26.0 --depth 1 https://github.com/FreeRDP/FreeRDP.git
 WORKDIR /freerdp-build/FreeRDP
 RUN cmake -Bbuild -GNinja \
     -DCMAKE_BUILD_TYPE=Release \

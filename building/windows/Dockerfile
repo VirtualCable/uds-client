@@ -40,7 +40,7 @@ RUN C:\vcpkg\vcpkg install openssl zlib libjpeg-turbo ffmpeg cjson libusb
 
 # Clone freerdp and buiild using comp-release.ps1 file
 RUN mkdir C:\dev ; \
-    git clone https://github.com/FreeRDP/FreeRDP.git C:\dev\FreeRDP.git ; \
+    git clone --branch 3.26.0 --depth 1 https://github.com/FreeRDP/FreeRDP.git C:\dev\FreeRDP.git ; \
     Set-Location C:\dev\FreeRDP.git ; \
     cmake -B build \
     -DCMAKE_TOOLCHAIN_FILE="c:/vcpkg/scripts/buildsystems/vcpkg.cmake" \

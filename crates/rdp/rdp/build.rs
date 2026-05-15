@@ -105,7 +105,7 @@ fn copy_windows_dlls() {
 
     // vcpkg DLLs
     let vcpkg_dlls = [
-        // "zlib1.dll",
+        "z.dll",  // Previously was "zlib1.dll", but vcpkg seems to rename it to just "z.dll"
         // "bz2.dll",
         "libssl-3-x64.dll",
         "libcrypto-3-x64.dll",
@@ -122,7 +122,8 @@ fn copy_windows_dlls() {
         "avcodec-*.dll",
         "avutil-*.dll",
         "swscale-*.dll",
-        //"openh264-*.dll",
+        // not used. Care with this if sometime is enabled. must use the one from Oracle, not the one compiled by vcpkg due to licenses. Anyway, we don't use it, so we can skip it
+        //"openh264-*.dll",  
         "swresample-*.dll",
         "cjson.dll",
     ];
