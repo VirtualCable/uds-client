@@ -447,4 +447,177 @@ mod tests {
         );
         assert!(handle.tx.send(AudioCommand::Close).is_ok());
     }
+
+    // ── Pure unit tests ────────────────────────────────────
+
+    #[test]
+    fn pcm_8bit() {
+        // 8-bit: (b as i8) as f32 / i8::MAX (127.0)
+        // 0 → 0.0, 127 (as i8 = 127) → ~1.0, 255 (as i8 = -1) → ~-0.00787
+        let data: Vec<f32> = pcm_to_f32(&[0, 127, 255], 8).collect();
+        assert!(data[0].abs() < 0.01);
+        assert!((data[1] - 1.0).abs() < 0.01);
+        assert!(data[2] < 0.0 && data[2] > -0.02);
+    }
+
+    #[test]
+    fn pcm_16bit() {
+        // i16::MAX = 32767
+        let max: i16 = i16::MAX;
+        let data: Vec<f32> = pcm_to_f32(&max.to_le_bytes(), 16).collect();
+        assert!((data[0] - 1.0).abs() < 0.001);
+        let zero: Vec<f32> = pcm_to_f32(&0i16.to_le_bytes(), 16).collect();
+        assert!(zero[0].abs() < 0.001);
+    }
+
+    #[test]
+    fn pcm_16bit_stereo() {
+        let samples: Vec<u8> = [100i16.to_le_bytes(), (-100i16).to_le_bytes()]
+            .concat();
+        let data: Vec<f32> = pcm_to_f32(&samples, 16).collect();
+        assert_eq!(data.len(), 2);
+        assert!(data[0] > 0.0);
+        assert!(data[1] < 0.0);
+    }
+
+    #[test]
+    fn pcm_24bit_zero() {
+        let data: Vec<f32> = pcm_to_f32(&[0u8; 6], 24).collect();
+        assert_eq!(data.len(), 2);
+        assert!(data[0].abs() < 0.001);
+        assert!(data[1].abs() < 0.001);
+    }
+
+    #[test]
+    fn pcm_32bit() {
+        let data: Vec<f32> = pcm_to_f32(&0i32.to_le_bytes(), 32).collect();
+        assert!(data[0].abs() < 0.001);
+    }
+
+    #[test]
+    fn pcm_unknown_bits_returns_empty() {
+        let data: Vec<f32> = pcm_to_f32(&[1, 2, 3, 4], 5).collect();
+        assert!(data.is_empty());
+    }
+
+    #[test]
+    fn pcm_empty_input() {
+        assert!(pcm_to_f32(&[], 8).next().is_none());
+        assert!(pcm_to_f32(&[], 16).next().is_none());
+    }
+
+    #[test]
+    fn resampler_passthrough() {
+        let input = vec![0.1, 0.5, -0.3];
+        let resampler = ResamplerIterator::new(input.clone().into_iter(), 44100, 44100);
+        let output: Vec<f32> = resampler.collect();
+        assert_eq!(output.len(), 3);
+        for (i, v) in output.iter().enumerate() {
+            assert!((v - input[i]).abs() < 0.001);
+        }
+    }
+
+    #[test]
+    fn resampler_upsample_2x() {
+        let input = vec![0.0, 1.0];
+        let resampler = ResamplerIterator::new(input.into_iter(), 24000, 48000);
+        let output: Vec<f32> = resampler.collect();
+        assert!(output.len() >= 2, "upsampling should produce more samples");
+    }
+
+    #[test]
+    fn resampler_downsample_2x() {
+        let input: Vec<f32> = (0..8).map(|i| i as f32).collect();
+        let in_len = input.len();
+        let resampler = ResamplerIterator::new(input.into_iter(), 48000, 24000);
+        let output: Vec<f32> = resampler.collect();
+        assert!(output.len() < in_len, "downsampling should produce fewer samples");
+    }
+
+    #[test]
+    fn resampler_empty() {
+        let resampler = ResamplerIterator::new(std::iter::empty::<f32>(), 44100, 48000);
+        assert_eq!(resampler.count(), 0);
+    }
+
+    #[test]
+    fn resampler_new_passthrough_flag() {
+        let r = ResamplerIterator::new(std::iter::empty::<f32>(), 44100, 44100);
+        assert!(r.passthrough);
+        let r = ResamplerIterator::new(std::iter::empty::<f32>(), 44100, 48000);
+        assert!(!r.passthrough);
+    }
+
+    #[test]
+    fn audio_stats_new_defaults() {
+        let s = AudioStats::new();
+        assert_eq!(s.total_play_calls, 0);
+        assert_eq!(s.total_frames_played, 0);
+        assert_eq!(s.total_frames_dropped, 0);
+        assert!(s.last_call.is_none());
+        assert!(s.time_between_play_calls.is_empty());
+    }
+
+    #[test]
+    fn audio_stats_add_frames_played() {
+        let mut s = AudioStats::new();
+        s.add_frames_played(100);
+        assert_eq!(s.total_frames_played, 100);
+        s.add_frames_played(50);
+        assert_eq!(s.total_frames_played, 150);
+        s.add_frames_played(0);
+        assert_eq!(s.total_frames_played, 150);
+    }
+
+    #[test]
+    fn audio_stats_add_frames_dropped() {
+        let mut s = AudioStats::new();
+        s.add_frames_dropped(10);
+        assert_eq!(s.total_frames_dropped, 10);
+        s.add_frames_dropped(5);
+        assert_eq!(s.total_frames_dropped, 15);
+    }
+
+    #[test]
+    fn audio_stats_mean_empty_returns_default() {
+        let s = AudioStats::new();
+        assert!((s.mean_calls_interval() - 180.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn audio_stats_mean_with_values() {
+        let mut s = AudioStats::new();
+        // Manually push a value below MIN_EXPECTED_INTERVAL (180ms)
+        s.time_between_play_calls.push_back(100);
+        s.time_between_play_calls.push_back(200);
+        // mean = 150, clamped to 180.0
+        assert!((s.mean_calls_interval() - 180.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn audio_stats_mean_no_clamp() {
+        let mut s = AudioStats::new();
+        s.time_between_play_calls.push_back(300);
+        s.time_between_play_calls.push_back(500);
+        // mean = 400, above MIN
+        assert!((s.mean_calls_interval() - 400.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn audio_stats_add_play_call_first_time() {
+        let mut s = AudioStats::new();
+        s.add_play_call();
+        assert!(s.last_call.is_some());
+        assert_eq!(s.total_play_calls, 0); // first call doesn't count
+        assert!(s.time_between_play_calls.is_empty());
+    }
+
+    #[test]
+    fn audio_stats_add_play_call_second_time() {
+        let mut s = AudioStats::new();
+        s.add_play_call();
+        s.add_play_call();
+        assert_eq!(s.total_play_calls, 1);
+        assert_eq!(s.time_between_play_calls.len(), 1);
+    }
 }
