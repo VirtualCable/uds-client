@@ -128,3 +128,59 @@ pub(super) fn create_temp_file(
         "Failed to create temp file after 3 attempts"
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn expand_vars_empty() {
+        assert_eq!(expand_vars("").unwrap(), "");
+    }
+
+    #[test]
+    fn expand_vars_no_vars() {
+        assert_eq!(expand_vars("hello world").unwrap(), "hello world");
+    }
+
+    #[test]
+    fn expand_vars_undefined() {
+        // We use a name that's never set by any test
+        #[cfg(windows)]
+        {
+            assert_eq!(expand_vars("%DEFINITELY_NOT_SET_12345%").unwrap(), "");
+        }
+        #[cfg(not(windows))]
+        {
+            assert_eq!(expand_vars("$DEFINITELY_NOT_SET_12345").unwrap(), "");
+            assert_eq!(expand_vars("${DEFINITELY_NOT_SET_12345}").unwrap(), "");
+        }
+    }
+
+    #[test]
+    fn expand_vars_defined() {
+        // SAFETY: test runs single-threaded, no other threads access env
+        unsafe { std::env::set_var("JS_TEST_VAR", "value123"); }
+        #[cfg(windows)]
+        {
+            assert_eq!(expand_vars("%JS_TEST_VAR%").unwrap(), "value123");
+            assert_eq!(expand_vars("pre_%JS_TEST_VAR%_post").unwrap(), "pre_value123_post");
+        }
+        #[cfg(not(windows))]
+        {
+            assert_eq!(expand_vars("$JS_TEST_VAR").unwrap(), "value123");
+            assert_eq!(expand_vars("${JS_TEST_VAR}").unwrap(), "value123");
+            assert_eq!(expand_vars("pre_$JS_TEST_VAR/post").unwrap(), "pre_value123/post");
+        }
+        unsafe { std::env::remove_var("JS_TEST_VAR"); }
+    }
+
+    #[test]
+    fn expand_vars_dollar_not_expanded() {
+        #[cfg(not(windows))]
+        {
+            assert_eq!(expand_vars("$$").unwrap(), "$$");
+            assert_eq!(expand_vars("cost $5").unwrap(), "cost $5");
+        }
+    }
+}

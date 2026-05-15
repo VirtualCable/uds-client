@@ -87,57 +87,63 @@ struct TunnelParams {
     shared_secret: Option<Vec<u8>>,
 }
 
+impl TunnelParams {
+    fn to_connect_info(
+        &self,
+        check_cert_default: Option<bool>,
+    ) -> anyhow::Result<TunnelConnectInfo> {
+        Ok(TunnelConnectInfo {
+            addr: self.addr.clone(),
+            port: self.port,
+            ticket: self.ticket.as_bytes().try_into().map_err(|_| {
+                anyhow::anyhow!("Invalid ticket length, must be 32 bytes")
+            })?,
+            check_certificate: self
+                .check_certificate
+                .unwrap_or(check_cert_default.unwrap_or(true)),
+            local_port: self.local_port,
+            startup_time_ms: self.startup_time_ms.unwrap_or(0),
+            keep_listening_after_timeout: self.keep_listening_after_timeout.unwrap_or(false),
+            enable_ipv6: self.enable_ipv6.unwrap_or(false),
+            shared_secret: self
+                .shared_secret
+                .as_ref()
+                .map(|s| {
+                    s.as_slice().try_into().map_err(|_| {
+                        anyhow::anyhow!("Invalid shared secret length")
+                    })
+                })
+                .transpose()?,
+        })
+    }
+}
+
 async fn start_tunel_fn(
     _: &JsValue,
     args: &[JsValue],
     ctx: &std::cell::RefCell<&mut Context>,
 ) -> JsResult<JsValue> {
     let appdata = appdata::AppData::load();
-    let tunnel_info = {
-        let mut ctx_borrow = ctx.borrow_mut();
-        let params = extract_js_args!(args, &mut *ctx_borrow, TunnelParams);
-        log::debug!(
-            "Starting tunnel to {}:{} with ticket {}, check_certificate: {:?}, listen_timeout_ms: {:?}, local_port: {:?}, keep_listening_after_timeout: {:?}, enable_ipv6: {:?}, shared_secret: {:?}",
-            params.addr,
-            params.port,
-            params.ticket,
-            params.check_certificate,
-            params.startup_time_ms,
-            params.local_port,
-            params.keep_listening_after_timeout,
-            params.enable_ipv6,
-            params.shared_secret,
-        );
-        TunnelConnectInfo {
-            addr: params.addr,
-            port: params.port,
-            ticket: params.ticket.as_bytes().try_into().map_err(|_| {
-                JsError::from_native(
-                    JsNativeError::error()
-                        .with_message("Invalid ticket length, must be 32 bytes".to_string()),
-                )
-            })?,
-            check_certificate: params
-                .check_certificate
-                .unwrap_or(appdata.verify_ssl.unwrap_or(true)),
-            local_port: params.local_port,
-            startup_time_ms: params.startup_time_ms.unwrap_or(0),
-            keep_listening_after_timeout: params.keep_listening_after_timeout.unwrap_or(false),
-            enable_ipv6: params.enable_ipv6.unwrap_or(false),
-            shared_secret: params
-                .shared_secret
-                .as_ref()
-                .map(|s| {
-                    s.as_slice().try_into().map_err(|_| {
-                        JsError::from_native(
-                            JsNativeError::error()
-                                .with_message("Invalid shared secret length".to_string()),
-                        )
-                    })
-                })
-                .transpose()?,
-        }
-    };
+    let mut ctx_borrow = ctx.borrow_mut();
+    let params = extract_js_args!(args, &mut *ctx_borrow, TunnelParams);
+    drop(ctx_borrow); // release before await
+    log::debug!(
+        "Starting tunnel to {}:{} with ticket {}, check_certificate: {:?}, listen_timeout_ms: {:?}, local_port: {:?}, keep_listening_after_timeout: {:?}, enable_ipv6: {:?}, shared_secret: {:?}",
+        params.addr,
+        params.port,
+        params.ticket,
+        params.check_certificate,
+        params.startup_time_ms,
+        params.local_port,
+        params.keep_listening_after_timeout,
+        params.enable_ipv6,
+        params.shared_secret,
+    );
+    let tunnel_info = params.to_connect_info(appdata.verify_ssl).map_err(|e| {
+        JsError::from_native(
+            JsNativeError::error().with_message(e.to_string())
+        )
+    })?;
 
     let port = connection::start_tunnel(tunnel_info)
         .await
@@ -225,5 +231,88 @@ mod tests {
         "#;
         _ = exec_script(&mut ctx, script).await;
         Ok(())
+    }
+
+    // ── Unit tests (no JS context needed) ──────────────────
+
+    #[test]
+    fn tunnel_params_valid_ticket() {
+        let p = TunnelParams {
+            ticket: "A".repeat(48),
+            ..Default::default()
+        };
+        assert!(p.to_connect_info(None).is_ok());
+    }
+
+    #[test]
+    fn tunnel_params_invalid_ticket_length() {
+        let p = TunnelParams {
+            ticket: "short".into(),
+            ..Default::default()
+        };
+        assert!(p.to_connect_info(None).is_err());
+    }
+
+    #[test]
+    fn tunnel_params_defaults() {
+        let p = TunnelParams {
+            ticket: "A".repeat(48),
+            ..Default::default()
+        };
+        let info = p.to_connect_info(None).unwrap();
+        assert_eq!(info.startup_time_ms, 0);
+        assert!(!info.keep_listening_after_timeout);
+        assert!(!info.enable_ipv6);
+        assert!(info.check_certificate);
+        assert!(info.shared_secret.is_none());
+    }
+
+    #[test]
+    fn tunnel_params_explicit_values() {
+        let p = TunnelParams {
+            ticket: "A".repeat(48),
+            startup_time_ms: Some(5000),
+            keep_listening_after_timeout: Some(true),
+            enable_ipv6: Some(true),
+            check_certificate: Some(false),
+            ..Default::default()
+        };
+        let info = p.to_connect_info(None).unwrap();
+        assert_eq!(info.startup_time_ms, 5000);
+        assert!(info.keep_listening_after_timeout);
+        assert!(info.enable_ipv6);
+        assert!(!info.check_certificate);
+    }
+
+    #[test]
+    fn tunnel_params_check_cert_default_override() {
+        let p = TunnelParams {
+            ticket: "A".repeat(48),
+            ..Default::default()
+        };
+        // cert_default = Some(false) overrides the default true
+        let info = p.to_connect_info(Some(false)).unwrap();
+        assert!(!info.check_certificate);
+    }
+
+    #[test]
+    fn tunnel_params_shared_secret_valid() {
+        let p = TunnelParams {
+            ticket: "A".repeat(48),
+            shared_secret: Some(vec![0u8; 32]),
+            ..Default::default()
+        };
+        let info = p.to_connect_info(None).unwrap();
+        assert!(info.shared_secret.is_some());
+    }
+
+    #[test]
+    fn tunnel_params_shared_secret_invalid_length() {
+        let p = TunnelParams {
+            ticket: "A".repeat(48),
+            shared_secret: Some(vec![0u8; 31]),
+            ..Default::default()
+        };
+        assert!(p.to_connect_info(None).is_err());
     }
 }

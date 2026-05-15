@@ -106,6 +106,50 @@ impl RdpSettings {
     pub fn is_valid(&self) -> bool {
         !self.server.is_empty()
     }
+
+    pub fn to_core_settings(&self) -> settings::RdpSettings {
+        let screen_size = if let (Some(width), Some(height)) = (self.screen_width, self.screen_height)
+        {
+            if width == 0 || height == 0 {
+                ScreenSize::Full
+            } else {
+                ScreenSize::Fixed(width, height)
+            }
+        } else {
+            ScreenSize::Full
+        };
+
+        let defs = settings::RdpSettings::default();
+        settings::RdpSettings {
+            server: self.server.clone(),
+            port: self.port.unwrap_or(defs.port),
+            user: self.user.clone().unwrap_or(defs.user),
+            password: self.password.clone().unwrap_or(defs.password),
+            domain: self.domain.clone().unwrap_or(defs.domain),
+            verify_cert: self.verify_cert.unwrap_or(defs.verify_cert),
+            use_nla: self.use_nla.unwrap_or(defs.use_nla),
+            screen_size,
+            clipboard_redirection: self.clipboard_redirection.unwrap_or(defs.clipboard_redirection),
+            audio_redirection: self.audio_redirection.unwrap_or(defs.audio_redirection),
+            microphone_redirection: self.microphone_redirection.unwrap_or(defs.microphone_redirection),
+            printer_redirection: self.printer_redirection.unwrap_or(defs.printer_redirection),
+            drives_to_redirect: self
+                .drives_to_redirect
+                .clone()
+                .unwrap_or_else(|| defs.drives_to_redirect.clone()),
+            sound_latency_threshold: self.sound_latency_threshold,
+            best_experience: self.best_experience.unwrap_or(defs.best_experience),
+            rail_app: self.rail_app.clone().or(defs.rail_app),
+            rail_args: self.rail_args.clone().or(defs.rail_args),
+            rail_working_dir: self.rail_working_dir.clone().or(defs.rail_working_dir),
+            scale_factor: 1.0,
+            use_local_scaler: self.use_local_scaler.unwrap_or(true),
+            server_info: self.server_info.as_ref().map(|s| settings::ServerInfo {
+                id: s.id.clone(),
+                token: s.token.clone(),
+            }),
+        }
+    }
 }
 
 fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
@@ -116,59 +160,7 @@ fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
         ));
     }
 
-    // If both screen_width and screen_height are provided, use them. If either is 0, treat as full screen.
-    let screen_size = if let (Some(width), Some(height)) =
-        (rdp_settings.screen_width, rdp_settings.screen_height)
-    {
-        if width == 0 || height == 0 {
-            ScreenSize::Full
-        } else {
-            ScreenSize::Fixed(width, height)
-        }
-    } else {
-        ScreenSize::Full
-    };
-
-    let defs = rdp::settings::RdpSettings::default();
-
-    // Generate Settings from our rdp_settings (defaults match `rdp::settings::RdpSettings` defaults)
-    let settings = settings::RdpSettings {
-        server: rdp_settings.server,
-        port: rdp_settings.port.unwrap_or(defs.port),
-        user: rdp_settings.user.unwrap_or(defs.user),
-        password: rdp_settings.password.unwrap_or(defs.password),
-        domain: rdp_settings.domain.unwrap_or(defs.domain),
-        // Default to false to match the core RDP settings defaults
-        verify_cert: rdp_settings.verify_cert.unwrap_or(defs.verify_cert),
-        use_nla: rdp_settings.use_nla.unwrap_or(defs.use_nla),
-        screen_size,
-        clipboard_redirection: rdp_settings
-            .clipboard_redirection
-            .unwrap_or(defs.clipboard_redirection),
-        audio_redirection: rdp_settings
-            .audio_redirection
-            .unwrap_or(defs.audio_redirection),
-        microphone_redirection: rdp_settings
-            .microphone_redirection
-            .unwrap_or(defs.microphone_redirection),
-        printer_redirection: rdp_settings
-            .printer_redirection
-            .unwrap_or(defs.printer_redirection),
-        drives_to_redirect: rdp_settings
-            .drives_to_redirect
-            .unwrap_or_else(|| defs.drives_to_redirect.clone()),
-        sound_latency_threshold: rdp_settings.sound_latency_threshold,
-        best_experience: rdp_settings.best_experience.unwrap_or(defs.best_experience),
-        rail_app: rdp_settings.rail_app.or(defs.rail_app),
-        rail_args: rdp_settings.rail_args.or(defs.rail_args),
-        rail_working_dir: rdp_settings.rail_working_dir.or(defs.rail_working_dir),
-        scale_factor: 1.0, // Will be overrided by local monitor scale factor in gui
-        use_local_scaler: rdp_settings.use_local_scaler.unwrap_or(true),
-        server_info: rdp_settings.server_info.map(|s| settings::ServerInfo {
-            id: s.id,
-            token: s.token,
-        }),
-    };
+    let settings = rdp_settings.to_core_settings();
 
     log::debug!("Starting RDP with settings: {:?}", settings);
 
@@ -358,5 +350,102 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    // ── Unit tests (no JS context needed) ──────────────────
+
+    #[test]
+    fn settings_is_valid_empty() {
+        let s = RdpSettings::default();
+        assert!(!s.is_valid());
+    }
+
+    #[test]
+    fn settings_is_valid_nonempty() {
+        let s = RdpSettings {
+            server: "host".into(),
+            ..Default::default()
+        };
+        assert!(s.is_valid());
+    }
+
+    #[test]
+    fn settings_defaults() {
+        let s = RdpSettings::default();
+        assert_eq!(s.server, "");
+        assert_eq!(s.port, Some(3389));
+        assert!(s.user.is_none());
+        assert!(s.password.is_none());
+        assert!(s.server_info.is_none());
+    }
+
+    #[test]
+    fn to_core_screen_full_when_missing() {
+        let s = RdpSettings::default();
+        let core = s.to_core_settings();
+        assert!(matches!(core.screen_size, ScreenSize::Full));
+    }
+
+    #[test]
+    fn to_core_screen_full_when_zero() {
+        let s = RdpSettings {
+            server: "h".into(),
+            screen_width: Some(0),
+            screen_height: Some(768),
+            ..Default::default()
+        };
+        assert!(matches!(s.to_core_settings().screen_size, ScreenSize::Full));
+    }
+
+    #[test]
+    fn to_core_screen_fixed() {
+        let s = RdpSettings {
+            server: "h".into(),
+            screen_width: Some(1024),
+            screen_height: Some(768),
+            ..Default::default()
+        };
+        assert!(matches!(
+            s.to_core_settings().screen_size,
+            ScreenSize::Fixed(1024, 768)
+        ));
+    }
+
+    #[test]
+    fn to_core_use_local_scaler_defaults_true() {
+        let s = RdpSettings::default();
+        assert!(s.to_core_settings().use_local_scaler);
+    }
+
+    #[test]
+    fn to_core_use_local_scaler_explicit_false() {
+        let s = RdpSettings {
+            server: "h".into(),
+            use_local_scaler: Some(false),
+            ..Default::default()
+        };
+        assert!(!s.to_core_settings().use_local_scaler);
+    }
+
+    #[test]
+    fn to_core_server_info_mapping() {
+        let s = RdpSettings {
+            server: "h".into(),
+            server_info: Some(ServerInfo {
+                id: "myid".into(),
+                token: "mytok".into(),
+            }),
+            ..Default::default()
+        };
+        let core = s.to_core_settings();
+        let si = core.server_info.unwrap();
+        assert_eq!(si.id, "myid");
+        assert_eq!(si.token, "mytok");
+    }
+
+    #[test]
+    fn to_core_server_info_none() {
+        let s = RdpSettings::default();
+        assert!(s.to_core_settings().server_info.is_none());
     }
 }
