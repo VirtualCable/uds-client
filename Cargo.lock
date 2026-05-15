@@ -907,6 +907,7 @@ dependencies = [
  "tokio-rustls",
  "widestring",
  "windows 0.62.2",
+ "zeroize",
 ]
 
 [[package]]
@@ -1109,6 +1110,7 @@ dependencies = [
  "sha2 0.11.0",
  "shared",
  "tokio",
+ "zeroize",
 ]
 
 [[package]]
@@ -2627,6 +2629,7 @@ dependencies = [
  "serial_test",
  "shared",
  "tokio",
+ "zeroize",
 ]
 
 [[package]]

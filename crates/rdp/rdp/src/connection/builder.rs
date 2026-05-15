@@ -59,10 +59,10 @@ impl Rdp {
 
             let settings_ptr = (*ctx).common.context.settings;
 
-            let host = CString::new(mut_self.config.settings.server.clone())?;
-            let user = CString::new(mut_self.config.settings.user.clone())?;
-            let pass = CString::new(mut_self.config.settings.password.clone())?;
-            let domain = CString::new(mut_self.config.settings.domain.clone())?;
+            let host = CString::new(mut_self.config.settings.server.as_str())?;
+            let user = CString::new(mut_self.config.settings.user.as_str())?;
+            let mut pass = CString::new(mut_self.config.settings.password.as_str())?;
+            let domain = CString::new(mut_self.config.settings.domain.as_str())?;
 
             freerdp_settings_set_string(
                 settings_ptr,
@@ -84,6 +84,10 @@ impl Rdp {
                 FreeRDP_Settings_Keys_String_FreeRDP_Domain,
                 domain.as_ptr(),
             );
+
+            // Zeroize sensitive data as soon as it is passed to FreeRDP
+            crate::utils::zeroize_cstring(&mut pass);
+
             freerdp_settings_set_uint32(
                 settings_ptr,
                 FreeRDP_Settings_Keys_UInt32_FreeRDP_ServerPort,

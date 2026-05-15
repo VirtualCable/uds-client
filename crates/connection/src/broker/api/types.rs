@@ -41,6 +41,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use shared::log;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Error {
@@ -154,13 +155,13 @@ pub struct Version {
     pub client_link: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Zeroize)]
 pub struct Log {
     pub level: String,
     pub ticket: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq, Zeroize)]
 pub enum ScriptType {
     #[serde(rename = "javascript")]
     #[default]
@@ -193,7 +194,7 @@ pub struct TicketReqBody<'a> {
     pub version: &'a str,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct Script {
     pub script: String,
     #[serde(rename = "type")]

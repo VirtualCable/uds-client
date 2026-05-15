@@ -95,7 +95,7 @@ mod tests {
     fn test_open_response_serialization() {
         let session_id = Ticket::new([1u8; TICKET_LENGTH]);
         let channel_count = 1;
-        let open_response = OpenResponse::new(session_id, channel_count, 1, 2);
+        let open_response = OpenResponse::new(session_id.clone(), channel_count, 1, 2);
         let vec = open_response.as_vec();
         let parsed = OpenResponse::try_from(vec.as_slice()).expect("Failed to parse OpenResponse");
         assert_eq!(parsed.session_id, session_id);

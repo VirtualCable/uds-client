@@ -8,6 +8,8 @@ use interprocess::local_socket::{
 };
 use serde::{Deserialize, Serialize};
 
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+
 fn socket_name(server_id: &str) -> io::Result<interprocess::local_socket::Name<'static>> {
     // GenericNamespaced: abstract namespace on Linux, named pipe on Windows
     if let Ok(name) = server_id.to_string().to_ns_name::<GenericNamespaced>() {
@@ -19,7 +21,7 @@ fn socket_name(server_id: &str) -> io::Result<interprocess::local_socket::Name<'
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Zeroize, ZeroizeOnDrop)]
 pub struct RailLaunchMsg {
     pub rail_app: String,
     pub rail_args: String,
@@ -73,7 +75,7 @@ pub fn bind(
 
     let listener_clone = listener.clone();
     let handle = std::thread::spawn({
-        let expected_token = expected_token.to_string();
+        let expected_token = Zeroizing::new(expected_token.to_string());
         move || {
             loop {
                 let maybe_stream = {
@@ -85,13 +87,14 @@ pub fn bind(
                 };
                 match maybe_stream {
                     Ok(stream) => {
-                        let _ = serde_json::from_reader::<_, RailLaunchMsg>(stream).map(|msg| {
+                        let _ = serde_json::from_reader::<_, RailLaunchMsg>(stream).map(|mut msg| {
                             // Token verification
-                            if msg.server_token != expected_token {
+                            if msg.server_token != *expected_token {
                                 shared::log::warn!(
                                     "IPC: rejected RAIL app launch — token mismatch for {}",
                                     msg.rail_app,
                                 );
+                                msg.zeroize();
                                 return;
                             }
                             shared::log::info!("IPC: received RAIL app launch: {}", msg.rail_app,);

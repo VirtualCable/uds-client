@@ -2,7 +2,9 @@
 // Copyright (c) 2025, Virtual Cable S.L.
 // All rights reserved.
 
-#[derive(Debug, Clone)]
+use zeroize::Zeroize;
+
+#[derive(Debug, Clone, Zeroize)]
 pub enum InputEvent {
     Keyboard { scancode: u16, pressed: bool },
     Mouse { flags: u16, x: u16, y: u16 },
@@ -10,7 +12,7 @@ pub enum InputEvent {
     Unicode { code: u16 },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Zeroize)]
 pub enum RdpCommand {
     Input(InputEvent),
     ViewportMove {

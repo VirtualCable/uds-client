@@ -99,9 +99,9 @@ impl AppHandler {
                 let cmd_ev = state.command_event;
                 self.rail_ipc = crate::ipc::bind(&srv.id, &srv.token, move |msg| {
                     let _ = cmd_tx.send(rdp_ffi::commands::RdpCommand::LaunchRailApp {
-                        app: msg.rail_app,
-                        args: msg.rail_args,
-                        dir: msg.rail_working_dir,
+                        app: msg.rail_app.clone(),
+                        args: msg.rail_args.clone(),
+                        dir: msg.rail_working_dir.clone(),
                     });
                     unsafe {
                         rdp_ffi::sys::SetEvent(cmd_ev.as_handle());

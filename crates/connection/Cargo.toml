@@ -36,6 +36,7 @@ rustls-native-certs.workspace = true
 aes-gcm.workspace = true
 hkdf.workspace = true
 sha2.workspace = true
+zeroize.workspace = true
 
 # channels and internal communication
 flume.workspace = true

@@ -49,8 +49,8 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
                 // this will be enough
                 let proxy = proxy::Proxy::new(
                     &format!("{}:{}", info.addr, info.port),
-                    info.ticket,
-                    crypt_info,
+                    info.ticket.clone(),
+                    crypt_info.clone(),
                     std::time::Duration::from_millis(info.startup_time_ms.min(MAX_STARTUP_TIME_MS)),
                     registered_trigger.clone(),
                 ).run().await?;

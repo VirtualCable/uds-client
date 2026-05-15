@@ -23,6 +23,7 @@ tokio.workspace = true
 futures.workspace = true
 async-trait.workspace = true
 regex.workspace = true
+zeroize.workspace = true
 
 anyhow.workspace = true
 rand.workspace = true

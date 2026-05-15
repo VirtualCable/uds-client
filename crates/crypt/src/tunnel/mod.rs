@@ -53,7 +53,7 @@ impl Crypt {
         log::debug!("Creating Crypt with initial seq: {}", seq);
         let cipher = Aes256Gcm::new(key.as_ref().into());
         Crypt {
-            key: *key,
+            key: key.clone(),
             cipher,
             seq,
         }
@@ -190,7 +190,7 @@ impl Clone for Crypt {
         let cipher = Aes256Gcm::new(self.key.as_ref().into());
         Crypt {
             cipher,
-            key: self.key,
+            key: self.key.clone(),
             seq: self.seq,
         }
     }

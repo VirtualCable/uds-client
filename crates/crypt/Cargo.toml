@@ -14,6 +14,7 @@ libcrux-ml-kem.workspace = true
 hkdf.workspace = true
 sha2.workspace = true
 aes-gcm.workspace = true
+zeroize.workspace = true
 
 # Tokio
 tokio.workspace = true

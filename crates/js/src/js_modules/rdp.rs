@@ -40,36 +40,56 @@ use boa_engine::{
 use connection::broker;
 use rdp::{geom::ScreenSize, settings};
 use shared::log;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::gui::{GuiMessage, send_message};
 
-#[derive(Debug, TryFromJs)]
+#[derive(Debug, TryFromJs, Zeroize, ZeroizeOnDrop)]
 struct ServerInfo {
+    #[zeroize(skip)]
     pub id: String,
     pub token: String,
 }
 
-#[derive(Debug, TryFromJs)]
+#[derive(Debug, TryFromJs, Zeroize, ZeroizeOnDrop)]
 struct RdpSettings {
+    #[zeroize(skip)]
     pub server: String,
+    #[zeroize(skip)]
     pub port: Option<u32>,
+    #[zeroize(skip)]
     pub user: Option<String>,
     pub password: Option<String>,
     pub domain: Option<String>,
+    #[zeroize(skip)]
     pub verify_cert: Option<bool>,
+    #[zeroize(skip)]
     pub use_nla: Option<bool>,
+    #[zeroize(skip)]
     pub screen_width: Option<u32>,
+    #[zeroize(skip)]
     pub screen_height: Option<u32>,
+    #[zeroize(skip)]
     pub clipboard_redirection: Option<bool>,
+    #[zeroize(skip)]
     pub audio_redirection: Option<bool>,
+    #[zeroize(skip)]
     pub microphone_redirection: Option<bool>,
+    #[zeroize(skip)]
     pub printer_redirection: Option<bool>,
+    #[zeroize(skip)]
     pub drives_to_redirect: Option<Vec<String>>,
+    #[zeroize(skip)]
     pub sound_latency_threshold: Option<u16>,
+    #[zeroize(skip)]
     pub best_experience: Option<bool>,
+    #[zeroize(skip)]
     pub rail_app: Option<String>,
+    #[zeroize(skip)]
     pub rail_args: Option<String>,
+    #[zeroize(skip)]
     pub rail_working_dir: Option<String>,
+    #[zeroize(skip)]
     pub use_local_scaler: Option<bool>,
     pub server_info: Option<ServerInfo>, // Not used by us, but may be used by others (as messages, etc..)
 }
@@ -352,8 +372,6 @@ mod tests {
         Ok(())
     }
 
-    // ── Unit tests (no JS context needed) ──────────────────
-
     #[test]
     fn settings_is_valid_empty() {
         let s = RdpSettings::default();
@@ -362,10 +380,8 @@ mod tests {
 
     #[test]
     fn settings_is_valid_nonempty() {
-        let s = RdpSettings {
-            server: "host".into(),
-            ..Default::default()
-        };
+        let mut s = RdpSettings::default();
+        s.server = "host".into();
         assert!(s.is_valid());
     }
 
@@ -388,23 +404,19 @@ mod tests {
 
     #[test]
     fn to_core_screen_full_when_zero() {
-        let s = RdpSettings {
-            server: "h".into(),
-            screen_width: Some(0),
-            screen_height: Some(768),
-            ..Default::default()
-        };
+        let mut s = RdpSettings::default();
+        s.server = "h".into();
+        s.screen_width = Some(0);
+        s.screen_height = Some(768);
         assert!(matches!(s.to_core_settings().screen_size, ScreenSize::Full));
     }
 
     #[test]
     fn to_core_screen_fixed() {
-        let s = RdpSettings {
-            server: "h".into(),
-            screen_width: Some(1024),
-            screen_height: Some(768),
-            ..Default::default()
-        };
+        let mut s = RdpSettings::default();
+        s.server = "h".into();
+        s.screen_width = Some(1024);
+        s.screen_height = Some(768);
         assert!(matches!(
             s.to_core_settings().screen_size,
             ScreenSize::Fixed(1024, 768)
@@ -419,24 +431,20 @@ mod tests {
 
     #[test]
     fn to_core_use_local_scaler_explicit_false() {
-        let s = RdpSettings {
-            server: "h".into(),
-            use_local_scaler: Some(false),
-            ..Default::default()
-        };
+        let mut s = RdpSettings::default();
+        s.server = "h".into();
+        s.use_local_scaler = Some(false);
         assert!(!s.to_core_settings().use_local_scaler);
     }
 
     #[test]
     fn to_core_server_info_mapping() {
-        let s = RdpSettings {
-            server: "h".into(),
-            server_info: Some(ServerInfo {
-                id: "myid".into(),
-                token: "mytok".into(),
-            }),
-            ..Default::default()
-        };
+        let mut s = RdpSettings::default();
+        s.server = "h".into();
+        s.server_info = Some(ServerInfo {
+            id: "myid".into(),
+            token: "mytok".into(),
+        });
         let core = s.to_core_settings();
         let si = core.server_info.unwrap();
         assert_eq!(si.id, "myid");

@@ -10,7 +10,7 @@ use crate::{
     types::{SharedSecret, Ticket},
 };
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct CryptoKeys {
     pub key_payload: SharedSecret,
     pub key_send: SharedSecret,

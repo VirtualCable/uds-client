@@ -31,13 +31,14 @@
 
 use anyhow::Result;
 use rand::{distr::Alphanumeric, prelude::*};
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use shared::utils::hex_to_bytes;
 
 use super::consts::TICKET_LENGTH;
 
 // Hard type for shared secret
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct SharedSecret([u8; 32]);
 
 /// This code block is implementing functionality for the `SharedSecret` struct in Rust. Here's a
@@ -78,7 +79,7 @@ impl TryFrom<&[u8]> for SharedSecret {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Zeroize, ZeroizeOnDrop)]
 pub struct Ticket([u8; TICKET_LENGTH]);
 
 impl Ticket {

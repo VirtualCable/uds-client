@@ -29,6 +29,7 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 use std::ops::Deref;
+use zeroize::Zeroize;
 
 use freerdp_sys::{GDI_RGN, HANDLE};
 use shared::log;
@@ -142,6 +143,15 @@ impl SafeHandle {
     pub fn as_handle(&self) -> HANDLE {
         self.ptr.as_ptr() as HANDLE
     }
+}
+
+pub fn zeroize_cstring(s: &mut std::ffi::CString) {
+    let bytes = unsafe {
+        let ptr = s.as_ptr() as *mut u8;
+        let len = s.as_bytes_with_nul().len();
+        std::slice::from_raw_parts_mut(ptr, len)
+    };
+    bytes.zeroize();
 }
 
 #[cfg(test)]

@@ -285,6 +285,18 @@ impl WindowCallbacks for Rdp {
             }
         };
 
+        // Defensive check: ensure the provided buffer is large enough for the calculated dimensions
+        if (icon_info.cbBitsColor as usize) < len {
+            log::error!(
+                "RAIL: Icon buffer too small for {}x{}: {} < {}",
+                w,
+                h,
+                icon_info.cbBitsColor,
+                len
+            );
+            return true;
+        }
+
         let src = unsafe { std::slice::from_raw_parts(icon_info.bitsColor, len) };
         // BGRA → RGBA swizzle (same as GDI path for non-macOS)
         let mut rgba = Vec::with_capacity(len);

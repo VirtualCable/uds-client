@@ -158,12 +158,12 @@ impl Proxy {
         // Send open tunnel command with the ticket and shared secret
         let handshake = if self.recover_connection {
             Handshake::Recover {
-                ticket: self.ticket,
+                ticket: self.ticket.clone(),
                 seqs: self.seqs,
             }
         } else {
             Handshake::Open {
-                ticket: self.ticket,
+                ticket: self.ticket.clone(),
             }
         };
         // Split the stream into reader and writer for easier handling on the next steps
