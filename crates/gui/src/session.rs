@@ -1,6 +1,5 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::time::Instant;
 
 use anyhow::Result;
 use winit::event_loop::ActiveEventLoop;
@@ -322,42 +321,20 @@ impl AppHandler {
                     }
                 }
                 GuiMessage::ShowProgress => {
-                    if let Some(ref mut l) = self.launcher {
-                        l.inner = LauncherInner::Progress {
-                            pct: 0,
-                            message: String::new(),
-                            start: Instant::now(),
-                            progress_duration_secs: 30,
-                            phase: ProgressPhase::Connecting,
-                            auto_animate: false,
-                            hover_idx: None,
-                            cancelled: false,
-                        };
-                        if let Some(w) = &l.window {
-                            w.set_visible(true);
-                            w.request_redraw();
-                        }
+                    if let Ok(p) = crate::progress_window::ProgressState::new(el) {
+                        let wid = p.window.id();
+                        self.register_window(wid, WindowKind::Progress);
+                        self.progress = Some(p);
                     }
                 }
                 GuiMessage::Progress(val, msg) => {
-                    if let Some(ref mut l) = self.launcher {
-                        let done = val >= 100;
-                        if let LauncherInner::Progress {
-                            ref mut pct,
-                            ref mut message,
-                            ref mut phase,
-                            ..
-                        } = l.inner
-                        {
-                            *pct = val;
-                            *message = msg;
-                            if done {
-                                *phase = ProgressPhase::Connected;
-                            }
+                    if let Some(ref mut p) = self.progress {
+                        p.pct = val;
+                        p.message = msg;
+                        if val >= 100 {
+                            p.phase = ProgressPhase::Connected;
                         }
-                        if let Some(w) = &l.window {
-                            w.request_redraw();
-                        }
+                        p.window.request_redraw();
                     }
                 }
                 GuiMessage::ConnectRdp(settings) => {
@@ -379,15 +356,10 @@ impl AppHandler {
         {
             match action {
                 LaunchAction::ShowProgress => {
-                    launcher.inner = LauncherInner::Progress {
-                        pct: 0,
-                        message: String::new(),
-                        start: Instant::now(),
-                        progress_duration_secs: 5,
-                        phase: ProgressPhase::Connecting,
-                        auto_animate: true,
-                        hover_idx: None,
-                        cancelled: false,
+                    if let Ok(p) = crate::progress_window::ProgressState::new(el) {
+                        let wid = p.window.id();
+                        self.register_window(wid, WindowKind::Progress);
+                        self.progress = Some(p);
                     }
                 }
                 LaunchAction::GoInvisible => launcher.inner = LauncherInner::Invisible,

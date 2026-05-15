@@ -48,6 +48,45 @@ impl AppHandler {
         self.launcher = None;
     }
 
+    pub(crate) fn handle_progress_event(&mut self, el: &ActiveEventLoop, event: WindowEvent) {
+        let Some(ref mut p) = self.progress else {
+            return;
+        };
+
+        match event {
+            WindowEvent::CursorMoved { position, .. } => {
+                let sf = p.window.scale_factor() as f32;
+                let (lx, ly) = (position.x as f32 / sf, position.y as f32 / sf);
+                p.last_mouse_pos = Some((lx, ly));
+                if p.handle_mouse_move(lx, ly) {
+                    p.window.request_redraw();
+                }
+            }
+            WindowEvent::MouseInput {
+                state: winit::event::ElementState::Pressed,
+                button: winit::event::MouseButton::Left,
+                ..
+            } => {
+                if let Some(pos) = p.last_mouse_pos {
+                    p.handle_click(pos.0, pos.1);
+                    if p.cancelled {
+                        self.stop.trigger();
+                        el.exit();
+                    }
+                }
+                p.window.request_redraw();
+            }
+            WindowEvent::RedrawRequested => {
+                p.paint();
+            }
+            WindowEvent::CloseRequested => {
+                self.stop.trigger();
+                self.progress = None;
+            }
+            _ => {}
+        }
+    }
+
     pub(crate) fn handle_launcher_event(&mut self, el: &ActiveEventLoop, event: WindowEvent) {
         let Some(ref mut l) = self.launcher else {
             return;
@@ -65,10 +104,6 @@ impl AppHandler {
             {
                 if let Some(pos) = l.last_mouse_pos {
                     l.inner.handle_click(pos.0, pos.1);
-                    if l.inner.is_cancelled() {
-                        self.stop.trigger();
-                        el.exit();
-                    }
                 }
                 if let Some(w) = &l.window {
                     w.request_redraw();

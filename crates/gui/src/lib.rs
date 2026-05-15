@@ -26,6 +26,7 @@ pub mod types;
 mod draw;
 pub mod ipc;
 mod launcher;
+mod progress_window;
 mod rdp;
 mod wgpu_render;
 
@@ -58,10 +59,12 @@ enum WindowKind {
     RdpRail(u32),
     Popup,
     About,
+    Progress,
 }
 
 pub struct AppHandler {
     launcher: Option<TestingLauncherState>,
+    progress: Option<crate::progress_window::ProgressState>,
     rdp: Option<Box<RdpState>>,
     popup: Option<PopupState>,
     about: Option<crate::about::AboutState>,
@@ -98,6 +101,7 @@ pub fn run_gui(
 
     let mut app = AppHandler {
         launcher: None,
+        progress: None,
         rdp: None,
         popup: None,
         about: None,
@@ -182,6 +186,9 @@ impl ApplicationHandler<UserEvent> for AppHandler {
                     Some(WindowKind::Launcher) => {
                         self.handle_launcher_event(el, WindowEvent::RedrawRequested)
                     }
+                    Some(WindowKind::Progress) => {
+                        self.handle_progress_event(el, WindowEvent::RedrawRequested)
+                    }
                     Some(WindowKind::Rdp) if !self.rdp.as_ref().is_some_and(|s| s.is_rail) => {
                         let _ = self.rdp.as_mut().map(|s| s.update_screen());
                     }
@@ -201,6 +208,7 @@ impl ApplicationHandler<UserEvent> for AppHandler {
                 // Dispatch by window kind
                 match self.windows.get(&wid) {
                     Some(WindowKind::Launcher) => self.handle_launcher_event(el, event),
+                    Some(WindowKind::Progress) => self.handle_progress_event(el, event),
                     #[allow(clippy::collapsible_match)]
                     Some(WindowKind::Rdp) => {
                         if !self.handle_rdp_input(&event) {
@@ -231,8 +239,11 @@ impl ApplicationHandler<UserEvent> for AppHandler {
                 if let Some(ref mut l) = self.launcher
                     && let Some(ref w) = l.window
                 {
-                    l.animation_time += 0.25; // Control wave speed
                     w.request_redraw();
+                }
+                if let Some(ref mut p) = self.progress {
+                    p.animation_time += 0.25;
+                    p.window.request_redraw();
                 }
             }
         }
