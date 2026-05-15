@@ -36,13 +36,14 @@ pub struct AboutState {
     pub scale: f32,
     pub animation_time: f32,
     pub waves: Vec<crate::draw::ui::waves::Wave>,
+    pub is_hovered: bool,
 }
 
 impl AboutState {
     pub fn new(event_loop: &ActiveEventLoop) -> Result<Self> {
         let (dw, dh) = crate::monitor::size(0).unwrap_or((1920, 1080));
-        let ww = 420.0;
-        let wh = 440.0;
+        let ww = 460.0;
+        let wh = 500.0;
         let sf = crate::monitor::scale(0) as f32;
         let px = (dw as f32 - ww * sf) / 2.0;
         let py = (dh as f32 - wh * sf) / 2.0;
@@ -71,6 +72,7 @@ impl AboutState {
             scale,
             animation_time: 0.0,
             waves: crate::draw::ui::waves::Wave::default_set(),
+            is_hovered: false,
         })
     }
 
@@ -78,11 +80,36 @@ impl AboutState {
         &self.window
     }
 
+    pub fn handle_mouse_move(&mut self, logical_x: f32, logical_y: f32) -> bool {
+        let old_hover = self.is_hovered;
+        self.is_hovered = false;
+        let s = self.scale;
+        let pw = self.phys_w as f32;
+        let ph = self.phys_h as f32;
+        
+        let bw = monitor::scaled_val(80) as f32;
+        let bh = monitor::scaled_val(35) as f32;
+        
+        let bx = (pw - bw) / 2.0;
+        let by = ph - bh - 20.0 * s;
+
+        let x = logical_x * s;
+        let y = logical_y * s;
+
+        if x >= bx && x <= bx + bw && y >= by && y <= by + bh {
+            self.is_hovered = true;
+        }
+        
+        self.is_hovered != old_hover
+    }
+
     pub fn paint(&mut self) {
         self.angle = (self.start.elapsed().as_secs_f32() * std::f32::consts::PI).sin() * 0.3;
         let s = self.scale;
         let pw = self.phys_w;
         let ph = self.phys_h;
+
+        self.renderer.reconfigure(pw, ph);
 
         let mut data: Vec<Vec<u8>> = Vec::new();
 
@@ -121,23 +148,27 @@ impl AboutState {
             let y = base_y + i as f32 * (22.0 * s);
             sections.push(
                 Section::default()
+                    .with_layout(
+                        wgpu_text::glyph_brush::Layout::default()
+                            .h_align(wgpu_text::glyph_brush::HorizontalAlign::Center)
+                    )
                     .add_text(
                         Text::new(line)
                             .with_scale(monitor::scaled_val(14) as f32)
                             .with_color([0.75, 0.75, 0.88, 1.0]),
                     )
-                    .with_screen_position(((pw as f32 - line.len() as f32 * 8.0 * s) / 2.0, y))
+                    .with_screen_position((pw as f32 / 2.0, y))
                     .to_owned(),
             );
         }
-        let close_y = base_y + ABOUT_LINES.len() as f32 * 22.0 * s + 20.0 * s;
         let bw = monitor::scaled_val(80) as u32;
         let bh = monitor::scaled_val(35) as u32;
+        let close_y = (ph as f32) - (bh as f32) - 20.0 * s;
         
         let style = crate::draw::ui::button::ButtonStyle {
             font_scale: monitor::scaled_val(14) as f32,
-            bg_color: [0x50, 0x50, 0x70, 0xFF],
-            border_color: [0x70, 0x70, 0x90, 0xFF],
+            bg_color: if self.is_hovered { [0x70, 0x70, 0x90, 0xFF] } else { [0x50, 0x50, 0x70, 0xFF] },
+            border_color: if self.is_hovered { [0x90, 0x90, 0xB0, 0xFF] } else { [0x70, 0x70, 0x90, 0xFF] },
             ..crate::draw::ui::button::ButtonStyle::default()
         };
         
@@ -215,6 +246,14 @@ impl ApplicationHandler for AboutHandler<'_> {
             WindowEvent::RedrawRequested => {
                 if let Some(s) = self.state.as_mut() {
                     s.paint();
+                }
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                if let Some(s) = self.state.as_mut() {
+                    let logical = position.to_logical::<f32>(s.scale as f64);
+                    if s.handle_mouse_move(logical.x, logical.y) {
+                        s.window.request_redraw();
+                    }
                 }
             }
             WindowEvent::MouseInput {
