@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use shared::log;
 use rdp_ffi::messaging::RdpMessage;
+use shared::log;
 
 #[allow(dead_code)]
 pub struct RailWindow {
@@ -33,7 +33,7 @@ pub enum RailAction {
     SetVisible(u32, bool),
 }
 
-// ── RAIL Message Dispatcher ─────────────────────────────────
+// ── RAIL Message Dispatcher ───
 // Called from handle_rdp_message in mod.rs
 
 use super::{RdpActionResult, RdpState};
@@ -66,7 +66,10 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
             size,
         } => {
             if ext_style.is_some_and(|s| (s & 0x20) != 0) {
-                log::debug!("Skipping RAIL window {} with style 0x20 (probably a menu)", window_id);
+                log::debug!(
+                    "Skipping RAIL window {} with style 0x20 (probably a menu)",
+                    window_id
+                );
                 return RdpActionResult::Continue;
             }
             let sf = state.coords_scale.max(1.0);
@@ -214,9 +217,7 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                 }
             } else {
                 // Buffer icon for pending window (same pattern as pending_pixels)
-                state
-                    .pending_icons
-                    .insert(window_id, (rgba, width, height));
+                state.pending_icons.insert(window_id, (rgba, width, height));
             }
             RdpActionResult::Continue
         }

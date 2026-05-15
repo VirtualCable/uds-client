@@ -374,4 +374,52 @@ mod tests {
         let c2 = buf2.buffer().unwrap().to_vec();
         assert_ne!(c1, c2);
     }
+
+    // ── Header parse / build
+
+    #[test]
+    fn parse_header_valid() {
+        let mut buf = [0u8; 10];
+        buf[0..8].copy_from_slice(&42u64.to_be_bytes());
+        buf[8..10].copy_from_slice(&100u16.to_be_bytes());
+        let (seq, len) = parse_header(&buf).unwrap();
+        assert_eq!(seq, 42);
+        assert_eq!(len, 100);
+    }
+
+    #[test]
+    fn parse_header_too_short() {
+        assert!(parse_header(&[0u8; 9]).is_err());
+        assert!(parse_header(&[]).is_err());
+    }
+
+    #[test]
+    fn parse_header_length_too_big() {
+        let mut buf = [0u8; 10];
+        buf[8..10].copy_from_slice(&(consts::MAX_PACKET_SIZE as u16 + 1).to_be_bytes());
+        assert!(parse_header(&buf).is_err());
+    }
+
+    #[test]
+    fn build_header_roundtrip() {
+        let mut buf = [0u8; 16];
+        build_header(42, 256u16, &mut buf).unwrap();
+        let (seq, len) = parse_header(&buf).unwrap();
+        assert_eq!(seq, 42);
+        assert_eq!(len, 256);
+    }
+
+    #[test]
+    fn build_header_too_short() {
+        let mut buf = [0u8; 9];
+        assert!(build_header(0, 0, &mut buf).is_err());
+    }
+
+    #[test]
+    fn build_header_does_not_clobber_past_10() {
+        let mut buf = [0xAAu8; 20];
+        build_header(1, 100, &mut buf).unwrap();
+        // Bytes 10..20 should be untouched
+        assert!(buf[10..].iter().all(|&b| b == 0xAA));
+    }
 }

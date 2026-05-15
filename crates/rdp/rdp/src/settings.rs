@@ -145,7 +145,13 @@ impl fmt::Debug for RdpSettings {
             .field("rail_working_dir", &self.rail_working_dir)
             .field("scale_factor", &self.scale_factor)
             .field("use_local_scaler", &self.use_local_scaler)
-            .field("server_info", &self.server_info.as_ref().map(|s| format!("id={}, token=****", s.id)))
+            .field(
+                "server_info",
+                &self
+                    .server_info
+                    .as_ref()
+                    .map(|s| format!("id={}, token=****", s.id)),
+            )
             .finish()
     }
 }

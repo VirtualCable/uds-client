@@ -296,20 +296,22 @@ mod tests {
         }
     }
 
-    // ── New tests ────────────────────────────────────────
-
     #[test]
     fn is_close_command_true() {
         assert!(Command::CloseChannel { channel_id: 1 }.is_close_command());
-        assert!(Command::ConnectionError {
-            message: "x".into()
-        }
-        .is_close_command());
-        assert!(Command::ChannelError {
-            channel_id: 1,
-            message: "x".into()
-        }
-        .is_close_command());
+        assert!(
+            Command::ConnectionError {
+                message: "x".into()
+            }
+            .is_close_command()
+        );
+        assert!(
+            Command::ChannelError {
+                channel_id: 1,
+                message: "x".into()
+            }
+            .is_close_command()
+        );
     }
 
     #[test]

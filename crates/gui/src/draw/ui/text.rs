@@ -18,11 +18,7 @@ pub fn wrap(
     for line in word_wrap(message, max_chars_per_line) {
         sections.push(
             Section::default()
-                .add_text(
-                    Text::new(line)
-                        .with_scale(font_scale)
-                        .with_color(color),
-                )
+                .add_text(Text::new(line).with_scale(font_scale).with_color(color))
                 .with_screen_position((x, cur_y))
                 .to_owned(),
         );

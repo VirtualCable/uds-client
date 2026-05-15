@@ -143,9 +143,7 @@ impl RailChannel {
         if let Some(ptr) = &self.ptr {
             let context = ptr.as_mut_ptr();
             let capp = std::ffi::CString::new(app).unwrap();
-            let cdir = std::ffi::CString::new(
-                if dir.is_empty() { "C:\\" } else { dir }
-            ).unwrap();
+            let cdir = std::ffi::CString::new(if dir.is_empty() { "C:\\" } else { dir }).unwrap();
             let cargs = std::ffi::CString::new(args).unwrap();
             let exec = RAIL_EXEC_ORDER {
                 flags: RAIL_EXEC_FLAG_EXPAND_ARGUMENTS as u16,

@@ -70,7 +70,13 @@ pub fn render(
         width: 1.5,
         ..Default::default()
     };
-    pixmap.stroke_path(&rect_path, &stroke_paint, &stroke, Transform::identity(), None);
+    pixmap.stroke_path(
+        &rect_path,
+        &stroke_paint,
+        &stroke,
+        Transform::identity(),
+        None,
+    );
 
     // Text section — positioned relative to button screen position
     let tx = x + w as f32 * 0.1;
@@ -94,23 +100,32 @@ pub fn rounded_rect_path(x: f32, y: f32, w: f32, h: f32, r: f32) -> tiny_skia::P
     pb.line_to(x + w - r, y);
     // Top-right corner
     pb.cubic_to(
-        x + w - r + r * 0.552, y,
-        x + w, y + r - r * 0.552,
-        x + w, y + r,
+        x + w - r + r * 0.552,
+        y,
+        x + w,
+        y + r - r * 0.552,
+        x + w,
+        y + r,
     );
     pb.line_to(x + w, y + h - r);
     // Bottom-right corner
     pb.cubic_to(
-        x + w, y + h - r + r * 0.552,
-        x + w - r + r * 0.552, y + h,
-        x + w - r, y + h,
+        x + w,
+        y + h - r + r * 0.552,
+        x + w - r + r * 0.552,
+        y + h,
+        x + w - r,
+        y + h,
     );
     pb.line_to(x + r, y + h);
     // Bottom-left corner
     pb.cubic_to(
-        x + r - r * 0.552, y + h,
-        x, y + h - r + r * 0.552,
-        x, y + h - r,
+        x + r - r * 0.552,
+        y + h,
+        x,
+        y + h - r + r * 0.552,
+        x,
+        y + h - r,
     );
     pb.line_to(x, y + r);
     // Top-left corner

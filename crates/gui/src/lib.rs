@@ -29,9 +29,9 @@ mod launcher;
 mod rdp;
 mod wgpu_render;
 
-mod session;
 mod input;
 mod launcher_ui;
+mod session;
 
 use launcher::{LauncherInner, TestingLauncherState};
 use popup::PopupState;
@@ -131,7 +131,7 @@ impl AppHandler {
     }
 }
 
-// ── ApplicationHandler ────────────────────────────────────
+// ── ApplicationHandler ──────
 
 impl ApplicationHandler<UserEvent> for AppHandler {
     fn resumed(&mut self, el: &ActiveEventLoop) {

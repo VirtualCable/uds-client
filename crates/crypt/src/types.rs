@@ -146,3 +146,115 @@ impl TryFrom<&[u8]> for Ticket {
         Ok(Ticket::new(id))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shared_secret_from_hex_valid() {
+        let hex = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let ss = SharedSecret::from_hex(hex).unwrap();
+        assert_eq!(ss.as_ref().len(), 32);
+    }
+
+    #[test]
+    fn shared_secret_from_hex_too_short() {
+        assert!(SharedSecret::from_hex("aabb").is_err());
+    }
+
+    #[test]
+    fn shared_secret_from_hex_too_long() {
+        let hex = "00".repeat(33);
+        assert!(SharedSecret::from_hex(&hex).is_err());
+    }
+
+    #[test]
+    fn shared_secret_from_hex_non_hex() {
+        assert!(SharedSecret::from_hex("gg").is_err());
+    }
+
+    #[test]
+    fn shared_secret_from_hex_empty() {
+        assert!(SharedSecret::from_hex("").is_err());
+    }
+
+    #[test]
+    fn shared_secret_try_from_valid() {
+        let bytes = [42u8; 32];
+        let ss = SharedSecret::try_from(bytes.as_slice()).unwrap();
+        assert_eq!(*ss.as_ref(), bytes);
+    }
+
+    #[test]
+    fn shared_secret_try_from_wrong_length() {
+        assert!(SharedSecret::try_from([0u8; 31].as_slice()).is_err());
+        assert!(SharedSecret::try_from([0u8; 33].as_slice()).is_err());
+        assert!(SharedSecret::try_from([].as_slice()).is_err());
+    }
+
+    #[test]
+    fn ticket_validate_alphanumeric() {
+        let mut id = [0u8; 48];
+        id.fill(b'A');
+        assert!(Ticket::new(id).validate().is_ok());
+        id.fill(b'9');
+        assert!(Ticket::new(id).validate().is_ok());
+    }
+
+    #[test]
+    fn ticket_validate_space_fails() {
+        let id = [b' '; 48];
+        assert!(Ticket::new(id).validate().is_err());
+    }
+
+    #[test]
+    fn ticket_validate_null_fails() {
+        let id = [0u8; 48];
+        assert!(Ticket::new(id).validate().is_err());
+    }
+
+    #[test]
+    fn ticket_validate_non_ascii_fails() {
+        let id = [0xFFu8; 48];
+        assert!(Ticket::new(id).validate().is_err());
+    }
+
+    #[test]
+    fn ticket_validate_boundary() {
+        let mut id = [b'0'; 48];
+        assert!(Ticket::new(id).validate().is_ok());
+        id[0] = b'/'; // just below '0'
+        assert!(Ticket::new(id).validate().is_err());
+        id[0] = b':'; // just above '9'
+        assert!(Ticket::new(id).validate().is_err());
+    }
+
+    #[test]
+    fn ticket_as_str_valid() {
+        let id = [b'A'; 48];
+        let ticket = Ticket::new(id);
+        assert_eq!(ticket.as_str().len(), 48);
+    }
+
+    #[test]
+    fn ticket_as_str_invalid_utf8() {
+        let id = [0xFFu8; 48];
+        let ticket = Ticket::new(id);
+        assert_eq!(ticket.as_str(), "NOT_REPRESENTABLE_TICKET");
+    }
+
+    #[test]
+    fn ticket_try_from_valid() {
+        let bytes = [b'X'; 48];
+        let ticket = Ticket::try_from(bytes.as_slice()).unwrap();
+        assert_eq!(*ticket.as_ref(), bytes);
+    }
+
+    #[test]
+    fn ticket_try_from_wrong_length() {
+        assert!(Ticket::try_from([0u8; 47].as_slice()).is_err());
+        assert!(Ticket::try_from([0u8; 49].as_slice()).is_err());
+        assert!(Ticket::try_from([].as_slice()).is_err());
+    }
+}

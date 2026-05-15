@@ -269,3 +269,108 @@ impl From<&[u8]> for PacketBuffer {
         packet_buffer
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_header_min_valid() {
+        let mut pb = PacketBuffer::new();
+        pb.set_length(2).unwrap(); // channel only, no data
+        assert_eq!(pb.validate_header().unwrap(), 2);
+    }
+
+    #[test]
+    fn validate_header_zero_fails() {
+        // set_length(0) succeeds, but validate_header rejects length < 2
+        let mut pb = PacketBuffer::new();
+        pb.set_length(0).unwrap();
+        assert!(pb.validate_header().is_err());
+    }
+
+    #[test]
+    fn validate_header_length_one_fails() {
+        let mut pb = PacketBuffer::new();
+        pb.set_length(1).unwrap();
+        assert!(pb.validate_header().is_err());
+    }
+
+    #[test]
+    fn validate_header_too_big_fails() {
+        let mut pb = PacketBuffer::new();
+        assert!(pb.set_length(consts::MAX_PACKET_SIZE + 1).is_err());
+    }
+
+    #[test]
+    fn set_length_boundary() {
+        let mut pb = PacketBuffer::new();
+        assert!(pb.set_length(consts::MAX_PACKET_SIZE).is_ok());
+        assert_eq!(pb.length().unwrap(), consts::MAX_PACKET_SIZE);
+    }
+
+    #[test]
+    fn set_length_zero_ok_but_validation_fails() {
+        // set_length(0) doesn't err, but validate_header rejects it
+        let mut pb = PacketBuffer::new();
+        assert!(pb.set_length(0).is_ok());
+        assert!(pb.validate_header().is_err());
+    }
+
+    #[test]
+    fn create_factory_roundtrip() {
+        let data = b"hello, tunnel!";
+        let pb = PacketBuffer::create(42, data.len() + 2, 7, data).unwrap();
+        assert_eq!(pb.seq().unwrap(), 42);
+        assert_eq!(pb.length().unwrap(), data.len() + 2);
+        assert_eq!(pb.channel_id(), 7);
+        assert_eq!(pb.data(), data);
+    }
+
+    #[test]
+    fn create_data_too_large() {
+        let data = vec![0u8; consts::MAX_PACKET_SIZE];
+        assert!(PacketBuffer::create(0, data.len() + 2, 0, &data).is_err());
+    }
+
+    #[test]
+    fn ensure_capacity_valid() {
+        assert!(PacketBuffer::ensure_capacity(0).is_ok());
+        assert!(PacketBuffer::ensure_capacity(2048).is_ok());
+    }
+
+    #[test]
+    fn ensure_capacity_too_large() {
+        assert!(PacketBuffer::ensure_capacity(10_000).is_err());
+    }
+
+    #[test]
+    fn calc_data_with_channel_len_basic() {
+        assert_eq!(PacketBuffer::calc_data_with_channel_len(0).unwrap(), 2);
+        assert_eq!(PacketBuffer::calc_data_with_channel_len(100).unwrap(), 102);
+    }
+
+    #[test]
+    fn calc_data_with_channel_len_boundary() {
+        assert!(PacketBuffer::calc_data_with_channel_len(1000).is_ok());
+        // 10_000 is way beyond BUFFER_SIZE
+        assert!(PacketBuffer::calc_data_with_channel_len(10_000).is_err());
+    }
+
+    #[test]
+    fn set_channel_id_roundtrip() {
+        let mut pb = PacketBuffer::new();
+        for id in [0u16, 0x1234, u16::MAX] {
+            pb.set_channel_id(id);
+            assert_eq!(pb.channel_id(), id);
+        }
+    }
+
+    #[test]
+    fn set_data_roundtrip() {
+        let mut pb = PacketBuffer::new();
+        pb.set_data(b"test").unwrap();
+        pb.set_length(2 + 4).unwrap();
+        assert_eq!(pb.data(), b"test");
+    }
+}

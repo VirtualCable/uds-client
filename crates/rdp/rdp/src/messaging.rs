@@ -168,7 +168,10 @@ impl core::fmt::Debug for RdpMessage {
                 .field("height", height)
                 .finish(),
             RdpMessage::WindowIcon {
-                window_id, width, height, ..
+                window_id,
+                width,
+                height,
+                ..
             } => f
                 .debug_struct("WindowIcon")
                 .field("window_id", window_id)

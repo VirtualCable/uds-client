@@ -397,8 +397,6 @@ mod tests {
         assert!(result.is_err(), "Signature verification should have failed");
     }
 
-    // ── New tests ────────────────────────────────────────
-
     #[test]
     fn broker_response_into_result_ok() {
         let resp = BrokerResponse {

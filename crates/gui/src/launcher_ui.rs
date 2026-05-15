@@ -12,7 +12,11 @@ use crate::monitor;
 use crate::wgpu_render::WgpuRenderer;
 
 impl AppHandler {
-    pub(crate) fn open_launcher(&mut self, el: &ActiveEventLoop, inner: LauncherInner) -> Result<()> {
+    pub(crate) fn open_launcher(
+        &mut self,
+        el: &ActiveEventLoop,
+        inner: LauncherInner,
+    ) -> Result<()> {
         let window = Arc::new(
             el.create_window(
                 Window::default_attributes()

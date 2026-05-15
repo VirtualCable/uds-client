@@ -14,8 +14,7 @@ pub struct Fps {
 
 impl Fps {
     pub fn new() -> Self {
-        let (bg_rgba, bw, bh) =
-            crate::draw::load_png_rgba(include_bytes!("../images/fps.png"));
+        let (bg_rgba, bw, bh) = crate::draw::load_png_rgba(include_bytes!("../images/fps.png"));
         Self {
             last_instant: std::time::Instant::now(),
             frames: Vec::new(),

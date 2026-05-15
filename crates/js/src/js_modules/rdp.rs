@@ -71,7 +71,7 @@ struct RdpSettings {
     pub rail_args: Option<String>,
     pub rail_working_dir: Option<String>,
     pub use_local_scaler: Option<bool>,
-    pub server_info: Option<ServerInfo>,  // Not used by us, but may be used by others (as messages, etc..)
+    pub server_info: Option<ServerInfo>, // Not used by us, but may be used by others (as messages, etc..)
 }
 
 impl Default for RdpSettings {
@@ -162,9 +162,12 @@ fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
         rail_app: rdp_settings.rail_app.or(defs.rail_app),
         rail_args: rdp_settings.rail_args.or(defs.rail_args),
         rail_working_dir: rdp_settings.rail_working_dir.or(defs.rail_working_dir),
-        scale_factor: 1.0,  // Will be overrided by local monitor scale factor in gui
+        scale_factor: 1.0, // Will be overrided by local monitor scale factor in gui
         use_local_scaler: rdp_settings.use_local_scaler.unwrap_or(true),
-        server_info: rdp_settings.server_info.map(|s| settings::ServerInfo { id: s.id, token: s.token }),
+        server_info: rdp_settings.server_info.map(|s| settings::ServerInfo {
+            id: s.id,
+            token: s.token,
+        }),
     };
 
     log::debug!("Starting RDP with settings: {:?}", settings);
@@ -178,7 +181,11 @@ fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
             server_token: srv.token.clone(),
         };
         if gui::ipc::try_send(&srv.id, &msg) {
-            log::info!("Sent RAIL app via IPC channel: {} (server_id={})", rail_app, srv.id);
+            log::info!(
+                "Sent RAIL app via IPC channel: {} (server_id={})",
+                rail_app,
+                srv.id
+            );
             return Ok(JsValue::undefined());
         }
     }
