@@ -517,6 +517,15 @@ impl Rdp {
                 ))?;
                 break;
             }
+
+            if handle_count > handles.len() - 2 {
+                log::error!("Too many event handles from FreeRDP: {}", handle_count);
+                tx.send(RdpMessage::Error(
+                    "Too many event handles, exiting.".to_string(),
+                ))?;
+                break;
+            }
+
             // Add our stop event handle and command event handle
             handles[handle_count] = self.stop_event.as_handle();
             handles[handle_count + 1] = self.command_event.as_handle();
@@ -675,6 +684,12 @@ impl Drop for Rdp {
         log::debug!("* Dropping Rdp instance, cleaning up resources...");
         unsafe {
             if let Some(conn) = self.instance {
+                let ctx = conn.context as *mut context::RdpContext;
+                if !ctx.is_null() {
+                    log::debug!(" **** Clearing owner in context to prevent UAF in callbacks");
+                    (*ctx).owner = std::ptr::null_mut();
+                }
+
                 freerdp_disconnect(conn.as_mut_ptr());
                 freerdp_context_free(conn.as_mut_ptr());
                 freerdp_free(conn.as_mut_ptr());

@@ -66,11 +66,10 @@ type ReasonType = i32; // int32_t
 /// This function is unsafe because it dereferences raw pointers to set callback functions.
 pub unsafe fn set_instance_callbacks(instance: *mut freerdp) {
     unsafe {
-        // Callback assignments
-        // All commented methods are provided by freerdp3
-        // Have to make some tests, but probably, the already
-        // manages the internal GDI state
-        // and we don't need to override them
+        if instance.is_null() {
+            debug!("instance_c::set_instance_callbacks: instance is null");
+            return;
+        }
         debug!("Setting instance callbacks");
         // Setups the channels event listeners
         (*instance).PreConnect = Some(pre_connect);
