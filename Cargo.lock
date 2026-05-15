@@ -4947,6 +4947,7 @@ dependencies = [
  "tracing-subscriber",
  "widestring",
  "windows 0.62.2",
+ "zeroize",
 ]
 
 [[package]]

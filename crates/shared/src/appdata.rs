@@ -69,20 +69,22 @@ impl AppData {
     }
 
     pub fn save(&self) {
-        if let Some(proj_dirs) = ProjectDirs::from(APP_QUALIFIER, APP_ORGANIZATION, APP_APPLICATION)
-        {
+        if let Some(proj_dirs) = ProjectDirs::from(APP_QUALIFIER, APP_ORGANIZATION, APP_APPLICATION) {
             let data_dir = proj_dirs.data_dir();
             if let Err(e) = std::fs::create_dir_all(data_dir) {
                 log::error!("Failed to create data directory: {}", e);
                 return;
             }
             let file_path = data_dir.join(APP_DATA_FILE);
-            if let Ok(data) = serde_json::to_string_pretty(self)
-                && let Err(e) = std::fs::write(file_path, data)
-            {
-                log::error!("Failed to write app data: {}", e);
-            } else {
-                log::error!("Failed to serialize app data");
+            match serde_json::to_string_pretty(self) {
+                Ok(data) => {
+                    if let Err(e) = std::fs::write(&file_path, data) {
+                        log::error!("Failed to write app data to {:?}: {}", file_path, e);
+                    }
+                }
+                Err(e) => {
+                    log::error!("Failed to serialize app data: {}", e);
+                }
             }
         }
     }

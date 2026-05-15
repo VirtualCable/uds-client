@@ -39,7 +39,8 @@ use windows::Win32::{
 };
 
 pub fn crypt_protect_data(input: &str) -> Result<String> {
-    let wide = widestring::U16CString::from_str(input)?;
+    use zeroize::Zeroize;
+    let mut wide = widestring::U16CString::from_str(input)?;
     let input_bytes = unsafe {
         std::slice::from_raw_parts(
             wide.as_ptr() as *const u8,
@@ -57,7 +58,7 @@ pub fn crypt_protect_data(input: &str) -> Result<String> {
         pbData: ptr::null_mut(),
     };
 
-    unsafe {
+    let result = unsafe {
         // First try with CRYPTPROTECT_LOCAL_MACHINE, if fails, try with CRYPTPROTECT_LOCAL_MACHINE | CRYPTPROTECT_UI_FORBIDDEN, that is more permissive
         if CryptProtectData(
             &in_blob,
@@ -78,9 +79,18 @@ pub fn crypt_protect_data(input: &str) -> Result<String> {
                 None,
                 CRYPTPROTECT_LOCAL_MACHINE | CRYPTPROTECT_UI_FORBIDDEN,
                 &mut out_blob,
-            )?;
+            )
+        } else {
+            Ok(())
         }
+    };
+
+    // Zeroize the wide string as soon as possible
+    unsafe {
+        wide.as_mut_slice().zeroize();
     }
+
+    result?;
 
     let encrypted =
         unsafe { std::slice::from_raw_parts(out_blob.pbData, out_blob.cbData as usize).to_vec() };

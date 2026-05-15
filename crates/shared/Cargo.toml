@@ -16,6 +16,7 @@ anyhow.workspace = true
 chrono.workspace = true
 directories-next.workspace = true
 hostname.workspace = true
+zeroize.workspace = true
 
 # Serialization
 serde.workspace = true

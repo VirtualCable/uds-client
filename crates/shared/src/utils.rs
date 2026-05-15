@@ -34,12 +34,22 @@ pub fn split_lines(text: &str, max_width: usize) -> Vec<&str> {
     let mut lines = Vec::new();
     for line in text.lines() {
         let line = line.trim();
-        let mut start = 0;
-        let line_len = line.len();
-        while start < line_len {
-            let end = usize::min(start + max_width, line_len);
-            lines.push(&line[start..end]);
-            start += max_width;
+        let char_indices: Vec<usize> = line.char_indices().map(|(i, _)| i).collect();
+        if char_indices.is_empty() {
+            continue;
+        }
+
+        let mut start_idx = 0;
+        while start_idx < char_indices.len() {
+            let byte_start = char_indices[start_idx];
+            let end_idx = start_idx + max_width;
+            let byte_end = if end_idx < char_indices.len() {
+                char_indices[end_idx]
+            } else {
+                line.len()
+            };
+            lines.push(&line[byte_start..byte_end]);
+            start_idx += max_width;
         }
     }
     lines

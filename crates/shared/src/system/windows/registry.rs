@@ -50,7 +50,12 @@ pub fn write_hkcu_str(key: &str, value_name: &str, value_data: &str) -> Result<(
     unsafe {
         RegOpenKeyExW(HKEY_CURRENT_USER, key, None, KEY_SET_VALUE, &mut hkey).ok()?;
 
-        let data_bytes = value_data.as_bytes();
+        let data_w = widestring::U16CString::from_str(value_data)?;
+        let data_bytes = std::slice::from_raw_parts(
+            data_w.as_ptr() as *const u8,
+            data_w.as_slice_with_nul().len() * 2,
+        );
+
         RegSetValueExW(hkey, value_name, None, REG_SZ, Some(data_bytes)).ok()?;
 
         RegCloseKey(hkey).ok()?;
@@ -131,8 +136,9 @@ fn read_key_str(key_type: KeyType, key: &str, value_name: &str) -> anyhow::Resul
         )
         .ok()?;
 
-        // Allocate buffer
-        let mut buffer: Vec<u16> = vec![0; (data_len / 2) as usize];
+        // Allocate buffer (size in bytes, but we want u16 units)
+        // Ensure we have enough space even if data_len is odd
+        let mut buffer: Vec<u16> = vec![0; (data_len as usize + 1) / 2];
 
         // Second call: read the actual value
         RegGetValueW(
