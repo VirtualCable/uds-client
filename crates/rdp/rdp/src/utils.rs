@@ -143,3 +143,25 @@ impl SafeHandle {
         self.ptr.as_ptr() as HANDLE
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pixel_format_rgba32() {
+        let pf = pixel_format(32, 3, 8, 8, 8, 8);
+        assert_eq!(pf, 0x20038888);
+    }
+
+    #[test]
+    fn pixel_format_bgra32() {
+        let pf = pixel_format(32, 4, 8, 8, 8, 8);
+        assert_eq!(pf, 0x20048888);
+    }
+
+    #[test]
+    fn pixel_format_all_zero() {
+        assert_eq!(pixel_format(0, 0, 0, 0, 0, 0), 0);
+    }
+}

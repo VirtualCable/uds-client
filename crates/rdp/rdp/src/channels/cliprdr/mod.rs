@@ -250,3 +250,42 @@ impl RdpClipboard {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn from_format_id_unicode() {
+        assert_eq!(
+            RdpClipboardFormat::from_format_id(freerdp_sys::CF_UNICODETEXT),
+            Some(RdpClipboardFormat::TextUnicode)
+        );
+    }
+
+    #[test]
+    fn from_format_id_text() {
+        assert_eq!(
+            RdpClipboardFormat::from_format_id(freerdp_sys::CF_TEXT),
+            Some(RdpClipboardFormat::TextAscii)
+        );
+    }
+
+    #[test]
+    fn from_format_id_unknown() {
+        assert_eq!(RdpClipboardFormat::from_format_id(99999), None);
+    }
+
+    #[test]
+    fn to_format_id_roundtrip() {
+        for fmt in [
+            RdpClipboardFormat::TextUnicode,
+            RdpClipboardFormat::TextAscii,
+            RdpClipboardFormat::TextOem,
+            RdpClipboardFormat::Image,
+        ] {
+            let id = fmt.to_format_id();
+            assert_eq!(RdpClipboardFormat::from_format_id(id), Some(fmt));
+        }
+    }
+}

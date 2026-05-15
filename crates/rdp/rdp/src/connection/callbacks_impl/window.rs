@@ -301,3 +301,34 @@ impl WindowCallbacks for Rdp {
         true
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn on_screen() {
+        assert!(!is_offscreen_pos(100, 200));
+        assert!(!is_offscreen_pos(-500, -500));
+    }
+
+    #[test]
+    fn boundary_not_offscreen() {
+        assert!(!is_offscreen_pos(OFFSCREEN_THRESHOLD, 0));
+        assert!(!is_offscreen_pos(0, OFFSCREEN_THRESHOLD));
+        assert!(!is_offscreen_pos(OFFSCREEN_THRESHOLD, OFFSCREEN_THRESHOLD));
+    }
+
+    #[test]
+    fn offscreen_below_threshold() {
+        assert!(is_offscreen_pos(OFFSCREEN_THRESHOLD - 1, 0));
+        assert!(is_offscreen_pos(0, OFFSCREEN_THRESHOLD - 1));
+        assert!(is_offscreen_pos(-2000, 0));
+        assert!(is_offscreen_pos(0, -2000));
+    }
+
+    #[test]
+    fn minimized_is_offscreen() {
+        assert!(is_offscreen_pos(-32000, -32000));
+    }
+}

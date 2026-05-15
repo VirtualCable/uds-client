@@ -69,7 +69,7 @@ pub unsafe fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
     log::debug!(" **** Setting Pointer Update Callbacks: {:?}", overrides);
     unsafe {
         let update = (*context).update;
-        let pointer = (*update).pointer;
+        let pointer = (*update).pointer;  // Does not mind getting it before checking update, because the value is not used until checks below
         if update.is_null() || pointer.is_null() {
             log::debug!(" **** Pointer not initialized, cannot override callbacks.");
             return;

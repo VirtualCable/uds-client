@@ -155,3 +155,59 @@ impl fmt::Debug for RdpSettings {
             .finish()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_port_is_3389() {
+        assert_eq!(RdpSettings::default().port, 3389);
+    }
+
+    #[test]
+    fn default_nla_is_true() {
+        assert!(RdpSettings::default().use_nla);
+    }
+
+    #[test]
+    fn default_screen_is_fixed_1024x768() {
+        let s = RdpSettings::default();
+        assert!(!s.screen_size.is_fullscreen());
+        assert_eq!(s.screen_size.width(), 1024);
+        assert_eq!(s.screen_size.height(), 768);
+    }
+
+    #[test]
+    fn default_drives_redirect_all() {
+        assert_eq!(RdpSettings::default().drives_to_redirect, vec!["all"]);
+    }
+
+    #[test]
+    fn default_server_info_none() {
+        assert!(RdpSettings::default().server_info.is_none());
+    }
+
+    #[test]
+    fn debug_masks_password() {
+        let s = RdpSettings {
+            password: "secret".into(),
+            ..Default::default()
+        };
+        let d = format!("{s:?}");
+        assert!(!d.contains("secret"));
+        assert!(d.contains("****"));
+    }
+
+    #[test]
+    fn server_info_token_zeroizes() {
+        let mut info = ServerInfo {
+            id: "myid".into(),
+            token: "mytok".into(),
+        };
+        use zeroize::Zeroize;
+        info.zeroize();
+        assert!(info.token.is_empty());
+        assert!(!info.id.is_empty());
+    }
+}

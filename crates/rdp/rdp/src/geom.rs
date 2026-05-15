@@ -81,14 +81,14 @@ pub enum ScreenSize {
 impl ScreenSize {
     pub fn width(&self) -> u32 {
         match self {
-            ScreenSize::Full => 1200,
+            ScreenSize::Full => 1200,  // Fallback value, not too small and not too large
             ScreenSize::Fixed(w, _) => *w,
         }
     }
 
     pub fn height(&self) -> u32 {
         match self {
-            ScreenSize::Full => 675,
+            ScreenSize::Full => 675,  // Fallback value, not too small and not too large
             ScreenSize::Fixed(_, h) => *h,
         }
     }
@@ -102,5 +102,59 @@ impl ScreenSize {
             ScreenSize::Fixed(w, h) => Some((*w, *h)),
             ScreenSize::Full => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rect_union_overlapping() {
+        let a = Rect::new(0, 0, 10, 10);
+        let b = Rect::new(5, 5, 10, 10);
+        let u = a.union(&b);
+        assert_eq!(u.x, 0);
+        assert_eq!(u.y, 0);
+        assert_eq!(u.w, 15);
+        assert_eq!(u.h, 15);
+    }
+
+    #[test]
+    fn rect_union_disjoint() {
+        let a = Rect::new(0, 0, 5, 5);
+        let b = Rect::new(10, 10, 5, 5);
+        let u = a.union(&b);
+        assert_eq!(u.x, 0);
+        assert_eq!(u.y, 0);
+        assert_eq!(u.w, 15);
+        assert_eq!(u.h, 15);
+    }
+
+    #[test]
+    fn rect_union_same() {
+        let a = Rect::new(1, 2, 3, 4);
+        let u = a.union(&a);
+        assert_eq!(u.x, 1);
+        assert_eq!(u.y, 2);
+        assert_eq!(u.w, 3);
+        assert_eq!(u.h, 4);
+    }
+
+    #[test]
+    fn screen_size_full() {
+        assert!(ScreenSize::Full.is_fullscreen());
+        assert_eq!(ScreenSize::Full.width(), 1200);
+        assert_eq!(ScreenSize::Full.height(), 675);
+        assert!(ScreenSize::Full.get_fixed_size().is_none());
+    }
+
+    #[test]
+    fn screen_size_fixed() {
+        let s = ScreenSize::Fixed(1920, 1080);
+        assert!(!s.is_fullscreen());
+        assert_eq!(s.width(), 1920);
+        assert_eq!(s.height(), 1080);
+        assert_eq!(s.get_fixed_size(), Some((1920, 1080)));
     }
 }
