@@ -79,7 +79,9 @@ impl RdpChannels {
     }
 
     pub fn clear_cliprdr(&mut self) {
+        self.stop_native();
         self.cliprdr = None;
+        self.native = None;
     }
 
     pub fn cliprdr(&self) -> Option<cliprdr::RdpClipboard> {

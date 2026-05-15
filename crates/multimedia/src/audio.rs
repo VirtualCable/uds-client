@@ -294,10 +294,12 @@ impl<I: Iterator<Item = f32>> Iterator for ResamplerIterator<I> {
         // next sample position
         self.pos += ratio;
 
-        // clear buffer if consumed
-        if self.pos >= 1.0 {
+        // clear buffer of consumed samples
+        while self.pos >= 1.0 {
             self.pos -= 1.0;
-            self.buffer.remove(0);
+            if !self.buffer.is_empty() {
+                self.buffer.remove(0);
+            }
         }
 
         Some(out)

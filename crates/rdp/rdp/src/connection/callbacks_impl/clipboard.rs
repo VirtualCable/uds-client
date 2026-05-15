@@ -184,8 +184,9 @@ impl ClipboardHandler for Rdp {
 
                         log::debug!("Providing clipboard text data: {}", clipboard_text);
 
-                        let text_bytes = clipboard_text.encode_utf16().collect::<Vec<u16>>();
-                        let byte_len = ((text_bytes.len() + 1) * 2) as u32; // +1 for null terminator
+                        let mut text_bytes = clipboard_text.encode_utf16().collect::<Vec<u16>>();
+                        text_bytes.push(0); // Add null terminator
+                        let byte_len = (text_bytes.len() * 2) as u32;
 
                         let response_header = freerdp_sys::CLIPRDR_HEADER {
                             msgType: 0,
@@ -222,16 +223,21 @@ impl ClipboardHandler for Rdp {
             data
         );
         // Assume data is UTF-16LE encoded text
-        if !data.len().is_multiple_of(2) {
+        if data.len() % 2 != 0 {
             log::warn!("Received clipboard data length is not even, cannot be valid UTF-16");
             return freerdp_sys::CHANNEL_RC_OK;
         }
         let u16_data: Vec<u16> = data
-            .chunks(2)
+            .chunks_exact(2)
             .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
             .collect();
-        // Now to String
-        if let Ok(text) = String::from_utf16(&u16_data) {
+        // Now to String, trimming null terminator if present
+        let u16_data_trimmed = match u16_data.iter().position(|&v| v == 0) {
+            Some(pos) => &u16_data[..pos],
+            None => &u16_data,
+        };
+
+        if let Ok(text) = String::from_utf16(u16_data_trimmed) {
             log::debug!("Received clipboard text data: {}", text);
             // Set to local clipboard
             if let Some(native) = self.channels.read().unwrap().native()
