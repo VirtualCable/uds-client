@@ -33,7 +33,7 @@ impl AppHandler {
             window: Some(window),
             renderer: Some(renderer),
             inner,
-            last_mouse_pos: None,
+            ..Default::default()
         });
         self.register_window(wid, WindowKind::Launcher);
         Ok(())
@@ -65,6 +65,10 @@ impl AppHandler {
             {
                 if let Some(pos) = l.last_mouse_pos {
                     l.inner.handle_click(pos.0, pos.1);
+                    if l.inner.is_cancelled() {
+                        self.stop.trigger();
+                        el.exit();
+                    }
                 }
                 if let Some(w) = &l.window {
                     w.request_redraw();
@@ -72,7 +76,14 @@ impl AppHandler {
             }
             WindowEvent::CursorMoved { position, .. } => {
                 let sf = *monitor::SCALE_FACTOR as f32;
-                l.last_mouse_pos = Some((position.x as f32 / sf, position.y as f32 / sf));
+                let lx = position.x as f32 / sf;
+                let ly = position.y as f32 / sf;
+                l.last_mouse_pos = Some((lx, ly));
+                if l.inner.handle_mouse_move(lx, ly) {
+                    if let Some(w) = &l.window {
+                        w.request_redraw();
+                    }
+                }
             }
             _ => {}
         }
@@ -92,12 +103,21 @@ impl AppHandler {
             WindowEvent::MouseInput { state, button, .. }
                 if state.is_pressed() && button == winit::event::MouseButton::Left =>
             {
-                if let Some(pos) = self.last_pointer {
-                    close = popup.handle_click(pos.x as f32, pos.y as f32);
+                if let Some(pos) = popup.last_mouse_pos {
+                    close = popup.handle_click(pos.0, pos.1);
+                }
+                if !close {
+                    popup.window.request_redraw();
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
-                self.last_pointer = Some(position);
+                let sf = popup.scale;
+                let lx = position.x as f32 / sf;
+                let ly = position.y as f32 / sf;
+                popup.last_mouse_pos = Some((lx, ly));
+                if popup.handle_mouse_move(lx, ly) {
+                    popup.window.request_redraw();
+                }
             }
             _ => {}
         }

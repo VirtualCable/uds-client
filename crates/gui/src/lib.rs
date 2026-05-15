@@ -188,8 +188,11 @@ impl ApplicationHandler<UserEvent> for AppHandler {
                     Some(&WindowKind::RdpRail(id)) => {
                         self.handle_rail_redraw(id);
                     }
-                    Some(WindowKind::About) => {
+                     Some(WindowKind::About) => {
                         self.handle_about_event(WindowEvent::RedrawRequested)
+                    }
+                    Some(WindowKind::Popup) => {
+                        self.handle_popup_event(WindowEvent::RedrawRequested)
                     }
                     _ => {}
                 }
@@ -219,15 +222,16 @@ impl ApplicationHandler<UserEvent> for AppHandler {
     fn user_event(&mut self, _el: &ActiveEventLoop, event: UserEvent) {
         match event {
             UserEvent::Tick => {
-                if let Some(ref r) = self.rdp {
+                if let Some(ref mut r) = self.rdp {
                     r.window.window.request_redraw();
                 }
-                if let Some(ref p) = self.popup {
+                if let Some(ref mut p) = self.popup {
                     p.window.request_redraw();
                 }
-                if let Some(ref l) = self.launcher
+                if let Some(ref mut l) = self.launcher
                     && let Some(ref w) = l.window
                 {
+                    l.animation_time += 0.25; // Control wave speed
                     w.request_redraw();
                 }
             }

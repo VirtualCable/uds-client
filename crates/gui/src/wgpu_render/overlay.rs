@@ -26,7 +26,8 @@ pub struct OverlayRenderer {
     bgl: wgpu::BindGroupLayout,
     pipeline: wgpu::RenderPipeline,
     sampler: wgpu::Sampler,
-    cache: std::collections::HashMap<(u32, u32), (wgpu::Texture, wgpu::TextureView)>,
+    // Cache textures by (width, height, index_in_frame)
+    cache: std::collections::HashMap<(u32, u32, usize), (wgpu::Texture, wgpu::TextureView)>,
 }
 
 impl OverlayRenderer {
@@ -124,21 +125,23 @@ impl OverlayRenderer {
         surf_w: u32,
         surf_h: u32,
     ) {
-        for ov in overlays {
-            if ov.rgba.is_empty() || ov.width == 0 || ov.height == 0 {
+        for (idx, ov) in overlays.iter().enumerate() {
+            if ov.rgba.is_empty() {
                 continue;
             }
-            let key = (ov.width, ov.height);
+
+            let key = (ov.width, ov.height, idx);
             let (tex, texv) = if let Some(c) = self.cache.get(&key) {
                 (&c.0, &c.1)
             } else {
-                let t = device.create_texture(&wgpu::TextureDescriptor {
-                    label: Some("ov_tex"),
-                    size: wgpu::Extent3d {
-                        width: ov.width,
-                        height: ov.height,
-                        depth_or_array_layers: 1,
-                    },
+                let size = wgpu::Extent3d {
+                    width: ov.width,
+                    height: ov.height,
+                    depth_or_array_layers: 1,
+                };
+                let tex = device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("overlay_texture"),
+                    size,
                     mip_level_count: 1,
                     sample_count: 1,
                     dimension: wgpu::TextureDimension::D2,
@@ -146,8 +149,8 @@ impl OverlayRenderer {
                     usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
                     view_formats: &[],
                 });
-                let v = t.create_view(&wgpu::TextureViewDescriptor::default());
-                self.cache.insert(key, (t, v));
+                let texv = tex.create_view(&wgpu::TextureViewDescriptor::default());
+                self.cache.insert(key, (tex, texv));
                 let e = self.cache.get(&key).unwrap();
                 (&e.0, &e.1)
             };

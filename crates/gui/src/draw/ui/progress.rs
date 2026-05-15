@@ -9,32 +9,43 @@ use tiny_skia::{Color, FillRule, Paint, PathBuilder, Pixmap, Transform};
 /// `pct` is 0.0–100.0.
 pub fn render(pct: f32, w: u32, h: u32) -> Vec<u8> {
     let mut pixmap = Pixmap::new(w, h).unwrap();
+    let s = h as f32 / 16.0; // Assume 16px is base height
 
     // Background (dark track)
     let bg_path = rounded_rect(0.0, 0.0, w as f32, h as f32, h as f32 / 2.0);
     let mut bg_paint = Paint::default();
-    bg_paint.set_color(Color::from_rgba8(0x40, 0x40, 0x60, 0xFF));
-    pixmap.fill_path(
-        &bg_path,
-        &bg_paint,
-        FillRule::Winding,
-        Transform::identity(),
-        None,
-    );
+    bg_paint.set_color(Color::from_rgba8(0x25, 0x25, 0x35, 0xFF));
+    pixmap.fill_path(&bg_path, &bg_paint, FillRule::Winding, Transform::identity(), None);
+
+    // Track Border
+    let mut border_paint = Paint::default();
+    border_paint.set_color(Color::from_rgba8(0x45, 0x45, 0x55, 0xFF));
+    let stroke = tiny_skia::Stroke {
+        width: 1.0 * s,
+        ..Default::default()
+    };
+    pixmap.stroke_path(&bg_path, &border_paint, &stroke, Transform::identity(), None);
 
     // Filled portion
-    let fw = (w as f32 * pct / 100.0).round() as u32;
-    if fw > 0 {
-        let fill_path = rounded_rect(0.0, 0.0, fw as f32, h as f32, h as f32 / 2.0);
+    let fw = (w as f32 * pct / 100.0).clamp(0.0, w as f32);
+    if fw > (h as f32 / 2.0) {
+        let fill_path = rounded_rect(1.0 * s, 1.0 * s, fw - 2.0 * s, h as f32 - 2.0 * s, (h as f32 - 2.0 * s) / 2.0);
+        
+        // Gradient fill
         let mut fill_paint = Paint::default();
-        fill_paint.set_color(Color::from_rgba8(0x60, 0xC0, 0xFF, 0xFF));
-        pixmap.fill_path(
-            &fill_path,
-            &fill_paint,
-            FillRule::Winding,
+        let grad = tiny_skia::LinearGradient::new(
+            tiny_skia::Point::from_xy(0.0, 0.0),
+            tiny_skia::Point::from_xy(0.0, h as f32),
+            vec![
+                tiny_skia::GradientStop::new(0.0, Color::from_rgba8(0x60, 0xC0, 0xFF, 0xFF)),
+                tiny_skia::GradientStop::new(1.0, Color::from_rgba8(0x20, 0x80, 0xE0, 0xFF)),
+            ],
+            tiny_skia::SpreadMode::Pad,
             Transform::identity(),
-            None,
-        );
+        ).unwrap();
+        fill_paint.shader = grad;
+        
+        pixmap.fill_path(&fill_path, &fill_paint, FillRule::Winding, Transform::identity(), None);
     }
 
     pixmap.take()

@@ -78,10 +78,15 @@ pub fn render(
         None,
     );
 
-    // Text section — positioned relative to button screen position
-    let tx = x + w as f32 * 0.1;
-    let ty = y + h as f32 * 0.15;
+    // Text section — positioned at the absolute center of the button
+    let tx = x + w as f32 / 2.0;
+    let ty = y + h as f32 / 2.0;
     let section = Section::default()
+        .with_layout(
+            wgpu_text::glyph_brush::Layout::default()
+                .h_align(wgpu_text::glyph_brush::HorizontalAlign::Center)
+                .v_align(wgpu_text::glyph_brush::VerticalAlign::Center),
+        )
         .add_text(
             Text::new(label)
                 .with_scale(style.font_scale)

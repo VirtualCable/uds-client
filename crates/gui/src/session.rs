@@ -330,6 +330,8 @@ impl AppHandler {
                             progress_duration_secs: 30,
                             phase: ProgressPhase::Connecting,
                             auto_animate: false,
+                            hover_idx: None,
+                            cancelled: false,
                         };
                         if let Some(w) = &l.window {
                             w.set_visible(true);
@@ -384,21 +386,35 @@ impl AppHandler {
                         progress_duration_secs: 5,
                         phase: ProgressPhase::Connecting,
                         auto_animate: true,
+                        hover_idx: None,
+                        cancelled: false,
                     }
                 }
                 LaunchAction::GoInvisible => launcher.inner = LauncherInner::Invisible,
                 LaunchAction::ShowWarning => {
-                    launcher.inner = LauncherInner::Warning("This is a warning message.".into())
+                    if let Ok(p) = PopupState::new(el, PopupKind::Warning("This is a test warning message.".into())) {
+                        let wid = p.window.id();
+                        self.register_window(wid, WindowKind::Popup);
+                        self.popup = Some(p);
+                    }
                 }
                 LaunchAction::ShowError => {
-                    launcher.inner = LauncherInner::Error("This is an error message.".into())
+                    if let Ok(p) = PopupState::new(el, PopupKind::Error("This is a test error message.".into())) {
+                        let wid = p.window.id();
+                        self.register_window(wid, WindowKind::Popup);
+                        self.popup = Some(p);
+                    }
                 }
                 LaunchAction::ShowYesNo => {
                     let (rtx, _) = tokio::sync::oneshot::channel::<bool>();
-                    launcher.inner = LauncherInner::YesNo {
-                        message: "Do you want to continue?".into(),
+                    if let Ok(p) = PopupState::new(el, PopupKind::YesNo {
+                        message: "This is a test confirmation message. Do you want to continue?".into(),
                         response: Arc::new(std::sync::RwLock::new(Some(rtx))),
-                    };
+                    }) {
+                        let wid = p.window.id();
+                        self.register_window(wid, WindowKind::Popup);
+                        self.popup = Some(p);
+                    }
                 }
                 LaunchAction::ConnectRdp | LaunchAction::ConnectRail => {
                     let is_rail = matches!(action, LaunchAction::ConnectRail);
