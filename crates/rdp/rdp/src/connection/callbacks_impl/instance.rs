@@ -34,9 +34,42 @@ use crate::callbacks::instance;
 
 use super::Rdp;
 
+// Sombra de S_H264_CONTEXT de FreeRDP para acceder a NumberOfThreads
+// ya que el header h264.h no es público.
+#[repr(C)]
+struct H264ContextShadow {
+    _compressor: i32,
+    _width: u32,
+    _height: u32,
+    _rate_control_mode: u32,
+    _bit_rate: u32,
+    _frame_rate: u32,
+    _qp: u32,
+    _usage_type: u32,
+    _hw_accel: u32,
+    pub num_threads: u32,
+}
+
 impl instance::InstanceCallbacks for Rdp {
     fn on_post_connect(&mut self) -> bool {
         log::debug!(" **** Connected successfully!");
+
+        // Limit FFmpeg threads to avoid the thread-per-core explosion
+        if let Some(instance) = &self.instance {
+            unsafe {
+                let context = instance.context;
+                if !context.is_null() && !(*context).codecs.is_null() {
+                    let codecs = (*context).codecs;
+                    let h264 = (*codecs).h264;
+                    if !h264.is_null() {
+                        log::debug!("Limiting FFmpeg decoder threads to 2 (via Shadow Struct)");
+                        let h264_shadow = h264 as *mut H264ContextShadow;
+                        (*h264_shadow).num_threads = 2;
+                    }
+                }
+            }
+        }
+
         true
     }
 }
