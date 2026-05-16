@@ -4,6 +4,96 @@ use shared::log;
 use super::RdpState;
 use crate::monitor;
 
+fn rect_contains(outer: &rdp_ffi::geom::Rect, inner: &rdp_ffi::geom::Rect) -> bool {
+    inner.x >= outer.x
+        && inner.y >= outer.y
+        && (inner.x + inner.w as i32) <= (outer.x + outer.w as i32)
+        && (inner.y + inner.h as i32) <= (outer.y + outer.h as i32)
+}
+
+fn rect_intersects(r1: &rdp_ffi::geom::Rect, r2: &rdp_ffi::geom::Rect) -> bool {
+    r1.x < r2.x + r2.w as i32 && r1.x + r1.w as i32 > r2.x && r1.y < r2.y + r2.h as i32 && r1.y + r1.h as i32 > r2.y
+}
+
+fn rect_area(r: &rdp_ffi::geom::Rect) -> u32 {
+    r.w * r.h
+}
+
+fn merge_rects(mut rects: Vec<rdp_ffi::geom::Rect>) -> Vec<rdp_ffi::geom::Rect> {
+    if rects.len() <= 1 {
+        return rects;
+    }
+
+    if rects.len() > 500 {
+        let mut joined = rects[0];
+        for r in &rects[1..] {
+            joined = joined.union(r);
+        }
+        return vec![joined];
+    }
+
+    // 1. Deduplicate
+    if rects.len() > 1 {
+        let mut i = 0;
+        while i < rects.len() {
+            let mut j = 0;
+            let mut removed = false;
+            while j < rects.len() {
+                if i != j && rect_contains(&rects[j], &rects[i]) {
+                    rects.remove(i);
+                    removed = true;
+                    break;
+                }
+                j += 1;
+            }
+            if !removed {
+                i += 1;
+            }
+        }
+    }
+
+    let mut changed = true;
+    while changed && rects.len() > 1 {
+        changed = false;
+        let mut i = 0;
+        while i < rects.len() {
+            let mut j = i + 1;
+            while j < rects.len() {
+                let r1 = rects[i];
+                let r2 = rects[j];
+
+                let mut should_merge = rect_intersects(&r1, &r2);
+                if !should_merge {
+                    let union = r1.union(&r2);
+                    if rect_area(&union) < (rect_area(&r1) + rect_area(&r2)).saturating_mul(115) / 100 {
+                        should_merge = true;
+                    }
+                }
+
+                if should_merge {
+                    rects[i] = r1.union(&r2);
+                    rects.remove(j);
+                    changed = true;
+                } else {
+                    j += 1;
+                }
+            }
+            i += 1;
+        }
+    }
+
+    const MAX_RECTS_PER_UPDATE: usize = 20;
+    if rects.len() > MAX_RECTS_PER_UPDATE {
+        let mut joined = rects[0];
+        for r in &rects[1..] {
+            joined = joined.union(r);
+        }
+        return vec![joined];
+    }
+
+    rects
+}
+
 impl RdpState {
     pub fn update_screen(&mut self) -> Result<()> {
         let gdi = self.gdi;
@@ -24,37 +114,70 @@ impl RdpState {
             return Ok(());
         }
 
+        // Drain pending rects and merge them
+        let rects = std::mem::take(&mut self.pending_rects);
+        let merged_rects = merge_rects(rects);
+
         let need_swizzle = !cfg!(target_os = "macos");
-        let total = fb_w * fb_h * 4;
-        self.window.scratch.resize(total, 0);
 
-        {
-            let _lock = self.gdi_lock.read().unwrap();
-            let framebuffer = unsafe {
-                std::slice::from_raw_parts((*gdi).primary_buffer as *const u8, stride * fb_h)
-            };
+        let _lock = self.gdi_lock.read().unwrap();
+        let framebuffer = unsafe {
+            std::slice::from_raw_parts((*gdi).primary_buffer as *const u8, stride * fb_h)
+        };
 
-            for row in 0..fb_h {
-                let src_start = row * stride;
-                let dst_start = row * fb_w * 4;
-                let row_bytes = (fb_w * 4).min(framebuffer.len().saturating_sub(src_start));
-                let dst_end = (dst_start + row_bytes).min(self.window.scratch.len());
+        // Convert merged rects to (u32, u32, u32, u32) and clamp to framebuffer bounds
+        let mut upload_rects = Vec::with_capacity(merged_rects.len());
+        let mut total_size = 0;
+        for r in &merged_rects {
+            let rx = (r.x as u32).min(fb_w as u32);
+            let ry = (r.y as u32).min(fb_h as u32);
+            let rw = r.w.min((fb_w as u32).saturating_sub(rx));
+            let rh = r.h.min((fb_h as u32).saturating_sub(ry));
+            if rw > 0 && rh > 0 {
+                upload_rects.push((rx, ry, rw, rh));
+                total_size += (rw * rh * 4) as usize;
+            }
+        }
+
+        // Prepare packed buffer
+        self.window.scratch.resize(total_size, 0);
+        let mut packed_offset = 0;
+
+        for &(rx, ry, rw, rh) in &upload_rects {
+            let rx = rx as usize;
+            let ry = ry as usize;
+            let rw = rw as usize;
+            let rh = rh as usize;
+
+            let dst_start = packed_offset;
+            let mut di = dst_start;
+            for row in ry..(ry + rh) {
+                let src_start = row * stride + rx * 4;
+                let row_bytes = rw * 4;
+
                 if need_swizzle {
-                    for col in 0..fb_w {
+                    for col in 0..rw {
                         let si = src_start + col * 4;
-                        let di = dst_start + col * 4;
                         if si + 3 < framebuffer.len() && di + 3 < self.window.scratch.len() {
                             self.window.scratch[di] = framebuffer[si + 2];
                             self.window.scratch[di + 1] = framebuffer[si + 1];
                             self.window.scratch[di + 2] = framebuffer[si];
                             self.window.scratch[di + 3] = framebuffer[si + 3];
+                            di += 4;
                         }
                     }
                 } else {
-                    self.window.scratch[dst_start..dst_end]
-                        .copy_from_slice(&framebuffer[src_start..src_start + row_bytes]);
+                    let dst_end = di + row_bytes;
+                    if dst_end <= self.window.scratch.len()
+                        && src_start + row_bytes <= framebuffer.len()
+                    {
+                        self.window.scratch[di..dst_end]
+                            .copy_from_slice(&framebuffer[src_start..src_start + row_bytes]);
+                        di += row_bytes;
+                    }
                 }
             }
+            packed_offset += rw * rh * 4;
         }
 
         let mut overlays: Vec<crate::wgpu_render::OverlayParams> = Vec::new();
@@ -98,6 +221,7 @@ impl RdpState {
             &overlays,
             &text_sections,
             cursor_overlay.as_ref(),
+            Some(&upload_rects),
         );
 
         Ok(())

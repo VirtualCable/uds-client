@@ -27,7 +27,7 @@ impl AppHandler {
         el: &ActiveEventLoop,
         mut settings: rdp_ffi::settings::RdpSettings,
     ) -> Result<()> {
-        self.close_progress();
+        self.close_progress(); // Ensure progress is closed if it was open before
         let is_rail = settings.rail_app.is_some();
         let use_rgba = cfg!(target_os = "macos");
 
@@ -55,7 +55,13 @@ impl AppHandler {
         let desktop_size = (rdp_w, rdp_h);
         let is_fullscreen = settings.screen_size.is_fullscreen() && !is_rail;
         let (window_logical_w, window_logical_h) =
-            monitor::phys_2_logic((desktop_w as i32, desktop_h as i32), monitor_scale);
+            if let rdp_ffi::geom::ScreenSize::Fixed(w, h) = settings.screen_size {
+                (w as f64, h as f64)
+            } else {
+                let (lw, lh) =
+                    monitor::phys_2_logic((desktop_w as i32, desktop_h as i32), monitor_scale);
+                (lw as f64, lh as f64)
+            };
         log::info!(
             "enter_rdp: rail={is_rail} fullscreen={is_fullscreen} logical={rdp_w}x{rdp_h} scale={monitor_scale}"
         );
@@ -406,7 +412,7 @@ impl AppHandler {
                         server: "172.27.247.161".to_string(),
                         user: "user".to_string(),
                         password: "temporal".to_string(),
-                        screen_size: rdp_ffi::geom::ScreenSize::Full,
+                        screen_size: rdp_ffi::geom::ScreenSize::Fixed(800, 600),
                         rail_app: if is_rail {
                             //Some("c:\\windows\\notepad.exe".to_string())
                             Some("c:\\windows\\system32\\mspaint.exe".to_string())

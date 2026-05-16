@@ -195,5 +195,5 @@ pub fn paint_launcher(state: &mut TestingLauncherState) {
         });
     }
 
-    renderer.update_and_render(&[], pw, ph, &overlays, &sections, None);
+    renderer.update_and_render(&[], pw, ph, &overlays, &sections, None, None);
 }

@@ -16,6 +16,14 @@ members = [
 ]
 resolver = "3"
 
+[profile.release-with-debug]
+inherits = "release"
+debug = true
+debug-assertions = false
+opt-level = 3
+
+
+
 [workspace.package]
 version = "5.0.0"
 edition = "2024"

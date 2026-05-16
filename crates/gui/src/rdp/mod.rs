@@ -62,6 +62,7 @@ pub struct RdpState {
     pub cursor: Cursor,
     pub pending_pixels: HashMap<u32, (u32, u32, Vec<u8>)>,
     pub pending_icons: HashMap<u32, (Vec<u8>, u32, u32)>,
+    pub pending_rects: Vec<rdp_ffi::geom::Rect>,
 }
 
 #[allow(dead_code)]
@@ -170,6 +171,7 @@ impl RdpState {
             cursor: Cursor::new(coords_scale),
             pending_pixels: HashMap::new(),
             pending_icons: HashMap::new(),
+            pending_rects: Vec::new(),
         })
     }
 }
@@ -178,7 +180,12 @@ impl RdpState {
 pub fn handle_rdp_message(state: &mut RdpState, message: RdpMessage) -> RdpActionResult {
     log::trace!("RDP message: {:?}", message);
     match message {
-        RdpMessage::UpdateRects(_rects) => RdpActionResult::Continue,
+        RdpMessage::UpdateRects(rects) => {
+            if !state.is_rail {
+                state.pending_rects.extend(rects);
+            }
+            RdpActionResult::Continue
+        }
         RdpMessage::DesktopResize(w, h) => {
             state.on_desktop_resize(w, h);
             RdpActionResult::Continue

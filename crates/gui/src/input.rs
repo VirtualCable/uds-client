@@ -239,7 +239,15 @@ impl AppHandler {
             rw.window
                 .set_outer_position(winit::dpi::PhysicalPosition::new(px, py));
             if let (Some(rgba), Some(ref mut renderer)) = (&rw.rgba_data, rw.renderer.as_mut()) {
-                renderer.update_and_render(rgba.as_slice(), rw.width, rw.height, &[], &[], None);
+                renderer.update_and_render(
+                    rgba.as_slice(),
+                    rw.width,
+                    rw.height,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                );
             }
         }
     }

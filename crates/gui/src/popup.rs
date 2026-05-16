@@ -310,6 +310,6 @@ impl PopupState {
         }
 
         self.renderer
-            .update_and_render(&[], pw, ph, &overlays, &sections, None);
+            .update_and_render(&[], pw, ph, &overlays, &sections, None, None);
     }
 }

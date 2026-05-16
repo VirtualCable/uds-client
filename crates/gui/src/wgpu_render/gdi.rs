@@ -93,15 +93,18 @@ impl GdiRenderer {
         rgba: &[u8],
         sw: u32,
         sh: u32,
+        rects: Option<&[(u32, u32, u32, u32)]>,
     ) -> Option<wgpu::BindGroup> {
-        if rgba.is_empty() || sw == 0 || sh == 0 {
+        if sw == 0 || sh == 0 {
             return None;
         }
+
         let ts = wgpu::Extent3d {
             width: sw,
             height: sh,
             depth_or_array_layers: 1,
         };
+
         if !self
             .cached
             .as_ref()
@@ -120,22 +123,41 @@ impl GdiRenderer {
             let v = t.create_view(&wgpu::TextureViewDescriptor::default());
             self.cached = Some((t, v, sw, sh));
         }
+
         let (tex, view, _, _) = self.cached.as_ref().unwrap();
-        queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: tex,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            rgba,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(sw * 4),
-                rows_per_image: Some(sh),
-            },
-            ts,
-        );
+        let rects = rects.unwrap_or(&[]);
+
+        // If we have data and rects, upload them
+        if !rgba.is_empty() {
+            let mut data_offset = 0;
+            for &(x, y, w, h) in rects {
+                let size = (w * h * 4) as usize;
+                if data_offset + size <= rgba.len() && w > 0 && h > 0 {
+                    let rect_data = &rgba[data_offset..data_offset + size];
+                    queue.write_texture(
+                        wgpu::TexelCopyTextureInfo {
+                            texture: tex,
+                            mip_level: 0,
+                            origin: wgpu::Origin3d { x, y, z: 0 },
+                            aspect: wgpu::TextureAspect::All,
+                        },
+                        rect_data,
+                        wgpu::TexelCopyBufferLayout {
+                            offset: 0,
+                            bytes_per_row: Some(w * 4),
+                            rows_per_image: Some(h),
+                        },
+                        wgpu::Extent3d {
+                            width: w,
+                            height: h,
+                            depth_or_array_layers: 1,
+                        },
+                    );
+                    data_offset += size;
+                }
+            }
+        }
+
         Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("gdi_bg"),
             layout: &self.bgl,

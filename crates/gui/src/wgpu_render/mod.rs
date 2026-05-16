@@ -145,6 +145,7 @@ impl WgpuRenderer {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn update_and_render(
         &mut self,
         rgba: &[u8],
@@ -153,6 +154,7 @@ impl WgpuRenderer {
         overlays: &[OverlayParams],
         sections: &[OwnedSection],
         cursor: Option<&OverlayParams>,
+        rects: Option<&[(u32, u32, u32, u32)]>,
     ) {
         let sw = sw.min(self.max_texture_size);
         let sh = sh.min(self.max_texture_size);
@@ -174,7 +176,9 @@ impl WgpuRenderer {
         let pw = self.config.width;
         let ph = self.config.height;
 
-        let gdi_bg = self.gdi.upload(&self.device, &self.queue, rgba, sw, sh);
+        let gdi_bg = self
+            .gdi
+            .upload(&self.device, &self.queue, rgba, sw, sh, rects);
 
         let mut enc = self
             .device

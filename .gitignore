@@ -11,3 +11,4 @@ target/
 *~
 /local_dlls
 *.log
+/profile.*
