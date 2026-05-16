@@ -42,7 +42,7 @@ pub(super) fn expand_vars(input: &str) -> Result<String> {
         Regex::new(r"%([A-Za-z0-9_]+)%").context("Failed to compile Windows variable regex")?;
 
     #[cfg(not(target_os = "windows"))]
-    let re = Regex::new(r"\$([A-Za-z0-9_]+)|\$\{([A-Za-z0-9_]+)\}")
+    let re = Regex::new(r"\$([A-Za-z_][A-Za-z0-9_]*)|\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
         .context("Failed to compile Unix variable regex")?;
 
     let result = re.replace_all(input, |caps: &regex::Captures| {
