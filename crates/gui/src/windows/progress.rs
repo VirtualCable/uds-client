@@ -1,7 +1,12 @@
-// BSD 3-Clause License, Authors: Adolfo Gómez, dkmaster at dkmon dot com
+// BSD 3-Clause License
+// Copyright (c) 2025, Virtual Cable S.L.
+// All rights reserved.
+
 use std::sync::Arc;
 use std::time::Instant;
 use wgpu_text::glyph_brush::{OwnedSection, Section, Text};
+use winit::event::WindowEvent;
+use winit::event_loop::ActiveEventLoop;
 
 use crate::draw::ui::{
     progress,
@@ -183,7 +188,6 @@ impl ProgressState {
             self.message.as_str()
         };
 
-        // 1. Draw Panel Background + Waves
         let panel_data = {
             let mut pixmap = tiny_skia::Pixmap::new(pw, ph).unwrap();
             let rect = tiny_skia::Rect::from_xywh(0.0, 0.0, pw as f32, ph as f32).unwrap();
@@ -191,7 +195,6 @@ impl ProgressState {
             paint.set_color(tiny_skia::Color::from_rgba8(30, 30, 35, 255));
             pixmap.fill_rect(rect, &paint, tiny_skia::Transform::identity(), None);
 
-            // Draw Waves using component
             let wave_data = waves::render(pw, ph, self.animation_time, s, &self.waves);
             if let Some(wave_pix) =
                 tiny_skia::Pixmap::from_vec(wave_data, tiny_skia::IntSize::from_wh(pw, ph).unwrap())
@@ -206,7 +209,6 @@ impl ProgressState {
                 );
             }
 
-            // Subtle border
             let mut border = tiny_skia::Paint::default();
             border.set_color(tiny_skia::Color::from_rgba8(60, 60, 75, 255));
             let stroke = tiny_skia::Stroke {
@@ -234,7 +236,6 @@ impl ProgressState {
             scale: 1.0,
         });
 
-        // 2. Percentage text
         let fs = monitor::scaled_val(32) as f32;
         sections.push(
             Section::default()
@@ -251,7 +252,6 @@ impl ProgressState {
                 .to_owned(),
         );
 
-        // 3. Progress bar
         let bw = monitor::scaled_val(280) as u32;
         let bh = monitor::scaled_val(12) as u32;
         let bx = (pw as f32 - bw as f32) / 2.0;
@@ -267,7 +267,6 @@ impl ProgressState {
             scale: 1.0,
         });
 
-        // 4. Status message
         let msg_fs = monitor::scaled_val(13) as f32;
         sections.push(
             Section::default()
@@ -284,7 +283,6 @@ impl ProgressState {
                 .to_owned(),
         );
 
-        // 5. CANCEL Button
         let (btn_data, btn_text) = self.cancel_btn.render();
         let b_idx = data.len();
         data.push(btn_data);
@@ -298,7 +296,6 @@ impl ProgressState {
         });
         sections.push(btn_text);
 
-        // 6. Logo (Top)
         ov_descs.push(OvDesc {
             data_idx: logo_idx,
             w: logo.width,
@@ -322,5 +319,53 @@ impl ProgressState {
 
         self.renderer
             .update_and_render(&[], pw, ph, &overlays, &sections, None, None);
+    }
+}
+
+impl crate::AppHandler {
+    pub(crate) fn handle_progress_event(&mut self, el: &ActiveEventLoop, event: WindowEvent) {
+        let Some(ref mut p) = self.progress else {
+            return;
+        };
+
+        match event {
+            WindowEvent::CursorMoved { position, .. } => {
+                let px = position.x as f32;
+                let py = position.y as f32;
+                p.last_mouse_pos = Some((px, py));
+                if p.handle_mouse_move(px, py) {
+                    p.window.request_redraw();
+                }
+            }
+            WindowEvent::MouseInput {
+                state: winit::event::ElementState::Pressed,
+                button: winit::event::MouseButton::Left,
+                ..
+            } => {
+                if let Some(pos) = p.last_mouse_pos {
+                    p.handle_click(pos.0, pos.1);
+                    if p.cancelled {
+                        self.stop.trigger();
+                        el.exit();
+                    }
+                }
+                p.window.request_redraw();
+            }
+            WindowEvent::RedrawRequested => {
+                p.paint();
+            }
+            WindowEvent::CloseRequested => {
+                self.close_progress();
+                self.stop.trigger();
+            }
+            _ => {}
+        }
+    }
+
+    pub(crate) fn close_progress(&mut self) {
+        if let Some(ref p) = self.progress {
+            self.unregister_window(p.window.id());
+        }
+        self.progress = None;
     }
 }

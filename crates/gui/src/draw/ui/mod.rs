@@ -6,6 +6,6 @@
 pub mod button;
 pub mod image;
 pub mod progress;
+pub mod rail_control;
 pub mod text;
 pub mod waves;
-pub mod rail_control;

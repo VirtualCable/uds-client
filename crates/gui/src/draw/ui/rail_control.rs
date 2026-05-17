@@ -37,10 +37,7 @@ impl RailControl {
             },
         ));
 
-        Self {
-            buttons,
-            text,
-        }
+        Self { buttons, text }
     }
 
     pub fn handle_mouse_move(&mut self, x: f32, y: f32) -> bool {
@@ -71,7 +68,8 @@ impl RailControl {
 
         // 1. Draw Background Panel
         let mut panel_pixmap = Pixmap::new(pw, ph).unwrap();
-        let rect = button::rounded_rect_path(1.0, 1.0, pw as f32 - 2.0, ph as f32 - 2.0, 6.0 * scale);
+        let rect =
+            button::rounded_rect_path(1.0, 1.0, pw as f32 - 2.0, ph as f32 - 2.0, 6.0 * scale);
 
         let mut paint = Paint::default();
         paint.set_color(Color::from_rgba8(30, 30, 35, 255));
@@ -97,7 +95,11 @@ impl RailControl {
         let text_fs = crate::monitor::scaled_val(14) as f32;
         sections.push(
             Section::default()
-                .add_text(Text::new(&self.text).with_scale(text_fs).with_color([1.0, 1.0, 1.0, 1.0]))
+                .add_text(
+                    Text::new(&self.text)
+                        .with_scale(text_fs)
+                        .with_color([1.0, 1.0, 1.0, 1.0]),
+                )
                 .with_screen_position((15.0 * scale, ph as f32 / 2.0))
                 .with_layout(
                     wgpu_text::glyph_brush::Layout::default()

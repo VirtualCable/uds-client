@@ -152,7 +152,8 @@ impl WgpuRenderer {
         sh: u32,
         rects: Option<&[(u32, u32, u32, u32)]>,
     ) {
-        self.gdi.upload(&self.device, &self.queue, rgba, sw, sh, rects);
+        self.gdi
+            .upload(&self.device, &self.queue, rgba, sw, sh, rects);
     }
 
     #[allow(clippy::too_many_arguments)]

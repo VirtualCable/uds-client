@@ -122,52 +122,52 @@ impl RdpState {
         let rects = std::mem::take(&mut self.pending_rects);
         let upload_rects = if !rects.is_empty() {
             let merged_rects = merge_rects(rects);
- 
-             let framebuffer = unsafe {
-                 std::slice::from_raw_parts((*gdi).primary_buffer as *const u8, stride * fb_h)
-             };
- 
-             // Convert merged rects to (u32, u32, u32, u32) and clamp to framebuffer bounds
-             let mut upload_rects = Vec::with_capacity(merged_rects.len());
-             let mut total_size = 0;
-             for r in &merged_rects {
-                 let rx = (r.x as u32).min(fb_w as u32);
-                 let ry = (r.y as u32).min(fb_h as u32);
-                 let rw = r.w.min((fb_w as u32).saturating_sub(rx));
-                 let rh = r.h.min((fb_h as u32).saturating_sub(ry));
-                 if rw > 0 && rh > 0 {
-                     upload_rects.push((rx, ry, rw, rh));
-                     total_size += (rw * rh * 4) as usize;
-                 }
-             }
- 
-             // Prepare packed buffer
-             self.window.scratch.resize(total_size, 0);
-             let mut packed_offset = 0;
- 
-             for &(rx, ry, rw, rh) in &upload_rects {
-                 let rx = rx as usize;
-                 let ry = ry as usize;
-                 let rw = rw as usize;
-                 let rh = rh as usize;
- 
-                 let dst_start = packed_offset;
-                 let mut di = dst_start;
-                 for row in ry..(ry + rh) {
-                     let src_start = row * stride + rx * 4;
-                     let row_bytes = rw * 4;
- 
-                     let dst_end = di + row_bytes;
-                     if dst_end <= self.window.scratch.len()
-                         && src_start + row_bytes <= framebuffer.len()
-                     {
-                         self.window.scratch[di..dst_end]
-                             .copy_from_slice(&framebuffer[src_start..src_start + row_bytes]);
-                         di += row_bytes;
-                     }
-                 }
-                 packed_offset += rw * rh * 4;
-             }
+
+            let framebuffer = unsafe {
+                std::slice::from_raw_parts((*gdi).primary_buffer as *const u8, stride * fb_h)
+            };
+
+            // Convert merged rects to (u32, u32, u32, u32) and clamp to framebuffer bounds
+            let mut upload_rects = Vec::with_capacity(merged_rects.len());
+            let mut total_size = 0;
+            for r in &merged_rects {
+                let rx = (r.x as u32).min(fb_w as u32);
+                let ry = (r.y as u32).min(fb_h as u32);
+                let rw = r.w.min((fb_w as u32).saturating_sub(rx));
+                let rh = r.h.min((fb_h as u32).saturating_sub(ry));
+                if rw > 0 && rh > 0 {
+                    upload_rects.push((rx, ry, rw, rh));
+                    total_size += (rw * rh * 4) as usize;
+                }
+            }
+
+            // Prepare packed buffer
+            self.window.scratch.resize(total_size, 0);
+            let mut packed_offset = 0;
+
+            for &(rx, ry, rw, rh) in &upload_rects {
+                let rx = rx as usize;
+                let ry = ry as usize;
+                let rw = rw as usize;
+                let rh = rh as usize;
+
+                let dst_start = packed_offset;
+                let mut di = dst_start;
+                for row in ry..(ry + rh) {
+                    let src_start = row * stride + rx * 4;
+                    let row_bytes = rw * 4;
+
+                    let dst_end = di + row_bytes;
+                    if dst_end <= self.window.scratch.len()
+                        && src_start + row_bytes <= framebuffer.len()
+                    {
+                        self.window.scratch[di..dst_end]
+                            .copy_from_slice(&framebuffer[src_start..src_start + row_bytes]);
+                        di += row_bytes;
+                    }
+                }
+                packed_offset += rw * rh * 4;
+            }
             upload_rects
         } else {
             vec![]

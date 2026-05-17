@@ -84,7 +84,7 @@ fn main() {
     shared::tls::init_tls(None);
     let (host, ticket, scrambler) = collect_arguments().unwrap_or_else(|| {
         // Show about window if no valid arguments
-        gui::about::show_about_window();
+        gui::windows::about::show_about_window();
         std::process::exit(0);
     });
 

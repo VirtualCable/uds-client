@@ -11,9 +11,16 @@ pub struct Pinbar {
     bg_h: u32,
 }
 
+impl Default for Pinbar {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Pinbar {
     pub fn new() -> Self {
-        let (bg_rgba, bw, bh) = crate::draw::load_png_rgba(include_bytes!("../images/pinbar.png"));
+        let (bg_rgba, bw, bh) =
+            crate::draw::load_png_rgba(include_bytes!("../../images/pinbar.png"));
         Self {
             visible: false,
             rect: None,

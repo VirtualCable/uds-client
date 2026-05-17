@@ -16,28 +16,25 @@ use winit::window::WindowId;
 
 use shared::system::trigger::Trigger;
 
-pub mod about;
 pub mod keymap;
 pub mod logo;
 mod monitor;
-mod popup;
 pub mod types;
+pub mod windows;
 
 mod draw;
 pub mod ipc;
-mod launcher;
-mod progress_window;
-mod rdp;
 mod wgpu_render;
 
 mod input;
-mod launcher_ui;
 mod session;
 
-use launcher::{LauncherInner, TestingLauncherState};
-use popup::PopupState;
-use rdp::RdpState;
 use types::{AppState, GuiMessage, ReturnCode};
+use windows::about::AboutState;
+use windows::launcher::{LauncherInner, TestingLauncherState};
+use windows::popup::PopupState;
+use windows::progress::{ProgressPhase, ProgressState};
+use windows::rdp::RdpState;
 
 #[derive(Debug)]
 pub struct RawKey {
@@ -65,10 +62,10 @@ enum WindowKind {
 pub struct AppHandler {
     catalog: gettext::Catalog,
     launcher: Option<TestingLauncherState>,
-    progress: Option<crate::progress_window::ProgressState>,
+    progress: Option<ProgressState>,
     rdp: Option<Box<RdpState>>,
     popup: Option<PopupState>,
-    about: Option<crate::about::AboutState>,
+    about: Option<AboutState>,
     windows: HashMap<WindowId, WindowKind>,
 
     keys_tx: Sender<RawKey>,
@@ -258,7 +255,7 @@ impl ApplicationHandler<UserEvent> for AppHandler {
                     if self.launcher.is_some() && p.pct < 100 {
                         p.pct += 1;
                         if p.pct >= 100 {
-                            p.phase = crate::progress_window::ProgressPhase::Connected;
+                            p.phase = ProgressPhase::Connected;
                         }
                     }
                     p.window.request_redraw();

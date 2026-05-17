@@ -1,11 +1,16 @@
-use crate::monitor;
-// BSD 3-Clause License, Authors: Adolfo Gómez
-use crate::draw::ui::{button, text};
-use crate::wgpu_render::{OverlayParams, WgpuRenderer};
+// BSD 3-Clause License
+// Copyright (c) 2025, Virtual Cable S.L.
+// All rights reserved.
+
 use std::sync::{Arc, RwLock};
 use tiny_skia::{Color, FillRule, Paint, PathBuilder, Pixmap, Stroke, Transform};
 use tokio::sync::oneshot;
 use wgpu_text::glyph_brush::{OwnedSection, Section, Text};
+use winit::event::WindowEvent;
+
+use crate::draw::ui::{button, text};
+use crate::monitor;
+use crate::wgpu_render::{OverlayParams, WgpuRenderer};
 
 pub enum PopupKind {
     YesNo {
@@ -164,7 +169,6 @@ impl PopupState {
         let pw = self.phys_w;
         let ph = self.phys_h;
 
-        // Ensure renderer is configured for this size (fixes text alignment)
         self.renderer.reconfigure(pw, ph);
 
         let (title, message, is_yesno, color) = match &self.kind {
@@ -179,7 +183,6 @@ impl PopupState {
         let mut data: Vec<Vec<u8>> = Vec::new();
         let mut ov_descs: Vec<(usize, u32, u32, f32, f32)> = Vec::new();
 
-        // 1. Draw Background Panel
         let mut panel_pixmap = Pixmap::new(pw, ph).unwrap();
         let rect = button::rounded_rect_path(2.0, 2.0, pw as f32 - 4.0, ph as f32 - 4.0, 10.0 * s);
 
@@ -203,7 +206,6 @@ impl PopupState {
         data.push(panel_pixmap.take());
         ov_descs.push((0, pw, ph, 0.0, 0.0));
 
-        // 2. Draw Icon Circle and Symbol
         let icon_size_px = monitor::scaled_val(40) as u32;
         let mut icon_pixmap = Pixmap::new(icon_size_px, icon_size_px).unwrap();
         let icon_center = icon_size_px as f32 / 2.0;
@@ -224,10 +226,8 @@ impl PopupState {
         paint.set_color(Color::from_rgba(color[0], color[1], color[2], 1.0).unwrap());
         icon_pixmap.stroke_path(&icon_path, &paint, &stroke, Transform::identity(), None);
 
-        // Symbol inside icon
         let mut sym_pb = PathBuilder::new();
         if is_yesno {
-            // Draw a bold '?'
             sym_pb.move_to(icon_center - 4.0 * s, icon_center - 6.0 * s);
             sym_pb.cubic_to(
                 icon_center - 4.0 * s,
@@ -248,7 +248,6 @@ impl PopupState {
             sym_pb.move_to(icon_center, icon_center + 6.0 * s);
             sym_pb.push_circle(icon_center, icon_center + 7.0 * s, 1.5 * s);
         } else {
-            // Draw a bold '!'
             sym_pb.move_to(icon_center, icon_center - 10.0 * s);
             sym_pb.line_to(icon_center, icon_center + 2.0 * s);
             sym_pb.move_to(icon_center, icon_center + 6.0 * s);
@@ -266,7 +265,6 @@ impl PopupState {
         data.push(icon_pixmap.take());
         ov_descs.push((1, icon_size_px, icon_size_px, 20.0 * s, 20.0 * s));
 
-        // 3. Texts
         let title_fs = monitor::scaled_val(18) as f32;
         sections.push(
             Section::default()
@@ -289,7 +287,6 @@ impl PopupState {
             msg_fs * 1.5,
         ));
 
-        // 4. Buttons
         for btn in &self.buttons {
             let (btn_data, btn_text) = btn.render();
             data.push(btn_data);
@@ -311,5 +308,49 @@ impl PopupState {
 
         self.renderer
             .update_and_render(&[], pw, ph, &overlays, &sections, None, None);
+    }
+}
+
+impl crate::AppHandler {
+    pub(crate) fn handle_popup_event(&mut self, event: WindowEvent) {
+        if self.popup.is_none() {
+            return;
+        }
+        let popup = self.popup.as_mut().unwrap();
+        let mut close = false;
+        match event {
+            WindowEvent::CloseRequested => close = true,
+            WindowEvent::RedrawRequested => {
+                popup.paint();
+            }
+            WindowEvent::MouseInput { state, button, .. }
+                if state.is_pressed() && button == winit::event::MouseButton::Left =>
+            {
+                if let Some(pos) = popup.last_mouse_pos {
+                    close = popup.handle_click(pos.0, pos.1);
+                }
+                if !close {
+                    popup.window.request_redraw();
+                }
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                let px = position.x as f32;
+                let py = position.y as f32;
+                popup.last_mouse_pos = Some((px, py));
+                if popup.handle_mouse_move(px, py) {
+                    popup.window.request_redraw();
+                }
+            }
+            _ => {}
+        }
+        if close {
+            let is_error = matches!(popup.kind, PopupKind::Error(_));
+            let wid = popup.window.id();
+            self.unregister_window(wid);
+            self.popup = None;
+            if is_error {
+                self.stop.trigger();
+            }
+        }
     }
 }

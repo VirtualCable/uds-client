@@ -98,10 +98,7 @@ pub fn bind(
                                     msg.zeroize();
                                     return;
                                 }
-                                shared::log::info!(
-                                    "IPC: received RAIL app launch: {}",
-                                    msg.app,
-                                );
+                                shared::log::info!("IPC: received RAIL app launch: {}", msg.app,);
                                 on_launch(msg);
                             });
                     }

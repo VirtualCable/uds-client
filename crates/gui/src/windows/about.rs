@@ -1,6 +1,7 @@
-use crate::monitor;
-// BSD 3-Clause License, Authors: Adolfo Gómez
-use crate::wgpu_render::{OverlayParams, WgpuRenderer};
+// BSD 3-Clause License
+// Copyright (c) 2025, Virtual Cable S.L.
+// All rights reserved.
+
 use anyhow::Result;
 use shared::log;
 use std::sync::Arc;
@@ -10,6 +11,9 @@ use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::Window;
+
+use crate::monitor;
+use crate::wgpu_render::{OverlayParams, WgpuRenderer};
 
 const ABOUT_LINES: &[&str] = &[
     "UDS Launcher",
@@ -113,7 +117,6 @@ impl AboutState {
 
         let mut data: Vec<Vec<u8>> = Vec::new();
 
-        // 1. Draw Panel Background + Waves
         let panel_data = {
             let mut pixmap = tiny_skia::Pixmap::new(pw, ph).unwrap();
             let rect = tiny_skia::Rect::from_xywh(0.0, 0.0, pw as f32, ph as f32).unwrap();
@@ -121,7 +124,6 @@ impl AboutState {
             paint.set_color(tiny_skia::Color::from_rgba8(30, 30, 35, 255));
             pixmap.fill_rect(rect, &paint, tiny_skia::Transform::identity(), None);
 
-            // Draw Waves
             let wave_data =
                 crate::draw::ui::waves::render(pw, ph, self.animation_time, s, &self.waves);
             if let Some(wave_pix) =
@@ -137,7 +139,6 @@ impl AboutState {
                 );
             }
 
-            // Subtle border
             let mut border = tiny_skia::Paint::default();
             border.set_color(tiny_skia::Color::from_rgba8(60, 60, 75, 255));
             let stroke = tiny_skia::Stroke {
@@ -159,8 +160,6 @@ impl AboutState {
         let logo_x = (pw as f32 - self.logo.width as f32 * s) / 2.0;
         let logo_y = 30.0 * s;
 
-        // Overlay index 0 is background
-        // We'll push logo and others after
         let mut sections: Vec<OwnedSection> = Vec::new();
         let base_y = self.logo.height as f32 * s + 60.0 * s;
         for (i, line) in ABOUT_LINES.iter().enumerate() {
@@ -274,5 +273,32 @@ impl ApplicationHandler for AboutHandler<'_> {
         if let Some(s) = self.state.as_ref() {
             s.window.request_redraw();
         }
+    }
+}
+
+impl crate::AppHandler {
+    pub(crate) fn handle_about_event(&mut self, event: WindowEvent) {
+        let Some(_) = self.about else { return };
+        match event {
+            WindowEvent::CloseRequested => {
+                self.close_about();
+            }
+            WindowEvent::MouseInput { state, .. } if state.is_pressed() => {
+                self.close_about();
+            }
+            WindowEvent::RedrawRequested => {
+                if let Some(ref mut a) = self.about {
+                    a.paint();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    pub(crate) fn close_about(&mut self) {
+        if let Some(ref a) = self.about {
+            self.unregister_window(a.window().id());
+        }
+        self.about = None;
     }
 }
