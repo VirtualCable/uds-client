@@ -402,7 +402,7 @@ mod tests {
         assert_eq!(s.port, Some(3389));
         assert!(s.user.is_none());
         assert!(s.password.is_none());
-        assert!(s.server_info.is_none());
+        assert!(s.rail.is_none());
     }
 
     #[test]
@@ -451,12 +451,18 @@ mod tests {
     fn to_core_server_info_mapping() {
         let mut s = RdpSettings::default();
         s.server = "h".into();
-        s.server_info = Some(ServerInfo {
-            id: "myid".into(),
-            token: "mytok".into(),
+        s.rail = Some(RailSettings {
+            app: "myapp".into(),
+            args: None,
+            working_dir: None,
+            title: None,
+            server_info: Some(ServerInfo {
+                id: "myid".into(),
+                token: "mytok".into(),
+            }),
         });
         let core = s.to_core_settings();
-        let si = core.server_info.unwrap();
+        let si = core.rail.unwrap().server_info.unwrap();
         assert_eq!(si.id, "myid");
         assert_eq!(si.token, "mytok");
     }
@@ -464,6 +470,6 @@ mod tests {
     #[test]
     fn to_core_server_info_none() {
         let s = RdpSettings::default();
-        assert!(s.to_core_settings().server_info.is_none());
+        assert!(s.to_core_settings().rail.is_none());
     }
 }

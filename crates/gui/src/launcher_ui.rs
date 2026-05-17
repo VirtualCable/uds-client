@@ -6,7 +6,7 @@ use winit::event_loop::ActiveEventLoop;
 use winit::window::Window;
 
 use super::{AppHandler, WindowKind};
-use crate::launcher::{LauncherInner, TestingLauncherState, paint_launcher};
+use crate::launcher::{LauncherInner, TestingLauncherState};
 use crate::logo;
 use crate::wgpu_render::WgpuRenderer;
 
@@ -111,7 +111,8 @@ impl AppHandler {
                 self.stop.trigger();
             }
             WindowEvent::RedrawRequested => {
-                paint_launcher(l);
+                #[cfg(feature = "test-ui")]
+                crate::launcher::paint_launcher(l);
             }
             WindowEvent::MouseInput { state, button, .. }
                 if state.is_pressed() && button == winit::event::MouseButton::Left =>
