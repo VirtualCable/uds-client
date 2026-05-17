@@ -231,6 +231,7 @@ impl ApplicationHandler<UserEvent> for AppHandler {
     fn user_event(&mut self, _el: &ActiveEventLoop, event: UserEvent) {
         match event {
             UserEvent::Tick => {
+                // If any rect pending, pinbar, fps or keyboard/mouse event pending, redraw
                 if let Some(ref mut r) = self.rdp {
                     r.window.window.request_redraw();
                 }

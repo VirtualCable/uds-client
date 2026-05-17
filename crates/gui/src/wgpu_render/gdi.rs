@@ -129,36 +129,57 @@ impl GdiRenderer {
         }
 
         let (tex, view, _, _) = self.cached.as_ref().unwrap();
-        let rects = rects.unwrap_or(&[]);
-
-        // If we have data and rects, upload them
+        // If we have data, upload it
         if !rgba.is_empty() {
-            let mut data_offset = 0;
-            for &(x, y, w, h) in rects {
-                let size = (w * h * 4) as usize;
-                if data_offset + size <= rgba.len() && w > 0 && h > 0 {
-                    let rect_data = &rgba[data_offset..data_offset + size];
-                    queue.write_texture(
-                        wgpu::TexelCopyTextureInfo {
-                            texture: tex,
-                            mip_level: 0,
-                            origin: wgpu::Origin3d { x, y, z: 0 },
-                            aspect: wgpu::TextureAspect::All,
-                        },
-                        rect_data,
-                        wgpu::TexelCopyBufferLayout {
-                            offset: 0,
-                            bytes_per_row: Some(w * 4),
-                            rows_per_image: Some(h),
-                        },
-                        wgpu::Extent3d {
-                            width: w,
-                            height: h,
-                            depth_or_array_layers: 1,
-                        },
-                    );
-                    data_offset += size;
+            if let Some(r) = rects {
+                let mut data_offset = 0;
+                for &(x, y, w, h) in r {
+                    let size = (w * h * 4) as usize;
+                    if data_offset + size <= rgba.len() && w > 0 && h > 0 {
+                        let rect_data = &rgba[data_offset..data_offset + size];
+                        queue.write_texture(
+                            wgpu::TexelCopyTextureInfo {
+                                texture: tex,
+                                mip_level: 0,
+                                origin: wgpu::Origin3d { x, y, z: 0 },
+                                aspect: wgpu::TextureAspect::All,
+                            },
+                            rect_data,
+                            wgpu::TexelCopyBufferLayout {
+                                offset: 0,
+                                bytes_per_row: Some(w * 4),
+                                rows_per_image: Some(h),
+                            },
+                            wgpu::Extent3d {
+                                width: w,
+                                height: h,
+                                depth_or_array_layers: 1,
+                            },
+                        );
+                        data_offset += size;
+                    }
                 }
+            } else {
+                // Full update
+                queue.write_texture(
+                    wgpu::TexelCopyTextureInfo {
+                        texture: tex,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    rgba,
+                    wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(sw * 4),
+                        rows_per_image: Some(sh),
+                    },
+                    wgpu::Extent3d {
+                        width: sw,
+                        height: sh,
+                        depth_or_array_layers: 1,
+                    },
+                );
             }
         }
 
