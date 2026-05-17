@@ -193,10 +193,14 @@ impl ApplicationHandler<UserEvent> for AppHandler {
                     Some(WindowKind::Progress) => {
                         self.handle_progress_event(el, WindowEvent::RedrawRequested)
                     }
-                    Some(WindowKind::Rdp) if !self.rdp.as_ref().is_some_and(|s| s.is_rail) => {
+                    Some(WindowKind::Rdp)
+                        if !self.rdp.as_ref().is_some_and(|s| s.rail.is_some()) =>
+                    {
                         let _ = self.rdp.as_mut().map(|s| s.update_screen());
                     }
-                    Some(WindowKind::Rdp) if self.rdp.as_ref().is_some_and(|s| s.is_rail) => {
+                    Some(WindowKind::Rdp)
+                        if self.rdp.as_ref().is_some_and(|s| s.rail.is_some()) =>
+                    {
                         self.handle_rail_control_redraw();
                     }
                     Some(&WindowKind::RdpRail(id)) => {

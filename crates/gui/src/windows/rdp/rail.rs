@@ -40,6 +40,7 @@ use super::{RdpActionResult, RdpState};
 
 #[allow(clippy::unnecessary_cast)]
 pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActionResult {
+    let rail = state.rail.as_mut().unwrap();
     match message {
         RdpMessage::WindowCreate {
             window_id,
@@ -76,9 +77,9 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
             let msf = state.window.window.scale_factor().max(1.0);
             let is_off = is_offscreen.unwrap_or(false);
 
-            let mut exists = state.rail_windows.contains_key(&window_id);
+            let mut exists = rail.windows.contains_key(&window_id);
             if !exists {
-                for action in &state.rail_actions {
+                for action in &rail.actions {
                     if let RailAction::Create(id, ..) = action
                         && *id == window_id
                     {
@@ -91,24 +92,22 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
             if exists {
                 if let Some(s) = show_state {
                     let hidden = s == 0 || is_off;
-                    state
-                        .rail_actions
+                    rail.actions
                         .push(RailAction::SetVisible(window_id, !hidden));
                 } else if is_offscreen.is_some() {
-                    state
-                        .rail_actions
+                    rail.actions
                         .push(RailAction::SetVisible(window_id, !is_off));
                 }
 
                 if pos.is_some() || size.is_some() {
-                    let default_rect = state
-                        .rail_windows
+                    let default_rect = rail
+                        .windows
                         .get(&window_id)
                         .map(|rw| rw.rect)
                         .unwrap_or_else(|| rdp_ffi::geom::Rect::new(0, 0, 0, 0));
                     let mut rect = default_rect;
-                    if !state.rail_windows.contains_key(&window_id) {
-                        for action in &state.rail_actions {
+                    if !rail.windows.contains_key(&window_id) {
+                        for action in &rail.actions {
                             if let RailAction::Create(id, _, r, ..) = action
                                 && *id == window_id
                             {
@@ -134,8 +133,7 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                         None => rect.h,
                     };
                     let new_rect = rdp_ffi::geom::Rect::new(x, y, w, h);
-                    state
-                        .rail_actions
+                    rail.actions
                         .push(RailAction::UpdatePosition(window_id, new_rect));
                 }
             } else {
@@ -154,7 +152,7 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
 
                     let hidden = show_state == Some(0) || is_off;
 
-                    state.rail_actions.push(RailAction::Create(
+                    rail.actions.push(RailAction::Create(
                         window_id,
                         title,
                         rect,
@@ -168,7 +166,7 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
             RdpActionResult::Continue
         }
         RdpMessage::WindowDelete(window_id) => {
-            state.rail_actions.push(RailAction::Delete(window_id));
+            rail.actions.push(RailAction::Delete(window_id));
             RdpActionResult::Continue
         }
         RdpMessage::WindowPixels {
@@ -177,7 +175,7 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
             height,
             data,
         } => {
-            if let Some(rw) = state.rail_windows.get_mut(&window_id) {
+            if let Some(rw) = rail.windows.get_mut(&window_id) {
                 let sf = state.coords_scale.max(1.0);
                 let msf = rw.window.scale_factor().max(1.0);
                 let lw = ((width as f64 * sf / msf) as u32).min(state.desktop_size.0);
@@ -200,7 +198,8 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
             } else {
                 // Window not created yet — buffer pixels for when RailAction::Create is processed
                 state
-                    .pending_pixels
+                    .pendings
+                    .pixels
                     .insert(window_id, (width, height, data));
             }
             RdpActionResult::Continue
@@ -211,13 +210,16 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
             width,
             height,
         } => {
-            if let Some(rw) = state.rail_windows.get(&window_id) {
+            if let Some(rw) = rail.windows.get(&window_id) {
                 if let Ok(icon) = winit::window::Icon::from_rgba(rgba, width, height) {
                     rw.window.set_window_icon(Some(icon));
                 }
             } else {
                 // Buffer icon for pending window (same pattern as pending_pixels)
-                state.pending_icons.insert(window_id, (rgba, width, height));
+                state
+                    .pendings
+                    .icons
+                    .insert(window_id, (rgba, width, height));
             }
             RdpActionResult::Continue
         }

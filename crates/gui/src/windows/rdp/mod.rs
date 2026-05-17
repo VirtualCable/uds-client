@@ -34,6 +34,22 @@ pub struct RdpWindow {
     pub renderer: crate::wgpu_render::WgpuRenderer,
     pub scratch: Vec<u8>,
 }
+
+pub struct Pendings {
+    pub resize: bool,
+    pub pixels: HashMap<u32, (u32, u32, Vec<u8>)>,
+    pub icons: HashMap<u32, (Vec<u8>, u32, u32)>,
+    pub rects: Vec<rdp_ffi::geom::Rect>,
+}
+
+pub struct Rail {
+    pub state: RailState,
+    pub channel: Option<rdp_ffi::channels::rail::RailChannel>,
+    pub actions: Vec<RailAction>,
+    pub windows: HashMap<u32, RailWindow>,
+    pub control: Option<crate::draw::ui::rail_control::RailControl>,
+}
+
 #[allow(dead_code)]
 pub struct RdpState {
     pub window: RdpWindow,
@@ -43,27 +59,19 @@ pub struct RdpState {
     pub channels: Arc<RwLock<rdp_ffi::channels::RdpChannels>>,
     pub command_tx: rdp_ffi::commands::Sender,
     pub command_event: rdp_ffi::utils::SafeHandle,
-    pub is_rail: bool,
     pub coords_scale: f64,
     pub desktop_size: (u32, u32),
     pub full_screen: Arc<AtomicBool>,
     pub last_windowed_size: Option<(u32, u32)>,
     pub last_resize: std::time::Instant,
-    pub pending_resize: bool,
     pub pinbar: Pinbar,
     pub keys_rx: Receiver<RawKey>,
     pub fps: Fps,
 
-    pub rail: RailState,
-    pub rail_channel: Option<rdp_ffi::channels::rail::RailChannel>,
-    pub rail_actions: Vec<RailAction>,
-    pub rail_windows: HashMap<u32, RailWindow>, // id → RailWindow
-    pub rail_control: Option<crate::draw::ui::rail_control::RailControl>,
+    pub rail: Option<Rail>,
+    pub pendings: Pendings,
 
     pub cursor: Cursor,
-    pub pending_pixels: HashMap<u32, (u32, u32, Vec<u8>)>,
-    pub pending_icons: HashMap<u32, (Vec<u8>, u32, u32)>,
-    pub pending_rects: Vec<rdp_ffi::geom::Rect>,
 }
 
 #[allow(dead_code)]
@@ -160,6 +168,21 @@ impl RdpState {
             }
         });
 
+        let rail = if is_rail {
+            Some(Rail {
+                state: RailState {
+                    windows: HashMap::new(),
+                    mouse_capture: None,
+                },
+                channel: rail_channel,
+                actions: Vec::new(),
+                windows: HashMap::new(),
+                control: rail_control,
+            })
+        } else {
+            None
+        };
+
         Ok(RdpState {
             window,
             update_rx: rx,
@@ -168,7 +191,6 @@ impl RdpState {
             channels,
             command_tx,
             command_event,
-            is_rail,
             coords_scale,
             desktop_size,
             full_screen: Arc::new(AtomicBool::new(false)),
@@ -176,22 +198,17 @@ impl RdpState {
             last_resize: std::time::Instant::now()
                 .checked_sub(std::time::Duration::from_secs(60))
                 .unwrap_or(std::time::Instant::now()),
-            pending_resize: false,
             pinbar: Pinbar::new(),
             keys_rx,
             fps: Fps::new(),
-            rail: RailState {
-                windows: HashMap::new(),
-                mouse_capture: None,
+            rail,
+            pendings: Pendings {
+                resize: false,
+                pixels: HashMap::new(),
+                icons: HashMap::new(),
+                rects: Vec::new(),
             },
-            rail_channel,
-            rail_actions: Vec::new(),
-            rail_control,
-            rail_windows: HashMap::new(),
             cursor: Cursor::new(coords_scale),
-            pending_pixels: HashMap::new(),
-            pending_icons: HashMap::new(),
-            pending_rects: Vec::new(),
         })
     }
 }
@@ -201,8 +218,8 @@ pub fn handle_rdp_message(state: &mut RdpState, message: RdpMessage) -> RdpActio
     log::trace!("RDP message: {:?}", message);
     match message {
         RdpMessage::UpdateRects(rects) => {
-            if !state.is_rail {
-                state.pending_rects.extend(rects);
+            if state.rail.is_none() {
+                state.pendings.rects.extend(rects);
             }
             RdpActionResult::Continue
         }
@@ -220,7 +237,7 @@ pub fn handle_rdp_message(state: &mut RdpState, message: RdpMessage) -> RdpActio
             RdpActionResult::Continue
         }
         // Delegate RAIL-specific messages
-        ref msg if state.is_rail => rail::handle_rail_message(state, msg.clone()),
+        ref msg if state.rail.is_some() => rail::handle_rail_message(state, msg.clone()),
         _ => RdpActionResult::Skip,
     }
 }
@@ -391,17 +408,22 @@ impl crate::AppHandler {
     }
 
     pub(crate) fn process_rail_actions(&mut self, el: &ActiveEventLoop) {
-        let actions = if let Some(ref mut state) = self.rdp {
-            std::mem::take(&mut state.rail_actions)
+        let actions = if let Some(ref mut state) = self.rdp
+            && let Some(ref mut rail) = state.rail
+        {
+            std::mem::take(&mut rail.actions)
         } else {
             return;
         };
         let mut regs: Vec<(winit::window::WindowId, u32)> = Vec::new();
         for action in &actions {
             let Some(ref mut state) = self.rdp else { break };
+            let Some(ref mut rail) = state.rail else {
+                break;
+            };
             match action {
                 RailAction::Create(id, title, rect, taskbar, decorations, visible) => {
-                    if state.rail_windows.contains_key(id) {
+                    if rail.windows.contains_key(id) {
                         continue;
                     }
                     let Ok(window) = el.create_window(
@@ -425,7 +447,7 @@ impl crate::AppHandler {
                     let renderer =
                         crate::wgpu_render::WgpuRenderer::new(window.clone(), rect.w, rect.h).ok();
                     let (rgba_data, pw, ph) =
-                        if let Some((w, h, data)) = state.pending_pixels.remove(id) {
+                        if let Some((w, h, data)) = state.pendings.pixels.remove(id) {
                             (Some(data), w, h)
                         } else {
                             (None, rect.w, rect.h)
@@ -433,7 +455,7 @@ impl crate::AppHandler {
                     if rgba_data.is_some() {
                         window.request_redraw();
                     }
-                    state.rail_windows.insert(
+                    rail.windows.insert(
                         *id,
                         RailWindow {
                             id: *id,
@@ -450,9 +472,9 @@ impl crate::AppHandler {
                             offscreen: false,
                         },
                     );
-                    if let Some((rgba, w, h)) = state.pending_icons.remove(id)
+                    if let Some((rgba, w, h)) = state.pendings.icons.remove(id)
                         && let Ok(icon) = winit::window::Icon::from_rgba(rgba, w, h)
-                        && let Some(rw) = state.rail_windows.get(id)
+                        && let Some(rw) = rail.windows.get(id)
                     {
                         rw.window.set_window_icon(Some(icon));
                     }
@@ -461,12 +483,12 @@ impl crate::AppHandler {
                     shared::log::debug!("RAIL window created: id={id} {rect:?}");
                 }
                 RailAction::Delete(id) => {
-                    if let Some(rw) = state.rail_windows.remove(id) {
+                    if let Some(rw) = rail.windows.remove(id) {
                         regs.push((rw.window.id(), *id));
                     }
                 }
                 RailAction::UpdatePosition(id, rect) => {
-                    if let Some(rw) = state.rail_windows.get_mut(id) {
+                    if let Some(rw) = rail.windows.get_mut(id) {
                         shared::log::trace!(
                             "RAIL[{id}] UpdatePosition rect=({},{}) {}x{} button_down={}",
                             rect.x,
@@ -487,7 +509,7 @@ impl crate::AppHandler {
                     }
                 }
                 RailAction::SetVisible(id, visible) => {
-                    if let Some(rw) = state.rail_windows.get_mut(id) {
+                    if let Some(rw) = rail.windows.get_mut(id) {
                         rw.window.set_visible(*visible);
                         rw.offscreen = !*visible;
                     }
@@ -505,7 +527,7 @@ impl crate::AppHandler {
         };
         while let Ok(message) = state.update_rx.try_recv() {
             match handle_rdp_message(state, message) {
-                RdpActionResult::Continue if !state.is_rail => {
+                RdpActionResult::Continue if state.rail.is_none() => {
                     state.window.window.request_redraw();
                 }
 

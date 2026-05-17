@@ -119,7 +119,7 @@ impl RdpState {
         }
 
         // Drain pending rects and merge them
-        let rects = std::mem::take(&mut self.pending_rects);
+        let rects = std::mem::take(&mut self.pendings.rects);
         let upload_rects = if !rects.is_empty() {
             let merged_rects = merge_rects(rects);
 
@@ -230,7 +230,7 @@ impl RdpState {
     }
 
     pub fn request_screen_resize(&mut self) {
-        if self.pending_resize {
+        if self.pendings.resize {
             return;
         }
         let phys = self.window.window.inner_size();
@@ -248,7 +248,7 @@ impl RdpState {
 
         self.window.renderer.reconfigure(phys.width, phys.height);
         self.last_resize = std::time::Instant::now();
-        self.pending_resize = true;
+        self.pendings.resize = true;
 
         if let Some(disp) = self.channels.write().unwrap().disp() {
             disp.send_monitor_layout(rdp_ffi::geom::Rect::new(0, 0, rdp_w, rdp_h), 0, 100, 100);
@@ -257,7 +257,7 @@ impl RdpState {
 
     pub fn on_desktop_resize(&mut self, _width: u32, _height: u32) {
         log::info!("DesktopResize acknowledged: {_width}x{_height}");
-        self.pending_resize = false;
+        self.pendings.resize = false;
         let phys = self.window.window.inner_size();
         self.window.renderer.reconfigure(phys.width, phys.height);
     }

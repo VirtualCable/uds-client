@@ -32,7 +32,7 @@ impl AppHandler {
 
         // Hotkeys
         if self.alt_held && key_ev.state.is_pressed() && !key_ev.repeat {
-            let is_rail = self.rdp.as_ref().is_some_and(|s| s.is_rail);
+            let is_rail = self.rdp.as_ref().is_some_and(|s| s.rail.is_some());
             match code {
                 winit::keyboard::KeyCode::Enter if !is_rail => {
                     log::debug!("Alt+Enter → fullscreen");
@@ -91,7 +91,7 @@ impl AppHandler {
 
     pub(crate) fn handle_rdp_input(&mut self, event: &WindowEvent) -> bool {
         let Some(s) = &mut self.rdp else { return true };
-        if s.is_rail {
+        if s.rail.is_some() {
             match event {
                 WindowEvent::CloseRequested => return false,
                 WindowEvent::CursorEntered { .. } => {
@@ -105,7 +105,7 @@ impl AppHandler {
                     let py = position.y as f32;
                     s.cursor.x = px;
                     s.cursor.y = py;
-                    if let Some(ref mut rc) = s.rail_control
+                    if let Some(ref mut rc) = s.rail.as_mut().and_then(|r| r.control.as_mut())
                         && rc.handle_mouse_move(px, py)
                     {
                         s.window.window.request_redraw();
@@ -114,7 +114,7 @@ impl AppHandler {
                 WindowEvent::MouseInput { state, button, .. }
                     if state.is_pressed() && *button == winit::event::MouseButton::Left =>
                 {
-                    if let Some(ref mut rc) = s.rail_control {
+                    if let Some(ref mut rc) = s.rail.as_mut().and_then(|r| r.control.as_mut()) {
                         if rc.handle_click(s.cursor.x, s.cursor.y) {
                             // Clicked exit!
                             return false; // This will close the application
@@ -262,7 +262,8 @@ impl AppHandler {
 
     pub(crate) fn handle_rail_control_redraw(&mut self) {
         if let Some(ref mut state) = self.rdp
-            && let Some(ref mut rc) = state.rail_control
+            && let Some(ref mut rail) = state.rail
+            && let Some(ref mut rc) = rail.control
         {
             let phys = state.window.window.inner_size();
             let scale = *crate::monitor::SCALE_FACTOR as f32;
@@ -272,7 +273,8 @@ impl AppHandler {
 
     pub(crate) fn handle_rail_redraw(&mut self, rail_id: u32) {
         if let Some(ref mut state) = self.rdp
-            && let Some(rw) = state.rail_windows.get_mut(&rail_id)
+            && let Some(ref mut rail) = state.rail
+            && let Some(rw) = rail.windows.get_mut(&rail_id)
         {
             // Force position every frame to prevent Windows cascading offset
             let sf = state.coords_scale.max(1.0);
@@ -297,7 +299,7 @@ impl AppHandler {
         let Some(ref mut state) = self.rdp else {
             return;
         };
-        let Some(rail_channel) = state.rail_channel.clone() else {
+        let Some(rail_channel) = state.rail.as_ref().and_then(|r| r.channel.clone()) else {
             return;
         };
         let cmd_tx = state.command_tx.clone();
@@ -316,7 +318,7 @@ impl AppHandler {
                 rail_channel.send_system_command(rail_id, rdp_ffi::consts::SC_CLOSE as u16);
             }
             WindowEvent::Focused(focused) => {
-                if let Some(rw) = state.rail_windows.get_mut(&rail_id) {
+                if let Some(rw) = state.rail.as_mut().unwrap().windows.get_mut(&rail_id) {
                     if focused && !rw.last_focused && rw.show_in_taskbar {
                         rail_channel.send_activate(rail_id, true);
                     }
@@ -325,7 +327,7 @@ impl AppHandler {
             }
             WindowEvent::CursorMoved { ref position, .. } => {
                 self.last_pointer = Some(*position);
-                if let Some(rw) = state.rail_windows.get(&rail_id) {
+                if let Some(rw) = state.rail.as_ref().unwrap().windows.get(&rail_id) {
                     let sf = state.coords_scale;
                     let (gx, gy) = monitor::phys_2_logic(
                         (
@@ -376,14 +378,17 @@ impl AppHandler {
                 );
                 if btn.is_pressed()
                     && state
-                        .rail_windows
+                        .rail
+                        .as_ref()
+                        .unwrap()
+                        .windows
                         .get(&rail_id)
                         .is_some_and(|rw| rw.show_in_taskbar)
                 {
                     rail_channel.send_activate(rail_id, true);
                 }
                 if let Some(pos) = self.last_pointer
-                    && let Some(rw) = state.rail_windows.get(&rail_id)
+                    && let Some(rw) = state.rail.as_ref().unwrap().windows.get(&rail_id)
                 {
                     let bm = match button {
                         winit::event::MouseButton::Left => rdp_ffi::sys::PTR_FLAGS_BUTTON1,
