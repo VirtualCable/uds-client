@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-11-16 19:09+0100\n"
+"POT-Creation-Date: 2026-05-17 04:13+0200\n"
 "PO-Revision-Date: 2025-11-16 18:43+0100\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -17,39 +17,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n > 1);\n"
 
-#: rust_files.tmp:384
-msgid "Cancel"
-msgstr "Annuler"
-
-#: rust_files.tmp:393
-msgid "Confirm"
-msgstr "Confirmer"
-
-#: rust_files.tmp:398
-msgid "Error"
-msgstr "Erreur"
-
-#: rust_files.tmp:403
-msgid "Warning"
-msgstr "Avertissement"
-
-#: rust_files.tmp:441
-msgid "Click to open in browser"
-msgstr "Cliquez pour ouvrir dans le navigateur"
-
-#: rust_files.tmp:464
-msgid "Yes"
-msgstr "Oui"
-
-#: rust_files.tmp:476
-msgid "No"
-msgstr "Non"
-
-#: rust_files.tmp:486
-msgid "Ok"
-msgstr "D&#39;accord"
-
-#: rust_files.tmp:521
+#: rust_files.tmp:238 rust_files.tmp:893
 msgid ""
 "The server {}\n"
 "must be approved.\n"
@@ -61,11 +29,15 @@ msgstr ""
 "N&#39;approuvez que les serveurs UDS auxquels vous faites confiance.\n"
 "Voulez-vous continuer ?"
 
-#: rust_files.tmp:528
+#: rust_files.tmp:245 rust_files.tmp:900
 msgid "Host {} not approved by user."
 msgstr "Hôte {} non approuvé par l&#39;utilisateur."
 
-#: rust_files.tmp:572
+#: rust_files.tmp:272 rust_files.tmp:927
+msgid "Starting connection..."
+msgstr "Connexion en cours..."
+
+#: rust_files.tmp:296 rust_files.tmp:951
 msgid ""
 "Client version {} is outdated. Required version is {}.\n"
 "Please download the latest version from\n"
@@ -77,7 +49,7 @@ msgstr ""
 "{}\n"
 "et réessayez."
 
-#: rust_files.tmp:587
+#: rust_files.tmp:311 rust_files.tmp:966
 msgid ""
 "A newer client version {} is available. Current version is {}.\n"
 "{}|Download the latest version"
@@ -86,13 +58,45 @@ msgstr ""
 "est {}.\n"
 "{}|Télécharger la dernière version"
 
-#: rust_files.tmp:607
+#: rust_files.tmp:325 rust_files.tmp:980
+msgid "Script signature verification failed."
+msgstr "La vérification de la signature du script a échoué."
+
+#: rust_files.tmp:336 rust_files.tmp:991
 msgid ""
 "Access denied by broker.\n"
 "{}"
 msgstr ""
 "Accès refusé par le courtier.\n"
 "{}"
+
+#: rust_files.tmp:341 rust_files.tmp:996
+msgid "Preparing connection..."
+msgstr "Préparation de la connexion..."
+
+#~ msgid "Cancel"
+#~ msgstr "Annuler"
+
+#~ msgid "Confirm"
+#~ msgstr "Confirmer"
+
+#~ msgid "Error"
+#~ msgstr "Erreur"
+
+#~ msgid "Warning"
+#~ msgstr "Avertissement"
+
+#~ msgid "Click to open in browser"
+#~ msgstr "Cliquez pour ouvrir dans le navigateur"
+
+#~ msgid "Yes"
+#~ msgstr "Oui"
+
+#~ msgid "No"
+#~ msgstr "Non"
+
+#~ msgid "Ok"
+#~ msgstr "D&#39;accord"
 
 #~ msgid "Close"
 #~ msgstr "Fermer"

@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-11-16 19:09+0100\n"
+"POT-Creation-Date: 2026-05-17 04:13+0200\n"
 "PO-Revision-Date: 2025-11-16 18:43+0100\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -16,39 +16,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: rust_files.tmp:384
-msgid "Cancel"
-msgstr "يلغي"
-
-#: rust_files.tmp:393
-msgid "Confirm"
-msgstr "يتأكد"
-
-#: rust_files.tmp:398
-msgid "Error"
-msgstr "خطأ"
-
-#: rust_files.tmp:403
-msgid "Warning"
-msgstr "تحذير"
-
-#: rust_files.tmp:441
-msgid "Click to open in browser"
-msgstr "انقر لفتح في المتصفح"
-
-#: rust_files.tmp:464
-msgid "Yes"
-msgstr "نعم"
-
-#: rust_files.tmp:476
-msgid "No"
-msgstr "لا"
-
-#: rust_files.tmp:486
-msgid "Ok"
-msgstr "نعم"
-
-#: rust_files.tmp:521
+#: rust_files.tmp:238 rust_files.tmp:893
 msgid ""
 "The server {}\n"
 "must be approved.\n"
@@ -60,11 +28,15 @@ msgstr ""
 "قم بالموافقة على خوادم UDS التي تثق بها فقط.\n"
 "هل تريد الاستمرار؟"
 
-#: rust_files.tmp:528
+#: rust_files.tmp:245 rust_files.tmp:900
 msgid "Host {} not approved by user."
 msgstr "لم تتم الموافقة على المضيف {} من قبل المستخدم."
 
-#: rust_files.tmp:572
+#: rust_files.tmp:272 rust_files.tmp:927
+msgid "Starting connection..."
+msgstr "بدء الاتصال..."
+
+#: rust_files.tmp:296 rust_files.tmp:951
 msgid ""
 "Client version {} is outdated. Required version is {}.\n"
 "Please download the latest version from\n"
@@ -76,7 +48,7 @@ msgstr ""
 "{}\n"
 "وحاول مرة أخرى."
 
-#: rust_files.tmp:587
+#: rust_files.tmp:311 rust_files.tmp:966
 msgid ""
 "A newer client version {} is available. Current version is {}.\n"
 "{}|Download the latest version"
@@ -84,13 +56,45 @@ msgstr ""
 "يتوفر إصدار أحدث من برنامج العميل {}. الإصدار الحالي هو {}.\n"
 "{}|تحميل أحدث إصدار"
 
-#: rust_files.tmp:607
+#: rust_files.tmp:325 rust_files.tmp:980
+msgid "Script signature verification failed."
+msgstr "فشلت عملية التحقق من توقيع البرنامج النصي."
+
+#: rust_files.tmp:336 rust_files.tmp:991
 msgid ""
 "Access denied by broker.\n"
 "{}"
 msgstr ""
 "تم رفض الوصول من قبل الوسيط.\n"
 "{}"
+
+#: rust_files.tmp:341 rust_files.tmp:996
+msgid "Preparing connection..."
+msgstr "جارٍ تجهيز الاتصال..."
+
+#~ msgid "Cancel"
+#~ msgstr "يلغي"
+
+#~ msgid "Confirm"
+#~ msgstr "يتأكد"
+
+#~ msgid "Error"
+#~ msgstr "خطأ"
+
+#~ msgid "Warning"
+#~ msgstr "تحذير"
+
+#~ msgid "Click to open in browser"
+#~ msgstr "انقر لفتح في المتصفح"
+
+#~ msgid "Yes"
+#~ msgstr "نعم"
+
+#~ msgid "No"
+#~ msgstr "لا"
+
+#~ msgid "Ok"
+#~ msgstr "نعم"
 
 #~ msgid "Close"
 #~ msgstr "يغلق"
