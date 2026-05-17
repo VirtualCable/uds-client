@@ -94,8 +94,39 @@ impl AppHandler {
         if s.is_rail {
             match event {
                 WindowEvent::CloseRequested => return false,
-                _ => return true,
+                WindowEvent::CursorEntered { .. } => {
+                    s.window.window.set_cursor_visible(true);
+                }
+                WindowEvent::CursorLeft { .. } => {
+                    s.window.window.set_cursor_visible(false);
+                }
+                WindowEvent::CursorMoved { position, .. } => {
+                    let px = position.x as f32;
+                    let py = position.y as f32;
+                    s.cursor.x = px;
+                    s.cursor.y = py;
+                    if let Some(ref mut rc) = s.rail_control
+                        && rc.handle_mouse_move(px, py)
+                    {
+                        s.window.window.request_redraw();
+                    }
+                }
+                WindowEvent::MouseInput { state, button, .. }
+                    if state.is_pressed() && *button == winit::event::MouseButton::Left =>
+                {
+                    if let Some(ref mut rc) = s.rail_control {
+                        if rc.handle_click(s.cursor.x, s.cursor.y) {
+                            // Clicked exit!
+                            return false; // This will close the application
+                        } else {
+                            // Clicked outside button -> DRAG!
+                            let _ = s.window.window.drag_window();
+                        }
+                    }
+                }
+                _ => {}
             }
+            return true;
         }
         match event {
             WindowEvent::CloseRequested => return false,
@@ -227,6 +258,16 @@ impl AppHandler {
             _ => {}
         }
         true
+    }
+
+    pub(crate) fn handle_rail_control_redraw(&mut self) {
+        if let Some(ref mut state) = self.rdp
+            && let Some(ref mut rc) = state.rail_control
+        {
+            let phys = state.window.window.inner_size();
+            let scale = *crate::monitor::SCALE_FACTOR as f32;
+            rc.paint(&mut state.window.renderer, phys.width, phys.height, scale);
+        }
     }
 
     pub(crate) fn handle_rail_redraw(&mut self, rail_id: u32) {

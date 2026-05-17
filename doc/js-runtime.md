@@ -467,11 +467,13 @@ Starts an RDP connection with the specified settings.
   - `drives_to_redirect` (array of strings, optional): List of drive letters to redirect. Valid special values include `"all"` (all drives).
   - `sound_latency_threshold` (number, optional): Threshold in ms for sound latency (default: 400).
   - `best_experience` (boolean, optional): Whether to enable best experience optimizations (default: true).
-  - `rail_app` (string, optional): RemoteApp program path (e.g., `"c:\\windows\\notepad.exe"`). Enables RAIL (RemoteApp) mode.
-  - `rail_args` (string, optional): Command-line arguments for the RemoteApp program.
-  - `rail_working_dir` (string, optional): Working directory for the RemoteApp program.
+  - `rail` (object, optional): RAIL (RemoteApp) settings. If provided, enables RAIL mode.
+    - `app` (string): RemoteApp program path (e.g., `"c:\\windows\\notepad.exe"`). Required if `rail` is provided.
+    - `args` (string, optional): Command-line arguments for the RemoteApp program.
+    - `working_dir` (string, optional): Working directory for the RemoteApp program.
+    - `title` (string, optional): Title for the RAIL control window (defaults to "UDS RemoteApps").
+    - `server_info` (object, optional): `{ id: string, token: string }`. Allows launching new RemoteApps into an already-running RAIL session via local IPC.
   - `use_local_scaler` (boolean, optional): If true (default), the local client handles all DPI scaling and the server renders at 100% DPI, reducing bandwidth. If false, the server handles scaling at the native monitor DPI.
-  - `server_info` (object, optional): `{ id: string, token: string }`. When combined with `rail_app`, allows launching new RemoteApps into an already-running RAIL session via local IPC. The `token` is verified by the listener to prevent unauthorized app launches from other processes on the same machine.
 
 **Returns:** undefined
 
@@ -508,9 +510,12 @@ RDP.start({
     server: "192.168.1.100",
     user: "username",
     password: "password",
-    rail_app: "c:\\windows\\notepad.exe",
-    rail_args: "c:\\temp\\file.txt",
-    rail_working_dir: "c:\\temp",
+    rail: {
+        app: "c:\\windows\\notepad.exe",
+        args: "c:\\temp\\file.txt",
+        working_dir: "c:\\temp",
+        title: "My Custom App"
+    },
     // With local scaler (default): server renders at 100% DPI, client upscales
     use_local_scaler: true
 });

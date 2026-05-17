@@ -23,9 +23,9 @@ fn socket_name(server_id: &str) -> io::Result<interprocess::local_socket::Name<'
 
 #[derive(Serialize, Deserialize, Clone, Zeroize, ZeroizeOnDrop)]
 pub struct RailLaunchMsg {
-    pub rail_app: String,
-    pub rail_args: String,
-    pub rail_working_dir: String,
+    pub app: String,
+    pub args: String,
+    pub working_dir: String,
     pub server_token: String,
 }
 
@@ -93,14 +93,14 @@ pub fn bind(
                                 if msg.server_token != *expected_token {
                                     shared::log::warn!(
                                         "IPC: rejected RAIL app launch — token mismatch for {}",
-                                        msg.rail_app,
+                                        msg.app,
                                     );
                                     msg.zeroize();
                                     return;
                                 }
                                 shared::log::info!(
                                     "IPC: received RAIL app launch: {}",
-                                    msg.rail_app,
+                                    msg.app,
                                 );
                                 on_launch(msg);
                             });
@@ -127,31 +127,31 @@ mod tests {
     #[test]
     fn rail_launch_msg_round_trip() {
         let msg = RailLaunchMsg {
-            rail_app: "notepad.exe".into(),
-            rail_args: "file.txt".into(),
-            rail_working_dir: "C:\\temp".into(),
+            app: "notepad.exe".into(),
+            args: "file.txt".into(),
+            working_dir: "C:\\temp".into(),
             server_token: "secret123".into(),
         };
         let json = serde_json::to_string(&msg).unwrap();
         let back: RailLaunchMsg = serde_json::from_str(&json).unwrap();
-        assert_eq!(back.rail_app, msg.rail_app);
-        assert_eq!(back.rail_args, msg.rail_args);
-        assert_eq!(back.rail_working_dir, msg.rail_working_dir);
+        assert_eq!(back.app, msg.app);
+        assert_eq!(back.args, msg.args);
+        assert_eq!(back.working_dir, msg.working_dir);
         assert_eq!(back.server_token, msg.server_token);
     }
 
     #[test]
     fn rail_launch_msg_json_fields() {
         let msg = RailLaunchMsg {
-            rail_app: "app".into(),
-            rail_args: "".into(),
-            rail_working_dir: "".into(),
+            app: "app".into(),
+            args: "".into(),
+            working_dir: "".into(),
             server_token: "tok".into(),
         };
         let json = serde_json::to_string(&msg).unwrap();
-        assert!(json.contains("\"rail_app\""));
-        assert!(json.contains("\"rail_args\""));
-        assert!(json.contains("\"rail_working_dir\""));
+        assert!(json.contains("\"app\""));
+        assert!(json.contains("\"args\""));
+        assert!(json.contains("\"working_dir\""));
         assert!(json.contains("\"server_token\""));
         assert!(json.contains("\"app\""));
         assert!(json.contains("\"tok\""));

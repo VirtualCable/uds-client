@@ -27,8 +27,13 @@ impl AppHandler {
         el: &ActiveEventLoop,
         mut settings: rdp_ffi::settings::RdpSettings,
     ) -> Result<()> {
+        macro_rules! tr {
+            ($msg:expr) => {
+                self.gettext($msg)
+            };
+        }
         self.close_progress(); // Ensure progress is closed if it was open before
-        let is_rail = settings.rail_app.is_some();
+        let is_rail = settings.rail.is_some();
         let use_rgba = cfg!(target_os = "macos");
 
         let monitor_scale = monitor::scale(0);
@@ -46,10 +51,10 @@ impl AppHandler {
             (rdp_ffi::geom::ScreenSize::Fixed(w, h), _) => (w, h),
         };
         let coords_scale = if use_local_scaler {
-            settings.scale_factor = 1.0;
+            settings.desktop_scale = 1.0;
             monitor_scale
         } else {
-            settings.scale_factor = monitor_scale;
+            settings.desktop_scale = monitor_scale;
             1.0
         };
         let desktop_size = (rdp_w, rdp_h);
@@ -73,7 +78,8 @@ impl AppHandler {
                 el.create_window(
                     Window::default_attributes()
                         .with_title("UDS RemoteApp")
-                        .with_inner_size(winit::dpi::LogicalSize::new(300.0, 100.0))
+                        .with_inner_size(winit::dpi::LogicalSize::new(300.0, 40.0))
+                        .with_decorations(false) // Borderless
                         .with_window_icon(Some(logo::load_icon())),
                 )?,
             );
@@ -84,7 +90,7 @@ impl AppHandler {
                 renderer,
                 scratch: Vec::new(),
             };
-            let server_info = settings.server_info.clone();
+            let server_info = settings.rail.as_ref().and_then(|r| r.server_info.clone());
             let rdp_state = RdpState::new(
                 rdp_window,
                 settings,
@@ -93,6 +99,8 @@ impl AppHandler {
                 (rdp_w, rdp_h),
                 self.keys_rx.clone(),
                 use_rgba,
+                tr!("UDS Apps"),
+                tr!("Exit"),
             )?;
             self.rdp = Some(Box::new(rdp_state));
             self.register_window(wid, WindowKind::Rdp);
@@ -105,9 +113,9 @@ impl AppHandler {
                 let cmd_ev = state.command_event;
                 self.rail_ipc = crate::ipc::bind(&srv.id, &srv.token, move |msg| {
                     let _ = cmd_tx.send(rdp_ffi::commands::RdpCommand::LaunchRailApp {
-                        app: msg.rail_app.clone(),
-                        args: msg.rail_args.clone(),
-                        dir: msg.rail_working_dir.clone(),
+                        app: msg.app.clone(),
+                        args: msg.args.clone(),
+                        dir: msg.working_dir.clone(),
                     });
                     unsafe {
                         rdp_ffi::sys::SetEvent(cmd_ev.as_handle());
@@ -144,6 +152,8 @@ impl AppHandler {
                 desktop_size,
                 self.keys_rx.clone(),
                 use_rgba,
+                tr!("UDS Apps"),
+                tr!("Exit"),
             )?;
             if is_fullscreen {
                 rdp_state
@@ -285,6 +295,11 @@ impl AppHandler {
     }
 
     pub(crate) fn process_gui_messages(&mut self, el: &ActiveEventLoop) {
+        macro_rules! tr {
+            ($msg:expr) => {
+                self.gettext($msg)
+            };
+        }
         while let Ok(msg) = self.gui_messages_rx.try_recv() {
             match msg {
                 GuiMessage::Close => {
@@ -323,7 +338,13 @@ impl AppHandler {
                     }
                 }
                 GuiMessage::ShowProgress => {
-                    if let Ok(p) = ProgressState::new(el) {
+                    if let Ok(p) = ProgressState::new(
+                        el,
+                        tr!("UDS Launcher"),
+                        tr!("CANCEL"),
+                        tr!("Connecting to RDP server..."),
+                        tr!("Connected."),
+                    ) {
                         let wid = p.window.id();
                         self.register_window(wid, WindowKind::Progress);
                         self.progress = Some(p);
@@ -357,7 +378,13 @@ impl AppHandler {
         {
             match action {
                 LaunchAction::ShowProgress => {
-                    if let Ok(p) = ProgressState::new(el) {
+                    if let Ok(p) = ProgressState::new(
+                        el,
+                        tr!("UDS Launcher"),
+                        tr!("CANCEL"),
+                        tr!("Connecting to RDP server..."),
+                        tr!("Connected."),
+                    ) {
                         let wid = p.window.id();
                         self.register_window(wid, WindowKind::Progress);
                         self.progress = Some(p);
@@ -413,18 +440,18 @@ impl AppHandler {
                         user: "user".to_string(),
                         password: "temporal".to_string(),
                         screen_size: rdp_ffi::geom::ScreenSize::Fixed(800, 600),
-                        rail_app: if is_rail {
-                            //Some("c:\\windows\\notepad.exe".to_string())
-                            Some("c:\\windows\\system32\\mspaint.exe".to_string())
-                        } else {
-                            None
-                        },
                         best_experience: true,
                         use_local_scaler: true,
-                        server_info: if is_rail {
-                            Some(rdp_ffi::settings::ServerInfo {
-                                id: "test-uds-rail".to_string(),
-                                token: "test-token".to_string(),
+                        rail: if is_rail {
+                            Some(rdp_ffi::settings::RailSettings {
+                                app: "c:\\windows\\system32\\mspaint.exe".to_string(),
+                                args: None,
+                                working_dir: None,
+                                title: Some("Ms Paint UDS App".to_string()),
+                                server_info: Some(rdp_ffi::settings::ServerInfo {
+                                    id: "test-uds-rail".to_string(),
+                                    token: "test-token".to_string(),
+                                }),
                             })
                         } else {
                             None
@@ -438,12 +465,13 @@ impl AppHandler {
                     }
                     // Test: after 4s, send notepad.exe via IPC to the same RAIL session
                     if is_rail {
-                        std::thread::spawn(|| {
+                        std::thread::spawn(move || {
                             std::thread::sleep(std::time::Duration::from_secs(4));
+                            log::info!("TEST: Sending notepad via IPC");
                             let msg = crate::ipc::RailLaunchMsg {
-                                rail_app: "c:\\windows\\notepad.exe".to_string(),
-                                rail_args: String::new(),
-                                rail_working_dir: String::new(),
+                                app: "c:\\windows\\notepad.exe".to_string(),
+                                args: String::new(),
+                                working_dir: String::new(),
                                 server_token: "test-token".to_string(),
                             };
                             let ok = crate::ipc::try_send("test-uds-rail", &msg);

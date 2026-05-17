@@ -52,6 +52,16 @@ struct ServerInfo {
 }
 
 #[derive(Debug, TryFromJs, Zeroize, ZeroizeOnDrop)]
+struct RailSettings {
+    #[zeroize(skip)]
+    pub app: String,
+    pub args: Option<String>,
+    pub working_dir: Option<String>,
+    pub title: Option<String>,
+    pub server_info: Option<ServerInfo>,
+}
+
+#[derive(Debug, TryFromJs, Zeroize, ZeroizeOnDrop)]
 struct RdpSettings {
     #[zeroize(skip)]
     pub server: String,
@@ -83,15 +93,9 @@ struct RdpSettings {
     pub sound_latency_threshold: Option<u16>,
     #[zeroize(skip)]
     pub best_experience: Option<bool>,
-    #[zeroize(skip)]
-    pub rail_app: Option<String>,
-    #[zeroize(skip)]
-    pub rail_args: Option<String>,
-    #[zeroize(skip)]
-    pub rail_working_dir: Option<String>,
+    pub rail: Option<RailSettings>,
     #[zeroize(skip)]
     pub use_local_scaler: Option<bool>,
-    pub server_info: Option<ServerInfo>, // Not used by us, but may be used by others (as messages, etc..)
 }
 
 impl Default for RdpSettings {
@@ -113,11 +117,8 @@ impl Default for RdpSettings {
             drives_to_redirect: None,
             sound_latency_threshold: None,
             best_experience: None,
-            rail_app: None,
-            rail_args: None,
-            rail_working_dir: None,
+            rail: None,
             use_local_scaler: None,
-            server_info: None,
         }
     }
 }
@@ -163,15 +164,18 @@ impl RdpSettings {
                 .unwrap_or_else(|| defs.drives_to_redirect.clone()),
             sound_latency_threshold: self.sound_latency_threshold,
             best_experience: self.best_experience.unwrap_or(defs.best_experience),
-            rail_app: self.rail_app.clone().or(defs.rail_app),
-            rail_args: self.rail_args.clone().or(defs.rail_args),
-            rail_working_dir: self.rail_working_dir.clone().or(defs.rail_working_dir),
-            scale_factor: 1.0,
-            use_local_scaler: self.use_local_scaler.unwrap_or(true),
-            server_info: self.server_info.as_ref().map(|s| settings::ServerInfo {
-                id: s.id.clone(),
-                token: s.token.clone(),
+            rail: self.rail.as_ref().map(|r| settings::RailSettings {
+                app: r.app.clone(),
+                args: r.args.clone(),
+                working_dir: r.working_dir.clone(),
+                title: r.title.clone(),
+                server_info: r.server_info.as_ref().map(|s| settings::ServerInfo {
+                    id: s.id.clone(),
+                    token: s.token.clone(),
+                }),
             }),
+            desktop_scale: 1.0,
+            use_local_scaler: self.use_local_scaler.unwrap_or(true),
         }
     }
 }
@@ -189,17 +193,19 @@ fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
     log::debug!("Starting RDP with settings: {:?}", settings);
 
     // If we have a server config and a rail_app, try sending via IPC to an existing session
-    if let (Some(srv), Some(rail_app)) = (&settings.server_info, &settings.rail_app) {
+    if let Some(ref rail) = settings.rail
+        && let Some(ref srv) = rail.server_info
+    {
         let msg = gui::ipc::RailLaunchMsg {
-            rail_app: rail_app.clone(),
-            rail_args: settings.rail_args.clone().unwrap_or_default(),
-            rail_working_dir: settings.rail_working_dir.clone().unwrap_or_default(),
+            app: rail.app.clone(),
+            args: rail.args.clone().unwrap_or_default(),
+            working_dir: rail.working_dir.clone().unwrap_or_default(),
             server_token: srv.token.clone(),
         };
         if gui::ipc::try_send(&srv.id, &msg) {
             log::info!(
                 "Sent RAIL app via IPC channel: {} (server_id={})",
-                rail_app,
+                rail.app,
                 srv.id
             );
             return Ok(JsValue::undefined());

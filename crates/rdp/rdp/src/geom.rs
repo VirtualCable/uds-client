@@ -28,6 +28,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+use zeroize::Zeroize;
 #[derive(Debug, Copy, Clone)]
 pub struct Rect {
     pub x: i32,
@@ -67,7 +68,7 @@ impl From<&freerdp_sys::GDI_RGN> for Rect {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Zeroize)]
 pub enum ScreenSize {
     Full,
     Fixed(u32, u32),

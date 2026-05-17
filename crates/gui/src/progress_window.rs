@@ -31,10 +31,18 @@ pub struct ProgressState {
     pub animation_time: f32,
     pub waves: Vec<Wave>,
     pub last_mouse_pos: Option<(f32, f32)>,
+    pub connecting_text: String,
+    pub connected_text: String,
 }
 
 impl ProgressState {
-    pub fn new(el: &winit::event_loop::ActiveEventLoop) -> anyhow::Result<Self> {
+    pub fn new(
+        el: &winit::event_loop::ActiveEventLoop,
+        title: String,
+        cancel_text: String,
+        connecting_text: String,
+        connected_text: String,
+    ) -> anyhow::Result<Self> {
         let (dw, dh) = crate::monitor::size(0).unwrap_or((1920, 1080));
         let ww = 400.0;
         let wh = 300.0;
@@ -45,7 +53,7 @@ impl ProgressState {
         let window = Arc::new(
             el.create_window(
                 winit::window::Window::default_attributes()
-                    .with_title("UDS Launcher")
+                    .with_title(title)
                     .with_inner_size(winit::dpi::LogicalSize::new(ww, wh))
                     .with_window_icon(Some(crate::logo::load_icon()))
                     .with_resizable(false)
@@ -70,7 +78,7 @@ impl ProgressState {
             by,
             bw as u32,
             bh as u32,
-            "CANCEL".to_string(),
+            cancel_text,
             crate::draw::ui::button::ButtonStyle {
                 font_scale: crate::monitor::scaled_val(13) as f32,
                 bg_color: [60, 35, 35, 255],
@@ -120,6 +128,8 @@ impl ProgressState {
                 },
             ],
             last_mouse_pos: None,
+            connecting_text,
+            connected_text,
         })
     }
 
@@ -166,8 +176,8 @@ impl ProgressState {
         };
         let message = if self.auto_animate {
             match self.phase {
-                ProgressPhase::Connecting => "Connecting to RDP server...",
-                ProgressPhase::Connected => "Connected.",
+                ProgressPhase::Connecting => self.connecting_text.as_str(),
+                ProgressPhase::Connected => self.connected_text.as_str(),
             }
         } else {
             self.message.as_str()

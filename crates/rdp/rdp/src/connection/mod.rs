@@ -156,7 +156,7 @@ impl Rdp {
                     (FreeRDP_Settings_Keys_UInt32_FreeRDP_FrameAcknowledge, 0),
                     (
                         FreeRDP_Settings_Keys_UInt32_FreeRDP_DesktopScaleFactor,
-                        (self.config.settings.scale_factor * 100.0) as u32,
+                        (self.config.settings.desktop_scale * 100.0) as u32,
                     ),
                     // 100% device = use desktop scale factor
                     // DeviceScaleFactor only allows 100, 140 y 180.. O.o
@@ -347,7 +347,7 @@ impl Rdp {
         self.debug_assert_instance();
         unsafe {
             if let Some(settings) = self.settings()
-                && let Some(app) = self.config.settings.rail_app.clone()
+                && let Some(ref rail) = self.config.settings.rail
             {
                 log::debug!("Enabling RAIL mode in FreeRDP settings");
                 freerdp_settings_set_bool(
@@ -375,14 +375,14 @@ impl Rdp {
                     0xFFFFFFFF, // Allow all capabilities negotiated with server
                 );
 
-                let capp = std::ffi::CString::new(app).unwrap();
+                let capp = std::ffi::CString::new(rail.app.clone()).unwrap();
                 freerdp_settings_set_string(
                     settings,
                     FreeRDP_Settings_Keys_String_FreeRDP_RemoteApplicationProgram,
                     capp.as_ptr(),
                 );
 
-                if let Some(rail_args) = &self.config.settings.rail_args {
+                if let Some(rail_args) = &rail.args {
                     let cargs = std::ffi::CString::new(rail_args.clone()).unwrap();
                     freerdp_settings_set_string(
                         settings,
@@ -391,7 +391,7 @@ impl Rdp {
                     );
                 }
 
-                if let Some(rail_dir) = &self.config.settings.rail_working_dir {
+                if let Some(rail_dir) = &rail.working_dir {
                     let cdir = std::ffi::CString::new(rail_dir.clone()).unwrap();
                     freerdp_settings_set_string(
                         settings,

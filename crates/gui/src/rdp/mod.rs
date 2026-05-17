@@ -58,6 +58,7 @@ pub struct RdpState {
     pub rail_channel: Option<rdp_ffi::channels::rail::RailChannel>,
     pub rail_actions: Vec<RailAction>,
     pub rail_windows: HashMap<u32, RailWindow>, // id → RailWindow
+    pub rail_control: Option<crate::draw::ui::rail_control::RailControl>,
 
     pub cursor: Cursor,
     pub pending_pixels: HashMap<u32, (u32, u32, Vec<u8>)>,
@@ -83,6 +84,8 @@ impl RdpState {
         desktop_size: (u32, u32),
         keys_rx: Receiver<RawKey>,
         use_rgba: bool,
+        default_title: String,
+        exit_text: String,
     ) -> Result<Self> {
         log::debug!(
             "RdpState::new: is_rail={}, coords_scale={}, desktop_size={:?}, use_rgba={}",
@@ -93,7 +96,8 @@ impl RdpState {
         );
         let (tx, rx) = bounded::<RdpMessage>(FRAMES_IN_FLIGHT);
 
-        let scale_factor = settings.scale_factor;
+        let scale_factor = settings.desktop_scale;
+        let rail_title = settings.rail.as_ref().and_then(|r| r.title.clone());
 
         let (mut rdp_instance, command_tx) = rdp_ffi::Rdp::new(settings, tx, use_rgba);
         let command_event = rdp_instance.get_command_event();
@@ -128,6 +132,21 @@ impl RdpState {
 
         let rail_channel = if is_rail {
             channels.read().unwrap().rail()
+        } else {
+            None
+        };
+
+        let rail_control = if is_rail {
+            let phys = window.window.inner_size();
+            let scale = *crate::monitor::SCALE_FACTOR as f32;
+            let title = rail_title.unwrap_or(default_title);
+            Some(crate::draw::ui::rail_control::RailControl::new(
+                title,
+                phys.width as f32,
+                phys.height as f32,
+                scale,
+                exit_text,
+            ))
         } else {
             None
         };
@@ -167,6 +186,7 @@ impl RdpState {
             },
             rail_channel,
             rail_actions: Vec::new(),
+            rail_control,
             rail_windows: HashMap::new(),
             cursor: Cursor::new(coords_scale),
             pending_pixels: HashMap::new(),

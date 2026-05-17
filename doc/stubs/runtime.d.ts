@@ -66,11 +66,14 @@ declare module "runtime" {
       drives_to_redirect?: string[];
       sound_latency_threshold?: number;
       best_experience?: boolean;
-      rail_app?: string;
-      rail_args?: string;
-      rail_working_dir?: string;
+      rail?: {
+        app: string;
+        args?: string;
+        working_dir?: string;
+        title?: string;
+        server_info?: { id: string; token: string };
+      };
       use_local_scaler?: boolean;
-      server_info?: { id: string; token: string };
     }): void;
     function sign(rdp_string: string, ticket: string): Promise<string>;
   }

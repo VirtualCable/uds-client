@@ -40,51 +40,35 @@ pub struct ServerInfo {
     pub token: String,
 }
 
+#[derive(Debug, Zeroize, Clone)]
+pub struct RailSettings {
+    pub app: String,
+    pub args: Option<String>,
+    pub working_dir: Option<String>,
+    pub title: Option<String>,
+    pub server_info: Option<ServerInfo>,
+}
+
 #[derive(Zeroize, Clone)]
 pub struct RdpSettings {
-    #[zeroize(skip)]
     pub server: String,
-    #[zeroize(skip)]
     pub port: u32,
     pub user: String,
     pub password: String,
     pub domain: String,
-    #[zeroize(skip)]
     pub verify_cert: bool,
-    #[zeroize(skip)]
     pub use_nla: bool,
-    #[zeroize(skip)]
     pub screen_size: ScreenSize,
-    #[zeroize(skip)]
     pub clipboard_redirection: bool,
-    #[zeroize(skip)]
     pub audio_redirection: bool,
-    #[zeroize(skip)]
     pub microphone_redirection: bool,
-    #[zeroize(skip)]
     pub printer_redirection: bool,
-    // Valid values for drives_to_redirect are "all" for all drives
-    // % -> Home
-    // * --> All drives
-    // DynamicDrives --> Later connected drives
-    #[zeroize(skip)]
     pub drives_to_redirect: Vec<String>,
-    #[zeroize(skip)]
     pub sound_latency_threshold: Option<u16>,
-    #[zeroize(skip)]
     pub best_experience: bool,
-    #[zeroize(skip)]
-    pub rail_app: Option<String>,
-    #[zeroize(skip)]
-    pub rail_args: Option<String>,
-    #[zeroize(skip)]
-    pub rail_working_dir: Option<String>,
-    #[zeroize(skip)]
-    pub scale_factor: f64,
-    #[zeroize(skip)]
+    pub rail: Option<RailSettings>,
+    pub desktop_scale: f64,
     pub use_local_scaler: bool,
-    #[zeroize(skip)]
-    pub server_info: Option<ServerInfo>,
 }
 
 impl Default for RdpSettings {
@@ -105,12 +89,9 @@ impl Default for RdpSettings {
             drives_to_redirect: vec!["all".to_string()], // By default, redirect all drives.
             sound_latency_threshold: None,
             best_experience: true,
-            rail_app: None,
-            rail_args: None,
-            rail_working_dir: None,
-            scale_factor: 1.0,
+            rail: None,
+            desktop_scale: 1.0,
             use_local_scaler: true,
-            server_info: None,
         }
     }
 }
@@ -140,18 +121,9 @@ impl fmt::Debug for RdpSettings {
             .field("drives_to_redirect", &self.drives_to_redirect)
             .field("sound_latency_threshold", &self.sound_latency_threshold)
             .field("best_experience", &self.best_experience)
-            .field("rail_app", &self.rail_app)
-            .field("rail_args", &self.rail_args)
-            .field("rail_working_dir", &self.rail_working_dir)
-            .field("scale_factor", &self.scale_factor)
+            .field("rail", &self.rail)
+            .field("desktop_scale", &self.desktop_scale)
             .field("use_local_scaler", &self.use_local_scaler)
-            .field(
-                "server_info",
-                &self
-                    .server_info
-                    .as_ref()
-                    .map(|s| format!("id={}, token=****", s.id)),
-            )
             .finish()
     }
 }
@@ -184,8 +156,8 @@ mod tests {
     }
 
     #[test]
-    fn default_server_info_none() {
-        assert!(RdpSettings::default().server_info.is_none());
+    fn default_rail_none() {
+        assert!(RdpSettings::default().rail.is_none());
     }
 
     #[test]

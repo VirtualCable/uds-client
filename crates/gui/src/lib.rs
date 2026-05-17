@@ -63,6 +63,7 @@ enum WindowKind {
 }
 
 pub struct AppHandler {
+    catalog: gettext::Catalog,
     launcher: Option<TestingLauncherState>,
     progress: Option<crate::progress_window::ProgressState>,
     rdp: Option<Box<RdpState>>,
@@ -88,7 +89,7 @@ pub struct AppHandler {
 }
 
 pub fn run_gui(
-    _catalog: gettext::Catalog,
+    catalog: gettext::Catalog,
     initial_state: Option<AppState>,
     messages_rx: Receiver<GuiMessage>,
     stop: Trigger,
@@ -100,6 +101,7 @@ pub fn run_gui(
     let proxy = event_loop.create_proxy();
 
     let mut app = AppHandler {
+        catalog,
         launcher: None,
         progress: None,
         rdp: None,
@@ -127,6 +129,10 @@ pub fn run_gui(
 }
 
 impl AppHandler {
+    pub fn gettext(&self, msgid: &str) -> String {
+        self.catalog.gettext(msgid).to_string()
+    }
+
     fn register_window(&mut self, wid: WindowId, kind: WindowKind) {
         self.windows.insert(wid, kind);
     }
@@ -192,6 +198,9 @@ impl ApplicationHandler<UserEvent> for AppHandler {
                     }
                     Some(WindowKind::Rdp) if !self.rdp.as_ref().is_some_and(|s| s.is_rail) => {
                         let _ = self.rdp.as_mut().map(|s| s.update_screen());
+                    }
+                    Some(WindowKind::Rdp) if self.rdp.as_ref().is_some_and(|s| s.is_rail) => {
+                        self.handle_rail_control_redraw();
                     }
                     Some(&WindowKind::RdpRail(id)) => {
                         self.handle_rail_redraw(id);

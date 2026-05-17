@@ -191,21 +191,19 @@ fn complete_handshake(context: *mut RailClientContext) -> UINT {
             }
 
             // 3. Client Execute (Launch RemoteApp)
-            if let Some(app) = &rdp.config.settings.rail_app
+            if let Some(ref rail) = rdp.config.settings.rail
                 && let Some(execute_fn) = (*context).ClientExecute
             {
-                let capp = std::ffi::CString::new(app.clone()).unwrap();
+                let capp = std::ffi::CString::new(rail.app.clone()).unwrap();
                 let cdir = std::ffi::CString::new(
-                    rdp.config
-                        .settings
-                        .rail_working_dir
+                    rail.working_dir
                         .as_deref()
                         .filter(|s| !s.is_empty())
                         .unwrap_or("C:\\"),
                 )
                 .unwrap();
                 let cargs =
-                    std::ffi::CString::new(rdp.config.settings.rail_args.as_deref().unwrap_or(""))
+                    std::ffi::CString::new(rail.args.as_deref().unwrap_or(""))
                         .unwrap();
                 let exec = RAIL_EXEC_ORDER {
                     flags: RAIL_EXEC_FLAG_EXPAND_ARGUMENTS as u16,
@@ -215,9 +213,9 @@ fn complete_handshake(context: *mut RailClientContext) -> UINT {
                 };
                 log::info!(
                     "RAIL: Sending ClientExecute for RemoteApp: {} (args={:?}, dir={:?})",
-                    app,
-                    rdp.config.settings.rail_args,
-                    rdp.config.settings.rail_working_dir
+                    rail.app,
+                    rail.args,
+                    rail.working_dir
                 );
                 execute_fn(context, &exec);
             }
