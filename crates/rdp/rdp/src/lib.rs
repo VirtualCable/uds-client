@@ -99,6 +99,7 @@ impl Rdp {
                 config: Config {
                     settings,
                     use_rgba,
+                    // Add window callbacks only if RDP is running in RAIL mode
                     callbacks: if is_rail {
                         callbacks::Callbacks {
                             window: vec![
