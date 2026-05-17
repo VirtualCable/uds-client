@@ -145,6 +145,16 @@ impl WgpuRenderer {
         })
     }
 
+    pub fn upload_gdi(
+        &mut self,
+        rgba: &[u8],
+        sw: u32,
+        sh: u32,
+        rects: Option<&[(u32, u32, u32, u32)]>,
+    ) {
+        self.gdi.upload(&self.device, &self.queue, rgba, sw, sh, rects);
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn update_and_render(
         &mut self,
