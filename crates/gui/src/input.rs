@@ -44,10 +44,10 @@ impl AppHandler {
                     return true;
                 }
                 winit::keyboard::KeyCode::KeyF if !is_rail => {
-                    if let Some(ref s) = self.rdp {
-                        if let RdpMode::Desktop { ref fps, .. } = s.mode {
-                            fps.toggle();
-                        }
+                    if let Some(ref s) = self.rdp
+                        && let RdpMode::Desktop { ref fps, .. } = s.mode
+                    {
+                        fps.toggle();
                     }
                     return true;
                 }
@@ -197,20 +197,19 @@ impl AppHandler {
                 state: btn, button, ..
             } => {
                 // Pinbar click — only on press
-                if let RdpMode::Desktop { ref pinbar, .. } = s.mode {
-                    if btn.is_pressed()
-                        && let Some(pos) = self.last_pointer
-                        && pinbar.visible
-                        && *button == winit::event::MouseButton::Left
-                    {
-                        let px = pos.x as f32;
-                        if pinbar.btn_fs_x.contains(&px) {
-                            self.toggle_fullscreen();
-                            return true;
-                        }
-                        if pinbar.btn_close_x.contains(&px) {
-                            return false;
-                        }
+                if let RdpMode::Desktop { ref pinbar, .. } = s.mode
+                    && btn.is_pressed()
+                    && let Some(pos) = self.last_pointer
+                    && pinbar.visible
+                    && *button == winit::event::MouseButton::Left
+                {
+                    let px = pos.x as f32;
+                    if pinbar.btn_fs_x.contains(&px) {
+                        self.toggle_fullscreen();
+                        return true;
+                    }
+                    if pinbar.btn_close_x.contains(&px) {
+                        return false;
                     }
                 }
 

@@ -183,16 +183,16 @@ impl RdpState {
         let mut _ov_data: Vec<Vec<u8>> = Vec::new();
         let mut ov_descs: Vec<crate::wgpu_render::OverlayDesc> = Vec::new();
 
-        if let RdpMode::Desktop { ref mut fps, .. } = self.mode {
-            if let Some(desc) = fps.build_overlay(phys.width, &mut text_sections, &mut _ov_data) {
-                ov_descs.push(desc);
-            }
+        if let RdpMode::Desktop { ref mut fps, .. } = self.mode
+            && let Some(desc) = fps.build_overlay(phys.width, &mut text_sections, &mut _ov_data)
+        {
+            ov_descs.push(desc);
         }
 
-        if let RdpMode::Desktop { ref mut pinbar, .. } = self.mode {
-            if let Some(desc) = pinbar.build(phys.width, &mut text_sections, &mut _ov_data) {
-                ov_descs.push(desc);
-            }
+        if let RdpMode::Desktop { ref mut pinbar, .. } = self.mode
+            && let Some(desc) = pinbar.build(phys.width, &mut text_sections, &mut _ov_data)
+        {
+            ov_descs.push(desc);
         }
 
         for d in &ov_descs {

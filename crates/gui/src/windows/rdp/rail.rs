@@ -113,7 +113,7 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                             if let RailAction::Create(id, _, r, ..) = action
                                 && *id == window_id
                             {
-                                rect = r.clone();
+                                rect = *r;
                             }
                         }
                     }
