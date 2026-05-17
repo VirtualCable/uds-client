@@ -34,7 +34,7 @@ use windows::about::AboutState;
 use windows::launcher::{LauncherInner, TestingLauncherState};
 use windows::popup::PopupState;
 use windows::progress::{ProgressPhase, ProgressState};
-use windows::rdp::RdpState;
+use windows::rdp::{RdpMode, RdpState};
 
 #[derive(Debug)]
 pub struct RawKey {
@@ -194,12 +194,18 @@ impl ApplicationHandler<UserEvent> for AppHandler {
                         self.handle_progress_event(el, WindowEvent::RedrawRequested)
                     }
                     Some(WindowKind::Rdp)
-                        if !self.rdp.as_ref().is_some_and(|s| s.rail.is_some()) =>
+                        if self
+                            .rdp
+                            .as_ref()
+                            .is_some_and(|s| matches!(s.mode, RdpMode::Desktop { .. })) =>
                     {
                         let _ = self.rdp.as_mut().map(|s| s.update_screen());
                     }
                     Some(WindowKind::Rdp)
-                        if self.rdp.as_ref().is_some_and(|s| s.rail.is_some()) =>
+                        if self
+                            .rdp
+                            .as_ref()
+                            .is_some_and(|s| matches!(s.mode, RdpMode::Rail(_))) =>
                     {
                         self.handle_rail_control_redraw();
                     }

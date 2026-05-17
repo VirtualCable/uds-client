@@ -8,6 +8,7 @@ use shared::log;
 
 use super::{AppHandler, RawKey};
 use crate::monitor;
+use crate::windows::rdp::RdpMode;
 
 impl AppHandler {
     pub(crate) fn handle_keyboard(&mut self, el: &ActiveEventLoop, event: &WindowEvent) -> bool {
@@ -32,7 +33,10 @@ impl AppHandler {
 
         // Hotkeys
         if self.alt_held && key_ev.state.is_pressed() && !key_ev.repeat {
-            let is_rail = self.rdp.as_ref().is_some_and(|s| s.rail.is_some());
+            let is_rail = self
+                .rdp
+                .as_ref()
+                .is_some_and(|s| matches!(s.mode, RdpMode::Rail(_)));
             match code {
                 winit::keyboard::KeyCode::Enter if !is_rail => {
                     log::debug!("Alt+Enter → fullscreen");
@@ -41,7 +45,9 @@ impl AppHandler {
                 }
                 winit::keyboard::KeyCode::KeyF if !is_rail => {
                     if let Some(ref s) = self.rdp {
-                        s.fps.toggle();
+                        if let RdpMode::Desktop { ref fps, .. } = s.mode {
+                            fps.toggle();
+                        }
                     }
                     return true;
                 }
@@ -66,32 +72,42 @@ impl AppHandler {
 
     pub(crate) fn toggle_fullscreen(&mut self) {
         let Some(s) = &mut self.rdp else { return };
-        let is_fs = s.full_screen.load(Ordering::Relaxed);
-        if !is_fs {
-            s.window
-                .window
-                .set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
-            s.full_screen.store(true, Ordering::Relaxed);
-        } else {
-            s.window.window.set_fullscreen(None);
-            s.full_screen.store(false, Ordering::Relaxed);
-            if s.last_windowed_size.is_none() {
-                let phys = s.window.window.inner_size();
-                let w = (phys.width as f64 * 2.0 / 3.0) as u32;
-                let h = (phys.height as f64 * 2.0 / 3.0) as u32;
-                let sf = s.window.window.scale_factor();
-                let _ = s
+        if let RdpMode::Desktop {
+            ref full_screen,
+            ref mut last_windowed_size,
+            ..
+        } = s.mode
+        {
+            let is_fs = full_screen.load(Ordering::Relaxed);
+            if !is_fs {
+                s.window
                     .window
-                    .window
-                    .request_inner_size(winit::dpi::LogicalSize::new(w as f64 / sf, h as f64 / sf));
-                s.last_windowed_size = Some((w, h));
+                    .set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+                full_screen.store(true, Ordering::Relaxed);
+            } else {
+                s.window.window.set_fullscreen(None);
+                full_screen.store(false, Ordering::Relaxed);
+                if last_windowed_size.is_none() {
+                    let phys = s.window.window.inner_size();
+                    let w = (phys.width as f64 * 2.0 / 3.0) as u32;
+                    let h = (phys.height as f64 * 2.0 / 3.0) as u32;
+                    let sf = s.window.window.scale_factor();
+                    let _ = s
+                        .window
+                        .window
+                        .request_inner_size(winit::dpi::LogicalSize::new(
+                            w as f64 / sf,
+                            h as f64 / sf,
+                        ));
+                    *last_windowed_size = Some((w, h));
+                }
             }
         }
     }
 
     pub(crate) fn handle_rdp_input(&mut self, event: &WindowEvent) -> bool {
         let Some(s) = &mut self.rdp else { return true };
-        if s.rail.is_some() {
+        if let RdpMode::Rail(ref mut rail) = s.mode {
             match event {
                 WindowEvent::CloseRequested => return false,
                 WindowEvent::CursorEntered { .. } => {
@@ -105,7 +121,7 @@ impl AppHandler {
                     let py = position.y as f32;
                     s.cursor.x = px;
                     s.cursor.y = py;
-                    if let Some(ref mut rc) = s.rail.as_mut().and_then(|r| r.control.as_mut())
+                    if let Some(ref mut rc) = rail.control.as_mut()
                         && rc.handle_mouse_move(px, py)
                     {
                         s.window.window.request_redraw();
@@ -114,7 +130,7 @@ impl AppHandler {
                 WindowEvent::MouseInput { state, button, .. }
                     if state.is_pressed() && *button == winit::event::MouseButton::Left =>
                 {
-                    if let Some(ref mut rc) = s.rail.as_mut().and_then(|r| r.control.as_mut()) {
+                    if let Some(ref mut rc) = rail.control.as_mut() {
                         if rc.handle_click(s.cursor.x, s.cursor.y) {
                             // Clicked exit!
                             return false; // This will close the application
@@ -159,33 +175,42 @@ impl AppHandler {
                     rdp_ffi::sys::SetEvent(s.command_event.as_handle());
                 }
                 // Pinbar
-                let is_fs = s.full_screen.load(Ordering::Relaxed);
-                if position.y < 5.0
-                    && position.x > std::cmp::max(phys_w, 1) as f64 * 0.4
-                    && position.x < phys_w as f64 * 0.6
+                if let RdpMode::Desktop {
+                    ref mut pinbar,
+                    ref full_screen,
+                    ..
+                } = s.mode
                 {
-                    s.pinbar.visible = is_fs;
-                }
-                if position.y > 32.0 {
-                    s.pinbar.visible = false;
+                    let is_fs = full_screen.load(Ordering::Relaxed);
+                    if position.y < 5.0
+                        && position.x > std::cmp::max(phys_w, 1) as f64 * 0.4
+                        && position.x < phys_w as f64 * 0.6
+                    {
+                        pinbar.visible = is_fs;
+                    }
+                    if position.y > 32.0 {
+                        pinbar.visible = false;
+                    }
                 }
             }
             WindowEvent::MouseInput {
                 state: btn, button, ..
             } => {
                 // Pinbar click — only on press
-                if btn.is_pressed()
-                    && let Some(pos) = self.last_pointer
-                    && s.pinbar.visible
-                    && *button == winit::event::MouseButton::Left
-                {
-                    let px = pos.x as f32;
-                    if s.pinbar.btn_fs_x.contains(&px) {
-                        self.toggle_fullscreen();
-                        return true;
-                    }
-                    if s.pinbar.btn_close_x.contains(&px) {
-                        return false;
+                if let RdpMode::Desktop { ref pinbar, .. } = s.mode {
+                    if btn.is_pressed()
+                        && let Some(pos) = self.last_pointer
+                        && pinbar.visible
+                        && *button == winit::event::MouseButton::Left
+                    {
+                        let px = pos.x as f32;
+                        if pinbar.btn_fs_x.contains(&px) {
+                            self.toggle_fullscreen();
+                            return true;
+                        }
+                        if pinbar.btn_close_x.contains(&px) {
+                            return false;
+                        }
                     }
                 }
 
@@ -262,7 +287,7 @@ impl AppHandler {
 
     pub(crate) fn handle_rail_control_redraw(&mut self) {
         if let Some(ref mut state) = self.rdp
-            && let Some(ref mut rail) = state.rail
+            && let RdpMode::Rail(ref mut rail) = state.mode
             && let Some(ref mut rc) = rail.control
         {
             let phys = state.window.window.inner_size();
@@ -273,7 +298,7 @@ impl AppHandler {
 
     pub(crate) fn handle_rail_redraw(&mut self, rail_id: u32) {
         if let Some(ref mut state) = self.rdp
-            && let Some(ref mut rail) = state.rail
+            && let RdpMode::Rail(ref mut rail) = state.mode
             && let Some(rw) = rail.windows.get_mut(&rail_id)
         {
             // Force position every frame to prevent Windows cascading offset
@@ -299,7 +324,10 @@ impl AppHandler {
         let Some(ref mut state) = self.rdp else {
             return;
         };
-        let Some(rail_channel) = state.rail.as_ref().and_then(|r| r.channel.clone()) else {
+        let RdpMode::Rail(ref mut rail) = state.mode else {
+            return;
+        };
+        let Some(rail_channel) = rail.channel.clone() else {
             return;
         };
         let cmd_tx = state.command_tx.clone();
@@ -318,7 +346,7 @@ impl AppHandler {
                 rail_channel.send_system_command(rail_id, rdp_ffi::consts::SC_CLOSE as u16);
             }
             WindowEvent::Focused(focused) => {
-                if let Some(rw) = state.rail.as_mut().unwrap().windows.get_mut(&rail_id) {
+                if let Some(rw) = rail.windows.get_mut(&rail_id) {
                     if focused && !rw.last_focused && rw.show_in_taskbar {
                         rail_channel.send_activate(rail_id, true);
                     }
@@ -327,7 +355,7 @@ impl AppHandler {
             }
             WindowEvent::CursorMoved { ref position, .. } => {
                 self.last_pointer = Some(*position);
-                if let Some(rw) = state.rail.as_ref().unwrap().windows.get(&rail_id) {
+                if let Some(rw) = rail.windows.get(&rail_id) {
                     let sf = state.coords_scale;
                     let (gx, gy) = monitor::phys_2_logic(
                         (
@@ -377,10 +405,7 @@ impl AppHandler {
                     btn.is_pressed()
                 );
                 if btn.is_pressed()
-                    && state
-                        .rail
-                        .as_ref()
-                        .unwrap()
+                    && rail
                         .windows
                         .get(&rail_id)
                         .is_some_and(|rw| rw.show_in_taskbar)
@@ -388,7 +413,7 @@ impl AppHandler {
                     rail_channel.send_activate(rail_id, true);
                 }
                 if let Some(pos) = self.last_pointer
-                    && let Some(rw) = state.rail.as_ref().unwrap().windows.get(&rail_id)
+                    && let Some(rw) = rail.windows.get(&rail_id)
                 {
                     let bm = match button {
                         winit::event::MouseButton::Left => rdp_ffi::sys::PTR_FLAGS_BUTTON1,

@@ -87,17 +87,32 @@ impl Rdp {
             unsafe { freerdp_sys::CreateEventW(std::ptr::null_mut(), 1, 0, std::ptr::null()) };
         let command_event: freerdp_sys::HANDLE =
             unsafe { freerdp_sys::CreateEventW(std::ptr::null_mut(), 0, 0, std::ptr::null()) }; // Auto-reset event
-
+ 
         let stop_event = utils::SafeHandle::new(stop_event).unwrap();
         let command_event = utils::SafeHandle::new(command_event).unwrap();
         let (command_tx, command_rx) = flume::unbounded();
+ 
+        let is_rail = settings.rail.is_some();
 
         (
             Rdp {
                 config: Config {
                     settings,
                     use_rgba,
-                    callbacks: callbacks::Callbacks::default(),
+                    callbacks: if is_rail {
+                        callbacks::Callbacks {
+                            window: vec![
+                                callbacks::window_c::Callbacks::Create,
+                                callbacks::window_c::Callbacks::Update,
+                                callbacks::window_c::Callbacks::Delete,
+                                callbacks::window_c::Callbacks::Icon,
+                                callbacks::window_c::Callbacks::CachedIcon,
+                            ],
+                            ..callbacks::Callbacks::default()
+                        }
+                    } else {
+                        callbacks::Callbacks::default()
+                    },
                 },
                 instance: None,
                 update_tx: Some(update_tx),

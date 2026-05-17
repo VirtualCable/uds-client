@@ -50,6 +50,17 @@ pub struct Rail {
     pub control: Option<crate::draw::ui::rail_control::RailControl>,
 }
 
+pub enum RdpMode {
+    Desktop {
+        pinbar: Pinbar,
+        full_screen: Arc<AtomicBool>,
+        last_windowed_size: Option<(u32, u32)>,
+        last_resize: std::time::Instant,
+        fps: Fps,
+    },
+    Rail(Rail),
+}
+
 #[allow(dead_code)]
 pub struct RdpState {
     pub window: RdpWindow,
@@ -61,14 +72,9 @@ pub struct RdpState {
     pub command_event: rdp_ffi::utils::SafeHandle,
     pub coords_scale: f64,
     pub desktop_size: (u32, u32),
-    pub full_screen: Arc<AtomicBool>,
-    pub last_windowed_size: Option<(u32, u32)>,
-    pub last_resize: std::time::Instant,
-    pub pinbar: Pinbar,
     pub keys_rx: Receiver<RawKey>,
-    pub fps: Fps,
 
-    pub rail: Option<Rail>,
+    pub mode: RdpMode,
     pub pendings: Pendings,
 
     pub cursor: Cursor,
@@ -107,18 +113,8 @@ impl RdpState {
         let scale_factor = settings.desktop_scale;
         let rail_title = settings.rail.as_ref().and_then(|r| r.title.clone());
 
-        let (mut rdp_instance, command_tx) = rdp_ffi::Rdp::new(settings, tx, use_rgba);
+        let (rdp_instance, command_tx) = rdp_ffi::Rdp::new(settings, tx, use_rgba);
         let command_event = rdp_instance.get_command_event();
-
-        if is_rail {
-            rdp_instance.set_window_callbacks(vec![
-                rdp_ffi::callbacks::window_c::Callbacks::Create,
-                rdp_ffi::callbacks::window_c::Callbacks::Update,
-                rdp_ffi::callbacks::window_c::Callbacks::Delete,
-                rdp_ffi::callbacks::window_c::Callbacks::Icon,
-                rdp_ffi::callbacks::window_c::Callbacks::CachedIcon,
-            ]);
-        }
 
         let mut rdp = Box::pin(rdp_instance);
         rdp.as_mut().build()?;
@@ -168,8 +164,8 @@ impl RdpState {
             }
         });
 
-        let rail = if is_rail {
-            Some(Rail {
+        let mode = if is_rail {
+            RdpMode::Rail(Rail {
                 state: RailState {
                     windows: HashMap::new(),
                     mouse_capture: None,
@@ -180,7 +176,15 @@ impl RdpState {
                 control: rail_control,
             })
         } else {
-            None
+            RdpMode::Desktop {
+                pinbar: Pinbar::new(),
+                full_screen: Arc::new(AtomicBool::new(false)),
+                last_windowed_size: None,
+                last_resize: std::time::Instant::now()
+                    .checked_sub(std::time::Duration::from_secs(60))
+                    .unwrap_or(std::time::Instant::now()),
+                fps: Fps::new(),
+            }
         };
 
         Ok(RdpState {
@@ -193,15 +197,8 @@ impl RdpState {
             command_event,
             coords_scale,
             desktop_size,
-            full_screen: Arc::new(AtomicBool::new(false)),
-            last_windowed_size: None,
-            last_resize: std::time::Instant::now()
-                .checked_sub(std::time::Duration::from_secs(60))
-                .unwrap_or(std::time::Instant::now()),
-            pinbar: Pinbar::new(),
             keys_rx,
-            fps: Fps::new(),
-            rail,
+            mode,
             pendings: Pendings {
                 resize: false,
                 pixels: HashMap::new(),
@@ -218,7 +215,7 @@ pub fn handle_rdp_message(state: &mut RdpState, message: RdpMessage) -> RdpActio
     log::trace!("RDP message: {:?}", message);
     match message {
         RdpMessage::UpdateRects(rects) => {
-            if state.rail.is_none() {
+            if matches!(state.mode, RdpMode::Desktop { .. }) {
                 state.pendings.rects.extend(rects);
             }
             RdpActionResult::Continue
@@ -237,7 +234,9 @@ pub fn handle_rdp_message(state: &mut RdpState, message: RdpMessage) -> RdpActio
             RdpActionResult::Continue
         }
         // Delegate RAIL-specific messages
-        ref msg if state.rail.is_some() => rail::handle_rail_message(state, msg.clone()),
+        ref msg if matches!(state.mode, RdpMode::Rail(_)) => {
+            rail::handle_rail_message(state, msg.clone())
+        }
         _ => RdpActionResult::Skip,
     }
 }
@@ -384,7 +383,12 @@ impl crate::AppHandler {
                     .window
                     .window
                     .set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
-                rdp_state.full_screen.store(true, Ordering::Relaxed);
+                if let RdpMode::Desktop {
+                    ref full_screen, ..
+                } = rdp_state.mode
+                {
+                    full_screen.store(true, Ordering::Relaxed);
+                }
             }
             self.rdp = Some(Box::new(rdp_state));
             self.register_window(wid, WindowKind::Rdp);
@@ -409,7 +413,7 @@ impl crate::AppHandler {
 
     pub(crate) fn process_rail_actions(&mut self, el: &ActiveEventLoop) {
         let actions = if let Some(ref mut state) = self.rdp
-            && let Some(ref mut rail) = state.rail
+            && let RdpMode::Rail(ref mut rail) = state.mode
         {
             std::mem::take(&mut rail.actions)
         } else {
@@ -418,7 +422,7 @@ impl crate::AppHandler {
         let mut regs: Vec<(winit::window::WindowId, u32)> = Vec::new();
         for action in &actions {
             let Some(ref mut state) = self.rdp else { break };
-            let Some(ref mut rail) = state.rail else {
+            let RdpMode::Rail(ref mut rail) = state.mode else {
                 break;
             };
             match action {
@@ -527,7 +531,7 @@ impl crate::AppHandler {
         };
         while let Ok(message) = state.update_rx.try_recv() {
             match handle_rdp_message(state, message) {
-                RdpActionResult::Continue if state.rail.is_none() => {
+                RdpActionResult::Continue if matches!(state.mode, RdpMode::Desktop { .. }) => {
                     state.window.window.request_redraw();
                 }
 
@@ -559,6 +563,8 @@ impl crate::AppHandler {
                 }
             }
         }
-        state.fps.record();
+        if let RdpMode::Desktop { ref mut fps, .. } = state.mode {
+            fps.record();
+        }
     }
 }

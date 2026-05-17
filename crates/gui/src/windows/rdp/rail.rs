@@ -36,11 +36,13 @@ pub enum RailAction {
 // ── RAIL Message Dispatcher ───
 // Called from handle_rdp_message in mod.rs
 
-use super::{RdpActionResult, RdpState};
+use super::{RdpActionResult, RdpMode, RdpState};
 
 #[allow(clippy::unnecessary_cast)]
 pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActionResult {
-    let rail = state.rail.as_mut().unwrap();
+    let RdpMode::Rail(ref mut rail) = state.mode else {
+        return RdpActionResult::Skip;
+    };
     match message {
         RdpMessage::WindowCreate {
             window_id,
@@ -111,7 +113,7 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                             if let RailAction::Create(id, _, r, ..) = action
                                 && *id == window_id
                             {
-                                rect = *r;
+                                rect = r.clone();
                             }
                         }
                     }

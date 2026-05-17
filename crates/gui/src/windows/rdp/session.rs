@@ -1,6 +1,7 @@
 use anyhow::Result;
 use shared::log;
 
+use super::RdpMode;
 use super::RdpState;
 use crate::monitor;
 
@@ -182,18 +183,16 @@ impl RdpState {
         let mut _ov_data: Vec<Vec<u8>> = Vec::new();
         let mut ov_descs: Vec<crate::wgpu_render::OverlayDesc> = Vec::new();
 
-        if let Some(desc) = self
-            .fps
-            .build_overlay(phys.width, &mut text_sections, &mut _ov_data)
-        {
-            ov_descs.push(desc);
+        if let RdpMode::Desktop { ref mut fps, .. } = self.mode {
+            if let Some(desc) = fps.build_overlay(phys.width, &mut text_sections, &mut _ov_data) {
+                ov_descs.push(desc);
+            }
         }
 
-        if let Some(desc) = self
-            .pinbar
-            .build(phys.width, &mut text_sections, &mut _ov_data)
-        {
-            ov_descs.push(desc);
+        if let RdpMode::Desktop { ref mut pinbar, .. } = self.mode {
+            if let Some(desc) = pinbar.build(phys.width, &mut text_sections, &mut _ov_data) {
+                ov_descs.push(desc);
+            }
         }
 
         for d in &ov_descs {
@@ -247,7 +246,13 @@ impl RdpState {
         );
 
         self.window.renderer.reconfigure(phys.width, phys.height);
-        self.last_resize = std::time::Instant::now();
+        if let RdpMode::Desktop {
+            ref mut last_resize,
+            ..
+        } = self.mode
+        {
+            *last_resize = std::time::Instant::now();
+        }
         self.pendings.resize = true;
 
         if let Some(disp) = self.channels.write().unwrap().disp() {
