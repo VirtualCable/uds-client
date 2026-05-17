@@ -230,7 +230,7 @@ impl RdpState {
     }
 
     pub fn request_screen_resize(&mut self) {
-        if self.last_resize.elapsed().as_millis() < 500 {
+        if self.pending_resize {
             return;
         }
         let phys = self.window.window.inner_size();

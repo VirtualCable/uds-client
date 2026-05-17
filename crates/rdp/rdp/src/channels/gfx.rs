@@ -93,7 +93,8 @@ extern "C" fn update_window_from_surface(
             let format = if owner.use_rgba() {
                 utils::pixel_format(32, 3, 8, 8, 8, 8)
             } else {
-                utils::pixel_format(32, 4, 8, 8, 8, 8)
+                // Use 3 instead of 4 to swap Red and Blue on Windows
+                utils::pixel_format(32, 3, 8, 8, 8, 8)
             };
 
             #[allow(clippy::unnecessary_cast)]
