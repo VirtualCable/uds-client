@@ -105,7 +105,7 @@ open = "5.3"
 
 # Post-quantum cryptography
 libcrux-ml-dsa = "0.0.8"
-libcrux-ml-kem = "0.0.8"
+libcrux-ml-kem = "0.0.9"
 
 # key derivation
 hkdf = "0.13"
