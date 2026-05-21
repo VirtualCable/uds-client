@@ -177,6 +177,7 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
             height,
             data,
         } => {
+            log::debug!("WindowPixels: {}x{} for window {}", width, height, window_id);
             if let Some(rw) = rail.windows.get_mut(&window_id) {
                 let sf = state.coords_scale.max(1.0);
                 let msf = rw.window.scale_factor().max(1.0);

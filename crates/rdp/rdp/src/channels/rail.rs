@@ -210,7 +210,7 @@ fn complete_handshake(context: *mut RailClientContext) -> UINT {
                     RemoteApplicationArguments: cargs.as_ptr(),
                 };
                 log::info!(
-                    "RAIL: Sending ClientExecute for RemoteApp: {} (args={:?}, dir={:?})",
+                    "RAIL: Sending ClientExecute for RemoteApp: {:?} (args={:?}, dir={:?})",
                     rail.app,
                     rail.args,
                     rail.working_dir

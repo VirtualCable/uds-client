@@ -160,35 +160,32 @@ pub fn setup_panic_hook() {
 
 pub fn setup_logging(level: &str, log_type: LogType) {
     let (level_key, log_path, use_datetime, log_name) = (
+        format!("UDS{}_LOG_LEVEL", log_type.to_string().to_uppercase()),
+        format!("UDS{}_LOG_PATH", log_type.to_string().to_uppercase()),
         format!(
-            "UDSLAUNCHER_{}_LOG_LEVEL",
-            log_type.to_string().to_uppercase()
-        ),
-        format!(
-            "UDSLAUNCHER_{}_LOG_PATH",
-            log_type.to_string().to_uppercase()
-        ),
-        format!(
-            "UDSLAUNCHER_{}_LOG_USE_DATETIME",
+            "UDS{}_LOG_USE_DATETIME",
             log_type.to_string().to_uppercase()
         ),
         format!("uds-{}", log_type.to_string().to_lowercase()),
     );
 
     // To keep compat with old behavior, if .uds-debug-on is on temp or user home, set level to debug
-    let level = if std::path::Path::new(&std::env::temp_dir().join(".uds-debug-on")).exists()
-        || std::path::Path::new(
-            &std::env::home_dir()
-                .unwrap_or_default()
-                .join(".uds-debug-on"),
-        )
-        .exists()
-    {
-        "debug".to_string()
-    } else {
-        // Only if .uds-debug-on is not present, get level from env var or use default passed
-        std::env::var(level_key).unwrap_or_else(|_| level.to_string())
-    };
+    // First look for env variabl
+    let level = std::env::var(level_key).unwrap_or_else(|_| {
+        if std::path::Path::new(&std::env::temp_dir().join(".uds-debug-on")).exists()
+            || std::path::Path::new(
+                &std::env::home_dir()
+                    .unwrap_or_default()
+                    .join(".uds-debug-on"),
+            )
+            .exists()
+        {
+            "debug".to_string()
+        } else {
+            // Only if .uds-debug-on is not present, get level from env var or use default passed
+            level.to_string()
+        }
+    });
 
     let log_path =
         std::env::var(log_path).unwrap_or_else(|_| std::env::temp_dir().to_string_lossy().into());
