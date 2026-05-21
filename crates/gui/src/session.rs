@@ -159,7 +159,7 @@ impl AppHandler {
                         //server: "172.27.247.161".to_string(),
                         server: "172.27.1.25".to_string(),
                         user: "Administrator".to_string(),
-                        password: "Temporal2012".to_string(),
+                        password: "Temporal".to_string(), // As secure as temporal for testing, ofc, this server is only for testing ;-)
                         screen_size: rdp_ffi::geom::ScreenSize::Fixed(800, 600),
                         best_experience: true,
                         use_local_scaler: true,
@@ -167,6 +167,7 @@ impl AppHandler {
                             Some(rdp_ffi::settings::RailSettings {
                                 // app: "c:\\windows\\system32\\mspaint.exe".to_string(),
                                 app: "||win32calc".to_string(),
+                                //app: "||mspaint".to_string(),
                                 args: None,
                                 working_dir: None,
                                 title: Some("Ms Paint UDS App".to_string()),

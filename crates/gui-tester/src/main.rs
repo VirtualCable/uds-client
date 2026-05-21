@@ -35,7 +35,9 @@ use shared::{log, system::trigger::Trigger};
 
 fn main() {
     let fake_catalog = gettext::Catalog::empty(); // Empty catalog for now
-    log::setup_logging("trace", log::LogType::Test);
+    log::setup_logging("debug", log::LogType::Test);
+    rdp::wlog::setup_freerdp_logger(rdp::wlog::WLogLevel::Info);
+
     let (_messages_tx, messages_rx): (
         Sender<gui::types::GuiMessage>,
         Receiver<gui::types::GuiMessage>,

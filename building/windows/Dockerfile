@@ -75,6 +75,7 @@ RUN mkdir C:\dev ; \
     -DLIBUSB_1_LIBRARY="c:/vcpkg/installed/x64-windows/lib/libusb-1.0.lib" \
     -DWITH_RDPGFX=ON \
     -DWITH_DYNVC=ON \
+    -DWITH_VAAPI_H264_ENCODING=OFF \
     -DWITH_DEBUG_ALL=OFF \
     -DWITH_DEBUG_CAPABILITIES=OFF \
     -DWITH_DEBUG_CERTIFICATE=OFF \

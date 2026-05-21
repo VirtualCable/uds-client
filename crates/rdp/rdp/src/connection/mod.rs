@@ -103,6 +103,8 @@ impl Rdp {
                     FreeRDP_Settings_Keys_Bool_FreeRDP_BitmapCompressionDisabled,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteConsoleAudio, // So audio is not played on server
                     FreeRDP_Settings_Keys_Bool_FreeRDP_DrawAllowSkipAlpha,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_GfxAVC444v2,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_GfxAVC444,
                 ]
                 .iter()
                 .for_each(|i| {
@@ -124,8 +126,6 @@ impl Rdp {
                     // FreeRDP_Settings_Keys_Bool_FreeRDP_CompressionEnabled,
                     // Graphics
                     // TODO: Test this settings on all platforms (gfx related and h264)
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_GfxAVC444v2,
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_GfxAVC444,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_GfxH264,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_GfxProgressiveV2,
                     //FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteFxCodec,

@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 shared = { path = "../shared" }
 gui = { path = "../gui", features = ["test-ui"] }
+rdp = { path = "../rdp/rdp", package = "rdp" }
 
 anyhow.workspace = true
 
