@@ -55,7 +55,7 @@ rustls = "0.23"
 rustls-native-certs = "0.8"
 
 # async & async TLS
-tokio-rustls = "0.26.4"
+tokio-rustls = "0.26"
 tokio = { version = "1.52", features = [
     "net",
     "io-util",
