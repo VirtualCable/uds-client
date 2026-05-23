@@ -368,5 +368,8 @@ impl crate::AppHandler {
             self.unregister_window(p.window.id());
         }
         self.progress = None;
+        if let Some(ref mut state) = self.rdp {
+            state.window.window.request_redraw();
+        }
     }
 }

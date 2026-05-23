@@ -397,6 +397,7 @@ impl crate::AppHandler {
         self.processing_events.store(true, Ordering::Relaxed);
         if let Some(ref state) = self.rdp {
             state.window.window.set_cursor_visible(false);
+            state.window.window.request_redraw();
         }
 
         Ok(())
@@ -557,7 +558,7 @@ impl crate::AppHandler {
         };
         while let Ok(message) = state.update_rx.try_recv() {
             match handle_rdp_message(state, message) {
-                RdpActionResult::Continue if matches!(state.mode, RdpMode::Desktop { .. }) => {
+                RdpActionResult::Continue => {
                     state.window.window.request_redraw();
                 }
 
