@@ -84,6 +84,7 @@ impl AppHandler {
                     if let Err(e) = self.open_rdp(el, *settings) {
                         log::error!("Failed to enter RDP: {e}");
                         self.stop.trigger();
+                        el.exit();
                         return;
                     }
                 }
@@ -185,6 +186,7 @@ impl AppHandler {
                     if let Err(e) = self.open_rdp(el, settings) {
                         log::error!("Failed to enter RDP: {e}");
                         self.stop.trigger();
+                        el.exit();
                     }
                     // if is_rail {
                     //     std::thread::spawn(move || {

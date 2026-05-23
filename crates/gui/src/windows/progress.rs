@@ -357,6 +357,7 @@ impl crate::AppHandler {
             WindowEvent::CloseRequested => {
                 self.close_progress();
                 self.stop.trigger();
+                el.exit();
             }
             _ => {}
         }

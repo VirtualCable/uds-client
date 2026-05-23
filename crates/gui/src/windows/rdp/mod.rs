@@ -205,7 +205,7 @@ impl RdpState {
                 icons: HashMap::new(),
                 rects: Vec::new(),
             },
-            cursor: Cursor::new(coords_scale),
+            cursor: Cursor::new(coords_scale, use_rgba),
         })
     }
 }
@@ -404,8 +404,17 @@ impl crate::AppHandler {
 
     pub(crate) fn close_rdp(&mut self) {
         self.processing_events.store(false, Ordering::Relaxed);
+        let mut ids = Vec::new();
         if let Some(ref r) = self.rdp {
-            self.unregister_window(r.window.window.id());
+            ids.push(r.window.window.id());
+            if let RdpMode::Rail(ref rail) = r.mode {
+                for rw in rail.windows.values() {
+                    ids.push(rw.window.id());
+                }
+            }
+        }
+        for id in ids {
+            self.unregister_window(id);
         }
         self.rdp = None;
         self.rail_ipc = None;
@@ -419,7 +428,8 @@ impl crate::AppHandler {
         } else {
             return;
         };
-        let mut regs: Vec<(winit::window::WindowId, u32)> = Vec::new();
+        let mut created: Vec<(winit::window::WindowId, u32)> = Vec::new();
+        let mut deleted: Vec<winit::window::WindowId> = Vec::new();
         for action in &actions {
             let Some(ref mut state) = self.rdp else { break };
             let RdpMode::Rail(ref mut rail) = state.mode else {
@@ -463,7 +473,7 @@ impl crate::AppHandler {
                         *id,
                         RailWindow {
                             id: *id,
-                            window,
+                            window: window.clone(),
                             renderer,
                             rgba_data,
                             width: pw,
@@ -477,6 +487,18 @@ impl crate::AppHandler {
                             rgba_dirty: true,
                         },
                     );
+
+                    // Set active cursor on the new window
+                    if state.cursor.visible && !state.cursor.data.is_empty() {
+                        let (rgba, w, h, hx, hy) = state.cursor.build_scaled_rgba();
+                        if let Ok(source) = winit::window::CustomCursor::from_rgba(rgba, w, h, hx, hy) {
+                            let custom_cursor = el.create_custom_cursor(source);
+                            window.set_cursor(custom_cursor);
+                        }
+                    } else {
+                        window.set_cursor(winit::window::CursorIcon::Default);
+                    }
+
                     if let Some((rgba, w, h)) = state.pendings.icons.remove(id)
                         && let Ok(icon) = winit::window::Icon::from_rgba(rgba, w, h)
                         && let Some(rw) = rail.windows.get(id)
@@ -484,12 +506,12 @@ impl crate::AppHandler {
                         rw.window.set_window_icon(Some(icon));
                     }
 
-                    regs.push((wid, *id));
+                    created.push((wid, *id));
                     shared::log::debug!("RAIL window created: id={id} {rect:?}");
                 }
                 RailAction::Delete(id) => {
                     if let Some(rw) = rail.windows.remove(id) {
-                        regs.push((rw.window.id(), *id));
+                        deleted.push(rw.window.id());
                     }
                 }
                 RailAction::UpdatePosition(id, rect) => {
@@ -521,12 +543,15 @@ impl crate::AppHandler {
                 }
             }
         }
-        for (wid, id) in regs {
+        for (wid, id) in created {
             self.register_window(wid, WindowKind::RdpRail(id));
+        }
+        for wid in deleted {
+            self.unregister_window(wid);
         }
     }
 
-    pub(crate) fn process_rdp_updates(&mut self, _el: &ActiveEventLoop) {
+    pub(crate) fn process_rdp_updates(&mut self, el: &ActiveEventLoop) {
         let Some(ref mut state) = self.rdp else {
             return;
         };
@@ -540,15 +565,42 @@ impl crate::AppHandler {
                     self.stop.trigger();
                     self.return_code = crate::types::ReturnCode::Exit;
                     self.close_rdp();
+                    el.exit();
                     return;
                 }
                 RdpActionResult::Error(_) => {
                     self.stop.trigger();
                     self.return_code = crate::types::ReturnCode::Exit;
                     self.close_rdp();
+                    el.exit();
                     return;
                 }
                 _ => {}
+            }
+        }
+        if state.cursor.dirty {
+            state.cursor.dirty = false;
+            if let RdpMode::Rail(ref mut rail) = state.mode {
+                let cursor_opt = if state.cursor.visible && !state.cursor.data.is_empty() {
+                    let (rgba, w, h, hx, hy) = state.cursor.build_scaled_rgba();
+                    match winit::window::CustomCursor::from_rgba(rgba, w, h, hx, hy) {
+                        Ok(source) => Some(el.create_custom_cursor(source)),
+                        Err(err) => {
+                            log::warn!("Failed to create CustomCursorSource: {:?}", err);
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
+
+                for rw in rail.windows.values() {
+                    if let Some(ref custom_cursor) = cursor_opt {
+                        rw.window.set_cursor(custom_cursor.clone());
+                    } else {
+                        rw.window.set_cursor(winit::window::CursorIcon::Default);
+                    }
+                }
             }
         }
         while let Ok(raw_key) = state.keys_rx.try_recv() {
