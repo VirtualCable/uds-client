@@ -91,15 +91,14 @@ extern "C" fn update_window_from_surface(
 
             let mut data = vec![0u8; (mapped_width * mapped_height * 4) as usize];
             let format = if owner.use_rgba() {
-                utils::pixel_format(32, 3, 8, 8, 8, 8)
+                utils::pixel_format(32, 3, 8, 8, 8, 8) // RGBA32 (macOS)
             } else {
-                // Use 3 instead of 4 to swap Red and Blue on Windows
-                utils::pixel_format(32, 3, 8, 8, 8, 8)
+                utils::pixel_format(32, 4, 8, 8, 8, 8) // BGRA32 (Windows/Linux)
             };
 
             #[allow(clippy::unnecessary_cast)]
             // Needed beceuse windows/linux differ in the expected type of the flags parameter
-            let res = freerdp_image_copy(
+            let _res = freerdp_image_copy(
                 data.as_mut_ptr(),
                 format,
                 mapped_width * 4,
@@ -116,16 +115,8 @@ extern "C" fn update_window_from_surface(
                 FREERDP_IMAGE_FLAGS_FREERDP_FLIP_NONE as u32,
             );
 
-            if res == 0 {
-                log::error!("freerdp_image_copy failed!");
-            }
+            // No swapping loop needed as we copy directly to the platform's native format
 
-            // Re-order BGRA to RGBA if necessary, freerdp_image_copy might not do everything perfectly for egui
-            if !owner.use_rgba() {
-                for chunk in data.chunks_exact_mut(4) {
-                    chunk.swap(0, 2); // Swap B and R
-                }
-            }
 
             if let Some(tx) = &owner.update_tx {
                 // log::debug!("GFX sending WindowPixels for id={}, {}x{}", window_id, mapped_width, mapped_height);

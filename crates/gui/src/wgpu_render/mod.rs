@@ -120,6 +120,7 @@ impl WgpuRenderer {
                         m,
                         wgpu::CompositeAlphaMode::PostMultiplied
                             | wgpu::CompositeAlphaMode::PreMultiplied
+                            | wgpu::CompositeAlphaMode::Inherit
                     )
                 })
                 .unwrap_or(wgpu::CompositeAlphaMode::Auto),
