@@ -474,6 +474,7 @@ impl crate::AppHandler {
                             has_decorations: *decorations,
                             last_focused: false,
                             offscreen: false,
+                            rgba_dirty: true,
                         },
                     );
                     if let Some((rgba, w, h)) = state.pendings.icons.remove(id)

@@ -17,6 +17,7 @@ pub struct RailWindow {
     pub has_decorations: bool,
     pub last_focused: bool,
     pub offscreen: bool,
+    pub rgba_dirty: bool,
 }
 
 #[allow(dead_code)]
@@ -197,6 +198,7 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                 rw.rgba_data = Some(data);
                 rw.width = width;
                 rw.height = height;
+                rw.rgba_dirty = true;
                 rw.window.request_redraw();
             } else {
                 // Window not created yet — buffer pixels for when RailAction::Create is processed

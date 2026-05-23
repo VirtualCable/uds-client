@@ -307,9 +307,15 @@ impl AppHandler {
             let (px, py) = monitor::logic_2_phys_pos((rw.rect.x, rw.rect.y), sf);
             rw.window
                 .set_outer_position(winit::dpi::PhysicalPosition::new(px, py));
-            if let (Some(rgba), Some(ref mut renderer)) = (&rw.rgba_data, rw.renderer.as_mut()) {
+            if let Some(ref mut renderer) = rw.renderer.as_mut() {
+                let upload_data = if rw.rgba_dirty {
+                    rw.rgba_dirty = false;
+                    rw.rgba_data.as_deref().unwrap_or(&[])
+                } else {
+                    &[]
+                };
                 renderer.update_and_render(
-                    rgba.as_slice(),
+                    upload_data,
                     rw.width,
                     rw.height,
                     &[],

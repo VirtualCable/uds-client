@@ -11,7 +11,7 @@ use anyhow::Result;
 use flume::{Receiver, Sender, bounded};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
-use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::WindowId;
 
 use shared::system::trigger::Trigger;
@@ -41,11 +41,6 @@ pub struct RawKey {
     pub keycode: winit::keyboard::KeyCode,
     pub pressed: bool,
     pub repeat: bool,
-}
-
-#[derive(Debug)]
-enum UserEvent {
-    Tick,
 }
 
 #[allow(dead_code)]
@@ -78,11 +73,10 @@ pub struct AppHandler {
     last_pointer: Option<winit::dpi::PhysicalPosition<f64>>,
     rail_button_down: Option<u32>,
     rail_ipc: Option<crate::ipc::IpcListener>,
-    pacing_started: bool,
     return_code: ReturnCode,
     initial_state: Option<AppState>,
     first_resume: bool,
-    proxy: EventLoopProxy<UserEvent>,
+    next_tick: Option<Instant>,
 }
 
 pub fn run_gui(
@@ -94,8 +88,7 @@ pub fn run_gui(
 ) -> Result<ReturnCode> {
     let (keys_tx, keys_rx) = bounded::<RawKey>(1024);
     let processing_events = Arc::new(AtomicBool::new(false));
-    let event_loop = EventLoop::<UserEvent>::with_user_event().build()?;
-    let proxy = event_loop.create_proxy();
+    let event_loop = EventLoop::new()?;
 
     let mut app = AppHandler {
         catalog,
@@ -115,11 +108,10 @@ pub fn run_gui(
         last_pointer: None,
         rail_button_down: None,
         rail_ipc: None,
-        pacing_started: false,
         return_code: ReturnCode::Exit,
         initial_state,
         first_resume: true,
-        proxy,
+        next_tick: None,
     };
     event_loop.run_app(&mut app)?;
     Ok(app.return_code)
@@ -136,12 +128,30 @@ impl AppHandler {
     fn unregister_window(&mut self, wid: WindowId) {
         self.windows.remove(&wid);
     }
+
+    fn tick_animations(&mut self) {
+        if let Some(ref mut p) = self.progress {
+            p.animation_time += 0.3;
+            if self.launcher.is_some() && p.pct < 100 {
+                p.pct += 1;
+                if p.pct >= 100 {
+                    p.phase = ProgressPhase::Connected;
+                }
+            }
+            p.window.request_redraw();
+        }
+        if let Some(ref mut a) = self.about {
+            a.animation_time += 0.3;
+            a.window().request_redraw();
+        }
+    }
 }
 
 // ── ApplicationHandler ──────
 
-impl ApplicationHandler<UserEvent> for AppHandler {
+impl ApplicationHandler for AppHandler {
     fn resumed(&mut self, el: &ActiveEventLoop) {
+        el.set_control_flow(ControlFlow::Poll);
         monitor::populate(el);
         if self.first_resume {
             self.first_resume = false;
@@ -153,23 +163,6 @@ impl ApplicationHandler<UserEvent> for AppHandler {
             };
             let _ = self.open_launcher(el, inner);
         }
-        // Start frame pacing once
-        if !self.pacing_started {
-            self.pacing_started = true;
-            let proxy = self.proxy.clone();
-            let fps = self.fps_limit;
-            let stop = self.stop.clone();
-            std::thread::spawn(move || {
-                let interval = Duration::from_secs_f64(1.0 / fps as f64);
-                while !stop.is_triggered() {
-                    std::thread::sleep(interval);
-                    let _ = proxy.send_event(UserEvent::Tick);
-                }
-            });
-        }
-        el.set_control_flow(ControlFlow::WaitUntil(
-            Instant::now() + Duration::from_millis(16),
-        ));
     }
 
     fn window_event(&mut self, el: &ActiveEventLoop, wid: WindowId, event: WindowEvent) {
@@ -244,43 +237,42 @@ impl ApplicationHandler<UserEvent> for AppHandler {
         }
     }
 
-    fn user_event(&mut self, _el: &ActiveEventLoop, event: UserEvent) {
-        match event {
-            UserEvent::Tick => {
-                // If any rect pending, pinbar, fps or keyboard/mouse event pending, redraw
-                if let Some(ref mut r) = self.rdp {
-                    r.window.window.request_redraw();
-                }
-                if let Some(ref mut p) = self.popup {
-                    p.window.request_redraw();
-                }
-                if let Some(ref mut l) = self.launcher
-                    && let Some(ref w) = l.window
-                {
-                    w.request_redraw();
-                }
-                if let Some(ref mut p) = self.progress {
-                    p.animation_time += 0.3; // Slightly faster waves
-                    // Simulación de progreso solo en modo testing
-                    if self.launcher.is_some() && p.pct < 100 {
-                        p.pct += 1;
-                        if p.pct >= 100 {
-                            p.phase = ProgressPhase::Connected;
-                        }
-                    }
-                    p.window.request_redraw();
-                }
-                if let Some(ref mut a) = self.about {
-                    a.animation_time += 0.3;
-                    a.window().request_redraw();
-                }
-            }
-        }
-    }
-
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
         if self.stop.is_triggered() {
             el.exit();
+            return;
+        }
+
+        self.process_gui_messages(el);
+        self.process_rdp_updates(el);
+        self.process_rail_actions(el);
+
+        let has_active_animations = self.progress.is_some() || self.about.is_some();
+        let rdp_active = self.rdp.is_some();
+
+        if has_active_animations || rdp_active {
+            let now = Instant::now();
+            let fps = self.fps_limit;
+            let interval = Duration::from_secs_f64(1.0 / fps as f64);
+            
+            let mut next_tick = self.next_tick.unwrap_or(now);
+
+            if now >= next_tick {
+                self.tick_animations();
+
+                let next = next_tick + interval;
+                if next < now {
+                    next_tick = now + interval;
+                } else {
+                    next_tick = next;
+                }
+            }
+
+            self.next_tick = Some(next_tick);
+            el.set_control_flow(ControlFlow::WaitUntil(next_tick));
+        } else {
+            self.next_tick = None;
+            el.set_control_flow(ControlFlow::Wait);
         }
     }
 
