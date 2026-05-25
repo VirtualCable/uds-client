@@ -4,20 +4,18 @@ use std::time::Duration;
 
 use interprocess::local_socket::prelude::*;
 use interprocess::local_socket::{
-    GenericFilePath, GenericNamespaced, Listener, ListenerNonblockingMode, ListenerOptions, Stream,
+    GenericNamespaced, Listener, ListenerNonblockingMode, ListenerOptions, Stream,
 };
 use serde::{Deserialize, Serialize};
 
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 fn socket_name(server_id: &str) -> io::Result<interprocess::local_socket::Name<'static>> {
-    // GenericNamespaced: abstract namespace on Linux, named pipe on Windows
-    if let Ok(name) = server_id.to_string().to_ns_name::<GenericNamespaced>() {
-        return Ok(name);
-    }
-    // Fallback for macOS: absolute filesystem path in /tmp
-    format!("/tmp/uds_rail_{server_id}")
-        .to_fs_name::<GenericFilePath>()
+    // GenericNamespaced → abstract namespace on Linux, named pipe on Windows,
+    //                       /tmp/<name> on macOS (via SpecialDirUdSocket).
+    server_id
+        .to_string()
+        .to_ns_name::<GenericNamespaced>()
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))
 }
 
@@ -61,14 +59,12 @@ pub fn bind(
     expected_token: &str,
     on_launch: impl Fn(RailLaunchMsg) + Send + 'static,
 ) -> io::Result<IpcListener> {
-    // Clean up stale socket file from a previous crash (macOS only — no-op elsewhere)
-    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
-    {
-        let _ = std::fs::remove_file(format!("/tmp/uds_rail_{server_id}"));
-    }
     let name = socket_name(server_id)?;
+    // try_overwrite(true) unlinks any stale socket file before binding,
+    // so a previous crash won't leave a dead file behind (relevant on macOS/Unix).
     let opts = ListenerOptions::new()
         .name(name)
+        .try_overwrite(true)
         .nonblocking(ListenerNonblockingMode::Accept);
     let listener = opts.create_sync().map_err(io::Error::other)?;
     let listener = Arc::new(Mutex::new(Some(listener)));

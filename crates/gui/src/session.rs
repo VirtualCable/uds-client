@@ -92,7 +92,6 @@ impl AppHandler {
         }
 
         // Launcher test actions
-        #[cfg(feature = "test-ui")]
         if let Some(ref mut launcher) = self.launcher
             && let Some(action) = launcher.inner.take_request()
         {
@@ -154,21 +153,19 @@ impl AppHandler {
                         self.popup = Some(p);
                     }
                 }
+                #[cfg(feature = "gui-tester")]
                 LaunchAction::ConnectRdp | LaunchAction::ConnectRail => {
                     let is_rail = matches!(action, LaunchAction::ConnectRail);
                     let settings = rdp_ffi::settings::RdpSettings {
-                        //server: "172.27.247.161".to_string(),
                         server: "172.27.1.25".to_string(),
                         user: "Administrator".to_string(),
-                        password: "Temporal".to_string(), // As secure as temporal for testing, ofc, this server is only for testing ;-)
+                        password: "Temporal2012".to_string(),
                         screen_size: rdp_ffi::geom::ScreenSize::Fixed(800, 600),
                         best_experience: true,
                         use_local_scaler: true,
                         rail: if is_rail {
                             Some(rdp_ffi::settings::RailSettings {
-                                // app: "c:\\windows\\system32\\mspaint.exe".to_string(),
                                 app: "||win32calc".to_string(),
-                                //app: "||mspaint".to_string(),
                                 args: None,
                                 working_dir: None,
                                 title: Some("Ms Paint UDS App".to_string()),
@@ -188,20 +185,10 @@ impl AppHandler {
                         self.stop.trigger();
                         el.exit();
                     }
-                    // if is_rail {
-                    //     std::thread::spawn(move || {
-                    //         std::thread::sleep(std::time::Duration::from_secs(4));
-                    //         log::info!("TEST: Sending notepad via IPC");
-                    //         let msg = crate::ipc::RailLaunchMsg {
-                    //             app: "c:\\windows\\notepad.exe".to_string(),
-                    //             args: String::new(),
-                    //             working_dir: String::new(),
-                    //             server_token: "test-token".to_string(),
-                    //         };
-                    //         let ok = crate::ipc::try_send("test-uds-rail", &msg);
-                    //         log::info!("IPC test: sent notepad.exe via IPC → {ok}");
-                    //     });
-                    // }
+                }
+                #[cfg(not(feature = "gui-tester"))]
+                LaunchAction::ConnectRdp | LaunchAction::ConnectRail => {
+                    log::warn!("RDP Connect/RAIL test actions are disabled without 'gui-tester' feature");
                 }
             }
         }

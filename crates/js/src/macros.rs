@@ -96,8 +96,17 @@ macro_rules! extract_js_args {
                         let val = $args.get(_i);
                         _i += 1;
                         if let Some(js_val) = val {
-                            js_val.try_js_into::<$t>($ctx)
-                                .unwrap_or_default()
+                            match js_val.try_js_into::<$t>($ctx) {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    shared::log::error!(
+                                        "extract_js_args: failed to convert argument {} to {}: {e}",
+                                        _i - 1,
+                                        stringify!($t),
+                                    );
+                                    <$t>::default()
+                                }
+                            }
                         } else {
                             <$t>::default()
                         }

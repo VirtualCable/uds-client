@@ -156,9 +156,7 @@ impl ApplicationHandler for AppHandler {
         if self.first_resume {
             self.first_resume = false;
             let inner = match self.initial_state.take().unwrap_or_default() {
-                #[cfg(feature = "test-ui")]
                 AppState::Test => LauncherInner::new_test(),
-                #[cfg(not(feature = "test-ui"))]
                 AppState::Progress => LauncherInner::default(),
             };
             let _ = self.open_launcher(el, inner);

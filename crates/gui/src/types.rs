@@ -30,11 +30,8 @@ pub enum ReturnCode {
 /// Initial state for the GUI
 #[derive(Debug, Clone, Default)]
 pub enum AppState {
-    #[cfg(feature = "test-ui")]
     #[default]
     Test,
-    #[cfg(not(feature = "test-ui"))]
-    #[default]
     Progress,
 }
 

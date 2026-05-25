@@ -36,4 +36,5 @@ tiny-skia.workspace = true
 gettext.workspace = true
 
 [features]
-test-ui = []
+gui-tester = []
+

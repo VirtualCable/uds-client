@@ -20,14 +20,12 @@ use crate::wgpu_render::{OverlayParams, WgpuRenderer};
 pub enum LauncherInner {
     #[default]
     None,
-    #[cfg(feature = "test-ui")]
     Test {
         buttons: Vec<(crate::draw::ui::button::Button, LaunchAction)>,
         request: Option<LaunchAction>,
     },
 }
 
-#[cfg(feature = "test-ui")]
 #[derive(Clone)]
 pub enum LaunchAction {
     ShowProgress,
@@ -40,7 +38,6 @@ pub enum LaunchAction {
 }
 
 impl LauncherInner {
-    #[cfg(feature = "test-ui")]
     pub fn new_test() -> Self {
         let s = *crate::monitor::SCALE_FACTOR as f32;
         let bh = crate::monitor::scaled_val(28) as u32;
@@ -83,7 +80,6 @@ impl LauncherInner {
 
     pub fn handle_mouse_move(&mut self, phys_x: f32, phys_y: f32) -> bool {
         match self {
-            #[cfg(feature = "test-ui")]
             LauncherInner::Test { buttons, .. } => {
                 let mut changed = false;
                 for (btn, _) in buttons.iter_mut() {
@@ -98,23 +94,19 @@ impl LauncherInner {
     }
 
     pub fn handle_click(&mut self, phys_x: f32, phys_y: f32) {
-        match self {
-            #[cfg(feature = "test-ui")]
-            LauncherInner::Test {
-                buttons, request, ..
-            } => {
-                for (btn, action) in buttons.iter() {
-                    if btn.contains(phys_x, phys_y) {
-                        *request = Some(action.clone());
-                        break;
-                    }
+        if let LauncherInner::Test {
+            buttons, request, ..
+        } = self
+        {
+            for (btn, action) in buttons.iter() {
+                if btn.contains(phys_x, phys_y) {
+                    *request = Some(action.clone());
+                    break;
                 }
             }
-            _ => {}
         }
     }
 
-    #[cfg(feature = "test-ui")]
     pub fn take_request(&mut self) -> Option<LaunchAction> {
         match self {
             LauncherInner::Test { request, .. } => request.take(),
@@ -131,7 +123,6 @@ pub struct TestingLauncherState {
     pub last_mouse_pos: Option<(f32, f32)>,
 }
 
-#[cfg(feature = "test-ui")]
 pub fn paint_launcher(state: &mut TestingLauncherState) {
     let renderer = match &mut state.renderer {
         Some(r) => r,
@@ -174,7 +165,6 @@ pub fn paint_launcher(state: &mut TestingLauncherState) {
 
     match &state.inner {
         LauncherInner::None => {}
-        #[cfg(feature = "test-ui")]
         LauncherInner::Test { buttons, .. } => {
             for (btn, _) in buttons.iter() {
                 let (btn_data, btn_text) = btn.render();
@@ -263,7 +253,6 @@ impl AppHandler {
                 self.stop.trigger();
             }
             WindowEvent::RedrawRequested => {
-                #[cfg(feature = "test-ui")]
                 paint_launcher(l);
             }
             WindowEvent::MouseInput { state, button, .. }

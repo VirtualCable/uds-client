@@ -48,6 +48,11 @@ declare module "runtime" {
     function startTunnel(params: { addr: string, port: number, ticket: string, startup_time_ms?: number, check_certificate?: boolean, local_port?: number, keep_listening_after_timeout?: boolean, enable_ipv6?: boolean, shared_secret?: Uint8Array | number[] }): Promise<{port: number}>;
   }
 
+  /**
+   * **⚠️ Do not use `null` for optional fields.**  
+   * Omit the key entirely or provide a valid value.  
+   * The Rust `TryFromJs` conversion does not accept `null` for `Option<T>` fields.
+   */
   export namespace RDP {
     function start(settings: {
       server: string;

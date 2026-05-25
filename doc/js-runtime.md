@@ -4,14 +4,14 @@ This document describes the JavaScript modules and functions available in the ru
 
 ## Module Overview
 
-| Module   | Description | Functions |
-|----------|-------------|-----------|
-| Utils    | Utility functions for environment variables, registry (Windows), encryption, and network testing | 8 |
-| File     | File operations, temporary files, and directory access | 9 |
-| Logger   | Logging functions at different levels | 5 |
-| Process  | Executable finding, process launching, and management | 8 |
-| Tasks    | Task management, cleanup files, and tunnel connections | 4 |
-| RDP      | RDP connection management | 2 |
+| Module  | Description                                                                                      | Functions |
+| ------- | ------------------------------------------------------------------------------------------------ | --------- |
+| Utils   | Utility functions for environment variables, registry (Windows), encryption, and network testing | 8         |
+| File    | File operations, temporary files, and directory access                                           | 9         |
+| Logger  | Logging functions at different levels                                                            | 5         |
+| Process | Executable finding, process launching, and management                                            | 8         |
+| Tasks   | Task management, cleanup files, and tunnel connections                                           | 4         |
+| RDP     | RDP connection management                                                                        | 2         |
 
 ## Utils Module
 
@@ -445,6 +445,8 @@ console.log("Tunnel port (with shared secret):", tunnelWithCrypto.port);
 
 The RDP module provides functions for managing RDP connections.
 
+> **⚠️ Important:** All optional fields must be either present with a valid value or **omitted entirely** from the object. Do **not** set them to `null` — the `TryFromJs` conversion does **not** handle JavaScript `null` values for optional fields. Use `undefined` (omit the key) or provide a valid value (e.g., empty string `""` instead of `null`).
+
 ### start
 
 Starts an RDP connection with the specified settings.
@@ -536,41 +538,41 @@ RDP.start({
 
 ## Complete Function Reference
 
-| Module  | Function                  | Parameters | Description |
-|---------|---------------------------|------------|-------------|
-| Utils   | expandVars               | input: string | Expands environment variables in string |
-| Utils   | cryptProtectData         | input: string | Encrypts data using Windows CryptProtectData (Windows only) |
-| Utils   | writeHkcu                | key: string, value_name: string, value_data: string | Writes string to HKCU registry (Windows only) |
-| Utils   | writeHkcuDword           | key: string, value_name: string, value_data: number | Writes DWORD to HKCU registry (Windows only) |
-| Utils   | readHkcu                 | key: string, value_name: string | Reads string from HKCU registry (Windows only) |
-| Utils   | readHklm                 | key: string, value_name: string | Reads string from HKLM registry (Windows only) |
-| Utils   | testServer (async)       | host: string, port: number, timeout_ms: number | Tests server connectivity |
-| Utils   | sleep (async)            | milliseconds: number | Waits for a specified number of milliseconds |
-| File    | createTempFile           | folder?: string, content?: string, extension?: string | Creates temporary file |
-| File    | read                     | path: string | Reads file content |
-| File    | write                    | path: string, content: string | Writes content to file |
-| File    | exists                   | path: string | Checks if path exists |
-| File    | isExecutable             | path: string | Checks if file is executable |
-| File    | isDirectory              | path: string | Checks if path is a directory |
-| File    | getTempDirectory         | - | Gets temp directory path |
-| File    | getHomeDirectory         | - | Gets home directory path |
-| File    | listFolder               | path: string | Lists folder entries |
-| Logger  | trace                    | msg: string | Logs trace message |
-| Logger  | debug                    | msg: string | Logs debug message |
-| Logger  | info                     | msg: string | Logs info message |
-| Logger  | warn                     | msg: string | Logs warn message |
-| Logger  | error                    | msg: string | Logs error message |
-| Process | findExecutable           | app_name: string, extra_path: string[] | Finds executable path |
-| Process | launch                   | app_path: string, app_args: string[] | Launches application |
-| Process | isRunning                | process_id: number | Checks if process is running |
-| Process | kill                     | process_id: number | Terminates process |
-| Process | wait                     | process_id: number | Waits for process to finish |
-| Process | waitTimeout              | process_id: number, timeout_ms: number | Waits for process with timeout |
-| Process | launchAndWait (async)    | app_path: string, app_args: string[], timeout_ms?: number | Launches application and waits for completion |
-| Process | sleep (async)            | milliseconds: number | Waits for a specified number of milliseconds |
-| Tasks   | addEarlyUnlinkableFile   | file_path: string | Adds file for early cleanup |
-| Tasks   | addLateUnlinkableFile    | file_path: string | Adds file for late cleanup |
-| Tasks   | addWaitableApp           | task_handle: number | Adds waitable application |
-| Tasks   | startTunnel (async)      | params: { addr: string, port: number, ticket: string, startup_time_ms?: number, check_certificate?: boolean, local_port?: number, keep_listening_after_timeout?: boolean, enable_ipv6?: boolean, shared_secret?: Uint8Array | number[] } | Starts tunnel connection |
-| RDP     | start                    | settings: object | Starts RDP connection |
-| RDP     | sign (async)             | rdp_string: string, ticket: string | Signs RDP content through the broker API |
+| Module  | Function               | Parameters                                                                                                                                                                                                                  | Description                                                 |
+| ------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Utils   | expandVars             | input: string                                                                                                                                                                                                               | Expands environment variables in string                     |
+| Utils   | cryptProtectData       | input: string                                                                                                                                                                                                               | Encrypts data using Windows CryptProtectData (Windows only) |
+| Utils   | writeHkcu              | key: string, value_name: string, value_data: string                                                                                                                                                                         | Writes string to HKCU registry (Windows only)               |
+| Utils   | writeHkcuDword         | key: string, value_name: string, value_data: number                                                                                                                                                                         | Writes DWORD to HKCU registry (Windows only)                |
+| Utils   | readHkcu               | key: string, value_name: string                                                                                                                                                                                             | Reads string from HKCU registry (Windows only)              |
+| Utils   | readHklm               | key: string, value_name: string                                                                                                                                                                                             | Reads string from HKLM registry (Windows only)              |
+| Utils   | testServer (async)     | host: string, port: number, timeout_ms: number                                                                                                                                                                              | Tests server connectivity                                   |
+| Utils   | sleep (async)          | milliseconds: number                                                                                                                                                                                                        | Waits for a specified number of milliseconds                |
+| File    | createTempFile         | folder?: string, content?: string, extension?: string                                                                                                                                                                       | Creates temporary file                                      |
+| File    | read                   | path: string                                                                                                                                                                                                                | Reads file content                                          |
+| File    | write                  | path: string, content: string                                                                                                                                                                                               | Writes content to file                                      |
+| File    | exists                 | path: string                                                                                                                                                                                                                | Checks if path exists                                       |
+| File    | isExecutable           | path: string                                                                                                                                                                                                                | Checks if file is executable                                |
+| File    | isDirectory            | path: string                                                                                                                                                                                                                | Checks if path is a directory                               |
+| File    | getTempDirectory       | -                                                                                                                                                                                                                           | Gets temp directory path                                    |
+| File    | getHomeDirectory       | -                                                                                                                                                                                                                           | Gets home directory path                                    |
+| File    | listFolder             | path: string                                                                                                                                                                                                                | Lists folder entries                                        |
+| Logger  | trace                  | msg: string                                                                                                                                                                                                                 | Logs trace message                                          |
+| Logger  | debug                  | msg: string                                                                                                                                                                                                                 | Logs debug message                                          |
+| Logger  | info                   | msg: string                                                                                                                                                                                                                 | Logs info message                                           |
+| Logger  | warn                   | msg: string                                                                                                                                                                                                                 | Logs warn message                                           |
+| Logger  | error                  | msg: string                                                                                                                                                                                                                 | Logs error message                                          |
+| Process | findExecutable         | app_name: string, extra_path: string[]                                                                                                                                                                                      | Finds executable path                                       |
+| Process | launch                 | app_path: string, app_args: string[]                                                                                                                                                                                        | Launches application                                        |
+| Process | isRunning              | process_id: number                                                                                                                                                                                                          | Checks if process is running                                |
+| Process | kill                   | process_id: number                                                                                                                                                                                                          | Terminates process                                          |
+| Process | wait                   | process_id: number                                                                                                                                                                                                          | Waits for process to finish                                 |
+| Process | waitTimeout            | process_id: number, timeout_ms: number                                                                                                                                                                                      | Waits for process with timeout                              |
+| Process | launchAndWait (async)  | app_path: string, app_args: string[], timeout_ms?: number                                                                                                                                                                   | Launches application and waits for completion               |
+| Process | sleep (async)          | milliseconds: number                                                                                                                                                                                                        | Waits for a specified number of milliseconds                |
+| Tasks   | addEarlyUnlinkableFile | file_path: string                                                                                                                                                                                                           | Adds file for early cleanup                                 |
+| Tasks   | addLateUnlinkableFile  | file_path: string                                                                                                                                                                                                           | Adds file for late cleanup                                  |
+| Tasks   | addWaitableApp         | task_handle: number                                                                                                                                                                                                         | Adds waitable application                                   |
+| Tasks   | startTunnel (async)    | params: { addr: string, port: number, ticket: string, startup_time_ms?: number, check_certificate?: boolean, local_port?: number, keep_listening_after_timeout?: boolean, enable_ipv6?: boolean, shared_secret?: Uint8Array | number[] }                                                  | Starts tunnel connection |
+| RDP     | start                  | settings: object                                                                                                                                                                                                            | Starts RDP connection                                       |
+| RDP     | sign (async)           | rdp_string: string, ticket: string                                                                                                                                                                                          | Signs RDP content through the broker API                    |

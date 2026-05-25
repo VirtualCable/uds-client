@@ -63,38 +63,23 @@ struct RailSettings {
 
 #[derive(Debug, TryFromJs, Zeroize, ZeroizeOnDrop)]
 struct RdpSettings {
-    #[zeroize(skip)]
     pub server: String,
-    #[zeroize(skip)]
     pub port: Option<u32>,
-    #[zeroize(skip)]
     pub user: Option<String>,
     pub password: Option<String>,
     pub domain: Option<String>,
-    #[zeroize(skip)]
     pub verify_cert: Option<bool>,
-    #[zeroize(skip)]
     pub use_nla: Option<bool>,
-    #[zeroize(skip)]
     pub screen_width: Option<u32>,
-    #[zeroize(skip)]
     pub screen_height: Option<u32>,
-    #[zeroize(skip)]
     pub clipboard_redirection: Option<bool>,
-    #[zeroize(skip)]
     pub audio_redirection: Option<bool>,
-    #[zeroize(skip)]
     pub microphone_redirection: Option<bool>,
-    #[zeroize(skip)]
     pub printer_redirection: Option<bool>,
-    #[zeroize(skip)]
     pub drives_to_redirect: Option<Vec<String>>,
-    #[zeroize(skip)]
     pub sound_latency_threshold: Option<u16>,
-    #[zeroize(skip)]
     pub best_experience: Option<bool>,
     pub rail: Option<RailSettings>,
-    #[zeroize(skip)]
     pub use_local_scaler: Option<bool>,
 }
 
@@ -182,6 +167,12 @@ impl RdpSettings {
 
 fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let rdp_settings = extract_js_args!(args, ctx, RdpSettings);
+    log::debug!(
+        "RdpSettings parsed - server: '{}', user: {:?}, port: {:?}",
+        rdp_settings.server,
+        rdp_settings.user,
+        rdp_settings.port
+    );
     if !rdp_settings.is_valid() {
         return Err(JsError::from_native(
             JsNativeError::error().with_message("Invalid RDP settings: 'server' is required"),
