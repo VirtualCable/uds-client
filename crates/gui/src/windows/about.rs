@@ -41,6 +41,7 @@ pub struct AboutState {
     pub animation_time: f32,
     pub waves: Vec<crate::draw::ui::waves::Wave>,
     pub close_btn: crate::draw::ui::button::Button,
+    pub last_mouse_pos: Option<(f32, f32)>,
 }
 
 impl AboutState {
@@ -96,6 +97,7 @@ impl AboutState {
             animation_time: 0.0,
             waves: crate::draw::ui::waves::Wave::default_set(),
             close_btn,
+            last_mouse_pos: None,
         })
     }
 
@@ -233,6 +235,9 @@ struct AboutHandler<'a> {
 
 impl ApplicationHandler for AboutHandler<'_> {
     fn resumed(&mut self, el: &ActiveEventLoop) {
+        // Populate monitor info so SCALE_FACTOR reflects the actual DPI.
+        // Without this, SCALE_FACTOR defaults to 1.0 and text is tiny on high-DPI.
+        crate::monitor::populate(el);
         match AboutState::new(el) {
             Ok(s) => *self.state = Some(s),
             Err(e) => {
@@ -255,22 +260,29 @@ impl ApplicationHandler for AboutHandler<'_> {
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
-                if let Some(s) = self.state.as_mut()
-                    && s.handle_mouse_move(position.x as f32, position.y as f32)
-                {
-                    s.window.request_redraw();
+                if let Some(s) = self.state.as_mut() {
+                    s.last_mouse_pos = Some((position.x as f32, position.y as f32));
+                    if s.close_btn.handle_mouse_move(position.x as f32, position.y as f32) {
+                        s.window.request_redraw();
+                    }
                 }
             }
             WindowEvent::MouseInput {
                 state: bs, button, ..
             } if bs.is_pressed() && button == winit::event::MouseButton::Left => {
-                el.exit();
+                if let Some(s) = self.state.as_ref()
+                    && let Some(pos) = s.last_mouse_pos
+                    && s.close_btn.contains(pos.0, pos.1)
+                {
+                    el.exit();
+                }
             }
             _ => {}
         }
     }
     fn about_to_wait(&mut self, _: &ActiveEventLoop) {
-        if let Some(s) = self.state.as_ref() {
+        if let Some(s) = self.state.as_mut() {
+            s.animation_time += 0.3;
             s.window.request_redraw();
         }
     }
@@ -278,18 +290,28 @@ impl ApplicationHandler for AboutHandler<'_> {
 
 impl crate::AppHandler {
     pub(crate) fn handle_about_event(&mut self, event: WindowEvent) {
-        let Some(_) = self.about else { return };
+        let Some(ref mut a) = self.about else { return };
         match event {
             WindowEvent::CloseRequested => {
                 self.close_about();
             }
-            WindowEvent::MouseInput { state, .. } if state.is_pressed() => {
-                self.close_about();
+            WindowEvent::MouseInput {
+                state, button, ..
+            } if state.is_pressed() && button == winit::event::MouseButton::Left => {
+                if let Some(pos) = a.last_mouse_pos
+                    && a.close_btn.contains(pos.0, pos.1)
+                {
+                    self.close_about();
+                }
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                a.last_mouse_pos = Some((position.x as f32, position.y as f32));
+                if a.close_btn.handle_mouse_move(position.x as f32, position.y as f32) {
+                    a.window.request_redraw();
+                }
             }
             WindowEvent::RedrawRequested => {
-                if let Some(ref mut a) = self.about {
-                    a.paint();
-                }
+                a.paint();
             }
             _ => {}
         }
