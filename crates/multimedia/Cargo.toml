@@ -10,3 +10,4 @@ cpal = { workspace = true }
 flume = { workspace = true }
 
 nokhwa = { workspace = true }
+turbojpeg = { workspace = true }

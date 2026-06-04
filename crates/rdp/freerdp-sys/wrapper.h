@@ -52,6 +52,7 @@
 #include <freerdp/channels/rail.h>
 #include <freerdp/channels/rdpsnd.h>
 #include <freerdp/channels/audin.h>
+#include <freerdp/channels/rdpecam.h>
 
 #include <freerdp/gdi/gfx.h>
 #include <freerdp/codec/h264.h>
