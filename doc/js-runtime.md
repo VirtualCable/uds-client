@@ -476,6 +476,7 @@ Starts an RDP connection with the specified settings.
     - `title` (string, optional): Title for the RAIL control window (defaults to "UDS RemoteApps").
     - `server_info` (object, optional): `{ id: string, token: string }`. Allows launching new RemoteApps into an already-running RAIL session via local IPC.
   - `use_local_scaler` (boolean, optional): If true (default), the local client handles all DPI scaling and the server renders at 100% DPI, reducing bandwidth. If false, the server handles scaling at the native monitor DPI.
+  - `use_tunnel` (boolean, optional): If true, overrides the ServerHostname setting with the original connection hostname during redirection.
 
 **Returns:** undefined
 

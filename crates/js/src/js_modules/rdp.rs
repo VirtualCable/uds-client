@@ -81,6 +81,7 @@ struct RdpSettings {
     pub best_experience: Option<bool>,
     pub rail: Option<RailSettings>,
     pub use_local_scaler: Option<bool>,
+    pub use_tunnel: Option<bool>,
 }
 
 impl Default for RdpSettings {
@@ -104,6 +105,7 @@ impl Default for RdpSettings {
             best_experience: None,
             rail: None,
             use_local_scaler: None,
+            use_tunnel: None,
         }
     }
 }
@@ -161,6 +163,7 @@ impl RdpSettings {
             }),
             desktop_scale: 1.0,
             use_local_scaler: self.use_local_scaler.unwrap_or(true),
+            use_tunnel: defs.use_tunnel,
         }
     }
 }

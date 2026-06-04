@@ -69,6 +69,7 @@ pub struct RdpSettings {
     pub rail: Option<RailSettings>,
     pub desktop_scale: f64,
     pub use_local_scaler: bool,
+    pub use_tunnel: bool,
 }
 
 impl Default for RdpSettings {
@@ -92,6 +93,7 @@ impl Default for RdpSettings {
             rail: None,
             desktop_scale: 1.0,
             use_local_scaler: true,
+            use_tunnel: false,
         }
     }
 }

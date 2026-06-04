@@ -93,7 +93,6 @@ impl Rdp {
     fn set_rdp_settings(&self) {
         #[cfg(debug_assertions)]
         self.debug_assert_instance();
-        log::debug!("set_rdp_settings");
         unsafe {
             if let Some(settings) = self.settings() {
                 // Set Falses first

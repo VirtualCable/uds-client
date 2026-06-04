@@ -27,10 +27,15 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::ffi::CString;
+
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 use shared::log;
 
 use crate::callbacks::instance;
+use freerdp_sys::{
+    FreeRDP_Settings_Keys_String_FreeRDP_ServerHostname, freerdp_settings_set_string,
+};
 
 use super::Rdp;
 
@@ -69,7 +74,25 @@ impl instance::InstanceCallbacks for Rdp {
                 }
             }
         }
+        true
+    }
 
+    fn on_redirect(&mut self) -> bool {
+        log::debug!(" **** Redirecting!");
+        // Override FreeRDP_ServerHostname with original hostname if tunnel flag is set
+        if self.config.settings.use_tunnel
+            && let Some(settings) = self.settings()
+            && let Ok(host) = CString::new(self.config.settings.server.as_str())
+        {
+            log::debug!("Override FreeRDP_ServerHostname with original");
+            unsafe {
+                freerdp_settings_set_string(
+                    settings,
+                    FreeRDP_Settings_Keys_String_FreeRDP_ServerHostname,
+                    host.as_ptr(),
+                );
+            }
+        };
         true
     }
 }

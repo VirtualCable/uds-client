@@ -79,6 +79,7 @@ declare module "runtime" {
         server_info?: { id: string; token: string };
       };
       use_local_scaler?: boolean;
+      use_tunnel?: boolean;
     }): void;
     function sign(rdp_string: string, ticket: string): Promise<string>;
   }

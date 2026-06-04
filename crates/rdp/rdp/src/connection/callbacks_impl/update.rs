@@ -49,29 +49,34 @@ impl update::UpdateCallbacks for Rdp {
 
     fn on_desktop_resize(&mut self) -> bool {
         log::debug!(" **** Desktop resized");
-        let width = unsafe {
-            freerdp_settings_get_uint32(
-                self.context().unwrap().context().settings,
-                FreeRDP_Settings_Keys_UInt32_FreeRDP_DesktopWidth,
-            )
-        };
-        let height = unsafe {
-            freerdp_settings_get_uint32(
-                self.context().unwrap().context().settings,
-                FreeRDP_Settings_Keys_UInt32_FreeRDP_DesktopHeight,
-            )
-        };
-        let gdi_lock = self.gdi_lock();
-        let _gdi_guard = gdi_lock.write().unwrap();
-        if let Some(gdi) = self.gdi() {
-            unsafe { gdi_resize(gdi, width as u32, height as u32) };
+        if let Some(settings) = self.settings() {
+            let width = unsafe {
+                freerdp_settings_get_uint32(
+                    settings,
+                    FreeRDP_Settings_Keys_UInt32_FreeRDP_DesktopWidth,
+                )
+            };
+            let height = unsafe {
+                freerdp_settings_get_uint32(
+                    settings,
+                    FreeRDP_Settings_Keys_UInt32_FreeRDP_DesktopHeight,
+                )
+            };
+            let gdi_lock = self.gdi_lock();
+            let _gdi_guard = gdi_lock.write().unwrap();
+            if let Some(gdi) = self.gdi() {
+                unsafe { gdi_resize(gdi, width as u32, height as u32) };
+            }
+            // If update_tx is present, notify it of the resize
+            // with try_send, so it doesn't block if the gui thread is not ready
+            if let Some(tx) = &self.update_tx {
+                let _ = tx.try_send(RdpMessage::DesktopResize(width as u32, height as u32));
+            }
+            true
+        } else {
+            log::debug!("No settings found");
+            false
         }
-        // If update_tx is present, notify it of the resize
-        // with try_send, so it doesn't block if the gui thread is not ready
-        if let Some(tx) = &self.update_tx {
-            let _ = tx.try_send(RdpMessage::DesktopResize(width as u32, height as u32));
-        }
-        true
     }
 }
 
