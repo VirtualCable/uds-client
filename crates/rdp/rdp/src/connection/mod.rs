@@ -239,6 +239,11 @@ impl Rdp {
                     );
                     channels(settings, "audin", None, false, true);
                 }
+                // Webcam redirection
+                if self.config.settings.webcam_redirection {
+                    let channel = format!("sys:{}", crate::addins::WEBCAM_SUBSYSTEM_CUSTOM);
+                    channels(settings, "rdpecam", Some(&channel), true, true);
+                }
 
                 // Set config settings for clipboard redirection
                 freerdp_settings_set_bool(

@@ -64,6 +64,7 @@ pub struct RdpSettings {
     pub microphone_redirection: bool,
     pub printer_redirection: bool,
     pub drives_to_redirect: Vec<String>,
+    pub webcam_redirection: bool,
     pub sound_latency_threshold: Option<u16>,
     pub best_experience: bool,
     pub rail: Option<RailSettings>,
@@ -93,6 +94,7 @@ impl Default for RdpSettings {
             rail: None,
             desktop_scale: 1.0,
             use_local_scaler: true,
+            webcam_redirection: false,
             use_tunnel: false,
         }
     }

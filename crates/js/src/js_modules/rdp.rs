@@ -75,6 +75,7 @@ struct RdpSettings {
     pub clipboard_redirection: Option<bool>,
     pub audio_redirection: Option<bool>,
     pub microphone_redirection: Option<bool>,
+    pub webcam_redirection: Option<bool>,
     pub printer_redirection: Option<bool>,
     pub drives_to_redirect: Option<Vec<String>>,
     pub sound_latency_threshold: Option<u16>,
@@ -99,6 +100,7 @@ impl Default for RdpSettings {
             clipboard_redirection: None,
             audio_redirection: None,
             microphone_redirection: None,
+            webcam_redirection: None,
             printer_redirection: None,
             drives_to_redirect: None,
             sound_latency_threshold: None,
@@ -163,7 +165,8 @@ impl RdpSettings {
             }),
             desktop_scale: 1.0,
             use_local_scaler: self.use_local_scaler.unwrap_or(true),
-            use_tunnel: defs.use_tunnel,
+            use_tunnel: self.use_tunnel.unwrap_or(defs.use_tunnel),
+            webcam_redirection: self.webcam_redirection.unwrap_or(defs.webcam_redirection),
         }
     }
 }

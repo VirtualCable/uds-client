@@ -8,3 +8,5 @@ shared = { path = "../shared" }
 
 cpal = { workspace = true }
 flume = { workspace = true }
+
+nokhwa = { workspace = true }

@@ -36,6 +36,7 @@ use freerdp_sys::{
 };
 
 use super::audio_output;
+use super::webcam;
 use shared::log;
 
 static FREERDP_ADDIN_PROVIDER: OnceLock<FREERDP_LOAD_CHANNEL_ADDIN_ENTRY_FN> = OnceLock::new();
@@ -74,6 +75,14 @@ unsafe extern "C" fn custom_addin_provider(
                     ) -> UINT,
                     unsafe extern "C" fn(*mut freerdp_sys::tagCHANNEL_ENTRY_POINTS) -> BOOL,
                 >(audio_output::sound_entry))
+            } else if name == "rdpecam"
+                && subsystem == super::WEBCAM_SUBSYSTEM_CUSTOM
+            {
+                log::info!("rdpecam channel addin requested.");
+                Some(std::mem::transmute::<
+                    unsafe extern "C" fn(*mut freerdp_sys::IDRDYNVC_ENTRY_POINTS) -> UINT,
+                    unsafe extern "C" fn(*mut freerdp_sys::tagCHANNEL_ENTRY_POINTS) -> BOOL,
+                >(webcam::webcam_entry))
             } else {
                 freerdp_addin_provider(psz_name, psz_subsystem, psz_type, dw_flags)
             }

@@ -31,5 +31,7 @@
 
 pub(crate) mod addin;
 pub(crate) mod audio_output;
+pub(crate) mod webcam;
 
 pub const RDPSND_SUBSYSTEM_CUSTOM: &str = "bmsnd";
+pub const WEBCAM_SUBSYSTEM_CUSTOM: &str = "bmwebcam";
