@@ -157,10 +157,11 @@ impl AppHandler {
                 LaunchAction::ConnectRdp | LaunchAction::ConnectRail => {
                     let is_rail = matches!(action, LaunchAction::ConnectRail);
                     let settings = rdp_ffi::settings::RdpSettings {
-                        server: "172.27.1.25".to_string(),
-                        user: "Administrator".to_string(),
-                        password: "Temporal2012".to_string(),
+                        server: "172.27.247.161".to_string(),
+                        user: "user".to_string(),
+                        password: "temporal".to_string(),
                         screen_size: rdp_ffi::geom::ScreenSize::Fixed(800, 600),
+                        webcam_redirection: true,
                         best_experience: true,
                         use_local_scaler: true,
                         rail: if is_rail {
