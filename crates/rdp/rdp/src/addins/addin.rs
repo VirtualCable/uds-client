@@ -63,6 +63,11 @@ unsafe extern "C" fn custom_addin_provider(
     unsafe {
         let name = secure_cstr_from_lpcstr(psz_name);
         let subsystem = secure_cstr_from_lpcstr(psz_subsystem);
+        let addin_type = secure_cstr_from_lpcstr(psz_type);
+        log::info!(
+            "custom_addin_provider: name='{}', subsystem='{}', type='{}'",
+            name, subsystem, addin_type
+        );
 
         if let Some(freerdp_addin_provider) = FREERDP_ADDIN_PROVIDER.get().unwrap() {
             if name.as_bytes() == &RDPSND_CHANNEL_NAME[..RDPSND_CHANNEL_NAME.len() - 1]
@@ -75,9 +80,7 @@ unsafe extern "C" fn custom_addin_provider(
                     ) -> UINT,
                     unsafe extern "C" fn(*mut freerdp_sys::tagCHANNEL_ENTRY_POINTS) -> BOOL,
                 >(audio_output::sound_entry))
-            } else if name == "rdpecam"
-                && subsystem == super::WEBCAM_SUBSYSTEM_CUSTOM
-            {
+            } else if name == "rdpecam" {
                 log::info!("rdpecam channel addin requested.");
                 Some(std::mem::transmute::<
                     unsafe extern "C" fn(*mut freerdp_sys::IDRDYNVC_ENTRY_POINTS) -> UINT,

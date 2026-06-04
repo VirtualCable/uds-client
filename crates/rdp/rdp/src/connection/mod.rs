@@ -242,7 +242,7 @@ impl Rdp {
                 // Webcam redirection
                 if self.config.settings.webcam_redirection {
                     let channel = format!("sys:{}", crate::addins::WEBCAM_SUBSYSTEM_CUSTOM);
-                    channels(settings, "rdpecam", Some(&channel), true, true);
+                    channels(settings, "rdpecam", Some(&channel), false, true);
                 }
 
                 // Set config settings for clipboard redirection
