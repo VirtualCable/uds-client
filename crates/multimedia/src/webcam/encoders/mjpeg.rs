@@ -25,14 +25,19 @@ impl Default for MjpegEncoder {
 }
 
 impl VideoEncoder for MjpegEncoder {
-    fn init(&mut self, width: u32, height: u32, _fps: u32) -> Result<(), String> {
+    fn init(&mut self, width: u32, height: u32, _fps: u32, quality: u32) -> Result<(), String> {
         self.width = width;
         self.height = height;
         if self.compressor.is_none() {
             match turbojpeg::Compressor::new() {
-                Ok(c) => self.compressor = Some(c),
+                Ok(mut c) => {
+                    let _ = c.set_quality(quality as i32);
+                    self.compressor = Some(c);
+                }
                 Err(e) => return Err(format!("Failed to create turbojpeg compressor: {e}")),
             }
+        } else if let Some(ref mut c) = self.compressor {
+            let _ = c.set_quality(quality as i32);
         }
         Ok(())
     }

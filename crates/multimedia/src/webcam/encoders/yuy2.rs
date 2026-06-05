@@ -18,7 +18,7 @@ impl Default for Yuy2Encoder {
 }
 
 impl VideoEncoder for Yuy2Encoder {
-    fn init(&mut self, width: u32, height: u32, _fps: u32) -> Result<(), String> {
+    fn init(&mut self, width: u32, height: u32, _fps: u32, _quality: u32) -> Result<(), String> {
         self.width = width;
         self.height = height;
         Ok(())

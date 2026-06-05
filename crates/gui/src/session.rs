@@ -161,7 +161,11 @@ impl AppHandler {
                         user: "user".to_string(),
                         password: "temporal".to_string(),
                         screen_size: rdp_ffi::geom::ScreenSize::Fixed(800, 600),
-                        webcam_redirection: true,
+                        webcam: Some(rdp_ffi::settings::WebcamSettings {
+                            enabled: true,
+                            quality: 80,
+                            fps: 15,
+                        }),
                         best_experience: true,
                         use_local_scaler: true,
                         rail: if is_rail {

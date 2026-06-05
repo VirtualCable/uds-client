@@ -49,6 +49,13 @@ pub struct RailSettings {
     pub server_info: Option<ServerInfo>,
 }
 
+#[derive(Debug, Zeroize, Clone)]
+pub struct WebcamSettings {
+    pub enabled: bool,
+    pub quality: u32,
+    pub fps: u32,
+}
+
 #[derive(Zeroize, Clone)]
 pub struct RdpSettings {
     pub server: String,
@@ -64,7 +71,7 @@ pub struct RdpSettings {
     pub microphone_redirection: bool,
     pub printer_redirection: bool,
     pub drives_to_redirect: Vec<String>,
-    pub webcam_redirection: bool,
+    pub webcam: Option<WebcamSettings>,
     pub sound_latency_threshold: Option<u16>,
     pub best_experience: bool,
     pub rail: Option<RailSettings>,
@@ -94,7 +101,7 @@ impl Default for RdpSettings {
             rail: None,
             desktop_scale: 1.0,
             use_local_scaler: true,
-            webcam_redirection: false,
+            webcam: None,
             use_tunnel: false,
         }
     }
@@ -123,6 +130,7 @@ impl fmt::Debug for RdpSettings {
             .field("microphone_redirection", &self.microphone_redirection)
             .field("printer_redirection", &self.printer_redirection)
             .field("drives_to_redirect", &self.drives_to_redirect)
+            .field("webcam", &self.webcam)
             .field("sound_latency_threshold", &self.sound_latency_threshold)
             .field("best_experience", &self.best_experience)
             .field("rail", &self.rail)

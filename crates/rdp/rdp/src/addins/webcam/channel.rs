@@ -94,10 +94,12 @@ fn handle_start_streams(ctx: &ChannelCtx, payload: &[u8]) {
     let format = media_type.Format;
     let width = media_type.Width;
     let height = media_type.Height;
-    let fps = media_type.FrameRateNumerator.checked_div(media_type.FrameRateDenominator).unwrap_or(15);
+    let requested_fps = media_type.FrameRateNumerator.checked_div(media_type.FrameRateDenominator).unwrap_or(15);
+    let configured_fps = multimedia::webcam::WEBCAM_FPS.load(std::sync::atomic::Ordering::Relaxed);
+    let fps = requested_fps.min(configured_fps);
 
     log::info!(
-        "Webcam: StartStreams — stream={stream_idx} format={format} {}x{} @ {fps}fps",
+        "Webcam: StartStreams — stream={stream_idx} format={format} {}x{} @ {fps}fps (requested: {requested_fps}fps, configured: {configured_fps}fps)",
         width, height
     );
 

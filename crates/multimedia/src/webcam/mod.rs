@@ -1,4 +1,5 @@
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -14,6 +15,9 @@ mod encoders;
 
 pub use mock::{StreamState, generate_mock_frame};
 pub use encoders::{VideoEncoder, RawEncoder, Yuy2Encoder, MjpegEncoder};
+
+pub static WEBCAM_QUALITY: AtomicU32 = AtomicU32::new(80);
+pub static WEBCAM_FPS: AtomicU32 = AtomicU32::new(15);
 
 pub enum WebcamCommand {
     StartStream {
@@ -137,7 +141,8 @@ impl WebcamHandle {
                             WebcamMode::YUY2 => Box::new(Yuy2Encoder::new()),
                             WebcamMode::Raw => Box::new(RawEncoder),
                         };
-                        let _ = encoder.init(s.width, s.height, s.fps);
+                        let q = WEBCAM_QUALITY.load(Ordering::Relaxed);
+                        let _ = encoder.init(s.width, s.height, s.fps, q);
                         current_mode = Some(mode_val);
                     }
 
