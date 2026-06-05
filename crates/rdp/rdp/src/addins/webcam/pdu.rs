@@ -66,11 +66,54 @@ pub fn build_response_header(msg_id: u8) -> Vec<u8> {
     pdu
 }
 
+pub fn build_stream_list_response(
+    frame_source_types: u16,
+    stream_category: u8,
+    selected: bool,
+    can_be_shared: bool,
+) -> Vec<u8> {
+    let mut pdu = Vec::with_capacity(7);
+    pdu.push(1u8); // version
+    pdu.push(freerdp_sys::CAM_MSG_ID_CAM_MSG_ID_StreamListResponse as u8);
+    pdu.extend_from_slice(&frame_source_types.to_le_bytes());
+    pdu.push(stream_category);
+    pdu.push(if selected { 1 } else { 0 });
+    pdu.push(if can_be_shared { 1 } else { 0 });
+    pdu
+}
+
+pub fn build_media_type_list_response(media_types: &[CAM_MEDIA_TYPE_DESCRIPTION]) -> Vec<u8> {
+    let mut pdu = Vec::with_capacity(2 + media_types.len() * 26);
+    pdu.push(1u8); // version
+    pdu.push(freerdp_sys::CAM_MSG_ID_CAM_MSG_ID_MediaTypeListResponse as u8);
+
+    for mt in media_types {
+        pdu.extend_from_slice(&serialize_media_type(mt));
+    }
+    pdu
+}
+
+pub fn build_current_media_type_response(mt: &CAM_MEDIA_TYPE_DESCRIPTION) -> Vec<u8> {
+    let mut pdu = Vec::with_capacity(28);
+    pdu.push(1u8); // version
+    pdu.push(freerdp_sys::CAM_MSG_ID_CAM_MSG_ID_CurrentMediaTypeResponse as u8);
+    pdu.extend_from_slice(&serialize_media_type(mt));
+    pdu
+}
+
+pub fn build_property_list_response() -> Vec<u8> {
+    let mut pdu = Vec::with_capacity(10);
+    pdu.push(1u8); // version
+    pdu.push(freerdp_sys::CAM_MSG_ID_CAM_MSG_ID_PropertyListResponse as u8);
+    pdu.extend_from_slice(&0u64.to_le_bytes()); // N_Properties = 0
+    pdu
+}
+
 pub fn build_sample_response(stream_index: u8, sample: &[u8]) -> Vec<u8> {
     let sample_size = sample.len();
     let mut pdu = Vec::with_capacity(PDU_HEADER_SIZE + 1 + sample_size);
     pdu.push(1u8); // version
-    pdu.push(0x12); // CAM_MSG_ID_SampleResponse = 0x12
+    pdu.push(freerdp_sys::CAM_MSG_ID_CAM_MSG_ID_SampleResponse as u8);
     pdu.push(stream_index);
     pdu.extend_from_slice(sample);
     pdu

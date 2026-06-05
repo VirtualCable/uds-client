@@ -76,20 +76,6 @@ pub unsafe extern "C" fn on_data(
     CHANNEL_RC_OK
 }
 
-fn write_media_type(pdu: &mut Vec<u8>, format: u8, width: u32, height: u32, fps: u32) {
-    let mt = freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION {
-        Format: format as i32,
-        Width: width,
-        Height: height,
-        FrameRateNumerator: fps,
-        FrameRateDenominator: 1,
-        PixelAspectRatioNumerator: 1,
-        PixelAspectRatioDenominator: 1,
-        Flags: freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION_FLAGS_CAM_MEDIA_TYPE_DESCRIPTION_FLAG_DecodingRequired,
-    };
-    pdu.extend_from_slice(&pdu::serialize_media_type(&mt));
-}
-
 fn handle_start_streams(ctx: &ChannelCtx, payload: &[u8]) {
     if payload.len() < 27 {
         log::error!("Webcam: StartStreams payload too short: {}", payload.len());
@@ -147,56 +133,47 @@ fn handle_start_streams(ctx: &ChannelCtx, payload: &[u8]) {
 
 fn handle_stream_list(ctx: &ChannelCtx) {
     log::info!("Webcam: StreamListRequest — reporting 1 stream");
-    // StreamListResponse: Header(2) + FrameSourceTypes(2) + StreamCategory(1) + Selected(1) + CanBeShared(1) = 7 bytes
-    let mut pdu = Vec::with_capacity(7);
-    pdu.push(1u8); // version
-    pdu.push(0x0A); // msg_id (CAM_MSG_ID_StreamListResponse = 0x0A)
-    
-    // FrameSourceTypes: CAM_STREAM_FRAME_SOURCE_TYPE_Color = 0x0001 (2 bytes, LE)
-    pdu.extend_from_slice(&1u16.to_le_bytes());
-    // StreamCategory: CAM_STREAM_CATEGORY_Capture = 0x01 (1 byte)
-    pdu.push(1u8);
-    // Selected: TRUE = 1 (1 byte)
-    pdu.push(1u8);
-    // CanBeShared: FALSE = 0 (1 byte)
-    pdu.push(0u8);
-
+    // FrameSourceTypes: CAM_STREAM_FRAME_SOURCE_TYPE_Color = 0x0001 (1u16)
+    // StreamCategory: CAM_STREAM_CATEGORY_Capture = 0x01 (1u8)
+    let pdu = pdu::build_stream_list_response(1, 1, true, false);
     unsafe { write_to_channel(ctx.channel, &pdu) };
 }
 
 fn handle_media_type_list(ctx: &ChannelCtx) {
     log::info!("Webcam: MediaTypeListRequest");
-    // Respond with supported formats: MJPEG(2), YUYV(3), NV12(4), RGB24(6)
-    let formats: [u8; 4] = [2, 3, 4, 6];
-    let mut pdu = Vec::with_capacity(2 + formats.len() * 26);
-    pdu.push(1u8); // version
-    pdu.push(0x0C); // msg_id (CAM_MSG_ID_MediaTypeListResponse = 0x0C)
-
-    for &fmt in &formats {
-        write_media_type(&mut pdu, fmt, 640, 480, 30);
-    }
-
+    let mt = freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION {
+        Format: freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_MJPG,
+        Width: 640,
+        Height: 480,
+        FrameRateNumerator: 30,
+        FrameRateDenominator: 1,
+        PixelAspectRatioNumerator: 1,
+        PixelAspectRatioDenominator: 1,
+        Flags: freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION_FLAGS_CAM_MEDIA_TYPE_DESCRIPTION_FLAG_DecodingRequired,
+    };
+    let pdu = pdu::build_media_type_list_response(&[mt]);
     unsafe { write_to_channel(ctx.channel, &pdu) };
 }
 
 fn handle_current_media_type(ctx: &ChannelCtx) {
     log::info!("Webcam: CurrentMediaTypeRequest");
-    let mut pdu = Vec::with_capacity(28);
-    pdu.push(1u8); // version
-    pdu.push(0x0E); // msg_id (CAM_MSG_ID_CurrentMediaTypeResponse = 0x0E)
-    write_media_type(&mut pdu, 2, 640, 480, 30); // Default to MJPEG 640x480 @ 30fps
-
+    let mt = freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION {
+        Format: freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_MJPG,
+        Width: 640,
+        Height: 480,
+        FrameRateNumerator: 30,
+        FrameRateDenominator: 1,
+        PixelAspectRatioNumerator: 1,
+        PixelAspectRatioDenominator: 1,
+        Flags: freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION_FLAGS_CAM_MEDIA_TYPE_DESCRIPTION_FLAG_DecodingRequired,
+    };
+    let pdu = pdu::build_current_media_type_response(&mt);
     unsafe { write_to_channel(ctx.channel, &pdu) };
 }
 
 fn handle_property_list(ctx: &ChannelCtx) {
     log::info!("Webcam: PropertyListRequest");
-    // Header(2) + N_Properties(8) = 10 bytes
-    let mut pdu = Vec::with_capacity(10);
-    pdu.push(1u8); // version
-    pdu.push(0x15); // msg_id (CAM_MSG_ID_PropertyListResponse = 0x15)
-    pdu.extend_from_slice(&0u64.to_le_bytes()); // N_Properties = 0
-
+    let pdu = pdu::build_property_list_response();
     unsafe { write_to_channel(ctx.channel, &pdu) };
 }
 
