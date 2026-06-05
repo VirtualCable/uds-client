@@ -28,44 +28,43 @@ pub unsafe extern "C" fn on_data(
     let s = unsafe { &*stream };
     let bytes = unsafe { std::slice::from_raw_parts(s.pointer, s.length) };
 
-    let Ok((version, msg_id, payload)) = parse_pdu_header(bytes) else {
+    let Ok((_version, msg_id, payload)) = parse_pdu_header(bytes) else {
         log::error!("Webcam: failed to parse PDU header!");
         return CHANNEL_RC_OK;
     };
 
-    log::info!("Webcam PDU received: version={version} msg_id={msg_id} len={}", bytes.len());
-
-    match msg_id as u32 {
-        0x11 => { // CAM_MSG_ID_SampleRequest = 0x11
-            ctx.webcam.request_sample();
+    #[allow(non_upper_case_globals)]
+    match msg_id as i32 {
+        freerdp_sys::CAM_MSG_ID_CAM_MSG_ID_SampleRequest => {
+            ctx.webcam.request_sample(ctx.channel as usize);
         }
-        0x0F => { // CAM_MSG_ID_StartStreamsRequest = 0x0F
+        freerdp_sys::CAM_MSG_ID_CAM_MSG_ID_StartStreamsRequest => {
             handle_start_streams(ctx, payload);
         }
-        0x10 => { // CAM_MSG_ID_StopStreamsRequest = 0x10
+        freerdp_sys::CAM_MSG_ID_CAM_MSG_ID_StopStreamsRequest => {
             log::info!("Webcam: StopStreamsRequest");
             ctx.webcam.stop_stream();
             send_success(ctx);
         }
-        0x07 => { // CAM_MSG_ID_ActivateDeviceRequest = 0x07
+        freerdp_sys::CAM_MSG_ID_CAM_MSG_ID_ActivateDeviceRequest => {
             log::info!("Webcam: ActivateDeviceRequest");
             send_success(ctx);
         }
-        0x08 => { // CAM_MSG_ID_DeactivateDeviceRequest = 0x08
+        freerdp_sys::CAM_MSG_ID_CAM_MSG_ID_DeactivateDeviceRequest => {
             log::info!("Webcam: DeactivateDeviceRequest");
             ctx.webcam.stop_stream();
             send_success(ctx);
         }
-        0x09 => { // CAM_MSG_ID_StreamListRequest = 0x09
+        freerdp_sys::CAM_MSG_ID_CAM_MSG_ID_StreamListRequest => {
             handle_stream_list(ctx);
         }
-        0x0B => { // CAM_MSG_ID_MediaTypeListRequest = 0x0B
+        freerdp_sys::CAM_MSG_ID_CAM_MSG_ID_MediaTypeListRequest => {
             handle_media_type_list(ctx);
         }
-        0x0D => { // CAM_MSG_ID_CurrentMediaTypeRequest = 0x0D
+        freerdp_sys::CAM_MSG_ID_CAM_MSG_ID_CurrentMediaTypeRequest => {
             handle_current_media_type(ctx);
         }
-        0x14 => { // CAM_MSG_ID_PropertyListRequest = 0x14
+        freerdp_sys::CAM_MSG_ID_CAM_MSG_ID_PropertyListRequest => {
             handle_property_list(ctx);
         }
         _ => {
@@ -78,14 +77,17 @@ pub unsafe extern "C" fn on_data(
 }
 
 fn write_media_type(pdu: &mut Vec<u8>, format: u8, width: u32, height: u32, fps: u32) {
-    pdu.push(format); // Format (1 byte)
-    pdu.extend_from_slice(&width.to_le_bytes()); // Width (4 bytes)
-    pdu.extend_from_slice(&height.to_le_bytes()); // Height (4 bytes)
-    pdu.extend_from_slice(&fps.to_le_bytes()); // FrameRateNumerator (4 bytes)
-    pdu.extend_from_slice(&1u32.to_le_bytes()); // FrameRateDenominator (4 bytes)
-    pdu.extend_from_slice(&1u32.to_le_bytes()); // PixelAspectRatioNumerator (4 bytes)
-    pdu.extend_from_slice(&1u32.to_le_bytes()); // PixelAspectRatioDenominator (4 bytes)
-    pdu.push(1u8); // Flags (1 byte, CAM_MEDIA_TYPE_DESCRIPTION_FLAG_DecodingRequired = 1)
+    let mt = freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION {
+        Format: format as i32,
+        Width: width,
+        Height: height,
+        FrameRateNumerator: fps,
+        FrameRateDenominator: 1,
+        PixelAspectRatioNumerator: 1,
+        PixelAspectRatioDenominator: 1,
+        Flags: freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION_FLAGS_CAM_MEDIA_TYPE_DESCRIPTION_FLAG_DecodingRequired,
+    };
+    pdu.extend_from_slice(&pdu::serialize_media_type(&mt));
 }
 
 fn handle_start_streams(ctx: &ChannelCtx, payload: &[u8]) {
@@ -95,25 +97,18 @@ fn handle_start_streams(ctx: &ChannelCtx, payload: &[u8]) {
         return;
     }
     let stream_idx = payload[0];
-    let format = payload[1];
-    
-    let mut width_bytes = [0u8; 4];
-    width_bytes.copy_from_slice(&payload[2..6]);
-    let width = u32::from_le_bytes(width_bytes);
-
-    let mut height_bytes = [0u8; 4];
-    height_bytes.copy_from_slice(&payload[6..10]);
-    let height = u32::from_le_bytes(height_bytes);
-
-    let mut num_bytes = [0u8; 4];
-    num_bytes.copy_from_slice(&payload[10..14]);
-    let num = u32::from_le_bytes(num_bytes);
-
-    let mut den_bytes = [0u8; 4];
-    den_bytes.copy_from_slice(&payload[14..18]);
-    let den = u32::from_le_bytes(den_bytes);
-
-    let fps = num.checked_div(den).unwrap_or(15);
+    let media_type = match pdu::parse_media_type(&payload[1..]) {
+        Ok(mt) => mt,
+        Err(e) => {
+            log::error!("Webcam: failed to parse media type: {e}");
+            send_error(ctx);
+            return;
+        }
+    };
+    let format = media_type.Format;
+    let width = media_type.Width;
+    let height = media_type.Height;
+    let fps = media_type.FrameRateNumerator.checked_div(media_type.FrameRateDenominator).unwrap_or(15);
 
     log::info!(
         "Webcam: StartStreams — stream={stream_idx} format={format} {}x{} @ {fps}fps",
@@ -123,8 +118,10 @@ fn handle_start_streams(ctx: &ChannelCtx, payload: &[u8]) {
     // Set the webcam mode depending on format selected by server.
     // If server selected CAM_MEDIA_FORMAT_MJPG (2), encode as MJPEG.
     // Otherwise (e.g. YUY2, NV12, RGB24), send raw frame.
-    if format == 2 {
+    if format == freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_MJPG {
         ctx.webcam.set_mode(multimedia::webcam::WebcamMode::MJPEG);
+    } else if format == freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_YUY2 {
+        ctx.webcam.set_mode(multimedia::webcam::WebcamMode::YUY2);
     } else {
         ctx.webcam.set_mode(multimedia::webcam::WebcamMode::Raw);
     }
@@ -132,11 +129,10 @@ fn handle_start_streams(ctx: &ChannelCtx, payload: &[u8]) {
     ctx.webcam.start_stream(width, height, fps);
     ctx.webcam.set_format(format as u32, width, height, fps);
 
-    let channel_ptr = ctx.channel as usize;
-    ctx.webcam.set_callback(move |frame| {
+    ctx.webcam.set_callback(move |frame, target_channel| {
         log::info!("Webcam: Sending sample response of {} bytes, stream_idx={stream_idx}", frame.len());
         let pdu = pdu::build_sample_response(stream_idx, &frame);
-        unsafe { pdu::write_to_channel(channel_ptr as *mut _, &pdu) };
+        unsafe { pdu::write_to_channel(target_channel as *mut _, &pdu) };
     });
 
     send_success(ctx);

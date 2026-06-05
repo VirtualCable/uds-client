@@ -11,12 +11,23 @@ use shared::log;
 use turbojpeg::{Image, OutputBuf, PixelFormat};
 
 pub enum WebcamCommand {
-    StartStream { width: u32, height: u32, fps: u32 },
+    StartStream {
+        width: u32,
+        height: u32,
+        fps: u32,
+    },
     /// Negotiate a new format. The capture loop will apply the closest match.
-    SetFormat { format: u32, width: u32, height: u32, fps: u32 },
+    SetFormat {
+        format: u32,
+        width: u32,
+        height: u32,
+        fps: u32,
+    },
     StopStream,
     Close,
 }
+
+pub type WebcamCallback = Box<dyn Fn(Vec<u8>, usize) + Send + Sync + 'static>;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum WebcamMode {
@@ -24,14 +35,17 @@ pub enum WebcamMode {
     Raw,
     /// Encode to MJPEG before storing
     MJPEG,
+    /// Convert to YUY2
+    YUY2,
 }
 
 pub struct WebcamHandle {
     cmd_tx: Sender<WebcamCommand>,
     pub latest_frame: Arc<Mutex<Option<Vec<u8>>>>,
     mode: Arc<Mutex<WebcamMode>>,
-    pub on_frame: Arc<Mutex<Option<Box<dyn Fn(Vec<u8>) + Send + Sync + 'static>>>>,
+    pub on_frame: Arc<Mutex<Option<WebcamCallback>>>,
     pub samples_requested: Arc<Mutex<u32>>,
+    pub active_channel: Arc<Mutex<Option<usize>>>,
 }
 
 struct StreamState {
@@ -53,13 +67,15 @@ impl WebcamHandle {
         let (cmd_tx, cmd_rx) = unbounded::<WebcamCommand>();
         let latest_frame = Arc::new(Mutex::new(None::<Vec<u8>>));
         let mode = Arc::new(Mutex::new(mode));
-        let on_frame = Arc::new(Mutex::new(None::<Box<dyn Fn(Vec<u8>) + Send + Sync + 'static>>));
+        let on_frame = Arc::new(Mutex::new(None::<WebcamCallback>));
         let samples_requested = Arc::new(Mutex::new(0u32));
+        let active_channel = Arc::new(Mutex::new(None::<usize>));
 
         let frame_out = latest_frame.clone();
         let cam_mode = mode.clone();
         let on_frame_cb = on_frame.clone();
         let samples_req = samples_requested.clone();
+        let active_chan = active_channel.clone();
         thread::spawn(move || {
             let mut state: Option<StreamState> = None;
             let mut frame_count: u64 = 0;
@@ -79,8 +95,15 @@ impl WebcamHandle {
                                 color_offset: 0,
                             });
                         }
-                        WebcamCommand::SetFormat { format, width, height, fps } => {
-                            log::info!("Mock Webcam: SetFormat {format} {width}x{height} @ {fps}fps");
+                        WebcamCommand::SetFormat {
+                            format,
+                            width,
+                            height,
+                            fps,
+                        } => {
+                            log::info!(
+                                "Mock Webcam: SetFormat {format} {width}x{height} @ {fps}fps"
+                            );
                             if let Some(ref mut s) = state {
                                 s.width = width;
                                 s.height = height;
@@ -105,26 +128,29 @@ impl WebcamHandle {
                     s.color_offset = s.color_offset.wrapping_add(4);
                     let bar_pos = (s.color_offset as u32 * 2) % s.width;
                     let mut rgb = vec![0u8; (s.width * s.height * 3) as usize];
-                    
+
                     for y in 0..s.height {
                         for x in 0..s.width {
                             let idx = ((y * s.width + x) * 3) as usize;
                             if x >= bar_pos && x < bar_pos + 40 {
                                 // Moving red bar
                                 rgb[idx] = 255;
-                                rgb[idx+1] = 50;
-                                rgb[idx+2] = 50;
+                                rgb[idx + 1] = 50;
+                                rgb[idx + 2] = 50;
                             } else {
                                 // Moving blue/green gradient background
                                 rgb[idx] = 20;
-                                rgb[idx+1] = (y % 256) as u8;
-                                rgb[idx+2] = s.color_offset;
+                                rgb[idx + 1] = (y % 256) as u8;
+                                rgb[idx + 2] = s.color_offset;
                             }
                         }
                     }
 
-                    let output = if *cam_mode.lock().unwrap() == WebcamMode::MJPEG {
+                    let mode_val = *cam_mode.lock().unwrap();
+                    let output = if mode_val == WebcamMode::MJPEG {
                         encode_rgb_to_jpeg(&rgb, s.width, s.height)
+                    } else if mode_val == WebcamMode::YUY2 {
+                        rgb_to_yuy2(&rgb, s.width, s.height)
                     } else {
                         rgb
                     };
@@ -133,11 +159,14 @@ impl WebcamHandle {
                     frame_count += 1;
 
                     let mut reqs = samples_req.lock().unwrap();
-                    if *reqs > 0 {
-                        if let Some(ref cb) = *on_frame_cb.lock().unwrap() {
-                            *reqs -= 1;
-                            cb(output);
-                        }
+                    if *reqs > 0
+                        && let (Some(chan), Some(ref cb)) = (
+                            *active_chan.lock().unwrap(),
+                            on_frame_cb.lock().unwrap().as_ref(),
+                        )
+                    {
+                        *reqs -= 1;
+                        cb(output, chan);
                     }
 
                     if last_report.elapsed().as_secs() >= 10 {
@@ -166,6 +195,7 @@ impl WebcamHandle {
             mode,
             on_frame,
             samples_requested,
+            active_channel,
         }
     }
 
@@ -175,21 +205,23 @@ impl WebcamHandle {
 
     pub fn set_callback<F>(&self, cb: F)
     where
-        F: Fn(Vec<u8>) + Send + Sync + 'static,
+        F: Fn(Vec<u8>, usize) + Send + Sync + 'static,
     {
         *self.on_frame.lock().unwrap() = Some(Box::new(cb));
     }
 
-    pub fn request_sample(&self) {
+    pub fn request_sample(&self, channel_ptr: usize) {
+        *self.active_channel.lock().unwrap() = Some(channel_ptr);
         let mut reqs = self.samples_requested.lock().unwrap();
         *reqs += 1;
-        if *reqs > 0 {
-            if let Some(ref frame) = *self.latest_frame.lock().unwrap() {
-                if let Some(ref cb) = *self.on_frame.lock().unwrap() {
-                    *reqs -= 1;
-                    cb(frame.clone());
-                }
-            }
+        if *reqs > 0
+            && let (Some(frame), Some(ref cb)) = (
+                self.latest_frame.lock().unwrap().as_ref(),
+                self.on_frame.lock().unwrap().as_ref(),
+            )
+        {
+            *reqs -= 1;
+            cb(frame.to_vec(), channel_ptr);
         }
     }
 
@@ -224,6 +256,7 @@ impl WebcamHandle {
     pub fn stop_stream(&self) {
         *self.latest_frame.lock().unwrap() = None;
         *self.samples_requested.lock().unwrap() = 0;
+        *self.active_channel.lock().unwrap() = None;
         *self.on_frame.lock().unwrap() = None;
         let _ = self.cmd_tx.send(WebcamCommand::StopStream);
     }
@@ -231,6 +264,7 @@ impl WebcamHandle {
     pub fn close(&self) {
         *self.latest_frame.lock().unwrap() = None;
         *self.samples_requested.lock().unwrap() = 0;
+        *self.active_channel.lock().unwrap() = None;
         *self.on_frame.lock().unwrap() = None;
         let _ = self.cmd_tx.send(WebcamCommand::Close);
     }
@@ -240,6 +274,48 @@ impl Default for WebcamHandle {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn rgb_to_yuy2(rgb: &[u8], width: u32, height: u32) -> Vec<u8> {
+    let num_pixels = (width * height) as usize;
+    let mut yuy2 = vec![0u8; num_pixels * 2];
+
+    for i in (0..num_pixels).step_by(2) {
+        let idx1 = i * 3;
+        let idx2 = (i + 1) * 3;
+
+        if idx2 + 2 >= rgb.len() {
+            break;
+        }
+
+        let r1 = rgb[idx1] as f32;
+        let g1 = rgb[idx1 + 1] as f32;
+        let b1 = rgb[idx1 + 2] as f32;
+
+        let r2 = rgb[idx2] as f32;
+        let g2 = rgb[idx2 + 1] as f32;
+        let b2 = rgb[idx2 + 2] as f32;
+
+        // Luminance Y1 and Y2
+        let y1 = (0.299 * r1 + 0.587 * g1 + 0.114 * b1) as u8;
+        let y2 = (0.299 * r2 + 0.587 * g2 + 0.114 * b2) as u8;
+
+        // Chroma U and V (averaged)
+        let r_avg = (r1 + r2) / 2.0;
+        let g_avg = (g1 + g2) / 2.0;
+        let b_avg = (b1 + b2) / 2.0;
+
+        let u = (-0.168736 * r_avg - 0.331264 * g_avg + 0.5 * b_avg + 128.0) as u8;
+        let v = (0.5 * r_avg - 0.418688 * g_avg - 0.081312 * b_avg + 128.0) as u8;
+
+        let dest_idx = i * 2;
+        yuy2[dest_idx] = y1;
+        yuy2[dest_idx + 1] = u;
+        yuy2[dest_idx + 2] = y2;
+        yuy2[dest_idx + 3] = v;
+    }
+
+    yuy2
 }
 
 /// Encode an RGB buffer to JPEG using turbojpeg.
@@ -304,7 +380,7 @@ mod tests {
         handle.start_stream(320, 240, 5);
         std::thread::sleep(Duration::from_millis(500));
         handle.stop_stream();
-        
+
         let mut ok = false;
         for _ in 0..50 {
             std::thread::sleep(Duration::from_millis(10));
