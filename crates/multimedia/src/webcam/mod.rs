@@ -64,6 +64,55 @@ pub struct WebcamHandle {
     pub active_channel: Arc<Mutex<Option<usize>>>,
 }
 
+fn select_camera_index() -> nokhwa::utils::CameraIndex {
+    if let Ok(val) = std::env::var("UDS_WEBCAM_DEVICE") {
+        if let Ok(idx) = val.parse::<u32>() {
+            return nokhwa::utils::CameraIndex::Index(idx);
+        }
+        // Query devices
+        if let Ok(devices) = nokhwa::query(nokhwa::utils::ApiBackend::Auto) {
+            let val_lower = val.to_lowercase();
+            for camera in devices {
+                if camera.human_name().to_lowercase().contains(&val_lower) {
+                    return camera.index().clone();
+                }
+            }
+        }
+    }
+    nokhwa::utils::CameraIndex::Index(0)
+}
+
+fn init_real_camera(width: u32, height: u32, fps: u32) -> Result<nokhwa::Camera, String> {
+    let index = select_camera_index();
+    
+    let requested_none = nokhwa::utils::RequestedFormat::new::<nokhwa::pixel_format::RgbFormat>(
+        nokhwa::utils::RequestedFormatType::None
+    );
+    let mut cam = nokhwa::Camera::new(index, requested_none)
+        .map_err(|e| format!("Failed to create Camera: {e}"))?;
+        
+    if let Ok(formats) = cam.compatible_camera_formats() {
+        let best_format = formats.iter().min_by_key(|f| {
+            let res_diff = ((f.width() as i32 - width as i32).abs() + (f.height() as i32 - height as i32).abs()) as u32;
+            let fps_diff = (f.frame_rate() as i32 - fps as i32).abs() as u32;
+            (res_diff, fps_diff)
+        });
+        
+        if let Some(&closest_format) = best_format {
+            log::info!("Selected closest camera format: {:?}", closest_format);
+            let requested_closest = nokhwa::utils::RequestedFormat::new::<nokhwa::pixel_format::RgbFormat>(
+                nokhwa::utils::RequestedFormatType::Exact(closest_format)
+            );
+            let _ = cam.set_camera_requset(requested_closest);
+        }
+    }
+    
+    cam.open_stream()
+        .map_err(|e| format!("Failed to open Camera stream: {e}"))?;
+    
+    Ok(cam)
+}
+
 impl WebcamHandle {
     pub fn new() -> Self {
         Self::with_mode(WebcamMode::Raw)
@@ -90,13 +139,15 @@ impl WebcamHandle {
             let mut last_report = std::time::Instant::now();
             let mut encoder: Box<dyn VideoEncoder> = Box::new(RawEncoder);
             let mut current_mode: Option<WebcamMode> = None;
+            let mut camera: Option<nokhwa::Camera> = None;
+            let mut is_mock = false;
 
             loop {
                 // Non-blocking query of commands
                 while let Ok(cmd) = cmd_rx.try_recv() {
                     match cmd {
                         WebcamCommand::StartStream { width, height, fps } => {
-                            log::info!("Mock Webcam: StartStream {width}x{height} @ {fps}fps");
+                            log::info!("Webcam: StartStream {width}x{height} @ {fps}fps");
                             current_mode = None;
                             state = Some(StreamState {
                                 width,
@@ -105,38 +156,100 @@ impl WebcamHandle {
                                 format: 2, // Default to MJPEG format ID
                                 color_offset: 0,
                             });
+
+                            let force_mock = std::env::var("UDS_WEBCAM_MOCK").map(|v| v == "1" || v.to_lowercase() == "true").unwrap_or(false);
+                            if force_mock {
+                                log::info!("Mock Webcam forced by environment variable");
+                                is_mock = true;
+                                camera = None;
+                            } else {
+                                match init_real_camera(width, height, fps) {
+                                    Ok(cam) => {
+                                        camera = Some(cam);
+                                        is_mock = false;
+                                        log::info!("Real camera initialized successfully");
+                                    }
+                                    Err(e) => {
+                                        log::warn!("Real camera initialization failed, falling back to mock: {}", e);
+                                        camera = None;
+                                        is_mock = true;
+                                    }
+                                }
+                            }
                         }
                         WebcamCommand::SetFormat {
-                            format,
+                            format: _,
                             width,
                             height,
                             fps,
                         } => {
                             log::info!(
-                                "Mock Webcam: SetFormat {format} {width}x{height} @ {fps}fps"
+                                "Webcam: SetFormat {width}x{height} @ {fps}fps"
                             );
                             current_mode = None;
                             if let Some(ref mut s) = state {
                                 s.width = width;
                                 s.height = height;
                                 s.fps = fps;
-                                s.format = format;
+                            }
+
+                            if !is_mock {
+                                if let Some(ref mut cam) = camera {
+                                    let _ = cam.stop_stream();
+                                }
+                                match init_real_camera(width, height, fps) {
+                                    Ok(cam) => {
+                                        camera = Some(cam);
+                                        is_mock = false;
+                                    }
+                                    Err(e) => {
+                                        log::warn!("Failed to re-initialize camera for new format, falling back to mock: {e}");
+                                        camera = None;
+                                        is_mock = true;
+                                    }
+                                }
                             }
                         }
                         WebcamCommand::StopStream => {
-                            log::info!("Mock Webcam: StopStream");
+                            log::info!("Webcam: StopStream");
+                            if let Some(mut cam) = camera.take() {
+                                let _ = cam.stop_stream();
+                            }
                             state = None;
                             *frame_out.lock().unwrap() = None;
                         }
                         WebcamCommand::Close => {
-                            log::info!("Mock Webcam: Close");
+                            log::info!("Webcam: Close");
+                            if let Some(mut cam) = camera.take() {
+                                let _ = cam.stop_stream();
+                            }
                             return;
                         }
                     }
                 }
 
                 if let Some(ref mut s) = state {
-                    let rgb = generate_mock_frame(s);
+                    let rgb = if is_mock {
+                        generate_mock_frame(s)
+                    } else if let Some(ref mut cam) = camera {
+                        match cam.frame() {
+                            Ok(frame) => {
+                                match frame.decode_image::<nokhwa::pixel_format::RgbFormat>() {
+                                    Ok(img) => img.into_raw(),
+                                    Err(e) => {
+                                        log::error!("Failed to decode camera frame: {e}");
+                                        generate_mock_frame(s)
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("Failed to capture camera frame: {e}");
+                                generate_mock_frame(s)
+                            }
+                        }
+                    } else {
+                        generate_mock_frame(s)
+                    };
 
                     let mode_val = *cam_mode.lock().unwrap();
                     if current_mode != Some(mode_val) {
@@ -187,7 +300,7 @@ impl WebcamHandle {
                     if last_report.elapsed().as_secs() >= 10 {
                         if frame_count > 0 {
                             log::debug!(
-                                "Mock Webcam: {} frames in 10s (~{:.1} fps)",
+                                "Webcam: {} frames in 10s (~{:.1} fps)",
                                 frame_count,
                                 frame_count as f32 / 10.0,
                             );
@@ -243,7 +356,29 @@ impl WebcamHandle {
     /// Query compatible formats from the default camera without keeping it open.
     /// Returns all (format, resolution, fps) tuples the hardware supports.
     pub fn compatible_formats() -> Vec<CameraFormat> {
-        // Return a mock set of formats
+        let force_mock = std::env::var("UDS_WEBCAM_MOCK").map(|v| v == "1" || v.to_lowercase() == "true").unwrap_or(false);
+        if force_mock {
+            return vec![
+                CameraFormat::new(Resolution::new(640, 480), FrameFormat::MJPEG, 30),
+                CameraFormat::new(Resolution::new(640, 480), FrameFormat::YUYV, 30),
+                CameraFormat::new(Resolution::new(1280, 720), FrameFormat::MJPEG, 30),
+                CameraFormat::new(Resolution::new(1920, 1080), FrameFormat::MJPEG, 30),
+            ];
+        }
+
+        let index = select_camera_index();
+        let requested = nokhwa::utils::RequestedFormat::new::<nokhwa::pixel_format::RgbFormat>(
+            nokhwa::utils::RequestedFormatType::None
+        );
+        if let Ok(mut camera) = nokhwa::Camera::new(index, requested) {
+            if let Ok(formats) = camera.compatible_camera_formats() {
+                if !formats.is_empty() {
+                    return formats;
+                }
+            }
+        }
+
+        // Return a mock set of formats if query fails
         vec![
             CameraFormat::new(Resolution::new(640, 480), FrameFormat::MJPEG, 30),
             CameraFormat::new(Resolution::new(640, 480), FrameFormat::YUYV, 30),
