@@ -104,14 +104,22 @@ fn handle_start_streams(ctx: &ChannelCtx, payload: &[u8]) {
     );
 
     // Set the webcam mode depending on format selected by server.
+    // If server selected CAM_MEDIA_FORMAT_H264 (1) and we support it, encode as H264.
     // If server selected CAM_MEDIA_FORMAT_MJPG (2), encode as MJPEG.
     // Otherwise (e.g. YUY2, NV12, RGB24), send raw frame.
-    if format == freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_MJPG {
+    if format == freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264 && multimedia::webcam::h264_available() {
+        ctx.webcam.set_mode(multimedia::webcam::WebcamMode::H264);
+    } else if format == freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_MJPG {
         ctx.webcam.set_mode(multimedia::webcam::WebcamMode::MJPEG);
     } else if format == freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_YUY2 {
         ctx.webcam.set_mode(multimedia::webcam::WebcamMode::YUY2);
     } else {
-        ctx.webcam.set_mode(multimedia::webcam::WebcamMode::Raw);
+        if format == freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264 {
+            log::warn!("Webcam: Server requested H264 but OpenH264 is unavailable. Falling back to MJPEG.");
+            ctx.webcam.set_mode(multimedia::webcam::WebcamMode::MJPEG);
+        } else {
+            ctx.webcam.set_mode(multimedia::webcam::WebcamMode::Raw);
+        }
     }
 
     ctx.webcam.start_stream(width, height, fps);
@@ -121,13 +129,13 @@ fn handle_start_streams(ctx: &ChannelCtx, payload: &[u8]) {
     ctx.webcam.set_sender(tx);
 
     std::thread::spawn(move || {
-        log::info!("Webcam: Frame writer thread started for stream {stream_idx}");
+        log::debug!("Webcam: Frame writer thread started for stream {stream_idx}");
         while let Ok(frame) = rx.recv() {
-            log::info!("Webcam: Sending sample response of {} bytes, stream_idx={stream_idx}", frame.data.len());
+            log::trace!("Webcam: Sending sample response of {} bytes, stream_idx={stream_idx}", frame.data.len());
             let pdu = pdu::build_sample_response(stream_idx, &frame.data);
             unsafe { pdu::write_to_channel(frame.channel_ptr as *mut _, &pdu) };
         }
-        log::info!("Webcam: Frame writer thread stopped for stream {stream_idx}");
+        log::debug!("Webcam: Frame writer thread stopped for stream {stream_idx}");
     });
 
     send_success(ctx);
@@ -142,8 +150,9 @@ fn handle_stream_list(ctx: &ChannelCtx) {
 }
 
 fn handle_media_type_list(ctx: &ChannelCtx) {
-    log::info!("Webcam: MediaTypeListRequest");
-    let mt = freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION {
+    let h264_supported = multimedia::webcam::h264_available();
+    log::info!("Webcam: MediaTypeListRequest — H264 supported: {}", h264_supported);
+    let mjpeg_mt = freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION {
         Format: freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_MJPG,
         Width: 640,
         Height: 480,
@@ -153,21 +162,51 @@ fn handle_media_type_list(ctx: &ChannelCtx) {
         PixelAspectRatioDenominator: 1,
         Flags: freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION_FLAGS_CAM_MEDIA_TYPE_DESCRIPTION_FLAG_DecodingRequired,
     };
-    let pdu = pdu::build_media_type_list_response(&[mt]);
+
+    let pdu = if h264_supported {
+        let h264_mt = freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION {
+            Format: freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264,
+            Width: 640,
+            Height: 480,
+            FrameRateNumerator: 30,
+            FrameRateDenominator: 1,
+            PixelAspectRatioNumerator: 1,
+            PixelAspectRatioDenominator: 1,
+            Flags: 0,
+        };
+        pdu::build_media_type_list_response(&[h264_mt, mjpeg_mt])
+    } else {
+        pdu::build_media_type_list_response(&[mjpeg_mt])
+    };
+
     unsafe { write_to_channel(ctx.channel, &pdu) };
 }
 
 fn handle_current_media_type(ctx: &ChannelCtx) {
-    log::info!("Webcam: CurrentMediaTypeRequest");
-    let mt = freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION {
-        Format: freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_MJPG,
-        Width: 640,
-        Height: 480,
-        FrameRateNumerator: 30,
-        FrameRateDenominator: 1,
-        PixelAspectRatioNumerator: 1,
-        PixelAspectRatioDenominator: 1,
-        Flags: freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION_FLAGS_CAM_MEDIA_TYPE_DESCRIPTION_FLAG_DecodingRequired,
+    let h264_supported = multimedia::webcam::h264_available();
+    log::info!("Webcam: CurrentMediaTypeRequest — H264 supported: {}", h264_supported);
+    let mt = if h264_supported {
+        freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION {
+            Format: freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264,
+            Width: 640,
+            Height: 480,
+            FrameRateNumerator: 30,
+            FrameRateDenominator: 1,
+            PixelAspectRatioNumerator: 1,
+            PixelAspectRatioDenominator: 1,
+            Flags: 0,
+        }
+    } else {
+        freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION {
+            Format: freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_MJPG,
+            Width: 640,
+            Height: 480,
+            FrameRateNumerator: 30,
+            FrameRateDenominator: 1,
+            PixelAspectRatioNumerator: 1,
+            PixelAspectRatioDenominator: 1,
+            Flags: freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION_FLAGS_CAM_MEDIA_TYPE_DESCRIPTION_FLAG_DecodingRequired,
+        }
     };
     let pdu = pdu::build_current_media_type_response(&mt);
     unsafe { write_to_channel(ctx.channel, &pdu) };

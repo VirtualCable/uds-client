@@ -240,14 +240,14 @@ impl Rdp {
                     channels(settings, "audin", None, false, true);
                 }
                 // Webcam redirection
-                if let Some(ref webcam) = self.config.settings.webcam {
-                    if webcam.enabled {
-                        multimedia::webcam::WEBCAM_QUALITY.store(webcam.quality, std::sync::atomic::Ordering::Relaxed);
-                        multimedia::webcam::WEBCAM_FPS.store(webcam.fps, std::sync::atomic::Ordering::Relaxed);
+                if let Some(ref webcam) = self.config.settings.webcam
+                    && webcam.enabled
+                {
+                    multimedia::webcam::WEBCAM_QUALITY.store(webcam.quality, std::sync::atomic::Ordering::Relaxed);
+                    multimedia::webcam::WEBCAM_FPS.store(webcam.fps, std::sync::atomic::Ordering::Relaxed);
 
-                        let channel = format!("sys:{}", crate::addins::WEBCAM_SUBSYSTEM_CUSTOM);
-                        channels(settings, "rdpecam", Some(&channel), false, true);
-                    }
+                    let channel = format!("sys:{}", crate::addins::WEBCAM_SUBSYSTEM_CUSTOM);
+                    channels(settings, "rdpecam", Some(&channel), false, true);
                 }
 
                 // Set config settings for clipboard redirection

@@ -17,6 +17,8 @@ impl VideoEncoder for RawEncoder {
 
 mod mjpeg;
 mod yuy2;
+mod h264;
 
 pub use mjpeg::MjpegEncoder;
 pub use yuy2::Yuy2Encoder;
+pub use h264::H264Encoder;

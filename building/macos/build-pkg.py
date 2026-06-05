@@ -413,7 +413,59 @@ def build_pkg() -> Path:
     pkgname = f"UDSLauncher-{VERSION}.pkg"
     pkg_path = OUTPUT_DIR / pkgname
 
-    subprocess.run(["productbuild", "--component", str(APP_DIR), "/Applications", str(pkg_path)], check=True)
+    # Create scripts folder for postinstall
+    scripts_dir = SCRIPT_DIR / "scripts"
+    scripts_dir.mkdir(parents=True, exist_ok=True)
+    postinstall_path = scripts_dir / "postinstall"
+
+    postinstall_content = """#!/bin/bash
+
+TARGET_DIR="/Library/Application Support/UDSClient/openh264"
+mkdir -p "$TARGET_DIR"
+
+ARCH=$(uname -m)
+VERSION="2.6.0"
+
+if [ "$ARCH" = "arm64" ]; then
+    URL="http://ciscobinary.openh264.org/libopenh264-${VERSION}-mac-arm64.dylib.bz2"
+else
+    URL="http://ciscobinary.openh264.org/libopenh264-${VERSION}-mac-x64.dylib.bz2"
+fi
+
+TEMP_FILE="/tmp/openh264.dylib.bz2"
+
+echo "Downloading OpenH264 from $URL..."
+if curl -L -s -f -o "$TEMP_FILE" "$URL"; then
+    echo "Decompressing OpenH264..."
+    if bunzip2 -f "$TEMP_FILE"; then
+        mv "/tmp/openh264.dylib" "$TARGET_DIR/libopenh264.dylib"
+        chmod 644 "$TARGET_DIR/libopenh264.dylib"
+        # Clear quarantine if present
+        xattr -d com.apple.quarantine "$TARGET_DIR/libopenh264.dylib" 2>/dev/null || true
+        echo "OpenH264 installed successfully."
+        exit 0
+    fi
+fi
+
+echo "Warning: Failed to download or extract OpenH264. Fallback to MJPEG will be used."
+exit 0
+"""
+
+    postinstall_path.write_text(postinstall_content)
+    postinstall_path.chmod(0o755)  # Make it executable
+
+    subprocess.run(
+        [
+            "productbuild",
+            "--component",
+            str(APP_DIR),
+            "/Applications",
+            "--scripts",
+            str(scripts_dir),
+            str(pkg_path),
+        ],
+        check=True,
+    )
     process_pkg_hook(pkg_path)
 
     return pkg_path

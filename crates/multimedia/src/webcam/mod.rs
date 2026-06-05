@@ -12,9 +12,11 @@ use shared::log;
 
 mod mock;
 mod encoders;
+pub mod openh264;
 
 pub use mock::{StreamState, generate_mock_frame};
 pub use encoders::{VideoEncoder, RawEncoder, Yuy2Encoder, MjpegEncoder};
+pub use openh264::h264_available;
 
 pub static WEBCAM_QUALITY: AtomicU32 = AtomicU32::new(80);
 pub static WEBCAM_FPS: AtomicU32 = AtomicU32::new(15);
@@ -49,6 +51,8 @@ pub enum WebcamMode {
     MJPEG,
     /// Convert to YUY2
     YUY2,
+    /// Encode using OpenH264
+    H264,
 }
 
 pub struct WebcamHandle {
@@ -139,6 +143,15 @@ impl WebcamHandle {
                         encoder = match mode_val {
                             WebcamMode::MJPEG => Box::new(MjpegEncoder::new()),
                             WebcamMode::YUY2 => Box::new(Yuy2Encoder::new()),
+                            WebcamMode::H264 => {
+                                match encoders::H264Encoder::new() {
+                                    Ok(enc) => Box::new(enc),
+                                    Err(e) => {
+                                        log::error!("Failed to create H264Encoder, falling back to MJPEG: {e}");
+                                        Box::new(MjpegEncoder::new())
+                                    }
+                                }
+                            }
                             WebcamMode::Raw => Box::new(RawEncoder),
                         };
                         let q = WEBCAM_QUALITY.load(Ordering::Relaxed);

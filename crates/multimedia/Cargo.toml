@@ -11,3 +11,5 @@ flume = { workspace = true }
 
 nokhwa = { workspace = true }
 turbojpeg = { workspace = true }
+libloading = "0.8"
+libc = { workspace = true }
