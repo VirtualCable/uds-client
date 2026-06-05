@@ -16,7 +16,7 @@ pub struct WebcamPlugin {
     pub plugin: IWTSPlugin,
     pub webcam: Option<Arc<WebcamHandle>>,
     pub(crate) listener: Option<*mut IWTSListener>,
-    pub(crate) listener_ctx: Option<*mut listener::ListenerCtx>,
+    pub(crate) listener_ctx: Option<*mut listener::ControlListenerCtx>,
 }
 
 // ── Entry point ──────────────────────────────────────────

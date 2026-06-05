@@ -1,5 +1,4 @@
 use std::sync::Arc;
-
 use freerdp_sys::{
     BOOL, BYTE, CHANNEL_RC_OK, IWTSListener, IWTSListenerCallback,
     IWTSVirtualChannel, IWTSVirtualChannelCallback, IWTSVirtualChannelManager, UINT,
@@ -8,24 +7,175 @@ use multimedia::webcam::WebcamHandle;
 use shared::log;
 
 use super::channel::{self, ChannelCtx};
+use super::pdu::write_to_channel;
+
+// --- Control Channel (Device Enumerator) Listener ---
 
 #[repr(C)]
-pub struct ListenerCtx {
+pub struct ControlListenerCtx {
     pub listener_cb: IWTSListenerCallback,
     pub webcam: Arc<WebcamHandle>,
+    pub channel_mgr: *mut IWTSVirtualChannelManager,
 }
 
-pub unsafe extern "C" fn on_new_channel(
+#[repr(C)]
+pub struct ControlChannelCtx {
+    pub channel_cb: IWTSVirtualChannelCallback,
+    pub channel: *mut IWTSVirtualChannel,
+    pub webcam: Arc<WebcamHandle>,
+    pub channel_mgr: *mut IWTSVirtualChannelManager,
+    pub dev_listener: Option<*mut IWTSListener>,
+    pub dev_listener_ctx: Option<*mut DeviceListenerCtx>,
+}
+
+pub unsafe extern "C" fn on_new_control_channel(
     listener_cb: *mut IWTSListenerCallback,
     p_channel: *mut IWTSVirtualChannel,
     _data: *mut BYTE,
     pb_accept: *mut BOOL,
     pp_callback: *mut *mut IWTSVirtualChannelCallback,
 ) -> UINT {
-    let lctx = listener_cb as *mut ListenerCtx;
+    let lctx = listener_cb as *mut ControlListenerCtx;
+    let webcam = unsafe { (*lctx).webcam.clone() };
+    let channel_mgr = unsafe { (*lctx).channel_mgr };
+
+    log::info!("Webcam Control: OnNewChannelConnection — channel={p_channel:?}, accepting");
+
+    unsafe {
+        *pb_accept = true.into();
+    }
+
+    let mut channel_ctx = Box::new(ControlChannelCtx {
+        channel_cb: IWTSVirtualChannelCallback {
+            OnDataReceived: Some(on_control_data),
+            OnOpen: Some(on_control_open),
+            OnClose: Some(on_control_close),
+            ..unsafe { std::mem::zeroed() }
+        },
+        channel: p_channel,
+        webcam,
+        channel_mgr,
+        dev_listener: None,
+        dev_listener_ctx: None,
+    });
+
+    unsafe {
+        *pp_callback = &mut channel_ctx.channel_cb;
+    }
+
+    let _ = Box::into_raw(channel_ctx);
+    CHANNEL_RC_OK
+}
+
+pub unsafe extern "C" fn on_control_open(cb: *mut IWTSVirtualChannelCallback) -> UINT {
+    let ctx = cb as *mut ControlChannelCtx;
+    log::info!("Webcam Control: Channel opened. Sending SelectVersionRequest...");
+    
+    // SelectVersionRequest: version = 1, msg_id = 3
+    let pdu = &[1u8, 3u8];
+    unsafe { write_to_channel((*ctx).channel, pdu) };
+    CHANNEL_RC_OK
+}
+
+pub unsafe extern "C" fn on_control_data(
+    cb: *mut IWTSVirtualChannelCallback,
+    stream: *mut freerdp_sys::wStream,
+) -> UINT {
+    let ctx = unsafe { &mut *(cb as *mut ControlChannelCtx) };
+    if stream.is_null() {
+        return CHANNEL_RC_OK;
+    }
+
+    let s = unsafe { &*stream };
+    let bytes = unsafe { std::slice::from_raw_parts(s.pointer, s.length) };
+    
+    if bytes.len() < 2 {
+        log::error!("Webcam Control PDU too short: {}", bytes.len());
+        return CHANNEL_RC_OK;
+    }
+    let version = bytes[0];
+    let msg_id = bytes[1];
+    log::info!("Webcam Control PDU received: version={version} msg_id={msg_id} len={}", bytes.len());
+
+    if msg_id == 0x04 { // CAM_MSG_ID_SelectVersionResponse
+        log::info!("Webcam Control: Version response received. Sending DeviceAddedNotification...");
+        // Send DeviceAddedNotification: version = 1, msg_id = 5
+        let mut pdu = Vec::new();
+        pdu.push(1u8); // version
+        pdu.push(5u8); // msg_id (CAM_MSG_ID_DeviceAddedNotification)
+        
+        // DeviceName (UTF-16 LE null-terminated): "Mock Camera\0"
+        let name = "Mock Camera";
+        let mut utf16: Vec<u16> = name.encode_utf16().collect();
+        utf16.push(0); // Null terminator
+        for &val in &utf16 {
+            pdu.extend_from_slice(&val.to_le_bytes());
+        }
+
+        // VirtualChannelName (ASCII null-terminated): "RDCamera_Capture_Device_0\0"
+        let channel_name = "RDCamera_Capture_Device_0\0";
+        pdu.extend_from_slice(channel_name.as_bytes());
+
+        unsafe { write_to_channel(ctx.channel, &pdu) };
+
+        log::info!("Webcam Control: Creating dynamic listener for RDCamera_Capture_Device_0...");
+        let (raw_dev_ctx, dev_listener, err) = unsafe {
+            create_device_listener(
+                ctx.webcam.clone(),
+                ctx.channel_mgr,
+                "RDCamera_Capture_Device_0",
+            )
+        };
+        if err == CHANNEL_RC_OK {
+            ctx.dev_listener = Some(dev_listener);
+            ctx.dev_listener_ctx = Some(raw_dev_ctx);
+            log::info!("Webcam Control: Dynamic listener created successfully");
+        } else {
+            log::error!("Webcam Control: Failed to create dynamic listener: {err}");
+        }
+    }
+
+    CHANNEL_RC_OK
+}
+
+pub unsafe extern "C" fn on_control_close(cb: *mut IWTSVirtualChannelCallback) -> UINT {
+    let ctx = cb as *mut ControlChannelCtx;
+    log::info!("Webcam Control: Channel closed. Cleaning up listeners...");
+
+    unsafe {
+        if let Some(l) = (*ctx).dev_listener.take() {
+            let mgr = (*ctx).channel_mgr;
+            if let Some(destroy_fn) = (*mgr).DestroyListener {
+                destroy_fn(mgr, l);
+            }
+        }
+        if let Some(c) = (*ctx).dev_listener_ctx.take() {
+            let _ = Box::from_raw(c);
+        }
+        let _ = Box::from_raw(ctx);
+    }
+    CHANNEL_RC_OK
+}
+
+// --- Device Channel Listener ---
+
+#[repr(C)]
+pub struct DeviceListenerCtx {
+    pub listener_cb: IWTSListenerCallback,
+    pub webcam: Arc<WebcamHandle>,
+}
+
+pub unsafe extern "C" fn on_new_device_channel(
+    listener_cb: *mut IWTSListenerCallback,
+    p_channel: *mut IWTSVirtualChannel,
+    _data: *mut BYTE,
+    pb_accept: *mut BOOL,
+    pp_callback: *mut *mut IWTSVirtualChannelCallback,
+) -> UINT {
+    let lctx = listener_cb as *mut DeviceListenerCtx;
     let webcam = unsafe { (*lctx).webcam.clone() };
 
-    log::info!("Webcam: OnNewChannelConnection — channel={p_channel:?}, accepting");
+    log::info!("Webcam Device: OnNewChannelConnection — channel={p_channel:?}, accepting");
 
     unsafe {
         *pb_accept = true.into();
@@ -42,8 +192,6 @@ pub unsafe extern "C" fn on_new_channel(
         stream_index: 0,
     });
 
-    channel_ctx.webcam.start_stream(640, 480, 15);
-
     unsafe {
         *pp_callback = &mut channel_ctx.channel_cb;
     }
@@ -52,16 +200,19 @@ pub unsafe extern "C" fn on_new_channel(
     CHANNEL_RC_OK
 }
 
+// --- Public Initialization Functions ---
+
 pub(super) fn create_listener(
     webcam: Arc<WebcamHandle>,
     channel_mgr: *mut IWTSVirtualChannelManager,
-) -> (*mut ListenerCtx, *mut IWTSListener, UINT) {
-    let mut listener_ctx = Box::new(ListenerCtx {
+) -> (*mut ControlListenerCtx, *mut IWTSListener, UINT) {
+    let mut listener_ctx = Box::new(ControlListenerCtx {
         listener_cb: IWTSListenerCallback {
-            OnNewChannelConnection: Some(on_new_channel),
-            pInterface: Arc::as_ptr(&webcam) as *mut _,
+            OnNewChannelConnection: Some(on_new_control_channel),
+            pInterface: std::ptr::null_mut(), // unused
         },
         webcam,
+        channel_mgr,
     });
 
     let mut listener_handle: *mut IWTSListener = std::ptr::null_mut();
@@ -69,6 +220,35 @@ pub(super) fn create_listener(
         (*channel_mgr).CreateListener.unwrap_unchecked()(
             channel_mgr,
             c"RDCamera_Device_Enumerator".as_ptr(),
+            0,
+            &mut listener_ctx.listener_cb,
+            &mut listener_handle,
+        )
+    };
+
+    let raw_ctx = Box::into_raw(listener_ctx);
+    (raw_ctx, listener_handle, error)
+}
+
+pub(super) unsafe fn create_device_listener(
+    webcam: Arc<WebcamHandle>,
+    channel_mgr: *mut IWTSVirtualChannelManager,
+    device_id: &str,
+) -> (*mut DeviceListenerCtx, *mut IWTSListener, UINT) {
+    let mut listener_ctx = Box::new(DeviceListenerCtx {
+        listener_cb: IWTSListenerCallback {
+            OnNewChannelConnection: Some(on_new_device_channel),
+            pInterface: std::ptr::null_mut(),
+        },
+        webcam,
+    });
+
+    let mut listener_handle: *mut IWTSListener = std::ptr::null_mut();
+    let c_device_id = std::ffi::CString::new(device_id).unwrap();
+    let error = unsafe {
+        (*channel_mgr).CreateListener.unwrap_unchecked()(
+            channel_mgr,
+            c_device_id.as_ptr(),
             0,
             &mut listener_ctx.listener_cb,
             &mut listener_handle,
