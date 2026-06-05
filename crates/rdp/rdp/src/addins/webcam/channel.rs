@@ -129,10 +129,17 @@ fn handle_start_streams(ctx: &ChannelCtx, payload: &[u8]) {
     ctx.webcam.start_stream(width, height, fps);
     ctx.webcam.set_format(format as u32, width, height, fps);
 
-    ctx.webcam.set_callback(move |frame, target_channel| {
-        log::info!("Webcam: Sending sample response of {} bytes, stream_idx={stream_idx}", frame.len());
-        let pdu = pdu::build_sample_response(stream_idx, &frame);
-        unsafe { pdu::write_to_channel(target_channel as *mut _, &pdu) };
+    let (tx, rx) = flume::unbounded::<multimedia::webcam::WebcamFrame>();
+    ctx.webcam.set_sender(tx);
+
+    std::thread::spawn(move || {
+        log::info!("Webcam: Frame writer thread started for stream {stream_idx}");
+        while let Ok(frame) = rx.recv() {
+            log::info!("Webcam: Sending sample response of {} bytes, stream_idx={stream_idx}", frame.data.len());
+            let pdu = pdu::build_sample_response(stream_idx, &frame.data);
+            unsafe { pdu::write_to_channel(frame.channel_ptr as *mut _, &pdu) };
+        }
+        log::info!("Webcam: Frame writer thread stopped for stream {stream_idx}");
     });
 
     send_success(ctx);
