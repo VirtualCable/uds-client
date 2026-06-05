@@ -76,6 +76,23 @@ pub unsafe extern "C" fn on_data(
     CHANNEL_RC_OK
 }
 
+fn get_overridden_format() -> Option<u32> {
+    if let Ok(val) = std::env::var("UDS_WEBCAM_FORMAT") {
+        let val_lower = val.to_lowercase();
+        if val_lower == "h264" {
+            Some(freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264 as u32)
+        } else if val_lower == "mjpeg" || val_lower == "mjpg" {
+            Some(freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_MJPG as u32)
+        } else if val_lower == "yuy2" {
+            Some(freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_YUY2 as u32)
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
 fn handle_start_streams(ctx: &ChannelCtx, payload: &[u8]) {
     if payload.len() < 27 {
         log::error!("Webcam: StartStreams payload too short: {}", payload.len());
@@ -91,12 +108,17 @@ fn handle_start_streams(ctx: &ChannelCtx, payload: &[u8]) {
             return;
         }
     };
-    let format = media_type.Format;
+    let mut format = media_type.Format;
     let width = media_type.Width;
     let height = media_type.Height;
     let requested_fps = media_type.FrameRateNumerator.checked_div(media_type.FrameRateDenominator).unwrap_or(15);
     let configured_fps = multimedia::webcam::WEBCAM_FPS.load(std::sync::atomic::Ordering::Relaxed);
     let fps = requested_fps.min(configured_fps);
+
+    if let Some(override_fmt) = get_overridden_format() {
+        log::info!("Webcam: Overriding format {} to {}", format, override_fmt);
+        format = override_fmt as i32;
+    }
 
     log::info!(
         "Webcam: StartStreams — stream={stream_idx} format={format} {}x{} @ {fps}fps (requested: {requested_fps}fps, configured: {configured_fps}fps)",
@@ -163,17 +185,25 @@ fn handle_media_type_list(ctx: &ChannelCtx) {
         Flags: freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION_FLAGS_CAM_MEDIA_TYPE_DESCRIPTION_FLAG_DecodingRequired,
     };
 
-    let pdu = if h264_supported {
-        let h264_mt = freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION {
-            Format: freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264,
-            Width: 640,
-            Height: 480,
-            FrameRateNumerator: 30,
-            FrameRateDenominator: 1,
-            PixelAspectRatioNumerator: 1,
-            PixelAspectRatioDenominator: 1,
-            Flags: 0,
-        };
+    let h264_mt = freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION {
+        Format: freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264,
+        Width: 640,
+        Height: 480,
+        FrameRateNumerator: 30,
+        FrameRateDenominator: 1,
+        PixelAspectRatioNumerator: 1,
+        PixelAspectRatioDenominator: 1,
+        Flags: 0,
+    };
+
+    let pdu = if let Some(override_fmt) = get_overridden_format() {
+        log::info!("Webcam: Forcing media format list override: {}", override_fmt);
+        if override_fmt == freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264 as u32 && h264_supported {
+            pdu::build_media_type_list_response(&[h264_mt])
+        } else {
+            pdu::build_media_type_list_response(&[mjpeg_mt])
+        }
+    } else if h264_supported {
         pdu::build_media_type_list_response(&[h264_mt, mjpeg_mt])
     } else {
         pdu::build_media_type_list_response(&[mjpeg_mt])
@@ -185,7 +215,23 @@ fn handle_media_type_list(ctx: &ChannelCtx) {
 fn handle_current_media_type(ctx: &ChannelCtx) {
     let h264_supported = multimedia::webcam::h264_available();
     log::info!("Webcam: CurrentMediaTypeRequest — H264 supported: {}", h264_supported);
-    let mt = if h264_supported {
+
+    let mut selected_fmt = if h264_supported {
+        freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264 as u32
+    } else {
+        freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_MJPG as u32
+    };
+
+    if let Some(override_fmt) = get_overridden_format() {
+        log::info!("Webcam: Forcing current media type override: {}", override_fmt);
+        if override_fmt == freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264 as u32 && h264_supported {
+            selected_fmt = override_fmt;
+        } else {
+            selected_fmt = freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_MJPG as u32;
+        }
+    }
+
+    let mt = if selected_fmt == freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264 as u32 {
         freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION {
             Format: freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264,
             Width: 640,
