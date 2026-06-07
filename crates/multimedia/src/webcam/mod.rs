@@ -1,5 +1,5 @@
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -10,12 +10,12 @@ use nokhwa::{
 };
 use shared::log;
 
-mod mock;
 mod encoders;
+mod mock;
 pub mod openh264;
 
+pub use encoders::{MjpegEncoder, RawEncoder, VideoEncoder, Yuy2Encoder};
 pub use mock::{StreamState, generate_mock_frame};
-pub use encoders::{VideoEncoder, RawEncoder, Yuy2Encoder, MjpegEncoder};
 pub use openh264::h264_available;
 
 // We use static values as we can only have ONE connection.
@@ -38,7 +38,9 @@ pub fn get_camera_dimensions() -> Option<(u32, u32)> {
         nokhwa_initialize(|_| {});
 
         // Check if there are any cameras on the system
-        let devices = nokhwa::query(nokhwa::utils::ApiBackend::Auto).ok().unwrap_or_default();
+        let devices = nokhwa::query(nokhwa::utils::ApiBackend::Auto)
+            .ok()
+            .unwrap_or_default();
         if devices.is_empty() {
             log::warn!("No cameras detected on the system via query.");
             return None;
@@ -46,15 +48,19 @@ pub fn get_camera_dimensions() -> Option<(u32, u32)> {
 
         let index = select_camera_index();
         let requested_none = nokhwa::utils::RequestedFormat::new::<nokhwa::pixel_format::RgbFormat>(
-            nokhwa::utils::RequestedFormatType::None
+            nokhwa::utils::RequestedFormatType::None,
         );
-        if let Ok(mut cam) = nokhwa::Camera::new(index, requested_none) {
-            if let Ok(formats) = cam.compatible_camera_formats() {
-                let best_format = formats.iter().max_by_key(|f| f.width() * f.height());
-                if let Some(format) = best_format {
-                    log::info!("Proactively detected camera dimensions: {}x{}", format.width(), format.height());
-                    return Some((format.width(), format.height()));
-                }
+        if let Ok(mut cam) = nokhwa::Camera::new(index, requested_none)
+            && let Ok(formats) = cam.compatible_camera_formats()
+        {
+            let best_format = formats.iter().max_by_key(|f| f.width() * f.height());
+            if let Some(format) = best_format {
+                log::info!(
+                    "Proactively detected camera dimensions: {}x{}",
+                    format.width(),
+                    format.height()
+                );
+                return Some((format.width(), format.height()));
             }
         }
 
@@ -128,32 +134,34 @@ fn select_camera_index() -> nokhwa::utils::CameraIndex {
 
 fn init_real_camera(width: u32, height: u32, fps: u32) -> Result<nokhwa::Camera, String> {
     let index = select_camera_index();
-    
+
     let requested_none = nokhwa::utils::RequestedFormat::new::<nokhwa::pixel_format::RgbFormat>(
-        nokhwa::utils::RequestedFormatType::None
+        nokhwa::utils::RequestedFormatType::None,
     );
     let mut cam = nokhwa::Camera::new(index, requested_none)
         .map_err(|e| format!("Failed to create Camera: {e}"))?;
-        
+
     if let Ok(formats) = cam.compatible_camera_formats() {
         let best_format = formats.iter().min_by_key(|f| {
-            let res_diff = (f.width() as i32 - width as i32).unsigned_abs() + (f.height() as i32 - height as i32).unsigned_abs();
+            let res_diff = (f.width() as i32 - width as i32).unsigned_abs()
+                + (f.height() as i32 - height as i32).unsigned_abs();
             let fps_diff = (f.frame_rate() as i32 - fps as i32).unsigned_abs();
             (res_diff, fps_diff)
         });
-        
+
         if let Some(&closest_format) = best_format {
             log::info!("Selected closest camera format: {:?}", closest_format);
-            let requested_closest = nokhwa::utils::RequestedFormat::new::<nokhwa::pixel_format::RgbFormat>(
-                nokhwa::utils::RequestedFormatType::Exact(closest_format)
-            );
+            let requested_closest =
+                nokhwa::utils::RequestedFormat::new::<nokhwa::pixel_format::RgbFormat>(
+                    nokhwa::utils::RequestedFormatType::Exact(closest_format),
+                );
             let _ = cam.set_camera_requset(requested_closest);
         }
     }
-    
+
     cam.open_stream()
         .map_err(|e| format!("Failed to open Camera stream: {e}"))?;
-    
+
     Ok(cam)
 }
 
@@ -201,7 +209,9 @@ impl WebcamHandle {
                                 color_offset: 0,
                             });
 
-                            let force_mock = std::env::var("UDS_WEBCAM_MOCK").map(|v| v == "1" || v.to_lowercase() == "true").unwrap_or(false);
+                            let force_mock = std::env::var("UDS_WEBCAM_MOCK")
+                                .map(|v| v == "1" || v.to_lowercase() == "true")
+                                .unwrap_or(false);
                             if force_mock {
                                 log::info!("Mock Webcam forced by environment variable");
                                 is_mock = true;
@@ -214,7 +224,10 @@ impl WebcamHandle {
                                         log::info!("Real camera initialized successfully");
                                     }
                                     Err(e) => {
-                                        log::warn!("Real camera initialization failed, falling back to mock: {}", e);
+                                        log::warn!(
+                                            "Real camera initialization failed, falling back to mock: {}",
+                                            e
+                                        );
                                         camera = None;
                                         is_mock = true;
                                     }
@@ -227,9 +240,7 @@ impl WebcamHandle {
                             height,
                             fps,
                         } => {
-                            log::info!(
-                                "Webcam: SetFormat {width}x{height} @ {fps}fps"
-                            );
+                            log::info!("Webcam: SetFormat {width}x{height} @ {fps}fps");
                             current_mode = None;
                             if let Some(ref mut s) = state {
                                 s.width = width;
@@ -247,7 +258,9 @@ impl WebcamHandle {
                                         is_mock = false;
                                     }
                                     Err(e) => {
-                                        log::warn!("Failed to re-initialize camera for new format, falling back to mock: {e}");
+                                        log::warn!(
+                                            "Failed to re-initialize camera for new format, falling back to mock: {e}"
+                                        );
                                         camera = None;
                                         is_mock = true;
                                     }
@@ -307,15 +320,15 @@ impl WebcamHandle {
                         encoder = match mode_val {
                             WebcamMode::MJPEG => Box::new(MjpegEncoder::new()),
                             WebcamMode::YUY2 => Box::new(Yuy2Encoder::new()),
-                            WebcamMode::H264 => {
-                                match encoders::H264Encoder::new() {
-                                    Ok(enc) => Box::new(enc),
-                                    Err(e) => {
-                                        log::error!("Failed to create H264Encoder, falling back to MJPEG: {e}");
-                                        Box::new(MjpegEncoder::new())
-                                    }
+                            WebcamMode::H264 => match encoders::H264Encoder::new() {
+                                Ok(enc) => Box::new(enc),
+                                Err(e) => {
+                                    log::error!(
+                                        "Failed to create H264Encoder, falling back to MJPEG: {e}"
+                                    );
+                                    Box::new(MjpegEncoder::new())
                                 }
-                            }
+                            },
                             WebcamMode::Raw => Box::new(RawEncoder),
                         };
                         let q = WEBCAM_QUALITY.load(Ordering::Relaxed);
@@ -407,7 +420,9 @@ impl WebcamHandle {
     /// Query compatible formats from the default camera without keeping it open.
     /// Returns all (format, resolution, fps) tuples the hardware supports.
     pub fn compatible_formats() -> Vec<CameraFormat> {
-        let force_mock = std::env::var("UDS_WEBCAM_MOCK").map(|v| v == "1" || v.to_lowercase() == "true").unwrap_or(false);
+        let force_mock = std::env::var("UDS_WEBCAM_MOCK")
+            .map(|v| v == "1" || v.to_lowercase() == "true")
+            .unwrap_or(false);
         if force_mock {
             return vec![
                 CameraFormat::new(Resolution::new(640, 480), FrameFormat::MJPEG, 30),
@@ -419,7 +434,7 @@ impl WebcamHandle {
 
         let index = select_camera_index();
         let requested = nokhwa::utils::RequestedFormat::new::<nokhwa::pixel_format::RgbFormat>(
-            nokhwa::utils::RequestedFormatType::None
+            nokhwa::utils::RequestedFormatType::None,
         );
         if let Ok(mut camera) = nokhwa::Camera::new(index, requested)
             && let Ok(formats) = camera.compatible_camera_formats()
