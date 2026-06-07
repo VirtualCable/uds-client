@@ -403,7 +403,10 @@ impl WebcamHandle {
         *self.active_channel.lock().unwrap() = Some(channel_ptr);
         let mut reqs = self.samples_requested.lock().unwrap();
         *reqs += 1;
-        if *reqs > 0
+        
+        let current_mode = *self.mode.lock().unwrap();
+        if current_mode != WebcamMode::H264
+            && *reqs > 0
             && let (Some(frame), Some(tx)) = (
                 self.latest_frame.lock().unwrap().as_ref(),
                 self.frame_tx.lock().unwrap().as_ref(),
