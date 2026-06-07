@@ -49,11 +49,13 @@ pub struct RailSettings {
     pub server_info: Option<ServerInfo>,
 }
 
-#[derive(Debug, Zeroize, Clone)]
+#[derive(Debug, Zeroize, Clone, Default)]
 pub struct WebcamSettings {
     pub enabled: bool,
     pub quality: u32,
     pub fps: u32,
+    pub max_width: Option<u32>,
+    pub max_height: Option<u32>,
 }
 
 #[derive(Zeroize, Clone)]

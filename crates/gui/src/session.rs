@@ -165,6 +165,7 @@ impl AppHandler {
                             enabled: true,
                             quality: 80,
                             fps: 15,
+                            ..rdp_ffi::settings::WebcamSettings::default()
                         }),
                         best_experience: true,
                         use_local_scaler: true,

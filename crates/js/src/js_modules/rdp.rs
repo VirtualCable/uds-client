@@ -66,6 +66,8 @@ struct WebcamSettings {
     pub enabled: bool,
     pub quality: Option<u32>,
     pub fps: Option<u32>,
+    pub max_width: Option<u32>,
+    pub max_height: Option<u32>,
 }
 
 #[derive(Debug, TryFromJs, Zeroize, ZeroizeOnDrop)]
@@ -177,6 +179,8 @@ impl RdpSettings {
                 enabled: w.enabled,
                 quality: w.quality.unwrap_or(80),
                 fps: w.fps.unwrap_or(15),
+                max_width: w.max_width,
+                max_height: w.max_height,
             }),
         }
     }

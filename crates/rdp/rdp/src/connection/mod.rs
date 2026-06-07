@@ -243,11 +243,22 @@ impl Rdp {
                 if let Some(ref webcam) = self.config.settings.webcam
                     && webcam.enabled
                 {
-                    multimedia::webcam::WEBCAM_QUALITY.store(webcam.quality, std::sync::atomic::Ordering::Relaxed);
-                    multimedia::webcam::WEBCAM_FPS.store(webcam.fps, std::sync::atomic::Ordering::Relaxed);
+                    if let Some((cam_w, cam_h)) = multimedia::webcam::get_camera_dimensions() {
+                        log::info!("Webcam redirection: Camera detected at {}x{}", cam_w, cam_h);
+                        multimedia::webcam::WEBCAM_QUALITY.store(webcam.quality, std::sync::atomic::Ordering::Relaxed);
+                        multimedia::webcam::WEBCAM_FPS.store(webcam.fps, std::sync::atomic::Ordering::Relaxed);
+                        
+                        // Set the max width/height limits
+                        let max_w = webcam.max_width.unwrap_or(0);
+                        let max_h = webcam.max_height.unwrap_or(0);
+                        multimedia::webcam::WEBCAM_MAX_WIDTH.store(max_w, std::sync::atomic::Ordering::Relaxed);
+                        multimedia::webcam::WEBCAM_MAX_HEIGHT.store(max_h, std::sync::atomic::Ordering::Relaxed);
 
-                    let channel = format!("sys:{}", crate::addins::WEBCAM_SUBSYSTEM_CUSTOM);
-                    channels(settings, "rdpecam", Some(&channel), false, true);
+                        let channel = format!("sys:{}", crate::addins::WEBCAM_SUBSYSTEM_CUSTOM);
+                        channels(settings, "rdpecam", Some(&channel), false, true);
+                    } else {
+                        log::warn!("Webcam redirection enabled in settings, but no webcam was detected on the system. Webcam redirection will not be enabled.");
+                    }
                 }
 
                 // Set config settings for clipboard redirection

@@ -69,6 +69,13 @@ declare module "runtime" {
       microphone_redirection?: boolean;
       printer_redirection?: boolean;
       drives_to_redirect?: string[];
+      webcam?: {
+        enabled: boolean;
+        quality?: number;
+        fps?: number;
+        max_width?: number;
+        max_height?: number;
+      };
       sound_latency_threshold?: number;
       best_experience?: boolean;
       rail?: {

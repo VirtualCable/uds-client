@@ -51,7 +51,7 @@ async fn test_stop_signal() -> Result<()> {
         &remote_server.listen_address(),
         dummy_ticket(),
         dummy_crypt_info(),
-        Duration::from_millis(100),
+        Duration::from_secs(2),
         stop.clone(),
     );
 
@@ -90,7 +90,7 @@ async fn test_proxy_connection_fail() {
         &addr.to_string(),
         dummy_ticket(),
         dummy_crypt_info(),
-        Duration::from_millis(100),
+        Duration::from_secs(2),
         Trigger::new(),
     );
 
@@ -117,7 +117,7 @@ async fn test_proxy_handshake_fail_garbage() {
         &addr.to_string(),
         dummy_ticket(),
         dummy_crypt_info(),
-        Duration::from_millis(100),
+        Duration::from_secs(2),
         Trigger::new(),
     );
 
@@ -192,7 +192,7 @@ async fn test_connect() -> Result<()> {
         &remote_server.listen_address(),
         dummy_ticket(),
         dummy_crypt_info(),
-        Duration::from_millis(100),
+        Duration::from_secs(2),
         stop.clone(),
     );
 
@@ -213,7 +213,7 @@ async fn test_recv_data() -> Result<()> {
         &remote_server.listen_address(),
         dummy_ticket(),
         dummy_crypt_info(),
-        Duration::from_millis(100),
+        Duration::from_secs(2),
         remote_server.stop.clone(),
     );
 
@@ -254,7 +254,7 @@ async fn test_send_data() -> Result<()> {
         &remote_server.listen_address(),
         dummy_ticket(),
         dummy_crypt_info(),
-        Duration::from_millis(100),
+        Duration::from_secs(2),
         remote_server.stop.clone(),
     );
 

@@ -18,8 +18,52 @@ pub use mock::{StreamState, generate_mock_frame};
 pub use encoders::{VideoEncoder, RawEncoder, Yuy2Encoder, MjpegEncoder};
 pub use openh264::h264_available;
 
+// We use static values as we can only have ONE connection.
 pub static WEBCAM_QUALITY: AtomicU32 = AtomicU32::new(80);
 pub static WEBCAM_FPS: AtomicU32 = AtomicU32::new(15);
+pub static WEBCAM_MAX_WIDTH: AtomicU32 = AtomicU32::new(0);
+pub static WEBCAM_MAX_HEIGHT: AtomicU32 = AtomicU32::new(0);
+
+static CAMERA_DIMENSIONS: std::sync::OnceLock<Option<(u32, u32)>> = std::sync::OnceLock::new();
+
+pub fn get_camera_dimensions() -> Option<(u32, u32)> {
+    *CAMERA_DIMENSIONS.get_or_init(|| {
+        let force_mock = std::env::var("UDS_WEBCAM_MOCK")
+            .map(|v| v == "1" || v.to_lowercase() == "true")
+            .unwrap_or(false);
+        if force_mock {
+            return Some((640, 480));
+        }
+
+        nokhwa_initialize(|_| {});
+
+        // Check if there are any cameras on the system
+        let devices = nokhwa::query(nokhwa::utils::ApiBackend::Auto).ok().unwrap_or_default();
+        if devices.is_empty() {
+            log::warn!("No cameras detected on the system via query.");
+            return None;
+        }
+
+        let index = select_camera_index();
+        let requested_none = nokhwa::utils::RequestedFormat::new::<nokhwa::pixel_format::RgbFormat>(
+            nokhwa::utils::RequestedFormatType::None
+        );
+        if let Ok(mut cam) = nokhwa::Camera::new(index, requested_none) {
+            if let Ok(formats) = cam.compatible_camera_formats() {
+                let best_format = formats.iter().max_by_key(|f| f.width() * f.height());
+                if let Some(format) = best_format {
+                    log::info!("Proactively detected camera dimensions: {}x{}", format.width(), format.height());
+                    return Some((format.width(), format.height()));
+                }
+            }
+        }
+
+        // If we have devices but failed to open or query formats (e.g. camera in use),
+        // fallback to default dimensions to keep redirection enabled.
+        log::warn!("Camera detected but failed to query dimensions. Falling back to 640x480.");
+        Some((640, 480))
+    })
+}
 
 pub enum WebcamCommand {
     StartStream {
@@ -93,8 +137,8 @@ fn init_real_camera(width: u32, height: u32, fps: u32) -> Result<nokhwa::Camera,
         
     if let Ok(formats) = cam.compatible_camera_formats() {
         let best_format = formats.iter().min_by_key(|f| {
-            let res_diff = ((f.width() as i32 - width as i32).abs() + (f.height() as i32 - height as i32).abs()) as u32;
-            let fps_diff = (f.frame_rate() as i32 - fps as i32).abs() as u32;
+            let res_diff = (f.width() as i32 - width as i32).unsigned_abs() + (f.height() as i32 - height as i32).unsigned_abs();
+            let fps_diff = (f.frame_rate() as i32 - fps as i32).unsigned_abs();
             (res_diff, fps_diff)
         });
         
@@ -229,27 +273,34 @@ impl WebcamHandle {
                 }
 
                 if let Some(ref mut s) = state {
-                    let rgb = if is_mock {
-                        generate_mock_frame(s)
+                    let (rgb, src_w, src_h) = if is_mock {
+                        (generate_mock_frame(s), s.width, s.height)
                     } else if let Some(ref mut cam) = camera {
                         match cam.frame() {
                             Ok(frame) => {
                                 match frame.decode_image::<nokhwa::pixel_format::RgbFormat>() {
-                                    Ok(img) => img.into_raw(),
+                                    Ok(img) => {
+                                        let w = img.width();
+                                        let h = img.height();
+                                        (img.into_raw(), w, h)
+                                    }
                                     Err(e) => {
                                         log::error!("Failed to decode camera frame: {e}");
-                                        generate_mock_frame(s)
+                                        (generate_mock_frame(s), s.width, s.height)
                                     }
                                 }
                             }
                             Err(e) => {
                                 log::error!("Failed to capture camera frame: {e}");
-                                generate_mock_frame(s)
+                                (generate_mock_frame(s), s.width, s.height)
                             }
                         }
                     } else {
-                        generate_mock_frame(s)
+                        (generate_mock_frame(s), s.width, s.height)
                     };
+
+                    let (dst_w, dst_h) = calculate_scaled_dimensions(s.width, s.height);
+                    let rgb_scaled = resize_rgb(&rgb, src_w, src_h, dst_w, dst_h);
 
                     let mode_val = *cam_mode.lock().unwrap();
                     if current_mode != Some(mode_val) {
@@ -268,15 +319,15 @@ impl WebcamHandle {
                             WebcamMode::Raw => Box::new(RawEncoder),
                         };
                         let q = WEBCAM_QUALITY.load(Ordering::Relaxed);
-                        let _ = encoder.init(s.width, s.height, s.fps, q);
+                        let _ = encoder.init(dst_w, dst_h, s.fps, q);
                         current_mode = Some(mode_val);
                     }
 
-                    let output = match encoder.encode(&rgb) {
+                    let output = match encoder.encode(&rgb_scaled) {
                         Ok(out) => out,
                         Err(e) => {
                             log::error!("Webcam encoder error: {e}");
-                            rgb.clone()
+                            rgb_scaled.clone()
                         }
                     };
 
@@ -370,12 +421,11 @@ impl WebcamHandle {
         let requested = nokhwa::utils::RequestedFormat::new::<nokhwa::pixel_format::RgbFormat>(
             nokhwa::utils::RequestedFormatType::None
         );
-        if let Ok(mut camera) = nokhwa::Camera::new(index, requested) {
-            if let Ok(formats) = camera.compatible_camera_formats() {
-                if !formats.is_empty() {
-                    return formats;
-                }
-            }
+        if let Ok(mut camera) = nokhwa::Camera::new(index, requested)
+            && let Ok(formats) = camera.compatible_camera_formats()
+            && !formats.is_empty()
+        {
+            return formats;
         }
 
         // Return a mock set of formats if query fails
@@ -432,6 +482,55 @@ impl Drop for WebcamHandle {
     }
 }
 
+fn calculate_scaled_dimensions(w: u32, h: u32) -> (u32, u32) {
+    let max_w = WEBCAM_MAX_WIDTH.load(Ordering::Relaxed);
+    let max_h = WEBCAM_MAX_HEIGHT.load(Ordering::Relaxed);
+
+    let mut target_w = w;
+    let mut target_h = h;
+
+    if max_w > 0 && target_w > max_w {
+        target_h = (target_h * max_w) / target_w;
+        target_w = max_w;
+    }
+
+    if max_h > 0 && target_h > max_h {
+        target_w = (target_w * max_h) / target_h;
+        target_h = max_h;
+    }
+
+    // Ensure even dimensions (required by H264 and many encoders)
+    target_w = (target_w / 2) * 2;
+    target_h = (target_h / 2) * 2;
+
+    (target_w.max(2), target_h.max(2))
+}
+
+fn resize_rgb(src: &[u8], src_w: u32, src_h: u32, dst_w: u32, dst_h: u32) -> Vec<u8> {
+    if src_w == dst_w && src_h == dst_h {
+        return src.to_vec();
+    }
+    let mut dst = vec![0u8; (dst_w * dst_h * 3) as usize];
+    let x_ratio = ((src_w << 16) / dst_w) + 1;
+    let y_ratio = ((src_h << 16) / dst_h) + 1;
+
+    for y in 0..dst_h {
+        for x in 0..dst_w {
+            let px = ((x * x_ratio) >> 16) as usize;
+            let py = ((y * y_ratio) >> 16) as usize;
+            let src_idx = (py * src_w as usize + px) * 3;
+            let dst_idx = (y as usize * dst_w as usize + x as usize) * 3;
+
+            if src_idx + 2 < src.len() && dst_idx + 2 < dst.len() {
+                dst[dst_idx] = src[src_idx];
+                dst[dst_idx + 1] = src[src_idx + 1];
+                dst[dst_idx + 2] = src[src_idx + 2];
+            }
+        }
+    }
+    dst
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -473,5 +572,52 @@ mod tests {
         }
         assert!(ok);
         handle.close();
+    }
+
+    #[test]
+    fn test_calculate_scaled_dimensions() {
+        // Default with no limits (both 0)
+        WEBCAM_MAX_WIDTH.store(0, Ordering::Relaxed);
+        WEBCAM_MAX_HEIGHT.store(0, Ordering::Relaxed);
+        let (w, h) = calculate_scaled_dimensions(640, 480);
+        assert_eq!(w, 640);
+        assert_eq!(h, 480);
+
+        // Limit width
+        WEBCAM_MAX_WIDTH.store(320, Ordering::Relaxed);
+        let (w, h) = calculate_scaled_dimensions(640, 480);
+        assert_eq!(w, 320);
+        assert_eq!(h, 240); // 480 * 320 / 640
+
+        // Limit height
+        WEBCAM_MAX_WIDTH.store(0, Ordering::Relaxed);
+        WEBCAM_MAX_HEIGHT.store(200, Ordering::Relaxed);
+        let (w, h) = calculate_scaled_dimensions(640, 480);
+        assert_eq!(w, 266); // 640 * 200 / 480 = 266.66 -> even rounding -> 266
+        assert_eq!(h, 200);
+
+        // Restore defaults
+        WEBCAM_MAX_WIDTH.store(0, Ordering::Relaxed);
+        WEBCAM_MAX_HEIGHT.store(0, Ordering::Relaxed);
+    }
+
+    #[test]
+    fn test_resize_rgb() {
+        let src = vec![1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]; // 2x2 RGB image
+        let dst = resize_rgb(&src, 2, 2, 1, 1); // scale down to 1x1
+        assert_eq!(dst.len(), 3);
+        assert_eq!(dst, vec![1u8, 2, 3]); // nearest neighbor maps top-left pixel
+    }
+
+    #[test]
+    fn test_get_camera_dimensions() {
+        unsafe {
+            std::env::set_var("UDS_WEBCAM_MOCK", "true");
+        }
+        let dims = get_camera_dimensions();
+        assert_eq!(dims, Some((640, 480)));
+        unsafe {
+            std::env::remove_var("UDS_WEBCAM_MOCK");
+        }
     }
 }

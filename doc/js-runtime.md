@@ -467,6 +467,12 @@ Starts an RDP connection with the specified settings.
   - `microphone_redirection` (boolean, optional): Whether to enable microphone redirection (default: false).
   - `printer_redirection` (boolean, optional): Whether to enable printer redirection (default: false).
   - `drives_to_redirect` (array of strings, optional): List of drive letters to redirect. Valid special values include `"all"` (all drives).
+  - `webcam` (object, optional): Webcam redirection settings. If provided, configures camera settings:
+    - `enabled` (boolean): Whether to enable webcam redirection (required if `webcam` is provided).
+    - `quality` (number, optional): Encoding quality from 1 to 100 (default: 80).
+    - `fps` (number, optional): Target frames per second (default: 15).
+    - `max_width` (number, optional): Optional limit on maximum captured frame width (resizes/scales frames if camera resolution is higher).
+    - `max_height` (number, optional): Optional limit on maximum captured frame height (resizes/scales frames if camera resolution is higher).
   - `sound_latency_threshold` (number, optional): Threshold in ms for sound latency (default: 400).
   - `best_experience` (boolean, optional): Whether to enable best experience optimizations (default: true).
   - `rail` (object, optional): RAIL (RemoteApp) settings. If provided, enables RAIL mode.
