@@ -54,8 +54,7 @@ pub struct WebcamSettings {
     pub enabled: bool,
     pub quality: u32,
     pub fps: u32,
-    pub max_width: Option<u32>,
-    pub max_height: Option<u32>,
+    pub size_limit: Option<(u32, u32)>,
 }
 
 #[derive(Zeroize, Clone)]

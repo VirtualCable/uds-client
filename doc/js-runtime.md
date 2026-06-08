@@ -471,8 +471,7 @@ Starts an RDP connection with the specified settings.
     - `enabled` (boolean): Whether to enable webcam redirection (required if `webcam` is provided).
     - `quality` (number, optional): Encoding quality from 1 to 100 (default: 80).
     - `fps` (number, optional): Target frames per second (default: 15).
-    - `max_width` (number, optional): Optional limit on maximum captured frame width (resizes/scales frames if camera resolution is higher).
-    - `max_height` (number, optional): Optional limit on maximum captured frame height (resizes/scales frames if camera resolution is higher).
+    - `size_limit` (array of two numbers `[width, height]`, optional): Optional limit on maximum captured frame resolution. E.g. `[1280, 720]`. A value of `0` for a dimension means unlimited. Both dimensions are evaluated.
   - `sound_latency_threshold` (number, optional): Threshold in ms for sound latency (default: 400).
   - `best_experience` (boolean, optional): Whether to enable best experience optimizations (default: true).
   - `rail` (object, optional): RAIL (RemoteApp) settings. If provided, enables RAIL mode.

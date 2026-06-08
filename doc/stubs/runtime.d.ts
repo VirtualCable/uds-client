@@ -73,8 +73,7 @@ declare module "runtime" {
         enabled: boolean;
         quality?: number;
         fps?: number;
-        max_width?: number;
-        max_height?: number;
+        size_limit?: [number, number];
       };
       sound_latency_threshold?: number;
       best_experience?: boolean;

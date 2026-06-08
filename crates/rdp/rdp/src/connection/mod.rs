@@ -245,12 +245,46 @@ impl Rdp {
                 {
                     if let Some((cam_w, cam_h)) = multimedia::webcam::get_camera_dimensions() {
                         log::info!("Webcam redirection: Camera detected at {}x{}", cam_w, cam_h);
-                        multimedia::webcam::WEBCAM_QUALITY.store(webcam.quality, std::sync::atomic::Ordering::Relaxed);
-                        multimedia::webcam::WEBCAM_FPS.store(webcam.fps, std::sync::atomic::Ordering::Relaxed);
-                        
-                        // Set the max width/height limits
-                        let max_w = webcam.max_width.unwrap_or(0);
-                        let max_h = webcam.max_height.unwrap_or(0);
+
+                        // Parse UDSLAUNCHER_LIMITS (width,height,fps,quality)
+                        let parse_launcher_limits = || -> (Option<u32>, Option<u32>, Option<u32>, Option<u32>) {
+                            if let Ok(val) = std::env::var("UDSLAUNCHER_LIMITS") {
+                                let parts: Vec<&str> = val.split(',').map(|s| s.trim()).collect();
+                                let get_part = |idx: usize| -> Option<u32> {
+                                    parts.get(idx).and_then(|&s| if s.is_empty() { None } else { s.parse::<u32>().ok() })
+                                };
+                                (get_part(0), get_part(1), get_part(2), get_part(3))
+                            } else {
+                                (None, None, None, None)
+                            }
+                        };
+                        let (env_w, env_h, env_fps, env_q) = parse_launcher_limits();
+
+                        // Base values from settings
+                        let mut final_quality = webcam.quality;
+                        let mut final_fps = webcam.fps;
+                        let (mut max_w, mut max_h) = if let Some((w, h)) = webcam.size_limit {
+                            (w, h)
+                        } else {
+                            (0, 0)
+                        };
+
+                        // Apply env limits (only allowing them to decrease values, never increase)
+                        if let Some(eq) = env_q {
+                            final_quality = final_quality.min(eq);
+                        }
+                        if let Some(efps) = env_fps {
+                            final_fps = final_fps.min(efps);
+                        }
+                        if let Some(ew) = env_w {
+                            max_w = if max_w == 0 { ew } else { max_w.min(ew) };
+                        }
+                        if let Some(eh) = env_h {
+                            max_h = if max_h == 0 { eh } else { max_h.min(eh) };
+                        }
+
+                        multimedia::webcam::WEBCAM_QUALITY.store(final_quality, std::sync::atomic::Ordering::Relaxed);
+                        multimedia::webcam::WEBCAM_FPS.store(final_fps, std::sync::atomic::Ordering::Relaxed);
                         multimedia::webcam::WEBCAM_MAX_WIDTH.store(max_w, std::sync::atomic::Ordering::Relaxed);
                         multimedia::webcam::WEBCAM_MAX_HEIGHT.store(max_h, std::sync::atomic::Ordering::Relaxed);
 

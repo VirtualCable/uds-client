@@ -57,7 +57,7 @@ impl Drop for H264Encoder {
 }
 
 impl VideoEncoder for H264Encoder {
-    fn init(&mut self, width: u32, height: u32, fps: u32, _quality: u32) -> Result<(), String> {
+    fn init(&mut self, width: u32, height: u32, fps: u32, quality: u32) -> Result<(), String> {
         if self.encoder.is_null() {
             return Err("Encoder is not created".to_string());
         }
@@ -80,8 +80,10 @@ impl VideoEncoder for H264Encoder {
         self.v_plane = vec![128u8; uv_len];
 
         // Prepare configuration base parameters
-        // target bitrate calculation based on width * height * fps
-        let target_bitrate = (width * height * fps * 2 / 10) as i32; // basic estimation
+        // target bitrate calculation based on width * height * fps, scaled by quality (1-100)
+        let q = if quality == 0 { 80 } else { quality.clamp(1, 100) };
+        let base_bitrate = (width * height * fps * 2 / 10) as f64;
+        let target_bitrate = (base_bitrate * (q as f64 / 100.0)) as i32;
 
         let params = SEncParamBase {
             f_usage_type: 0, // CAMERA_VIDEO_REAL_TIME

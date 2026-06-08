@@ -28,7 +28,7 @@ static CAMERA_DIMENSIONS: std::sync::OnceLock<Option<(u32, u32)>> = std::sync::O
 
 pub fn get_camera_dimensions() -> Option<(u32, u32)> {
     *CAMERA_DIMENSIONS.get_or_init(|| {
-        let force_mock = std::env::var("UDS_WEBCAM_MOCK")
+        let force_mock = std::env::var("UDSLAUNCHER_CAM_MOCK")
             .map(|v| v == "1" || v.to_lowercase() == "true")
             .unwrap_or(false);
         if force_mock {
@@ -115,7 +115,7 @@ pub struct WebcamHandle {
 }
 
 fn select_camera_index() -> nokhwa::utils::CameraIndex {
-    if let Ok(val) = std::env::var("UDS_WEBCAM_DEVICE") {
+    if let Ok(val) = std::env::var("UDSLAUNCHER_CAM_DEVICE") {
         if let Ok(idx) = val.parse::<u32>() {
             return nokhwa::utils::CameraIndex::Index(idx);
         }
@@ -142,6 +142,7 @@ fn init_real_camera(width: u32, height: u32, fps: u32) -> Result<nokhwa::Camera,
         .map_err(|e| format!("Failed to create Camera: {e}"))?;
 
     if let Ok(formats) = cam.compatible_camera_formats() {
+        log::debug!("Webcam: All compatible camera formats: {:?}", formats);
         let best_format = formats.iter().min_by_key(|f| {
             let res_diff = (f.width() as i32 - width as i32).unsigned_abs()
                 + (f.height() as i32 - height as i32).unsigned_abs();
@@ -215,7 +216,7 @@ impl WebcamHandle {
                                 color_offset: 0,
                             });
 
-                            let force_mock = std::env::var("UDS_WEBCAM_MOCK")
+                            let force_mock = std::env::var("UDSLAUNCHER_CAM_MOCK")
                                 .map(|v| v == "1" || v.to_lowercase() == "true")
                                 .unwrap_or(false);
                             if force_mock {
@@ -473,7 +474,7 @@ impl WebcamHandle {
     /// Query compatible formats from the default camera without keeping it open.
     /// Returns all (format, resolution, fps) tuples the hardware supports.
     pub fn compatible_formats() -> Vec<CameraFormat> {
-        let force_mock = std::env::var("UDS_WEBCAM_MOCK")
+        let force_mock = std::env::var("UDSLAUNCHER_CAM_MOCK")
             .map(|v| v == "1" || v.to_lowercase() == "true")
             .unwrap_or(false);
         if force_mock {
@@ -677,12 +678,12 @@ mod tests {
     #[test]
     fn test_get_camera_dimensions() {
         unsafe {
-            std::env::set_var("UDS_WEBCAM_MOCK", "true");
+            std::env::set_var("UDSLAUNCHER_CAM_MOCK", "true");
         }
         let dims = get_camera_dimensions();
         assert_eq!(dims, Some((640, 480)));
         unsafe {
-            std::env::remove_var("UDS_WEBCAM_MOCK");
+            std::env::remove_var("UDSLAUNCHER_CAM_MOCK");
         }
     }
 }
