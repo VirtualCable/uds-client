@@ -265,6 +265,11 @@ def fix_install_names(binary: Path) -> None:
 
         dep_name = Path(dep).name
 
+        # Skip libopenh264 — handled by postinstall script, don't rewrite its path
+        if "openh264" in dep_name.lower():
+            print(f"   - Skipping openh264 (postinstall): {dep}")
+            continue
+
         if is_dylib:
             new_path = f"@rpath/{dep_name}"
         else:
@@ -397,6 +402,10 @@ def validate_bundle_dependencies(app_dir: Path) -> bool:
             if dep.startswith(valid_prefixes):
                 continue
 
+            # Allow openh264 — it's handled by the postinstall script
+            if "openh264" in Path(dep).name.lower():
+                continue
+
             print(f"   !! INVALID dependency: {dep}")
             all_ok = False
 
@@ -526,6 +535,10 @@ def main() -> None:
     copied_deps: set[str] = set()
     for dep in dependencies:
         dep_path = Path(dep)
+        # Skip libopenh264 — it's handled by the postinstall script due to licensing restrictions
+        if "openh264" in dep_path.name.lower():
+            print(f">> Skipping openh264 (handled by postinstall): {dep_path.name}")
+            continue
         copy_external_dependency(dep_path, dst_lib_dir, copied_deps)
 
     print("==> Fixing install names")
