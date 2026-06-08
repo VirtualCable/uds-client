@@ -39,7 +39,9 @@ pub struct SLayerBSInfo {
     pub ui_temporal_id: u8,
     pub ui_spatial_id: u8,
     pub ui_quality_id: u8,
+    pub e_frame_type: libc::c_int,
     pub ui_layer_type: u8,
+    pub i_sub_seq_id: libc::c_int,
     pub i_nal_count: libc::c_int,
     pub p_nal_length_in_byte: *mut libc::c_int,
     pub p_bs_buf: *mut u8,
@@ -250,5 +252,18 @@ mod tests {
         let init_res = encoder.init(640, 480, 30, 80);
         println!("OpenH264 encoder initialization result: {:?}", init_res);
         assert!(init_res.is_ok(), "Failed to initialize OpenH264 encoder: {:?}", init_res);
+
+        let dummy_rgb = vec![128u8; 640 * 480 * 3];
+        for i in 0..5 {
+            match encoder.encode(&dummy_rgb) {
+                Ok(data) => {
+                    println!("Frame {}: encoded size = {} bytes", i, data.len());
+                    assert_ne!(data.len(), 0, "Frame {} generated 0 bytes!", i);
+                }
+                Err(e) => {
+                    panic!("Frame {} failed to encode: {:?}", i, e);
+                }
+            }
+        }
     }
 }

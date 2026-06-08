@@ -242,13 +242,19 @@ impl WebcamHandle {
                         } => {
                             log::info!("Webcam: SetFormat {width}x{height} @ {fps}fps");
                             current_mode = None;
+                            let mut needs_restart = true;
                             if let Some(ref mut s) = state {
-                                s.width = width;
-                                s.height = height;
-                                s.fps = fps;
+                                if s.width == width && s.height == height && s.fps == fps && camera.is_some() {
+                                    needs_restart = false;
+                                    log::info!("Webcam: Format matches current stream, skipping camera restart");
+                                } else {
+                                    s.width = width;
+                                    s.height = height;
+                                    s.fps = fps;
+                                }
                             }
 
-                            if !is_mock {
+                            if !is_mock && needs_restart {
                                 if let Some(ref mut cam) = camera {
                                     let _ = cam.stop_stream();
                                 }
@@ -286,11 +292,14 @@ impl WebcamHandle {
                 }
 
                 if let Some(ref mut s) = state {
+                    log::trace!("Webcam capture loop iteration: frame_count = {}", frame_count);
                     let (rgb, src_w, src_h) = if is_mock {
                         (generate_mock_frame(s), s.width, s.height)
                     } else if let Some(ref mut cam) = camera {
+                        log::trace!("Calling cam.frame()...");
                         match cam.frame() {
                             Ok(frame) => {
+                                log::trace!("cam.frame() returned Ok");
                                 match frame.decode_image::<nokhwa::pixel_format::RgbFormat>() {
                                     Ok(img) => {
                                         let w = img.width();
@@ -529,21 +538,18 @@ fn resize_rgb(src: &[u8], src_w: u32, src_h: u32, dst_w: u32, dst_h: u32) -> Vec
         return src.to_vec();
     }
     let mut dst = vec![0u8; (dst_w * dst_h * 3) as usize];
-    let x_ratio = ((src_w << 16) / dst_w) + 1;
-    let y_ratio = ((src_h << 16) / dst_h) + 1;
-
     for y in 0..dst_h {
+        let py = ((y * src_h) / dst_h).min(src_h - 1) as usize;
+        let py_offset = py * src_w as usize * 3;
+        let dst_y_offset = y as usize * dst_w as usize * 3;
         for x in 0..dst_w {
-            let px = ((x * x_ratio) >> 16) as usize;
-            let py = ((y * y_ratio) >> 16) as usize;
-            let src_idx = (py * src_w as usize + px) * 3;
-            let dst_idx = (y as usize * dst_w as usize + x as usize) * 3;
+            let px = ((x * src_w) / dst_w).min(src_w - 1) as usize;
+            let src_idx = py_offset + px * 3;
+            let dst_idx = dst_y_offset + x as usize * 3;
 
-            if src_idx + 2 < src.len() && dst_idx + 2 < dst.len() {
-                dst[dst_idx] = src[src_idx];
-                dst[dst_idx + 1] = src[src_idx + 1];
-                dst[dst_idx + 2] = src[src_idx + 2];
-            }
+            dst[dst_idx] = src[src_idx];
+            dst[dst_idx + 1] = src[src_idx + 1];
+            dst[dst_idx + 2] = src[src_idx + 2];
         }
     }
     dst

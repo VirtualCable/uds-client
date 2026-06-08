@@ -17,6 +17,7 @@ pub struct H264Encoder {
     y_plane: Vec<u8>,
     u_plane: Vec<u8>,
     v_plane: Vec<u8>,
+    frame_index: u64,
 }
 
 // Ensure the encoder can be safely moved across thread boundaries
@@ -33,6 +34,7 @@ impl H264Encoder {
             y_plane: Vec::new(),
             u_plane: Vec::new(),
             v_plane: Vec::new(),
+            frame_index: 0,
         })
     }
 }
@@ -59,6 +61,7 @@ impl VideoEncoder for H264Encoder {
         self.width = width;
         self.height = height;
         self.fps = fps;
+        self.frame_index = 0;
 
         // Allocate YUV420P planes:
         // Y: width * height
@@ -79,7 +82,7 @@ impl VideoEncoder for H264Encoder {
             i_pic_width: width as i32,
             i_pic_height: height as i32,
             i_target_bitrate: target_bitrate,
-            i_rc_mode: 0, // RC_QUALITY_MODE
+            i_rc_mode: -1, // RC_OFF_MODE
             f_max_frame_rate: fps as f32,
         };
 
@@ -91,6 +94,11 @@ impl VideoEncoder for H264Encoder {
             }
 
             let set_option_fn = (*(*self.encoder).vtbl).set_option;
+
+            // ENCODER_OPTION_DATAFORMAT = 0, videoFormatI420 = 23
+            let mut video_format = 23i32;
+            let _ret_format = set_option_fn(self.encoder, 0, &mut video_format as *mut i32 as *mut std::ffi::c_void);
+
             // ENCODER_OPTION_TRACE_LEVEL = 19
             let mut log_level = 2i32;
             let _ret_level = set_option_fn(self.encoder, 19, &mut log_level as *mut i32 as *mut std::ffi::c_void);
@@ -146,6 +154,9 @@ impl VideoEncoder for H264Encoder {
             }
         }
 
+        let timestamp_ms = (self.frame_index * 1000) / self.fps.max(1) as u64;
+        self.frame_index += 1;
+
         // Configure SSourcePicture
         let src_pic = SSourcePicture {
             i_color_format: 23, // videoFormatI420
@@ -158,7 +169,7 @@ impl VideoEncoder for H264Encoder {
             ],
             i_pic_width: self.width as i32,
             i_pic_height: self.height as i32,
-            ui_time_stamp: 0,
+            ui_time_stamp: timestamp_ms as libc::c_longlong,
         };
 
         let mut bs_info = SFrameBSInfo {
@@ -176,13 +187,21 @@ impl VideoEncoder for H264Encoder {
                 return Err(format!("OpenH264 encode_frame failed with code: {ret}"));
             }
 
-            if bs_info.i_frame_size_in_bytes <= 0 {
-                // No output frame generated (e.g. initial delay/buffering, though OpenH264 CAMERA mode is low-latency)
+            // Calculate total size from layers
+            let mut total_size = 0;
+            for layer_idx in 0..bs_info.i_layer_num as usize {
+                let layer = &bs_info.s_layer_info[layer_idx];
+                for nal_idx in 0..layer.i_nal_count as usize {
+                    total_size += *layer.p_nal_length_in_byte.add(nal_idx) as usize;
+                }
+            }
+
+            if total_size == 0 {
                 return Ok(Vec::new());
             }
 
             // Gather all layer bitstream buffers
-            let mut encoded_data = Vec::with_capacity(bs_info.i_frame_size_in_bytes as usize);
+            let mut encoded_data = Vec::with_capacity(total_size);
             for layer_idx in 0..bs_info.i_layer_num as usize {
                 let layer = &bs_info.s_layer_info[layer_idx];
                 let mut layer_size = 0;
@@ -196,9 +215,50 @@ impl VideoEncoder for H264Encoder {
                 }
             }
 
-            Ok(encoded_data)
+            let filtered_data = filter_annex_b_nal_units(&encoded_data);
+            Ok(filtered_data)
         }
     }
+}
+
+fn filter_annex_b_nal_units(data: &[u8]) -> Vec<u8> {
+    let mut filtered = Vec::with_capacity(data.len());
+    let mut i = 0;
+    let len = data.len();
+    let mut starts = Vec::new();
+
+    // Scan for all 3-byte and 4-byte start codes
+    while i < len {
+        if i + 4 <= len && &data[i..i+4] == &[0, 0, 0, 1] {
+            starts.push((i, 4));
+            i += 4;
+        } else if i + 3 <= len && &data[i..i+3] == &[0, 0, 1] {
+            starts.push((i, 3));
+            i += 3;
+        } else {
+            i += 1;
+        }
+    }
+
+    for idx in 0..starts.len() {
+        let (start_pos, code_len) = starts[idx];
+        let payload_start = start_pos + code_len;
+        let payload_end = if idx + 1 < starts.len() {
+            starts[idx + 1].0
+        } else {
+            len
+        };
+
+        if payload_start < payload_end {
+            let header_byte = data[payload_start];
+            let nal_type = header_byte & 0x1F;
+            if nal_type != 9 {
+                filtered.extend_from_slice(&[0, 0, 0, 1]);
+                filtered.extend_from_slice(&data[payload_start..payload_end]);
+            }
+        }
+    }
+    filtered
 }
 
 unsafe extern "C" fn openh264_trace_callback(
@@ -225,5 +285,31 @@ unsafe extern "C" fn openh264_trace_callback(
         2 => log::warn!("OpenH264: {}", msg_trimmed),  // WELS_LOG_WARNING
         4 => log::info!("OpenH264: {}", msg_trimmed),  // WELS_LOG_INFO
         _ => log::debug!("OpenH264: {}", msg_trimmed),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_filter_annex_b_nal_units() {
+        // Prepare a mock Annex B bitstream containing:
+        // 1. NAL Unit type 7 (SPS) with start code 0x000001
+        // 2. NAL Unit type 9 (AUD) with start code 0x00000001
+        // 3. NAL Unit type 5 (IDR) with start code 0x00000001
+        let mock_data = vec![
+            0, 0, 1, 7, 10, 11, 12, // SPS
+            0, 0, 0, 1, 9, 20, 21,  // AUD (to be filtered out)
+            0, 0, 0, 1, 5, 30, 31,  // IDR
+        ];
+        
+        let expected = vec![
+            0, 0, 0, 1, 7, 10, 11, 12, // SPS
+            0, 0, 0, 1, 5, 30, 31,     // IDR
+        ];
+        
+        let filtered = filter_annex_b_nal_units(&mock_data);
+        assert_eq!(filtered, expected);
     }
 }

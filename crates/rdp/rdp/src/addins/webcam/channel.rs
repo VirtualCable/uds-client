@@ -33,6 +33,8 @@ pub unsafe extern "C" fn on_data(
         return CHANNEL_RC_OK;
     };
 
+    log::trace!("Webcam received msg_id: {}", msg_id);
+
     #[allow(non_upper_case_globals)]
     match msg_id as i32 {
         freerdp_sys::CAM_MSG_ID_CAM_MSG_ID_SampleRequest => {
@@ -193,7 +195,7 @@ fn handle_media_type_list(ctx: &ChannelCtx) {
         FrameRateDenominator: 1,
         PixelAspectRatioNumerator: 1,
         PixelAspectRatioDenominator: 1,
-        Flags: 0,
+        Flags: freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION_FLAGS_CAM_MEDIA_TYPE_DESCRIPTION_FLAG_DecodingRequired,
     };
 
     let pdu = if let Some(override_fmt) = get_overridden_format() {
@@ -204,7 +206,7 @@ fn handle_media_type_list(ctx: &ChannelCtx) {
             pdu::build_media_type_list_response(&[mjpeg_mt])
         }
     } else if h264_supported {
-        pdu::build_media_type_list_response(&[h264_mt, mjpeg_mt])
+        pdu::build_media_type_list_response(&[mjpeg_mt, h264_mt])
     } else {
         pdu::build_media_type_list_response(&[mjpeg_mt])
     };
@@ -216,11 +218,7 @@ fn handle_current_media_type(ctx: &ChannelCtx) {
     let h264_supported = multimedia::webcam::h264_available();
     log::info!("Webcam: CurrentMediaTypeRequest — H264 supported: {}", h264_supported);
 
-    let mut selected_fmt = if h264_supported {
-        freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264 as u32
-    } else {
-        freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_MJPG as u32
-    };
+    let mut selected_fmt = freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_MJPG as u32;
 
     if let Some(override_fmt) = get_overridden_format() {
         log::info!("Webcam: Forcing current media type override: {}", override_fmt);
@@ -240,7 +238,7 @@ fn handle_current_media_type(ctx: &ChannelCtx) {
             FrameRateDenominator: 1,
             PixelAspectRatioNumerator: 1,
             PixelAspectRatioDenominator: 1,
-            Flags: 0,
+            Flags: freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION_FLAGS_CAM_MEDIA_TYPE_DESCRIPTION_FLAG_DecodingRequired,
         }
     } else {
         freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION {
