@@ -429,14 +429,22 @@ def build_pkg() -> Path:
 
     postinstall_content = """#!/bin/bash
 
+# Proof-of-life: touch this file to confirm the script was executed at all
+touch /tmp/udslauncher-postinstall-ran 2>/dev/null
+
 LOG_FILE="/tmp/udslauncher-postinstall.log"
 
-# Log all output to /tmp (automatically cleaned by macOS on reboot)
-exec > >(tee -a "$LOG_FILE") 2>&1
+# Simple log function: echoes and appends to log file
+log() {
+    echo "$@"
+    echo "$@" >> "$LOG_FILE"
+}
 
-echo "=== UDSLauncher postinstall started at $(date) ==="
+log "=== UDSLauncher postinstall started at $(date) ==="
+log "Running as: $(whoami)"
 
 TARGET_DIR="/Library/Application Support/UDSLauncher/openh264"
+log "Creating target directory: $TARGET_DIR"
 mkdir -p "$TARGET_DIR"
 
 ARCH=$(uname -m)
@@ -450,28 +458,28 @@ fi
 
 TEMP_FILE="/tmp/openh264.dylib.bz2"
 
-echo "Architecture: $ARCH"
-echo "Downloading OpenH264 from $URL..."
+log "Architecture: $ARCH"
+log "Downloading OpenH264 from $URL..."
 if curl -L -s -f -o "$TEMP_FILE" "$URL"; then
-    echo "Downloaded OK ($(stat -f%z "$TEMP_FILE") bytes)"
-    echo "Decompressing OpenH264..."
+    log "Downloaded OK ($(stat -f%z "$TEMP_FILE") bytes)"
+    log "Decompressing OpenH264..."
     if bunzip2 -f "$TEMP_FILE"; then
         mv "/tmp/openh264.dylib" "$TARGET_DIR/libopenh264.dylib"
         chmod 644 "$TARGET_DIR/libopenh264.dylib"
         # Clear quarantine if present
         xattr -d com.apple.quarantine "$TARGET_DIR/libopenh264.dylib" 2>/dev/null || true
-        echo "OpenH264 installed successfully to $TARGET_DIR"
-        echo "=== UDSLauncher postinstall finished OK at $(date) ==="
+        log "OpenH264 installed successfully to $TARGET_DIR"
+        log "=== UDSLauncher postinstall finished OK at $(date) ==="
         exit 0
     else
-        echo "ERROR: bunzip2 failed"
+        log "ERROR: bunzip2 failed"
     fi
 else
-    echo "ERROR: curl download failed (exit code: $?)"
+    log "ERROR: curl download failed (exit code: $?)"
 fi
 
-echo "Warning: Failed to download or extract OpenH264. Fallback to MJPEG will be used."
-echo "=== UDSLauncher postinstall finished WITH WARNINGS at $(date) ==="
+log "Warning: Failed to download or extract OpenH264. Fallback to MJPEG will be used."
+log "=== UDSLauncher postinstall finished WITH WARNINGS at $(date) ==="
 exit 0
 """
 
