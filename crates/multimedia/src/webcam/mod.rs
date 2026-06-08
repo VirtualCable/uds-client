@@ -349,6 +349,13 @@ impl WebcamHandle {
                         let q = WEBCAM_QUALITY.load(Ordering::Relaxed);
                         let _ = encoder.init(dst_w, dst_h, s.fps, q);
                         current_mode = Some(mode_val);
+                        log::info!(
+                            "Webcam encoder initialized: Mode={:?}, Resolution={}x{}, FPS={}",
+                            mode_val,
+                            dst_w,
+                            dst_h,
+                            s.fps
+                        );
                     }
 
                     let output = match encoder.encode(&rgb_scaled) {

@@ -206,7 +206,7 @@ fn handle_media_type_list(ctx: &ChannelCtx) {
             pdu::build_media_type_list_response(&[mjpeg_mt])
         }
     } else if h264_supported {
-        pdu::build_media_type_list_response(&[mjpeg_mt, h264_mt])
+        pdu::build_media_type_list_response(&[h264_mt, mjpeg_mt])
     } else {
         pdu::build_media_type_list_response(&[mjpeg_mt])
     };
@@ -218,7 +218,11 @@ fn handle_current_media_type(ctx: &ChannelCtx) {
     let h264_supported = multimedia::webcam::h264_available();
     log::info!("Webcam: CurrentMediaTypeRequest — H264 supported: {}", h264_supported);
 
-    let mut selected_fmt = freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_MJPG as u32;
+    let mut selected_fmt = if h264_supported {
+        freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264 as u32
+    } else {
+        freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_MJPG as u32
+    };
 
     if let Some(override_fmt) = get_overridden_format() {
         log::info!("Webcam: Forcing current media type override: {}", override_fmt);

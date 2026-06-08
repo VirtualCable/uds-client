@@ -188,8 +188,9 @@ impl VideoEncoder for H264Encoder {
         };
 
         unsafe {
-            // Force an IDR (keyframe) at the start and periodically every 15 frames
-            if !self.has_sent_idr || self.frame_index % 15 == 0 {
+            // Force an IDR (keyframe) at the start and periodically every (fps * 2) frames
+            let keyframe_interval = (self.fps * 2).max(1) as u64;
+            if !self.has_sent_idr || self.frame_index % keyframe_interval == 0 {
                 let force_intra_fn = (*(*self.encoder).vtbl).force_intra_frame;
                 let _ = force_intra_fn(self.encoder, true);
             }
