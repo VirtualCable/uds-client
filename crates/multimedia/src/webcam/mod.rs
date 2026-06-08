@@ -394,8 +394,16 @@ impl WebcamHandle {
                             let fps = frame_count as f64 / duration;
                             let bytes_per_sec = bytes_count as f64 / duration;
                             let bytes_per_frame = bytes_count as f64 / frame_count as f64;
+                            let mode_name = match current_mode {
+                                Some(WebcamMode::MJPEG) => "MJPEG",
+                                Some(WebcamMode::H264) => "H264",
+                                Some(WebcamMode::YUY2) => "YUY2",
+                                Some(WebcamMode::Raw) => "Raw",
+                                None => "None",
+                            };
                             log::debug!(
-                                "Webcam: {} frames in {:.1}s (~{:.1} fps), {:.0} bytes/s, {:.0} bytes/frame",
+                                "Webcam [{}]: {} frames in {:.1}s (~{:.1} fps), {:.0} bytes/s, {:.0} bytes/frame",
+                                mode_name,
                                 frame_count,
                                 duration,
                                 fps,

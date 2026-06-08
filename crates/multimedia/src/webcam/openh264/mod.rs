@@ -45,6 +45,7 @@ pub struct SLayerBSInfo {
     pub i_nal_count: libc::c_int,
     pub p_nal_length_in_byte: *mut libc::c_int,
     pub p_bs_buf: *mut u8,
+    pub r_psnr: [f32; 3],
 }
 
 #[repr(C)]

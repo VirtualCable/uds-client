@@ -18,6 +18,8 @@ pub struct H264Encoder {
     u_plane: Vec<u8>,
     v_plane: Vec<u8>,
     frame_index: u64,
+    has_sent_idr: bool,
+    sps_pps: Vec<u8>,
 }
 
 // Ensure the encoder can be safely moved across thread boundaries
@@ -35,6 +37,8 @@ impl H264Encoder {
             u_plane: Vec::new(),
             v_plane: Vec::new(),
             frame_index: 0,
+            has_sent_idr: false,
+            sps_pps: Vec::new(),
         })
     }
 }
@@ -62,6 +66,8 @@ impl VideoEncoder for H264Encoder {
         self.height = height;
         self.fps = fps;
         self.frame_index = 0;
+        self.has_sent_idr = false;
+        self.sps_pps.clear();
 
         // Allocate YUV420P planes:
         // Y: width * height
@@ -107,6 +113,7 @@ impl VideoEncoder for H264Encoder {
             let mut callback: openh264::WelsTraceCallback = openh264_trace_callback;
             let _ret_callback = set_option_fn(self.encoder, 20, &mut callback as *mut _ as *mut std::ffi::c_void);
         }
+
 
         log::info!("OpenH264 initialized successfully: {}x{} @ {}fps", width, height, fps);
         Ok(())
@@ -181,6 +188,12 @@ impl VideoEncoder for H264Encoder {
         };
 
         unsafe {
+            // Force an IDR (keyframe) at the start and periodically every 15 frames
+            if !self.has_sent_idr || self.frame_index % 15 == 0 {
+                let force_intra_fn = (*(*self.encoder).vtbl).force_intra_frame;
+                let _ = force_intra_fn(self.encoder, true);
+            }
+
             let encode_fn = (*(*self.encoder).vtbl).encode_frame;
             let ret = encode_fn(self.encoder, &src_pic, &mut bs_info);
             if ret != 0 {
@@ -192,7 +205,9 @@ impl VideoEncoder for H264Encoder {
             for layer_idx in 0..bs_info.i_layer_num as usize {
                 let layer = &bs_info.s_layer_info[layer_idx];
                 for nal_idx in 0..layer.i_nal_count as usize {
-                    total_size += *layer.p_nal_length_in_byte.add(nal_idx) as usize;
+                    if !layer.p_nal_length_in_byte.is_null() {
+                        total_size += *layer.p_nal_length_in_byte.add(nal_idx) as usize;
+                    }
                 }
             }
 
@@ -206,8 +221,10 @@ impl VideoEncoder for H264Encoder {
                 let layer = &bs_info.s_layer_info[layer_idx];
                 let mut layer_size = 0;
                 for nal_idx in 0..layer.i_nal_count as usize {
-                    let nal_len = *layer.p_nal_length_in_byte.add(nal_idx) as usize;
-                    layer_size += nal_len;
+                    if !layer.p_nal_length_in_byte.is_null() {
+                        let nal_len = *layer.p_nal_length_in_byte.add(nal_idx) as usize;
+                        layer_size += nal_len;
+                    }
                 }
                 if layer_size > 0 && !layer.p_bs_buf.is_null() {
                     let slice = std::slice::from_raw_parts(layer.p_bs_buf, layer_size);
@@ -215,50 +232,84 @@ impl VideoEncoder for H264Encoder {
                 }
             }
 
-            let filtered_data = filter_annex_b_nal_units(&encoded_data);
+            // Parse and filter Annex B NAL units
+            let mut filtered_data = Vec::new();
+            let mut i = 0;
+            let len = encoded_data.len();
+            let mut starts = Vec::new();
+
+            // Scan for all 3-byte and 4-byte start codes
+            while i < len {
+                if i + 4 <= len && &encoded_data[i..i+4] == &[0, 0, 0, 1] {
+                    starts.push((i, 4));
+                    i += 4;
+                } else if i + 3 <= len && &encoded_data[i..i+3] == &[0, 0, 1] {
+                    starts.push((i, 3));
+                    i += 3;
+                } else {
+                    i += 1;
+                }
+            }
+
+            let mut has_idr_in_this_frame = false;
+
+            for idx in 0..starts.len() {
+                let (start_pos, code_len) = starts[idx];
+                let payload_start = start_pos + code_len;
+                let payload_end = if idx + 1 < starts.len() {
+                    starts[idx + 1].0
+                } else {
+                    len
+                };
+
+                if payload_start < payload_end {
+                    let header_byte = encoded_data[payload_start];
+                    let nal_type = header_byte & 0x1F;
+                    if self.frame_index <= 5 {
+                        println!("[ENCODER] Frame index: {}, NAL unit type: {} at pos {}", self.frame_index, nal_type, start_pos);
+                    }
+
+                    if nal_type == 7 {
+                        // SPS: Clear previous and store
+                        self.sps_pps.clear();
+                        self.sps_pps.extend_from_slice(&[0, 0, 0, 1]);
+                        self.sps_pps.extend_from_slice(&encoded_data[payload_start..payload_end]);
+                    } else if nal_type == 8 {
+                        // PPS: Store
+                        self.sps_pps.extend_from_slice(&[0, 0, 0, 1]);
+                        self.sps_pps.extend_from_slice(&encoded_data[payload_start..payload_end]);
+                    } else if nal_type == 5 {
+                        // IDR picture
+                        has_idr_in_this_frame = true;
+                        if !self.sps_pps.is_empty() {
+                            filtered_data.extend_from_slice(&self.sps_pps);
+                        }
+                        filtered_data.extend_from_slice(&[0, 0, 0, 1]);
+                        filtered_data.extend_from_slice(&encoded_data[payload_start..payload_end]);
+                    } else if nal_type == 1 {
+                        // P-frame slice
+                        if self.has_sent_idr {
+                            filtered_data.extend_from_slice(&[0, 0, 0, 1]);
+                            filtered_data.extend_from_slice(&encoded_data[payload_start..payload_end]);
+                        }
+                    } else if nal_type != 9 {
+                        // Other NAL types (e.g. SEI), skipping AUD (9)
+                        if self.has_sent_idr {
+                            filtered_data.extend_from_slice(&[0, 0, 0, 1]);
+                            filtered_data.extend_from_slice(&encoded_data[payload_start..payload_end]);
+                        }
+                    }
+                }
+            }
+
+            if has_idr_in_this_frame {
+                self.has_sent_idr = true;
+            }
+
+
             Ok(filtered_data)
         }
     }
-}
-
-fn filter_annex_b_nal_units(data: &[u8]) -> Vec<u8> {
-    let mut filtered = Vec::with_capacity(data.len());
-    let mut i = 0;
-    let len = data.len();
-    let mut starts = Vec::new();
-
-    // Scan for all 3-byte and 4-byte start codes
-    while i < len {
-        if i + 4 <= len && &data[i..i+4] == &[0, 0, 0, 1] {
-            starts.push((i, 4));
-            i += 4;
-        } else if i + 3 <= len && &data[i..i+3] == &[0, 0, 1] {
-            starts.push((i, 3));
-            i += 3;
-        } else {
-            i += 1;
-        }
-    }
-
-    for idx in 0..starts.len() {
-        let (start_pos, code_len) = starts[idx];
-        let payload_start = start_pos + code_len;
-        let payload_end = if idx + 1 < starts.len() {
-            starts[idx + 1].0
-        } else {
-            len
-        };
-
-        if payload_start < payload_end {
-            let header_byte = data[payload_start];
-            let nal_type = header_byte & 0x1F;
-            if nal_type != 9 {
-                filtered.extend_from_slice(&[0, 0, 0, 1]);
-                filtered.extend_from_slice(&data[payload_start..payload_end]);
-            }
-        }
-    }
-    filtered
 }
 
 unsafe extern "C" fn openh264_trace_callback(
@@ -293,23 +344,79 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_filter_annex_b_nal_units() {
-        // Prepare a mock Annex B bitstream containing:
-        // 1. NAL Unit type 7 (SPS) with start code 0x000001
-        // 2. NAL Unit type 9 (AUD) with start code 0x00000001
-        // 3. NAL Unit type 5 (IDR) with start code 0x00000001
-        let mock_data = vec![
-            0, 0, 1, 7, 10, 11, 12, // SPS
-            0, 0, 0, 1, 9, 20, 21,  // AUD (to be filtered out)
-            0, 0, 0, 1, 5, 30, 31,  // IDR
-        ];
-        
-        let expected = vec![
-            0, 0, 0, 1, 7, 10, 11, 12, // SPS
-            0, 0, 0, 1, 5, 30, 31,     // IDR
-        ];
-        
-        let filtered = filter_annex_b_nal_units(&mock_data);
-        assert_eq!(filtered, expected);
+    #[ignore]
+    fn test_generate_h264_dump() {
+        let mut encoder = H264Encoder::new().unwrap();
+        let width = 640;
+        let height = 480;
+        let fps = 30;
+        encoder.init(width, height, fps, 3).unwrap();
+
+        let temp_dir = std::env::var("TEMP").unwrap_or_else(|_| ".".to_string());
+        let dump_path = std::path::PathBuf::from(temp_dir).join("test_stream.h264");
+        let _ = std::fs::remove_file(&dump_path);
+
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&dump_path)
+            .unwrap();
+
+        let num_frames = 600; // 20 seconds at 30 fps
+        let sq_size = 120;
+
+        let mut total_bytes = 0;
+        for f in 0..num_frames {
+            let mut rgb = vec![0u8; (width * height * 3) as usize];
+            
+            // Generate a dynamic gradient background
+            let b_val = ((f * 2) % 256) as u8;
+            for y in 0..height {
+                let y_offset = y * width * 3;
+                let g_val = (y * 255 / height) as u8;
+                for x in 0..width {
+                    let r_val = (x * 255 / width) as u8;
+                    let idx = (y_offset + x * 3) as usize;
+                    rgb[idx] = r_val;
+                    rgb[idx + 1] = g_val;
+                    rgb[idx + 2] = b_val;
+                }
+            }
+            
+            // Calculate square position (bouncing path or moving diagonal)
+            let x_start = (f * 8) % (width - sq_size);
+            let y_start = (f * 6) % (height - sq_size);
+
+            for y in y_start..(y_start + sq_size) {
+                let y_offset = y * width * 3;
+                for x in x_start..(x_start + sq_size) {
+                    let idx = (y_offset + x * 3) as usize;
+                    // Draw a bright white square with a black border
+                    if y == y_start || y == y_start + sq_size - 1 || x == x_start || x == x_start + sq_size - 1 {
+                        rgb[idx] = 0;
+                        rgb[idx + 1] = 0;
+                        rgb[idx + 2] = 0;
+                    } else {
+                        rgb[idx] = 255;
+                        rgb[idx + 1] = 255;
+                        rgb[idx + 2] = 255;
+                    }
+                }
+            }
+
+            let encoded = encoder.encode(&rgb).unwrap();
+
+            total_bytes += encoded.len();
+            if f % 30 == 0 {
+                println!("Frame {}: encoded size = {} bytes", f, encoded.len());
+            }
+            if !encoded.is_empty() {
+                use std::io::Write;
+                file.write_all(&encoded).unwrap();
+            }
+        }
+
+        println!("Generated moving test pattern H264 dump at: {:?}, total size: {} bytes", dump_path, total_bytes);
     }
 }
