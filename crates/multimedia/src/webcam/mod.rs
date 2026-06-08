@@ -188,7 +188,9 @@ impl WebcamHandle {
         thread::spawn(move || {
             let mut state: Option<StreamState> = None;
             let mut frame_count: u64 = 0;
+            let mut bytes_count: u64 = 0;
             let mut last_report = std::time::Instant::now();
+            let mut stream_start_time = std::time::Instant::now();
             let mut encoder: Box<dyn VideoEncoder> = Box::new(RawEncoder);
             let mut current_mode: Option<WebcamMode> = None;
             let mut camera: Option<nokhwa::Camera> = None;
@@ -201,6 +203,10 @@ impl WebcamHandle {
                         WebcamCommand::StartStream { width, height, fps } => {
                             log::info!("Webcam: StartStream {width}x{height} @ {fps}fps");
                             current_mode = None;
+                            frame_count = 0;
+                            bytes_count = 0;
+                            last_report = std::time::Instant::now();
+                            stream_start_time = std::time::Instant::now();
                             state = Some(StreamState {
                                 width,
                                 height,
@@ -355,6 +361,7 @@ impl WebcamHandle {
 
                     *frame_out.lock().unwrap() = Some(output.clone());
                     frame_count += 1;
+                    bytes_count += output.len() as u64;
 
                     let mut reqs = samples_req.lock().unwrap();
                     if *reqs > 0
@@ -370,15 +377,34 @@ impl WebcamHandle {
                         });
                     }
 
-                    if last_report.elapsed().as_secs() >= 10 {
+                    let elapsed_total = stream_start_time.elapsed().as_secs();
+                    let report_interval = if elapsed_total <= 60 {
+                        5
+                    } else if elapsed_total <= 120 {
+                        15
+                    } else if elapsed_total <= 240 {
+                        30
+                    } else {
+                        60
+                    };
+
+                    let duration = last_report.elapsed().as_secs_f64();
+                    if duration >= report_interval as f64 {
                         if frame_count > 0 {
+                            let fps = frame_count as f64 / duration;
+                            let bytes_per_sec = bytes_count as f64 / duration;
+                            let bytes_per_frame = bytes_count as f64 / frame_count as f64;
                             log::debug!(
-                                "Webcam: {} frames in 10s (~{:.1} fps)",
+                                "Webcam: {} frames in {:.1}s (~{:.1} fps), {:.0} bytes/s, {:.0} bytes/frame",
                                 frame_count,
-                                frame_count as f32 / 10.0,
+                                duration,
+                                fps,
+                                bytes_per_sec,
+                                bytes_per_frame,
                             );
                         }
                         frame_count = 0;
+                        bytes_count = 0;
                         last_report = std::time::Instant::now();
                     }
 
