@@ -142,6 +142,7 @@ fn init_real_camera(width: u32, height: u32, fps: u32) -> Result<nokhwa::Camera,
         .map_err(|e| format!("Failed to create Camera: {e}"))?;
 
     if let Ok(formats) = cam.compatible_camera_formats() {
+        log::debug!("Webcam: All compatible camera formats: {:?}", formats);
         let best_format = formats.iter().min_by_key(|f| {
             let res_diff = (f.width() as i32 - width as i32).unsigned_abs()
                 + (f.height() as i32 - height as i32).unsigned_abs();

@@ -176,11 +176,26 @@ fn handle_stream_list(ctx: &ChannelCtx) {
 fn handle_media_type_list(ctx: &ChannelCtx) {
     let h264_supported = multimedia::webcam::h264_available();
     log::info!("Webcam: MediaTypeListRequest — H264 supported: {}", h264_supported);
+
+    // Determine target width & height dynamically
+    let (mut width, mut height) = multimedia::webcam::get_camera_dimensions().unwrap_or((640, 480));
+    let max_w = multimedia::webcam::WEBCAM_MAX_WIDTH.load(std::sync::atomic::Ordering::Relaxed);
+    let max_h = multimedia::webcam::WEBCAM_MAX_HEIGHT.load(std::sync::atomic::Ordering::Relaxed);
+    if max_w > 0 && width > max_w {
+        width = max_w;
+    }
+    if max_h > 0 && height > max_h {
+        height = max_h;
+    }
+
+    // Determine target FPS dynamically
+    let fps = multimedia::webcam::WEBCAM_FPS.load(std::sync::atomic::Ordering::Relaxed).max(1);
+
     let mjpeg_mt = freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION {
         Format: freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_MJPG,
-        Width: 640,
-        Height: 480,
-        FrameRateNumerator: 30,
+        Width: width,
+        Height: height,
+        FrameRateNumerator: fps,
         FrameRateDenominator: 1,
         PixelAspectRatioNumerator: 1,
         PixelAspectRatioDenominator: 1,
@@ -189,9 +204,9 @@ fn handle_media_type_list(ctx: &ChannelCtx) {
 
     let h264_mt = freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION {
         Format: freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264,
-        Width: 640,
-        Height: 480,
-        FrameRateNumerator: 30,
+        Width: width,
+        Height: height,
+        FrameRateNumerator: fps,
         FrameRateDenominator: 1,
         PixelAspectRatioNumerator: 1,
         PixelAspectRatioDenominator: 1,
@@ -218,6 +233,20 @@ fn handle_current_media_type(ctx: &ChannelCtx) {
     let h264_supported = multimedia::webcam::h264_available();
     log::info!("Webcam: CurrentMediaTypeRequest — H264 supported: {}", h264_supported);
 
+    // Determine target width & height dynamically
+    let (mut width, mut height) = multimedia::webcam::get_camera_dimensions().unwrap_or((640, 480));
+    let max_w = multimedia::webcam::WEBCAM_MAX_WIDTH.load(std::sync::atomic::Ordering::Relaxed);
+    let max_h = multimedia::webcam::WEBCAM_MAX_HEIGHT.load(std::sync::atomic::Ordering::Relaxed);
+    if max_w > 0 && width > max_w {
+        width = max_w;
+    }
+    if max_h > 0 && height > max_h {
+        height = max_h;
+    }
+
+    // Determine target FPS dynamically
+    let fps = multimedia::webcam::WEBCAM_FPS.load(std::sync::atomic::Ordering::Relaxed).max(1);
+
     let mut selected_fmt = if h264_supported {
         freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264 as u32
     } else {
@@ -236,9 +265,9 @@ fn handle_current_media_type(ctx: &ChannelCtx) {
     let mt = if selected_fmt == freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264 as u32 {
         freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION {
             Format: freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264,
-            Width: 640,
-            Height: 480,
-            FrameRateNumerator: 30,
+            Width: width,
+            Height: height,
+            FrameRateNumerator: fps,
             FrameRateDenominator: 1,
             PixelAspectRatioNumerator: 1,
             PixelAspectRatioDenominator: 1,
@@ -247,9 +276,9 @@ fn handle_current_media_type(ctx: &ChannelCtx) {
     } else {
         freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION {
             Format: freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_MJPG,
-            Width: 640,
-            Height: 480,
-            FrameRateNumerator: 30,
+            Width: width,
+            Height: height,
+            FrameRateNumerator: fps,
             FrameRateDenominator: 1,
             PixelAspectRatioNumerator: 1,
             PixelAspectRatioDenominator: 1,
