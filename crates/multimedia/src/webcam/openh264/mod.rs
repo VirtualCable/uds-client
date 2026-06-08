@@ -131,7 +131,7 @@ fn init_openh264_library() -> Result<(), String> {
     // 2. Platform-specific paths
     #[cfg(target_os = "macos")]
     {
-        possible_paths.push(PathBuf::from("/Library/Application Support/UDSClient/openh264/libopenh264.dylib"));
+        possible_paths.push(PathBuf::from("/Library/Application Support/UDSLauncher/openh264/libopenh264.dylib"));
     }
 
     // 3. Fallback to system library paths (handled by libloading itself if we pass a simple name)

@@ -429,7 +429,14 @@ def build_pkg() -> Path:
 
     postinstall_content = """#!/bin/bash
 
-TARGET_DIR="/Library/Application Support/UDSClient/openh264"
+LOG_FILE="/tmp/udslauncher-postinstall.log"
+
+# Log all output to /tmp (automatically cleaned by macOS on reboot)
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+echo "=== UDSLauncher postinstall started at $(date) ==="
+
+TARGET_DIR="/Library/Application Support/UDSLauncher/openh264"
 mkdir -p "$TARGET_DIR"
 
 ARCH=$(uname -m)
@@ -443,20 +450,28 @@ fi
 
 TEMP_FILE="/tmp/openh264.dylib.bz2"
 
+echo "Architecture: $ARCH"
 echo "Downloading OpenH264 from $URL..."
 if curl -L -s -f -o "$TEMP_FILE" "$URL"; then
+    echo "Downloaded OK ($(stat -f%z "$TEMP_FILE") bytes)"
     echo "Decompressing OpenH264..."
     if bunzip2 -f "$TEMP_FILE"; then
         mv "/tmp/openh264.dylib" "$TARGET_DIR/libopenh264.dylib"
         chmod 644 "$TARGET_DIR/libopenh264.dylib"
         # Clear quarantine if present
         xattr -d com.apple.quarantine "$TARGET_DIR/libopenh264.dylib" 2>/dev/null || true
-        echo "OpenH264 installed successfully."
+        echo "OpenH264 installed successfully to $TARGET_DIR"
+        echo "=== UDSLauncher postinstall finished OK at $(date) ==="
         exit 0
+    else
+        echo "ERROR: bunzip2 failed"
     fi
+else
+    echo "ERROR: curl download failed (exit code: $?)"
 fi
 
 echo "Warning: Failed to download or extract OpenH264. Fallback to MJPEG will be used."
+echo "=== UDSLauncher postinstall finished WITH WARNINGS at $(date) ==="
 exit 0
 """
 
