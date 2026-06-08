@@ -260,10 +260,27 @@ impl RdpState {
         }
     }
 
-    pub fn on_desktop_resize(&mut self, _width: u32, _height: u32) {
-        log::info!("DesktopResize acknowledged: {_width}x{_height}");
+    pub fn on_desktop_resize(&mut self, width: u32, height: u32) {
+        log::info!("DesktopResize acknowledged: {width}x{height}");
         self.pendings.resize = false;
         let phys = self.window.window.inner_size();
         self.window.renderer.reconfigure(phys.width, phys.height);
+
+        let sf = self.coords_scale.max(1.0);
+        let (rdp_w_raw, rdp_h_raw) =
+            monitor::phys_2_logic((phys.width as i32, phys.height as i32), sf);
+        let rdp_w = (rdp_w_raw as u32).max(1) & !3;
+        let rdp_h = (rdp_h_raw as u32).max(1) & !3;
+
+        if rdp_w != width || rdp_h != height {
+            log::info!(
+                "Window size changed during pending resize (current logical: {}x{}, acknowledged: {}x{}). Requesting resize again.",
+                rdp_w,
+                rdp_h,
+                width,
+                height
+            );
+            self.request_screen_resize();
+        }
     }
 }
