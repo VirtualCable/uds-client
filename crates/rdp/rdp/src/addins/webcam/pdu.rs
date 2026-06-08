@@ -23,14 +23,14 @@ pub fn parse_media_type(data: &[u8]) -> Result<CAM_MEDIA_TYPE_DESCRIPTION> {
         data.len()
     );
 
-    let format = data[0] as i32;
+    let format = data[0] as freerdp_sys::CAM_MEDIA_FORMAT;
     let width = u32::from_le_bytes(data[1..5].try_into()?);
     let height = u32::from_le_bytes(data[5..9].try_into()?);
     let fps_num = u32::from_le_bytes(data[9..13].try_into()?);
     let fps_den = u32::from_le_bytes(data[13..17].try_into()?);
     let aspect_num = u32::from_le_bytes(data[17..21].try_into()?);
     let aspect_den = u32::from_le_bytes(data[21..25].try_into()?);
-    let flags = data[25] as i32;
+    let flags = data[25] as freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION_FLAGS;
 
     Ok(CAM_MEDIA_TYPE_DESCRIPTION {
         Format: format,
