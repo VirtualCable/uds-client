@@ -37,6 +37,14 @@ use std::{
 use glob::glob;
 
 fn copy_if_different(src: &PathBuf, dst: &PathBuf) -> io::Result<()> {
+    // If not exists src, print error and raise it
+    if !src.exists() {
+        eprintln!("Source file {:?} does not exist", src);
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("Source file {:?} does not exist", src),
+        ));
+    }
     if !dst.exists() || fs::metadata(src)?.len() != fs::metadata(dst)?.len() {
         // If it doesn't exist or its size differs, copy it
         println!("cargo:warning=Copying {:?}", src.file_name().unwrap());
@@ -126,6 +134,8 @@ fn copy_windows_dlls() {
         //"openh264-*.dll",
         "swresample-*.dll",
         "cjson.dll",
+        // Not for rdp, but neeeend, turbojpeg
+        "turbojpeg.dll",
     ];
 
     for dll in freerdp_dlls {

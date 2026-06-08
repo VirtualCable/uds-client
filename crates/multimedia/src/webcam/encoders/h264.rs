@@ -2,12 +2,10 @@
 // Copyright (c) 2025, Virtual Cable S.L.
 // All rights reserved.
 
-use std::ptr;
 use crate::webcam::encoders::VideoEncoder;
-use crate::webcam::openh264::{
-    self, ISVCEncoder, SEncParamBase, SSourcePicture, SFrameBSInfo,
-};
+use crate::webcam::openh264::{self, ISVCEncoder, SEncParamBase, SFrameBSInfo, SSourcePicture};
 use shared::log;
+use std::ptr;
 
 pub struct H264Encoder {
     encoder: *mut ISVCEncoder,
@@ -81,7 +79,11 @@ impl VideoEncoder for H264Encoder {
 
         // Prepare configuration base parameters
         // target bitrate calculation based on width * height * fps, scaled by quality (1-100)
-        let q = if quality == 0 { 80 } else { quality.clamp(1, 100) };
+        let q = if quality == 0 {
+            80
+        } else {
+            quality.clamp(1, 100)
+        };
         let base_bitrate = (width * height * fps * 2 / 10) as f64;
         let target_bitrate = (base_bitrate * (q as f64 / 100.0)) as i32;
 
@@ -105,19 +107,35 @@ impl VideoEncoder for H264Encoder {
 
             // ENCODER_OPTION_DATAFORMAT = 0, videoFormatI420 = 23
             let mut video_format = 23i32;
-            let _ret_format = set_option_fn(self.encoder, 0, &mut video_format as *mut i32 as *mut std::ffi::c_void);
+            let _ret_format = set_option_fn(
+                self.encoder,
+                0,
+                &mut video_format as *mut i32 as *mut std::ffi::c_void,
+            );
 
             // ENCODER_OPTION_TRACE_LEVEL = 19
             let mut log_level = 2i32;
-            let _ret_level = set_option_fn(self.encoder, 19, &mut log_level as *mut i32 as *mut std::ffi::c_void);
+            let _ret_level = set_option_fn(
+                self.encoder,
+                19,
+                &mut log_level as *mut i32 as *mut std::ffi::c_void,
+            );
 
             // ENCODER_OPTION_TRACE_CALLBACK = 20
             let mut callback: openh264::WelsTraceCallback = openh264_trace_callback;
-            let _ret_callback = set_option_fn(self.encoder, 20, &mut callback as *mut _ as *mut std::ffi::c_void);
+            let _ret_callback = set_option_fn(
+                self.encoder,
+                20,
+                &mut callback as *mut _ as *mut std::ffi::c_void,
+            );
         }
 
-
-        log::info!("OpenH264 initialized successfully: {}x{} @ {}fps", width, height, fps);
+        log::info!(
+            "OpenH264 initialized successfully: {}x{} @ {}fps",
+            width,
+            height,
+            fps
+        );
         Ok(())
     }
 
@@ -192,7 +210,7 @@ impl VideoEncoder for H264Encoder {
         unsafe {
             // Force an IDR (keyframe) at the start and periodically every (fps * 2) frames
             let keyframe_interval = (self.fps * 2).max(1) as u64;
-            if !self.has_sent_idr || self.frame_index % keyframe_interval == 0 {
+            if !self.has_sent_idr || self.frame_index.is_multiple_of(keyframe_interval) {
                 let force_intra_fn = (*(*self.encoder).vtbl).force_intra_frame;
                 let _ = force_intra_fn(self.encoder, true);
             }
@@ -243,10 +261,10 @@ impl VideoEncoder for H264Encoder {
 
             // Scan for all 3-byte and 4-byte start codes
             while i < len {
-                if i + 4 <= len && &encoded_data[i..i+4] == &[0, 0, 0, 1] {
+                if i + 4 <= len && encoded_data[i..i + 4] == [0, 0, 0, 1] {
                     starts.push((i, 4));
                     i += 4;
-                } else if i + 3 <= len && &encoded_data[i..i+3] == &[0, 0, 1] {
+                } else if i + 3 <= len && encoded_data[i..i + 3] == [0, 0, 1] {
                     starts.push((i, 3));
                     i += 3;
                 } else {
@@ -269,18 +287,23 @@ impl VideoEncoder for H264Encoder {
                     let header_byte = encoded_data[payload_start];
                     let nal_type = header_byte & 0x1F;
                     if self.frame_index <= 5 {
-                        println!("[ENCODER] Frame index: {}, NAL unit type: {} at pos {}", self.frame_index, nal_type, start_pos);
+                        println!(
+                            "[ENCODER] Frame index: {}, NAL unit type: {} at pos {}",
+                            self.frame_index, nal_type, start_pos
+                        );
                     }
 
                     if nal_type == 7 {
                         // SPS: Clear previous and store
                         self.sps_pps.clear();
                         self.sps_pps.extend_from_slice(&[0, 0, 0, 1]);
-                        self.sps_pps.extend_from_slice(&encoded_data[payload_start..payload_end]);
+                        self.sps_pps
+                            .extend_from_slice(&encoded_data[payload_start..payload_end]);
                     } else if nal_type == 8 {
                         // PPS: Store
                         self.sps_pps.extend_from_slice(&[0, 0, 0, 1]);
-                        self.sps_pps.extend_from_slice(&encoded_data[payload_start..payload_end]);
+                        self.sps_pps
+                            .extend_from_slice(&encoded_data[payload_start..payload_end]);
                     } else if nal_type == 5 {
                         // IDR picture
                         has_idr_in_this_frame = true;
@@ -293,13 +316,15 @@ impl VideoEncoder for H264Encoder {
                         // P-frame slice
                         if self.has_sent_idr {
                             filtered_data.extend_from_slice(&[0, 0, 0, 1]);
-                            filtered_data.extend_from_slice(&encoded_data[payload_start..payload_end]);
+                            filtered_data
+                                .extend_from_slice(&encoded_data[payload_start..payload_end]);
                         }
                     } else if nal_type != 9 {
                         // Other NAL types (e.g. SEI), skipping AUD (9)
                         if self.has_sent_idr {
                             filtered_data.extend_from_slice(&[0, 0, 0, 1]);
-                            filtered_data.extend_from_slice(&encoded_data[payload_start..payload_end]);
+                            filtered_data
+                                .extend_from_slice(&encoded_data[payload_start..payload_end]);
                         }
                     }
                 }
@@ -308,7 +333,6 @@ impl VideoEncoder for H264Encoder {
             if has_idr_in_this_frame {
                 self.has_sent_idr = true;
             }
-
 
             Ok(filtered_data)
         }
@@ -372,7 +396,7 @@ mod tests {
         let mut total_bytes = 0;
         for f in 0..num_frames {
             let mut rgb = vec![0u8; (width * height * 3) as usize];
-            
+
             // Generate a dynamic gradient background
             let b_val = ((f * 2) % 256) as u8;
             for y in 0..height {
@@ -386,7 +410,7 @@ mod tests {
                     rgb[idx + 2] = b_val;
                 }
             }
-            
+
             // Calculate square position (bouncing path or moving diagonal)
             let x_start = (f * 8) % (width - sq_size);
             let y_start = (f * 6) % (height - sq_size);
@@ -396,7 +420,11 @@ mod tests {
                 for x in x_start..(x_start + sq_size) {
                     let idx = (y_offset + x * 3) as usize;
                     // Draw a bright white square with a black border
-                    if y == y_start || y == y_start + sq_size - 1 || x == x_start || x == x_start + sq_size - 1 {
+                    if y == y_start
+                        || y == y_start + sq_size - 1
+                        || x == x_start
+                        || x == x_start + sq_size - 1
+                    {
                         rgb[idx] = 0;
                         rgb[idx + 1] = 0;
                         rgb[idx + 2] = 0;
@@ -420,6 +448,9 @@ mod tests {
             }
         }
 
-        println!("Generated moving test pattern H264 dump at: {:?}, total size: {} bytes", dump_path, total_bytes);
+        println!(
+            "Generated moving test pattern H264 dump at: {:?}, total size: {} bytes",
+            dump_path, total_bytes
+        );
     }
 }

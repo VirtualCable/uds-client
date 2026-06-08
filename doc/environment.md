@@ -1,75 +1,75 @@
-# Variables de Entorno de UDS Client
+# UDS Client Environment Variables
 
-Este documento detalla las variables de entorno soportadas por el cliente UDS, clasificadas por su funcionalidad.
+This document details the environment variables supported by the UDS client, classified by their functionality.
 
 ---
 
-## 📹 Redirección de Webcam
+## 📹 Webcam Redirection
 
-Estas variables permiten diagnosticar y configurar el comportamiento de la redirección de cámara web en sesiones RDP:
+These variables allow diagnosing and configuring webcam redirection behavior in RDP sessions:
 
 ### `UDSLAUNCHER_CAM_FORMAT`
-* **Descripción**: Fuerza el formato de codificación utilizado para transmitir los frames de la webcam al servidor.
-* **Valores posibles**:
-  * `h264` o `1`: Fuerza el uso del codificador H.264 (OpenH264).
-  * `mjpeg` o `2`: Fuerza la codificación en MJPEG utilizando TurboJPEG.
-  * `yuy2` o `3`: Fuerza el formato YUY2 sin compresión adicional.
-  * `raw` o `0`: Envía frames raw sin compresión.
+* **Description**: Forces the encoding format used to transmit webcam frames to the server.
+* **Possible values**:
+  * `h264` or `1`: Forces the use of the H.264 encoder (OpenH264).
+  * `mjpeg` or `2`: Forces MJPEG encoding using TurboJPEG.
+  * `yuy2` or `3`: Forces YUY2 format without additional compression.
+  * `raw` or `0`: Sends raw frames without compression.
 
 ### `UDSLAUNCHER_CAM_MOCK`
-* **Descripción**: Si está definida, simula una webcam de prueba generando un patrón en movimiento (un cuadrado rebotando con gradientes de color). Es ideal para pruebas donde no se dispone de una cámara física o para depuración.
+* **Description**: If set, simulates a test webcam by generating a moving pattern (a bouncing square with color gradients). Ideal for testing when no physical camera is available or for debugging.
 
 ### `UDSLAUNCHER_CAM_DEVICE`
-* **Descripción**: Selecciona un dispositivo de vídeo específico.
-* **Valores posibles**:
-  * Un número entero (ej. `0`, `1`): El índice del dispositivo en el sistema.
-  * Un texto: Busca el primer dispositivo cuyo nombre amigable contenga dicho texto (búsqueda insensible a mayúsculas/minúsculas).
-* **Ejemplo**: `UDSLAUNCHER_CAM_DEVICE="Logitech"` seleccionará automáticamente la cámara Logitech.
+* **Description**: Selects a specific video device.
+* **Possible values**:
+  * An integer (e.g. `0`, `1`): The device index in the system.
+  * A string: Searches for the first device whose friendly name contains that text (case-insensitive search).
+* **Example**: `UDSLAUNCHER_CAM_DEVICE="Logitech"` will automatically select the Logitech camera.
 
 ---
 
-## ⚙️ Limitación Dinámica de Parámetros
+## ⚙️ Dynamic Parameter Limiting
 
 ### `UDSLAUNCHER_LIMITS`
-* **Descripción**: Permite sobreescribir y **disminuir/reducir** los límites máximos de rendimiento y calidad para la redirección de la cámara web. **Nota importante**: Solo permite reducir los límites impuestos por el administrador en la sesión (para solucionar problemas de ancho de banda o consumo de CPU local), **nunca ampliarlos**.
-* **Formato**: `ancho,alto,fps,calidad` (valores enteros separados por comas). 
-* **Reglas**:
-  * Los campos son posicionales y opcionales. Un valor vacío (ej. `,` o espacios) indica mantener el valor original de la sesión.
-  * Si se proporciona una resolución, ambos valores (ancho y alto) deben indicarse.
-* **Ejemplos**:
-  * `640,480,10,50`: Reduce el tamaño máximo capturado a 640x480, limita los FPS a 10 y reduce la calidad de compresión a un máximo de 50.
-  * `,,15,`: Deja la resolución original intacta, pero limita los FPS de captura a un máximo de 15.
-  * `1280,720,,`: Limita la resolución máxima capturada a 1280x720, manteniendo los FPS y calidad configurados en la sesión.
+* **Description**: Allows overriding and **lowering/reducing** the maximum performance and quality limits for webcam redirection. **Important note**: Only allows reducing the limits imposed by the session administrator (to troubleshoot bandwidth issues or local CPU consumption), **never increasing them**.
+* **Format**: `width,height,fps,quality` (integer values separated by commas).
+* **Rules**:
+  * Fields are positional and optional. An empty value (e.g. `,` or spaces) means keeping the original session value.
+  * If a resolution is provided, both values (width and height) must be specified.
+* **Examples**:
+  * `640,480,10,50`: Reduces the maximum captured size to 640x480, limits FPS to 10, and reduces compression quality to a maximum of 50.
+  * `,,15,`: Leaves the original resolution intact, but limits capture FPS to a maximum of 15.
+  * `1280,720,,`: Limits the maximum captured resolution to 1280x720, keeping the FPS and quality configured in the session.
 
 ---
 
-## 📝 Sistema de Logs
+## 📝 Logging System
 
-Permiten configurar la verbosidad y la ruta de almacenamiento de los ficheros de log generados por la aplicación.
+These allow configuring the verbosity and storage path of the log files generated by the application.
 
 ### `UDSLAUNCHER_LOG_LEVEL`
-* **Descripción**: Nivel mínimo de trazas a registrar para el proceso principal del Launcher.
-* **Valores**: `trace`, `debug`, `info`, `warn`, `error`.
-* **Por defecto**: `debug` en compilaciones de desarrollo (`debug`), `info` en producción (`release`).
+* **Description**: Minimum trace level to record for the main Launcher process.
+* **Values**: `trace`, `debug`, `info`, `warn`, `error`.
+* **Default**: `debug` in development builds (`debug`), `info` in production (`release`).
 
 ### `UDSLAUNCHER_LOG_PATH`
-* **Descripción**: Ruta del directorio donde se escribirá el archivo de log.
-* **Por defecto**: Directorio temporal del sistema (ej. `%TEMP%` en Windows o `/tmp` en Unix).
+* **Description**: Path to the directory where the log file will be written.
+* **Default**: System temporary directory (e.g. `%TEMP%` on Windows or `/tmp` on Unix).
 
 ### `UDSLAUNCHER_LOG_USE_DATETIME`
-* **Descripción**: Si se establece en `true`, incluye la fecha, la hora y el nombre del host en el nombre del fichero de log para evitar sobrescribir logs anteriores.
-* **Valores**: `true`, `false`.
-* **Por defecto**: `false`.
+* **Description**: If set to `true`, includes the date, time, and hostname in the log file name to avoid overwriting previous logs.
+* **Values**: `true`, `false`.
+* **Default**: `false`.
 
-### Archivos de Test (`UDSLAUNCHER-TESTS_LOG_...`)
-El set homólogo de variables controla el comportamiento de los logs de pruebas unitarias/integración:
+### Test Files (`UDSLAUNCHER-TESTS_LOG_...`)
+The counterpart set of variables controls the logging behavior for unit/integration tests:
 * `UDSLAUNCHER-TESTS_LOG_LEVEL`
 * `UDSLAUNCHER-TESTS_LOG_PATH`
 * `UDSLAUNCHER-TESTS_LOG_USE_DATETIME`
 
 ---
 
-## 🛠️ Depuración y Desarrollo
+## 🛠️ Debugging and Development
 
 ### `UDS_DEBUG_ARGS`
-* **Descripción**: Disponible únicamente en compilaciones de depuración (`debug_assertions`). Permite inyectar los argumentos de inicio (como la URL del protocolo `udssv2://...`) a través del entorno en lugar de la línea de comandos, facilitando el debugging desde el IDE.
+* **Description**: Available only in debug builds (`debug_assertions`). Allows injecting startup arguments (such as the `udssv2://...` protocol URL) via the environment instead of the command line, making debugging from the IDE easier.

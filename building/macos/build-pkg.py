@@ -47,6 +47,11 @@ FREERDP_BASE_LIBS: typing.Final[list[str]] = [
     "libwinpr-tools3.dylib",
 ]
 
+# Currently turbojpeg is the only external dependency we have, but this list can be extended in the future
+OTHER_BASE_LIBS: typing.Final[list[str]] = [
+    "libturbojpeg.dylib",
+]
+
 # Default FREERDP_ROOT to /usr/local if not set
 FREERDP_ROOT: Path = Path(os.environ.get("FREERDP_ROOT", "/usr/local/"))
 
@@ -351,12 +356,12 @@ def fail(msg: str) -> typing.NoReturn:
     sys.exit(1)
 
 
-def ensure_freerdp_libs() -> None:
+def ensure_dyn_libs() -> None:
     lib_dir = FREERDP_ROOT / "lib"
     if not lib_dir.is_dir():
         fail(f"FREERDP_ROOT directory does not exist or lacks 'lib': {lib_dir}")
 
-    for lib in FREERDP_BASE_LIBS:
+    for lib in FREERDP_BASE_LIBS + OTHER_BASE_LIBS:
         lib_path = lib_dir / lib
         if not lib_path.is_file():
             fail(f"Required FreeRDP library not found: {lib_path}")
@@ -473,7 +478,7 @@ exit 0
 
 def main() -> None:
     # Ensure FreeRDP libs are present, fails if not
-    ensure_freerdp_libs()
+    ensure_dyn_libs()
 
     print("==> Building Rust binaries (cargo build --release)")
     subprocess.run(
@@ -567,7 +572,7 @@ def main() -> None:
         print(f"Moving package to {destination}")
         # If already exists, remove
         shutil.copy(pkg_name, destination)
-        
+
     # Note that the binaries and app are signed ad-hoc by default
     print("=== Build process completed successfully ===")
     print(f"App bundle: {APP_DIR}")

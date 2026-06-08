@@ -36,7 +36,7 @@ pub unsafe extern "C" fn on_data(
     log::trace!("Webcam received msg_id: {}", msg_id);
 
     #[allow(non_upper_case_globals)]
-    match msg_id as i32 {
+    match msg_id as freerdp_sys::CAM_MSG_ID {
         freerdp_sys::CAM_MSG_ID_CAM_MSG_ID_SampleRequest => {
             ctx.webcam.request_sample(ctx.channel as usize);
         }
@@ -78,15 +78,15 @@ pub unsafe extern "C" fn on_data(
     CHANNEL_RC_OK
 }
 
-fn get_overridden_format() -> Option<u32> {
+fn get_overridden_format() -> Option<freerdp_sys::CAM_MEDIA_FORMAT> {
     if let Ok(val) = std::env::var("UDSLAUNCHER_CAM_FORMAT") {
         let val_lower = val.to_lowercase();
         if val_lower == "h264" {
-            Some(freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264 as u32)
+            Some(freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264)
         } else if val_lower == "mjpeg" || val_lower == "mjpg" {
-            Some(freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_MJPG as u32)
+            Some(freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_MJPG)
         } else if val_lower == "yuy2" {
-            Some(freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_YUY2 as u32)
+            Some(freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_YUY2)
         } else {
             None
         }
@@ -119,7 +119,7 @@ fn handle_start_streams(ctx: &ChannelCtx, payload: &[u8]) {
 
     if let Some(override_fmt) = get_overridden_format() {
         log::info!("Webcam: Overriding format {} to {}", format, override_fmt);
-        format = override_fmt as i32;
+        format = override_fmt as freerdp_sys::CAM_MEDIA_FORMAT;
     }
 
     log::info!(
@@ -215,7 +215,7 @@ fn handle_media_type_list(ctx: &ChannelCtx) {
 
     let pdu = if let Some(override_fmt) = get_overridden_format() {
         log::info!("Webcam: Forcing media format list override: {}", override_fmt);
-        if override_fmt == freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264 as u32 && h264_supported {
+        if override_fmt == freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264 && h264_supported {
             pdu::build_media_type_list_response(&[h264_mt])
         } else {
             pdu::build_media_type_list_response(&[mjpeg_mt])
@@ -248,21 +248,21 @@ fn handle_current_media_type(ctx: &ChannelCtx) {
     let fps = multimedia::webcam::WEBCAM_FPS.load(std::sync::atomic::Ordering::Relaxed).max(1);
 
     let mut selected_fmt = if h264_supported {
-        freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264 as u32
+        freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264
     } else {
-        freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_MJPG as u32
+        freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_MJPG
     };
 
     if let Some(override_fmt) = get_overridden_format() {
         log::info!("Webcam: Forcing current media type override: {}", override_fmt);
-        if override_fmt == freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264 as u32 && h264_supported {
+        if override_fmt == freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264 && h264_supported {
             selected_fmt = override_fmt;
         } else {
-            selected_fmt = freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_MJPG as u32;
+            selected_fmt = freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_MJPG;
         }
     }
 
-    let mt = if selected_fmt == freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264 as u32 {
+    let mt = if selected_fmt == freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264 {
         freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION {
             Format: freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264,
             Width: width,

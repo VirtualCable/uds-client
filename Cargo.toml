@@ -98,7 +98,7 @@ bytemuck = { version = "1", features = ["derive"] }
 tiny-skia = "0.12"
 
 # Sound
-cpal = "0.17.2"
+cpal = "0.18.1"
 
 # Webcam
 nokhwa = { version = "0.10", default-features = false, features = ["input-native"] }

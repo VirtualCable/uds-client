@@ -100,7 +100,7 @@ impl AudioHandle {
                     output_sample_rate = cfg.sample_rate;
                     stream = Some(
                         dev.build_output_stream(
-                            &cfg,
+                            cfg,
                             {
                                 let buffer = Arc::clone(&buffer);
                                 move |data: &mut [f32], _| {
