@@ -134,8 +134,8 @@ fn copy_windows_dlls() {
         //"openh264-*.dll",
         "swresample-*.dll",
         "cjson.dll",
-        // Not for rdp, but neeeend, turbojpeg
-        "turbojpeg.dll",
+        // Not used, compiled statically
+        //"turbojpeg.dll",
     ];
 
     for dll in freerdp_dlls {
