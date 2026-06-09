@@ -50,6 +50,8 @@ FREERDP_BASE_LIBS: typing.Final[list[str]] = [
 # Default FREERDP_ROOT to /usr/local if not set
 FREERDP_ROOT: Path = Path(os.environ.get("FREERDP_ROOT", "/usr/local/"))
 
+OPENH264_RPATH: typing.Final[str] = "/Library/Application Support/UDSLauncher/openh264"
+
 
 def ad_hoc_sign(path: Path, deep: bool = False) -> None:
     print(f"[SIGN] Ad-hoc signing {path}")
@@ -436,7 +438,9 @@ def build_pkg() -> Path:
     scripts_dir.mkdir(parents=True, exist_ok=True)
     postinstall_path = scripts_dir / "postinstall"
 
-    postinstall_content = """#!/bin/bash
+    postinstall_content = (
+        f'TARGET_DIR="{OPENH264_RPATH}"\n\n'
+        + """#!/bin/bash
 
 # Proof-of-life: touch this file to confirm the script was executed at all
 touch /tmp/udslauncher-postinstall-ran 2>/dev/null
@@ -452,7 +456,6 @@ log() {
 log "=== UDSLauncher postinstall started at $(date) ==="
 log "Running as: $(whoami)"
 
-TARGET_DIR="/Library/Application Support/UDSLauncher/openh264"
 log "Creating target directory: $TARGET_DIR"
 if ! mkdir -p "$TARGET_DIR"; then
     log "FATAL: Could not create $TARGET_DIR"
@@ -504,6 +507,7 @@ log "Warning: Failed to download or extract OpenH264. Fallback to MJPEG will be 
 log "=== UDSLauncher postinstall finished WITH WARNINGS at $(date) ==="
 exit 0
 """
+    )
 
     postinstall_path.write_text(postinstall_content)
     postinstall_path.chmod(0o755)  # Make it executable
@@ -606,7 +610,6 @@ def main() -> None:
     fix_install_names(APP_DIR / "Contents" / "MacOS" / "mac-launcher")
 
     # Add rpath for openh264 (downloaded by postinstall to /Library/Application Support/UDSLauncher/openh264/)
-    OPENH264_RPATH: typing.Final[str] = "/Library/Application Support/UDSLauncher/openh264"
     for exe in ["launcher", "mac-launcher"]:
         exe_path = APP_DIR / "Contents" / "MacOS" / exe
         try:
