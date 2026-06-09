@@ -445,7 +445,10 @@ log "Running as: $(whoami)"
 
 TARGET_DIR="/Library/Application Support/UDSLauncher/openh264"
 log "Creating target directory: $TARGET_DIR"
-mkdir -p "$TARGET_DIR"
+if ! mkdir -p "$TARGET_DIR"; then
+    log "FATAL: Could not create $TARGET_DIR"
+    exit 1
+fi
 
 ARCH=$(uname -m)
 VERSION="2.6.0"
@@ -457,6 +460,7 @@ else
 fi
 
 TEMP_FILE="/tmp/openh264.dylib.bz2"
+DECOMPRESSED="/tmp/openh264.dylib"
 
 log "Architecture: $ARCH"
 log "Downloading OpenH264 from $URL..."
@@ -464,19 +468,27 @@ if curl -L -s -f -o "$TEMP_FILE" "$URL"; then
     log "Downloaded OK ($(stat -f%z "$TEMP_FILE") bytes)"
     log "Decompressing OpenH264..."
     if bunzip2 -f "$TEMP_FILE"; then
-        mv "/tmp/openh264.dylib" "$TARGET_DIR/libopenh264.dylib"
-        chmod 644 "$TARGET_DIR/libopenh264.dylib"
-        # Clear quarantine if present
-        xattr -d com.apple.quarantine "$TARGET_DIR/libopenh264.dylib" 2>/dev/null || true
-        log "OpenH264 installed successfully to $TARGET_DIR"
-        log "=== UDSLauncher postinstall finished OK at $(date) ==="
-        exit 0
+        if mv "$DECOMPRESSED" "$TARGET_DIR/libopenh264.dylib"; then
+            chmod 644 "$TARGET_DIR/libopenh264.dylib"
+            # Clear quarantine if present
+            xattr -d com.apple.quarantine "$TARGET_DIR/libopenh264.dylib" 2>/dev/null || true
+            log "OpenH264 installed successfully to $TARGET_DIR"
+            # Clean up temp files
+            rm -f "$TEMP_FILE" "$DECOMPRESSED"
+            log "=== UDSLauncher postinstall finished OK at $(date) ==="
+            exit 0
+        else
+            log "ERROR: Failed to move dylib to $TARGET_DIR"
+        fi
     else
         log "ERROR: bunzip2 failed"
     fi
 else
     log "ERROR: curl download failed (exit code: $?)"
 fi
+
+# Clean up temp files on failure
+rm -f "$TEMP_FILE" "$DECOMPRESSED"
 
 log "Warning: Failed to download or extract OpenH264. Fallback to MJPEG will be used."
 log "=== UDSLauncher postinstall finished WITH WARNINGS at $(date) ==="
@@ -488,12 +500,17 @@ exit 0
 
     subprocess.run(
         [
-            "productbuild",
-            "--component",
-            str(APP_DIR),
+            "pkgbuild",
+            "--identifier",
+            "org.openuds.launcher",
+            "--version",
+            VERSION,
+            "--install-location",
             "/Applications",
             "--scripts",
             str(scripts_dir),
+            "--component",
+            str(APP_DIR),
             str(pkg_path),
         ],
         check=True,
@@ -603,7 +620,7 @@ def main() -> None:
         print(f"Moving package to {destination}")
         # If already exists, remove
         shutil.copy(pkg_name, destination)
-        
+
     # Note that the binaries and app are signed ad-hoc by default
     print("=== Build process completed successfully ===")
     print(f"App bundle: {APP_DIR}")
