@@ -265,9 +265,18 @@ def fix_install_names(binary: Path) -> None:
 
         dep_name = Path(dep).name
 
-        # Skip libopenh264 — handled by postinstall script, don't rewrite its path
+        # Openh264 is not bundled due to licensing; it's downloaded by postinstall.
+        # Rewrite install name to @rpath so dyld can find it via the rpath we add to executables.
         if "openh264" in dep_name.lower():
-            print(f"   - Skipping openh264 (postinstall): {dep}")
+            new_path = f"@rpath/{dep_name}"
+            try:
+                subprocess.run(
+                    ["install_name_tool", "-change", dep, new_path, str(binary)],
+                    check=True,
+                )
+                print(f"   - Rewrote openh264 {dep} -> {new_path}")
+            except Exception as exc:
+                print(f"   - WARN: failed to rewrite openh264 {dep}: {exc}")
             continue
 
         if is_dylib:
@@ -461,6 +470,7 @@ fi
 
 TEMP_FILE="/tmp/openh264.dylib.bz2"
 DECOMPRESSED="/tmp/openh264.dylib"
+TARGET_FILE="libopenh264.8.dylib"
 
 log "Architecture: $ARCH"
 log "Downloading OpenH264 from $URL..."
@@ -468,10 +478,10 @@ if curl -L -s -f -o "$TEMP_FILE" "$URL"; then
     log "Downloaded OK ($(stat -f%z "$TEMP_FILE") bytes)"
     log "Decompressing OpenH264..."
     if bunzip2 -f "$TEMP_FILE"; then
-        if mv "$DECOMPRESSED" "$TARGET_DIR/libopenh264.dylib"; then
-            chmod 644 "$TARGET_DIR/libopenh264.dylib"
+        if mv "$DECOMPRESSED" "$TARGET_DIR/$TARGET_FILE"; then
+            chmod 644 "$TARGET_DIR/$TARGET_FILE"
             # Clear quarantine if present
-            xattr -d com.apple.quarantine "$TARGET_DIR/libopenh264.dylib" 2>/dev/null || true
+            xattr -d com.apple.quarantine "$TARGET_DIR/$TARGET_FILE" 2>/dev/null || true
             log "OpenH264 installed successfully to $TARGET_DIR"
             # Clean up temp files
             rm -f "$TEMP_FILE" "$DECOMPRESSED"
@@ -594,6 +604,19 @@ def main() -> None:
     # Executables
     fix_install_names(APP_DIR / "Contents" / "MacOS" / "launcher")
     fix_install_names(APP_DIR / "Contents" / "MacOS" / "mac-launcher")
+
+    # Add rpath for openh264 (downloaded by postinstall to /Library/Application Support/UDSLauncher/openh264/)
+    OPENH264_RPATH: typing.Final[str] = "/Library/Application Support/UDSLauncher/openh264"
+    for exe in ["launcher", "mac-launcher"]:
+        exe_path = APP_DIR / "Contents" / "MacOS" / exe
+        try:
+            subprocess.run(
+                ["install_name_tool", "-add_rpath", OPENH264_RPATH, str(exe_path)],
+                check=True,
+            )
+            print(f">> Added openh264 rpath to {exe}")
+        except Exception as exc:
+            print(f">> WARN: failed to add openh264 rpath to {exe}: {exc}")
 
     # Validate bundle
     if not validate_bundle_dependencies(APP_DIR):
