@@ -1,0 +1,31 @@
+#!/bin/bash
+set -e
+
+TARGET_DIR="/Library/Application Support/UDSLauncher/openh264"
+LOG_FILE="/tmp/udslauncher-postremove.log"
+
+log() {
+    echo "$@"
+    echo "$@" >> "$LOG_FILE"
+}
+
+log "=== UDSLauncher postremove started at $(date) ==="
+
+if [ -f "$TARGET_DIR/libopenh264.8.dylib" ]; then
+    rm -f "$TARGET_DIR/libopenh264.8.dylib"
+    log "Removed OpenH264 dylib from $TARGET_DIR"
+else
+    log "No OpenH264 dylib found at $TARGET_DIR"
+fi
+
+if [ -d "$TARGET_DIR" ]; then
+    rmdir "$TARGET_DIR" 2>/dev/null || true
+fi
+
+PARENT_DIR="/Library/Application Support/UDSLauncher"
+if [ -d "$PARENT_DIR" ]; then
+    rmdir "$PARENT_DIR" 2>/dev/null || true
+fi
+
+log "=== UDSLauncher postremove finished at $(date) ==="
+exit 0

@@ -433,84 +433,10 @@ def build_pkg() -> Path:
     pkgname = f"UDSLauncher-{VERSION}.pkg"
     pkg_path = OUTPUT_DIR / pkgname
 
-    # Create scripts folder for postinstall
+    # Use external installer scripts instead of embedding the postinstall in Python.
     scripts_dir = SCRIPT_DIR / "scripts"
-    scripts_dir.mkdir(parents=True, exist_ok=True)
-    postinstall_path = scripts_dir / "postinstall"
-
-    postinstall_content = (
-        f'TARGET_DIR="{OPENH264_RPATH}"\n\n'
-        + """#!/bin/bash
-
-# Proof-of-life: touch this file to confirm the script was executed at all
-touch /tmp/udslauncher-postinstall-ran 2>/dev/null
-
-LOG_FILE="/tmp/udslauncher-postinstall.log"
-
-# Simple log function: echoes and appends to log file
-log() {
-    echo "$@"
-    echo "$@" >> "$LOG_FILE"
-}
-
-log "=== UDSLauncher postinstall started at $(date) ==="
-log "Running as: $(whoami)"
-
-log "Creating target directory: $TARGET_DIR"
-if ! mkdir -p "$TARGET_DIR"; then
-    log "FATAL: Could not create $TARGET_DIR"
-    exit 1
-fi
-
-ARCH=$(uname -m)
-VERSION="2.6.0"
-
-if [ "$ARCH" = "arm64" ]; then
-    URL="http://ciscobinary.openh264.org/libopenh264-${VERSION}-mac-arm64.dylib.bz2"
-else
-    URL="http://ciscobinary.openh264.org/libopenh264-${VERSION}-mac-x64.dylib.bz2"
-fi
-
-TEMP_FILE="/tmp/openh264.dylib.bz2"
-DECOMPRESSED="/tmp/openh264.dylib"
-TARGET_FILE="libopenh264.8.dylib"
-
-log "Architecture: $ARCH"
-log "Downloading OpenH264 from $URL..."
-if curl -L -s -f -o "$TEMP_FILE" "$URL"; then
-    log "Downloaded OK ($(stat -f%z "$TEMP_FILE") bytes)"
-    log "Decompressing OpenH264..."
-    if bunzip2 -f "$TEMP_FILE"; then
-        if mv "$DECOMPRESSED" "$TARGET_DIR/$TARGET_FILE"; then
-            chmod 644 "$TARGET_DIR/$TARGET_FILE"
-            # Clear quarantine if present
-            xattr -d com.apple.quarantine "$TARGET_DIR/$TARGET_FILE" 2>/dev/null || true
-            log "OpenH264 installed successfully to $TARGET_DIR"
-            # Clean up temp files
-            rm -f "$TEMP_FILE" "$DECOMPRESSED"
-            log "=== UDSLauncher postinstall finished OK at $(date) ==="
-            exit 0
-        else
-            log "ERROR: Failed to move dylib to $TARGET_DIR"
-        fi
-    else
-        log "ERROR: bunzip2 failed"
-    fi
-else
-    log "ERROR: curl download failed (exit code: $?)"
-fi
-
-# Clean up temp files on failure
-rm -f "$TEMP_FILE" "$DECOMPRESSED"
-
-log "Warning: Failed to download or extract OpenH264. Fallback to MJPEG will be used."
-log "=== UDSLauncher postinstall finished WITH WARNINGS at $(date) ==="
-exit 0
-"""
-    )
-
-    postinstall_path.write_text(postinstall_content)
-    postinstall_path.chmod(0o755)  # Make it executable
+    if not scripts_dir.exists():
+        raise FileNotFoundError(f"Required scripts folder not found: {scripts_dir}")
 
     subprocess.run(
         [
