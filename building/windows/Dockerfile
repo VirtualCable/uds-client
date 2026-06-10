@@ -11,7 +11,8 @@ RUN Set-ExecutionPolicy Bypass -Scope Process -Force; \
 RUN choco install -y git ; \
     choco install -y cmake --installargs 'ADD_CMAKE_TO_PATH=System' ; \
     choco install -y ninja ; \
-    choco install -y llvm ;
+    choco install -y llvm ; \
+    choco install -y nasm
 
 # Visual Studio Build Tools 2022
 RUN choco install -y visualstudio2022buildtools \
@@ -36,7 +37,7 @@ RUN Invoke-WebRequest -Uri https://win.rustup.rs/x86_64 -OutFile rustup-init.exe
 RUN git clone https://github.com/microsoft/vcpkg $env:VCPKG_ROOT ; \
     & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat"
 
-RUN C:\vcpkg\vcpkg install openssl zlib libjpeg-turbo ffmpeg cjson libusb libjpeg-turbo
+RUN C:\vcpkg\vcpkg install openssl zlib ffmpeg cjson libusb
 
 # Clone freerdp and buiild using comp-release.ps1 file
 RUN mkdir C:\dev ; \
