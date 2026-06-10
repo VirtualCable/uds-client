@@ -36,7 +36,7 @@ RUN Invoke-WebRequest -Uri https://win.rustup.rs/x86_64 -OutFile rustup-init.exe
 RUN git clone https://github.com/microsoft/vcpkg $env:VCPKG_ROOT ; \
     & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat"
 
-RUN C:\vcpkg\vcpkg install openssl zlib libjpeg-turbo ffmpeg cjson libusb
+RUN C:\vcpkg\vcpkg install openssl zlib ffmpeg cjson libusb
 
 # Clone freerdp and buiild using comp-release.ps1 file
 RUN mkdir C:\dev ; \
