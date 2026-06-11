@@ -6,7 +6,11 @@ use zeroize::Zeroize;
 
 #[derive(Debug, Clone, Zeroize)]
 pub enum InputEvent {
-    Keyboard { scancode: u16, pressed: bool },
+    Keyboard {
+        scancode: u16,
+        pressed: bool,
+        repeat: bool,
+    },
     Mouse { flags: u16, x: u16, y: u16 },
     ExtendedMouse { flags: u16, x: u16, y: u16 },
     Unicode { code: u16 },

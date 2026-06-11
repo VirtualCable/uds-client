@@ -610,6 +610,7 @@ impl crate::AppHandler {
                     rdp_ffi::commands::InputEvent::Keyboard {
                         scancode: sc as u16,
                         pressed: raw_key.pressed,
+                        repeat: raw_key.repeat,
                     },
                 ));
                 unsafe {

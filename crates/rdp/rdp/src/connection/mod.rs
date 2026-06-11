@@ -626,11 +626,15 @@ impl Rdp {
                                 }
 
                                 match ev {
-                                    crate::commands::InputEvent::Keyboard { scancode, pressed } => {
+                                    crate::commands::InputEvent::Keyboard {
+                                        scancode,
+                                        pressed,
+                                        repeat,
+                                    } => {
                                         freerdp_input_send_keyboard_event_ex(
                                             input,
                                             if pressed { 1 } else { 0 },
-                                            0,
+                                            if repeat { 1 } else { 0 },
                                             scancode as u32,
                                         );
                                     }
