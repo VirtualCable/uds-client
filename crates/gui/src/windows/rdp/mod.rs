@@ -613,6 +613,15 @@ impl crate::AppHandler {
                         repeat: raw_key.repeat,
                     },
                 ));
+                if sc == crate::keymap::RdpScanCode::RMenu && !raw_key.pressed {
+                    let _ = state.command_tx.send(rdp_ffi::commands::RdpCommand::Input(
+                        rdp_ffi::commands::InputEvent::Keyboard {
+                            scancode: crate::keymap::RdpScanCode::LControl as u16,
+                            pressed: false,
+                            repeat: false,
+                        },
+                    ));
+                }
                 unsafe {
                     rdp_ffi::sys::SetEvent(state.command_event.as_handle());
                 }
