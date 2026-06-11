@@ -37,6 +37,8 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use flume::{Receiver, Sender, unbounded};
 use shared::log;
 
+use super::tools::{ResamplerIterator, f32_to_pcm};
+
 pub enum MicCommand {
     Stop,
 }
@@ -84,19 +86,30 @@ impl MicHandle {
                 }
             };
 
+            let cfg = config.config();
+            let actual_rate = cfg.sample_rate;
+            let actual_channels = cfg.channels as usize;
+            let need_resample = actual_rate != sample_rate;
+            let need_downmix = actual_channels > channels as usize;
+
             log::debug!(
-                "[MicHandle] Using input config: sample_rate={}, channels={}, format={:?}",
-                config.sample_rate(),
-                config.channels(),
-                config.sample_format()
+                "[MicHandle] Capture config: actual_rate={}, actual_channels={}, resample={}, downmix={}",
+                actual_rate,
+                actual_channels,
+                need_resample,
+                need_downmix
             );
 
-            let cfg = config.config();
-            let actual_channels = cfg.channels as usize;
-            let packet_frames = (frames_per_packet as usize) * actual_channels;
+            let out_packet_frames = (frames_per_packet as usize) * (channels as usize);
+            let input_packet_frames = if need_resample {
+                ((out_packet_frames as f32 * actual_rate as f32 / sample_rate as f32).ceil() as usize)
+                    .max(out_packet_frames * 2)
+            } else {
+                out_packet_frames * if need_downmix { actual_channels } else { 1 }
+            };
 
             let buffer: Arc<RwLock<VecDeque<f32>>> =
-                Arc::new(RwLock::new(VecDeque::with_capacity(packet_frames * 4)));
+                Arc::new(RwLock::new(VecDeque::with_capacity(input_packet_frames * 4)));
 
             let stream = match device.build_input_stream(
                 cfg,
@@ -106,10 +119,28 @@ impl MicHandle {
                     move |data: &[f32], _| {
                         let mut buf = buffer.write().unwrap();
                         buf.extend(data.iter().copied());
-                        while buf.len() >= packet_frames {
-                            let chunk: Vec<f32> = buf.drain(0..packet_frames).collect();
+                        while buf.len() >= input_packet_frames {
+                            let chunk: Vec<f32> = buf.drain(0..input_packet_frames).collect();
                             drop(buf);
-                            let pcm = f32_to_pcm(&chunk, bits_per_sample);
+
+                            let out: Vec<f32> = if need_resample {
+                                ResamplerIterator::new(chunk.into_iter(), actual_rate, sample_rate)
+                                    .collect()
+                            } else {
+                                chunk
+                            };
+
+                            let out: Vec<f32> = if need_downmix {
+                                let mut mono = Vec::with_capacity(out.len() / actual_channels);
+                                for stereo_frame in out.chunks_exact(actual_channels) {
+                                    mono.push(stereo_frame.iter().sum::<f32>() / actual_channels as f32);
+                                }
+                                mono
+                            } else {
+                                out
+                            };
+
+                            let pcm = f32_to_pcm(&out, bits_per_sample);
                             let _ = data_tx.send(pcm);
                             buf = buffer.write().unwrap();
                         }
@@ -153,64 +184,55 @@ fn get_input_config(
         }
     };
 
-    for cfg in configs {
+    let all: Vec<_> = configs.collect();
+    log::debug!(
+        "[MicHandle] Supported configs: {:?}",
+        all.iter()
+            .map(|c| format!(
+                "ch={}, rates=[{}..{}], fmt={:?}",
+                c.channels(),
+                c.min_sample_rate(),
+                c.max_sample_rate(),
+                c.sample_format()
+            ))
+            .collect::<Vec<_>>()
+    );
+
+    for cfg in &all {
         if cfg.channels() == channels
             && cfg.min_sample_rate() <= sample_rate
             && sample_rate <= cfg.max_sample_rate()
         {
             return Some(
                 cfg.try_with_sample_rate(sample_rate)
-                    .unwrap_or(cfg.with_max_sample_rate()),
+                    .unwrap_or_else(|| cfg.with_max_sample_rate()),
             );
         }
     }
+
     log::warn!(
-        "[MicHandle] No exact input config for channels={}, trying any channel count",
-        channels
+        "[MicHandle] No config for channels={} @ {}Hz, trying any channel",
+        channels,
+        sample_rate
     );
-    let configs = match dev.supported_input_configs() {
-        Ok(c) => c,
-        Err(e) => {
-            log::error!("[MicHandle] Failed to get input configs: {}", e);
-            return None;
-        }
-    };
-    for cfg in configs {
+    for cfg in &all {
         if cfg.min_sample_rate() <= sample_rate
             && sample_rate <= cfg.max_sample_rate()
         {
             return Some(
                 cfg.try_with_sample_rate(sample_rate)
-                    .unwrap_or(cfg.with_max_sample_rate()),
+                    .unwrap_or_else(|| cfg.with_max_sample_rate()),
             );
         }
     }
-    None
-}
 
-fn f32_to_pcm(data: &[f32], bits_per_sample: u16) -> Vec<u8> {
-    match bits_per_sample {
-        8 => data
-            .iter()
-            .map(|&s| {
-                let clamped = s.clamp(-1.0, 1.0);
-                (clamped * i8::MAX as f32) as i8 as u8
-            })
-            .collect(),
-        16 => {
-            let mut out = Vec::with_capacity(data.len() * 2);
-            for &s in data {
-                let clamped = s.clamp(-1.0, 1.0);
-                let v = (clamped * i16::MAX as f32) as i16;
-                out.extend_from_slice(&v.to_le_bytes());
-            }
-            out
-        }
-        _ => {
-            log::error!("[MicHandle] Unsupported bits per sample: {}", bits_per_sample);
-            Vec::new()
-        }
-    }
+    log::warn!(
+        "[MicHandle] No config for {}Hz, falling back to first available config",
+        sample_rate
+    );
+    all.into_iter()
+        .next()
+        .map(|cfg| cfg.with_max_sample_rate())
 }
 
 #[cfg(test)]
@@ -221,21 +243,5 @@ mod tests {
     fn test_mic_handle_creation() {
         let (handle, _data_rx) = MicHandle::new(44100, 1, 16, 480);
         assert!(handle.tx.send(MicCommand::Stop).is_ok());
-    }
-
-    #[test]
-    fn test_f32_to_pcm_16bit() {
-        let samples = vec![0.0, 0.5, -0.5, 1.0, -1.0];
-        let pcm = f32_to_pcm(&samples, 16);
-        assert_eq!(pcm.len(), 10);
-        assert_eq!(pcm[0..2], [0, 0]);
-    }
-
-    #[test]
-    fn test_f32_to_pcm_8bit() {
-        let samples = vec![0.0, 0.5, -0.5];
-        let pcm = f32_to_pcm(&samples, 8);
-        assert_eq!(pcm.len(), 3);
-        assert_eq!(pcm[0], 0);
     }
 }

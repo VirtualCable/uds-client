@@ -38,7 +38,7 @@ use freerdp_sys::{
     PFREERDP_AUDIN_DEVICE_ENTRY_POINTS,
 };
 
-use multimedia::mic::{MicCommand, MicHandle};
+use multimedia::audio::{MicCommand, MicHandle};
 use shared::log;
 
 #[repr(C)]

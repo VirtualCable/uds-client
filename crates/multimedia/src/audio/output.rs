@@ -38,6 +38,8 @@ use std::thread;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use shared::log;
 
+use super::tools::{ResamplerIterator, pcm_to_f32};
+
 pub enum AudioCommand {
     Play(Vec<u8>),
     SetVolume(u32),
@@ -222,110 +224,6 @@ impl AudioHandle {
     }
 }
 
-// Resampling iterator to adjust sample rates
-pub struct ResamplerIterator<I> {
-    inner: I,
-    input_rate: f32,
-    output_rate: f32,
-    buffer: Vec<f32>,
-    pos: f32,
-    passthrough: bool,
-}
-
-impl<I: Iterator<Item = f32>> ResamplerIterator<I> {
-    pub fn new(inner: I, input_rate: u32, output_rate: u32) -> Self {
-        Self {
-            inner,
-            input_rate: input_rate as f32,
-            output_rate: output_rate as f32,
-            buffer: Vec::new(),
-            pos: 0.0,
-            passthrough: input_rate == output_rate,
-        }
-    }
-}
-
-impl<I: Iterator<Item = f32>> Iterator for ResamplerIterator<I> {
-    type Item = f32;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.passthrough {
-            return self.inner.next();
-        }
-        // sample rate ratio
-        let ratio = self.input_rate / self.output_rate;
-
-        // fill buffer if needed
-        if self.buffer.len() < 2 {
-            if let Some(sample) = self.inner.next() {
-                self.buffer.push(sample);
-            } else {
-                return None;
-            }
-        }
-
-        // simple linear interpolation
-        let i = self.pos.floor() as usize;
-        let frac = self.pos - i as f32;
-
-        // while i + 1 >= self.buffer.len() { // Original line was wrong, it should be while...
-        //     // load more data
-        //     if let Some(sample) = self.inner.next() {
-        //         self.buffer.push(sample);
-        //     } else {
-        //         return None;
-        //     }
-        // }
-
-        // Corrected logic for interpolation boundary check
-        while i + 1 >= self.buffer.len() {
-            // load more data
-            if let Some(sample) = self.inner.next() {
-                self.buffer.push(sample);
-            } else {
-                return None;
-            }
-        }
-
-        let s0 = self.buffer[i];
-        let s1 = self.buffer[i + 1];
-        let out = s0 + (s1 - s0) * frac;
-
-        // next sample position
-        self.pos += ratio;
-
-        // clear buffer of consumed samples
-        while self.pos >= 1.0 {
-            self.pos -= 1.0;
-            if !self.buffer.is_empty() {
-                self.buffer.remove(0);
-            }
-        }
-
-        Some(out)
-    }
-}
-
-fn pcm_to_f32<'a>(data: &'a [u8], bits_per_sample: u16) -> impl Iterator<Item = f32> + 'a {
-    match bits_per_sample {
-        8 => Box::new(data.iter().map(|&b| (b as i8) as f32 / i8::MAX as f32))
-            as Box<dyn Iterator<Item = f32>>,
-        16 => Box::new(
-            data.chunks_exact(2)
-                .map(|c| i16::from_le_bytes([c[0], c[1]]) as f32 / i16::MAX as f32),
-        ) as Box<dyn Iterator<Item = f32>>,
-        24 => Box::new(data.chunks_exact(3).map(|c| {
-            let v = ((c[0] as i32) | ((c[1] as i32) << 8) | ((c[2] as i32) << 16)) << 8;
-            v as f32 / i32::MAX as f32
-        })) as Box<dyn Iterator<Item = f32>>,
-        32 => Box::new(
-            data.chunks_exact(4)
-                .map(|c| i32::from_le_bytes([c[0], c[1], c[2], c[3]]) as f32 / i32::MAX as f32),
-        ) as Box<dyn Iterator<Item = f32>>,
-        _ => Box::new(std::iter::empty()) as Box<dyn Iterator<Item = f32>>,
-    }
-}
-
 // Keep statistics about audio playback
 // Such as time between play calls, dropped frames, etc
 pub struct AudioStats {
@@ -451,106 +349,6 @@ mod tests {
     }
 
     // ── Pure unit tests ────────────────────────────────────
-
-    #[test]
-    fn pcm_8bit() {
-        // 8-bit: (b as i8) as f32 / i8::MAX (127.0)
-        // 0 → 0.0, 127 (as i8 = 127) → ~1.0, 255 (as i8 = -1) → ~-0.00787
-        let data: Vec<f32> = pcm_to_f32(&[0, 127, 255], 8).collect();
-        assert!(data[0].abs() < 0.01);
-        assert!((data[1] - 1.0).abs() < 0.01);
-        assert!(data[2] < 0.0 && data[2] > -0.02);
-    }
-
-    #[test]
-    fn pcm_16bit() {
-        // i16::MAX = 32767
-        let max: i16 = i16::MAX;
-        let data: Vec<f32> = pcm_to_f32(&max.to_le_bytes(), 16).collect();
-        assert!((data[0] - 1.0).abs() < 0.001);
-        let zero: Vec<f32> = pcm_to_f32(&0i16.to_le_bytes(), 16).collect();
-        assert!(zero[0].abs() < 0.001);
-    }
-
-    #[test]
-    fn pcm_16bit_stereo() {
-        let samples: Vec<u8> = [100i16.to_le_bytes(), (-100i16).to_le_bytes()].concat();
-        let data: Vec<f32> = pcm_to_f32(&samples, 16).collect();
-        assert_eq!(data.len(), 2);
-        assert!(data[0] > 0.0);
-        assert!(data[1] < 0.0);
-    }
-
-    #[test]
-    fn pcm_24bit_zero() {
-        let data: Vec<f32> = pcm_to_f32(&[0u8; 6], 24).collect();
-        assert_eq!(data.len(), 2);
-        assert!(data[0].abs() < 0.001);
-        assert!(data[1].abs() < 0.001);
-    }
-
-    #[test]
-    fn pcm_32bit() {
-        let data: Vec<f32> = pcm_to_f32(&0i32.to_le_bytes(), 32).collect();
-        assert!(data[0].abs() < 0.001);
-    }
-
-    #[test]
-    fn pcm_unknown_bits_returns_empty() {
-        let data: Vec<f32> = pcm_to_f32(&[1, 2, 3, 4], 5).collect();
-        assert!(data.is_empty());
-    }
-
-    #[test]
-    fn pcm_empty_input() {
-        assert!(pcm_to_f32(&[], 8).next().is_none());
-        assert!(pcm_to_f32(&[], 16).next().is_none());
-    }
-
-    #[test]
-    fn resampler_passthrough() {
-        let input = vec![0.1, 0.5, -0.3];
-        let resampler = ResamplerIterator::new(input.clone().into_iter(), 44100, 44100);
-        let output: Vec<f32> = resampler.collect();
-        assert_eq!(output.len(), 3);
-        for (i, v) in output.iter().enumerate() {
-            assert!((v - input[i]).abs() < 0.001);
-        }
-    }
-
-    #[test]
-    fn resampler_upsample_2x() {
-        let input = vec![0.0, 1.0];
-        let resampler = ResamplerIterator::new(input.into_iter(), 24000, 48000);
-        let output: Vec<f32> = resampler.collect();
-        assert!(output.len() >= 2, "upsampling should produce more samples");
-    }
-
-    #[test]
-    fn resampler_downsample_2x() {
-        let input: Vec<f32> = (0..8).map(|i| i as f32).collect();
-        let in_len = input.len();
-        let resampler = ResamplerIterator::new(input.into_iter(), 48000, 24000);
-        let output: Vec<f32> = resampler.collect();
-        assert!(
-            output.len() < in_len,
-            "downsampling should produce fewer samples"
-        );
-    }
-
-    #[test]
-    fn resampler_empty() {
-        let resampler = ResamplerIterator::new(std::iter::empty::<f32>(), 44100, 48000);
-        assert_eq!(resampler.count(), 0);
-    }
-
-    #[test]
-    fn resampler_new_passthrough_flag() {
-        let r = ResamplerIterator::new(std::iter::empty::<f32>(), 44100, 44100);
-        assert!(r.passthrough);
-        let r = ResamplerIterator::new(std::iter::empty::<f32>(), 44100, 48000);
-        assert!(!r.passthrough);
-    }
 
     #[test]
     fn audio_stats_new_defaults() {
