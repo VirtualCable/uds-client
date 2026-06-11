@@ -100,49 +100,55 @@ impl MicHandle {
                 need_downmix
             );
 
-            let out_packet_frames = (frames_per_packet as usize) * (channels as usize);
-            let input_packet_frames = if need_resample {
-                ((out_packet_frames as f32 * actual_rate as f32 / sample_rate as f32).ceil() as usize)
-                    .max(out_packet_frames * 2)
-            } else {
-                out_packet_frames * if need_downmix { actual_channels } else { 1 }
-            };
+            let out_packet_samples = (frames_per_packet as usize) * (channels as usize);
 
-            let buffer: Arc<RwLock<VecDeque<f32>>> =
-                Arc::new(RwLock::new(VecDeque::with_capacity(input_packet_frames * 4)));
+            let sample_buf: Arc<RwLock<VecDeque<f32>>> =
+                Arc::new(RwLock::new(VecDeque::with_capacity(out_packet_samples * 4)));
 
             let stream = match device.build_input_stream(
                 cfg,
                 {
                     let data_tx = data_tx.clone();
-                    let buffer = Arc::clone(&buffer);
+                    let sample_buf = Arc::clone(&sample_buf);
                     move |data: &[f32], _| {
-                        let mut buf = buffer.write().unwrap();
+                        let mut buf = sample_buf.write().unwrap();
                         buf.extend(data.iter().copied());
-                        while buf.len() >= input_packet_frames {
-                            let chunk: Vec<f32> = buf.drain(0..input_packet_frames).collect();
+
+                        let min_input = if need_resample || need_downmix {
+                            (out_packet_samples * 2).max(256)
+                        } else {
+                            out_packet_samples
+                        };
+
+                        while buf.len() >= min_input {
+                            let drain_end = buf.len().min(min_input * 2);
+                            let chunk: Vec<f32> = buf.drain(0..drain_end).collect();
                             drop(buf);
 
-                            let out: Vec<f32> = if need_resample {
+                            let processed: Vec<f32> = if need_resample {
                                 ResamplerIterator::new(chunk.into_iter(), actual_rate, sample_rate)
                                     .collect()
                             } else {
                                 chunk
                             };
 
-                            let out: Vec<f32> = if need_downmix {
-                                let mut mono = Vec::with_capacity(out.len() / actual_channels);
-                                for stereo_frame in out.chunks_exact(actual_channels) {
-                                    mono.push(stereo_frame.iter().sum::<f32>() / actual_channels as f32);
+                            let processed: Vec<f32> = if need_downmix {
+                                let mut mono = Vec::with_capacity(processed.len() / actual_channels);
+                                for frame in processed.chunks_exact(actual_channels) {
+                                    mono.push(frame.iter().sum::<f32>() / actual_channels as f32);
                                 }
                                 mono
                             } else {
-                                out
+                                processed
                             };
 
-                            let pcm = f32_to_pcm(&out, bits_per_sample);
-                            let _ = data_tx.send(pcm);
-                            buf = buffer.write().unwrap();
+                            for packet in processed.chunks(out_packet_samples) {
+                                let mut pkt = packet.to_vec();
+                                pkt.resize(out_packet_samples, 0.0);
+                                let pcm = f32_to_pcm(&pkt, bits_per_sample);
+                                let _ = data_tx.send(pcm);
+                            }
+                            buf = sample_buf.write().unwrap();
                         }
                     }
                 },
