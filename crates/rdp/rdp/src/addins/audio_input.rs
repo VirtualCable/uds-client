@@ -30,9 +30,10 @@
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 #![allow(dead_code)]
 use std::thread;
+use std::time::Instant;
 
 use freerdp_sys::{
-    AUDIO_FORMAT, BOOL, BYTE, CHANNEL_RC_NO_MEMORY, CHANNEL_RC_OK,
+    AUDIO_FORMAT, BOOL, BYTE, CHANNEL_RC_OK,
     IAudinDevice, AudinReceive, UINT, UINT32, WAVE_FORMAT_PCM,
     PFREERDP_AUDIN_DEVICE_ENTRY_POINTS,
 };
@@ -50,7 +51,7 @@ pub struct MicPlugin {
 
 pub unsafe extern "C" fn mic_entry(p_entry_points: PFREERDP_AUDIN_DEVICE_ENTRY_POINTS) -> UINT {
     if p_entry_points.is_null() {
-        return CHANNEL_RC_NO_MEMORY;
+        return 1;
     }
 
     let mut plugin = Box::new(MicPlugin {
@@ -81,18 +82,15 @@ unsafe extern "C" fn format_supported(
     _device: *mut IAudinDevice,
     format: *const AUDIO_FORMAT,
 ) -> BOOL {
-    match unsafe { (*format).wFormatTag } {
-        x if x == WAVE_FORMAT_PCM as u16 => {
-            let channels = unsafe { (*format).nChannels };
-            let bits = unsafe { (*format).wBitsPerSample };
-            let cb_size = unsafe { (*format).cbSize };
-            if cb_size == 0 && (bits == 8 || bits == 16) && (channels == 1 || channels == 2) {
-                return true.into();
-            }
-            false.into()
+    unsafe {
+        if (*format).wFormatTag != WAVE_FORMAT_PCM as u16 {
+            return false.into();
         }
-        _ => false.into(),
+        if (*format).nChannels != 1 {
+            return false.into();
+        }
     }
+    true.into()
 }
 
 unsafe extern "C" fn set_format(
@@ -104,8 +102,6 @@ unsafe extern "C" fn set_format(
     let mut fmt = unsafe { *format };
     fmt.nBlockAlign = (fmt.wBitsPerSample / 8) * fmt.nChannels;
     fmt.nAvgBytesPerSec = fmt.nSamplesPerSec * fmt.nBlockAlign as u32;
-    fmt.cbSize = 0;
-    fmt.data = std::ptr::null_mut();
     plugin.format_buf = fmt;
     plugin.frames_per_packet = frames_per_packet;
     log::debug!(
@@ -124,41 +120,124 @@ unsafe extern "C" fn open(
     user_data: *mut std::ffi::c_void,
 ) -> UINT {
     let plugin = unsafe { &mut *(device as *mut MicPlugin) };
-    let fmt = plugin.format_buf;
+
+    log::debug!("Mic device open called");
+
+    if receive.is_none() {
+        log::error!("Mic device open called with null receive callback");
+        return CHANNEL_RC_OK;
+    }
+
+    let receive_cb = receive.unwrap();
+    let user_data_usize = user_data as usize;
     let fps = plugin.frames_per_packet;
+    let sample_rate = plugin.format_buf.nSamplesPerSec;
+    let bits = plugin.format_buf.wBitsPerSample;
+    let mono_fmt = plugin.format_buf;
 
     let (mic, data_rx) = MicHandle::new(
-        fmt.nSamplesPerSec,
-        fmt.nChannels,
-        fmt.wBitsPerSample,
+        sample_rate,
+        mono_fmt.nChannels,
+        bits,
         fps,
     );
 
-    let user_data_usize = user_data as usize;
+    plugin.mic = Some(mic);
+
+    let st_format_tag = mono_fmt.wFormatTag;
+    let st_sample_rate = mono_fmt.nSamplesPerSec;
+    let st_bits_sample = mono_fmt.wBitsPerSample;
+    let st_block_align = mono_fmt.nBlockAlign * 2;
+    let st_avg_bps = mono_fmt.nAvgBytesPerSec * 2;
 
     thread::spawn(move || {
-        let fmt = AUDIO_FORMAT {
-            wFormatTag: WAVE_FORMAT_PCM as u16,
-            nChannels: fmt.nChannels,
-            nSamplesPerSec: fmt.nSamplesPerSec,
-            nAvgBytesPerSec: fmt.nAvgBytesPerSec,
-            nBlockAlign: fmt.nBlockAlign,
-            wBitsPerSample: fmt.wBitsPerSample,
+        let ud = user_data_usize as *mut std::ffi::c_void;
+
+        let stereo_fmt = AUDIO_FORMAT {
+            wFormatTag: st_format_tag,
+            nChannels: 2,
+            nSamplesPerSec: st_sample_rate,
+            nAvgBytesPerSec: st_avg_bps,
+            nBlockAlign: st_block_align,
+            wBitsPerSample: st_bits_sample,
             cbSize: 0,
             data: std::ptr::null_mut(),
         };
-        let ud = user_data_usize as *mut std::ffi::c_void;
-        while let Ok(pcm_data) = data_rx.recv() {
-            if let Some(cb) = receive {
-                let _ = unsafe { cb(&fmt, pcm_data.as_ptr() as *const BYTE, pcm_data.len(), ud) };
+
+        if sample_rate == 0 || fps == 0 {
+            log::error!("Mic reader: invalid format or frames_per_packet");
+            return;
+        }
+
+        let nanos = (fps as u64 * 1_000_000_000) / sample_rate as u64;
+        let duration = std::time::Duration::from_nanos(nanos);
+        let mono_packet_bytes = fps as usize * (bits as usize / 8);
+        let stereo_packet_bytes = mono_packet_bytes * 2;
+
+        log::info!(
+            "Mic reader thread started: rate={}, frames={}, duration={:?}",
+            sample_rate,
+            fps,
+            duration
+        );
+
+        let mut next_packet_at = Instant::now() + duration;
+
+        loop {
+            let timeout = next_packet_at.saturating_duration_since(Instant::now());
+
+            let mono_data = match data_rx.recv_timeout(timeout) {
+                Ok(data) => data,
+                Err(flume::RecvTimeoutError::Timeout) => {
+                    vec![0u8; mono_packet_bytes]
+                }
+                Err(flume::RecvTimeoutError::Disconnected) => break,
+            };
+
+            let mut stereo_data = Vec::with_capacity(stereo_packet_bytes);
+            let bytes_per_sample = (bits as usize) / 8;
+            for i in 0..fps as usize {
+                let start = i * bytes_per_sample;
+                let end = start + bytes_per_sample;
+                if end <= mono_data.len() {
+                    stereo_data.extend_from_slice(&mono_data[start..end]);
+                    stereo_data.extend_from_slice(&mono_data[start..end]);
+                } else {
+                    let silence = vec![0u8; bytes_per_sample];
+                    stereo_data.extend_from_slice(&silence);
+                    stereo_data.extend_from_slice(&silence);
+                }
+            }
+
+            unsafe {
+                let res = (receive_cb)(
+                    &stereo_fmt,
+                    stereo_data.as_ptr() as *const BYTE,
+                    stereo_data.len(),
+                    ud,
+                );
+                if res != CHANNEL_RC_OK {
+                    log::error!("Mic receive failed with {}", res);
+                    break;
+                }
+            }
+
+            next_packet_at += duration;
+            let now = Instant::now();
+            if next_packet_at <= now {
+                next_packet_at = now + duration;
             }
         }
-        log::debug!("Mic reader thread exiting");
+        log::info!("Mic reader thread ending");
     });
 
-    plugin.mic = Some(mic);
-    log::debug!("Mic opened: sample_rate={}, channels={}, bits={}, fps={}",
-        fmt.nSamplesPerSec, fmt.nChannels, fmt.wBitsPerSample, fps);
+    log::debug!(
+        "Mic opened: sample_rate={}, channels={}, bits={}, fps={}",
+        mono_fmt.nSamplesPerSec,
+        mono_fmt.nChannels,
+        mono_fmt.wBitsPerSample,
+        fps
+    );
     CHANNEL_RC_OK
 }
 

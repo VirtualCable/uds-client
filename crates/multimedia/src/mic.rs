@@ -164,6 +164,27 @@ fn get_input_config(
             );
         }
     }
+    log::warn!(
+        "[MicHandle] No exact input config for channels={}, trying any channel count",
+        channels
+    );
+    let configs = match dev.supported_input_configs() {
+        Ok(c) => c,
+        Err(e) => {
+            log::error!("[MicHandle] Failed to get input configs: {}", e);
+            return None;
+        }
+    };
+    for cfg in configs {
+        if cfg.min_sample_rate() <= sample_rate
+            && sample_rate <= cfg.max_sample_rate()
+        {
+            return Some(
+                cfg.try_with_sample_rate(sample_rate)
+                    .unwrap_or(cfg.with_max_sample_rate()),
+            );
+        }
+    }
     None
 }
 
