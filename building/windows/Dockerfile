@@ -11,7 +11,8 @@ RUN Set-ExecutionPolicy Bypass -Scope Process -Force; \
 RUN choco install -y git ; \
     choco install -y cmake --installargs 'ADD_CMAKE_TO_PATH=System' ; \
     choco install -y ninja ; \
-    choco install -y llvm ;
+    choco install -y llvm ; \
+    choco install -y nasm
 
 # Visual Studio Build Tools 2022
 RUN choco install -y visualstudio2022buildtools \
