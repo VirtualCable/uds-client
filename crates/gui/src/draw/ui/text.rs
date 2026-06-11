@@ -31,13 +31,26 @@ pub(crate) fn word_wrap(text: &str, max_chars: usize) -> Vec<&str> {
     let mut lines = Vec::new();
     let mut start = 0;
     while start < text.len() {
-        let end = (start + max_chars).min(text.len());
-        if end >= text.len() {
-            lines.push(&text[start..]);
-            break;
-        }
+        // Advance by at most max_chars **characters** (respecting UTF-8 boundaries)
+        let end = match text[start..].char_indices().nth(max_chars) {
+            Some((offset, _)) => start + offset,
+            None => {
+                lines.push(&text[start..]);
+                break;
+            }
+        };
+
         // Try to break at a word boundary within the last ~20% of the line
-        let search_start = (end as i32 - (max_chars as i32 / 5).max(1)).max(start as i32) as usize;
+        let search_window = (max_chars / 5).max(1);
+        let search_start = match text[start..end]
+            .char_indices()
+            .rev()
+            .nth(search_window)
+        {
+            Some((offset, _)) => start + offset,
+            None => start,
+        };
+
         if let Some(brk) = text[search_start..end].rfind(|c: char| [' ', '-'].contains(&c)) {
             let split = search_start + brk;
             lines.push(&text[start..split]);
@@ -97,5 +110,36 @@ mod tests {
     fn hyphen_break() {
         let lines = word_wrap("inter-procedural-analysis", 12);
         assert!(lines.len() >= 2, "should break at hyphen");
+    }
+
+    #[test]
+    fn utf8_multi_byte_no_panic() {
+        // Each accented char is 2 bytes in UTF-8; old code could panic here
+        let lines = word_wrap("áéíóúáéíóúáéíóú", 5);
+        assert!(lines.len() >= 3, "should break multiple times");
+        // Verify every slice is valid UTF-8 (no panic = success)
+        for line in &lines {
+            assert!(line.len() <= 15, "byte length may exceed max_chars but must not panic");
+        }
+    }
+
+    #[test]
+    fn utf8_mixed_content() {
+        let lines = word_wrap("café con leche y croissant", 8);
+        assert!(lines.len() >= 2, "should break at word boundaries");
+        // Ensure no line exceeds max_chars characters
+        for line in &lines {
+            assert!(line.chars().count() <= 8, "char count must respect max_chars");
+        }
+    }
+
+    #[test]
+    fn utf8_hard_break() {
+        // Long run of multi-byte chars with no spaces — must hard-break safely
+        let lines = word_wrap("aáéíóúbáéíóúcáéíóúdáéíóú", 5);
+        assert!(lines.len() >= 4, "should hard-break multiple times");
+        for line in &lines {
+            assert!(line.chars().count() <= 5, "each line must have at most max_chars characters");
+        }
     }
 }
