@@ -161,6 +161,7 @@ impl AppHandler {
                         user: "user".to_string(),
                         password: "temporal".to_string(),
                         screen_size: rdp_ffi::geom::ScreenSize::Fixed(800, 600),
+                        microphone_redirection: true,
                         webcam: Some(rdp_ffi::settings::WebcamSettings {
                             enabled: true,
                             quality: 80,
