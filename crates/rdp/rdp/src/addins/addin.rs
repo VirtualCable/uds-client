@@ -31,10 +31,12 @@
 use std::sync::OnceLock;
 
 use freerdp_sys::{
-    BOOL, DWORD, FREERDP_LOAD_CHANNEL_ADDIN_ENTRY_FN, LPCSTR, PVIRTUALCHANNELENTRY,
-    RDPSND_CHANNEL_NAME, UINT, freerdp_get_current_addin_provider, freerdp_register_addin_provider,
+    AUDIN_CHANNEL_NAME, BOOL, DWORD, FREERDP_LOAD_CHANNEL_ADDIN_ENTRY_FN, LPCSTR,
+    PVIRTUALCHANNELENTRY, RDPSND_CHANNEL_NAME, UINT, freerdp_get_current_addin_provider,
+    freerdp_register_addin_provider,
 };
 
+use super::audio_input;
 use super::audio_output;
 use super::webcam;
 use shared::log;
@@ -80,6 +82,16 @@ unsafe extern "C" fn custom_addin_provider(
                     ) -> UINT,
                     unsafe extern "C" fn(*mut freerdp_sys::tagCHANNEL_ENTRY_POINTS) -> BOOL,
                 >(audio_output::sound_entry))
+            } else if name.as_bytes() == &AUDIN_CHANNEL_NAME[..AUDIN_CHANNEL_NAME.len() - 1]
+                && subsystem == super::AUDIN_SUBSYSTEM_CUSTOM
+            {
+                log::info!("audin channel addin requested.");
+                Some(std::mem::transmute::<
+                    unsafe extern "C" fn(
+                        *mut freerdp_sys::FREERDP_AUDIN_DEVICE_ENTRY_POINTS,
+                    ) -> UINT,
+                    unsafe extern "C" fn(*mut freerdp_sys::tagCHANNEL_ENTRY_POINTS) -> BOOL,
+                >(audio_input::mic_entry))
             } else if name == "rdpecam" {
                 log::info!("rdpecam channel addin requested.");
                 Some(std::mem::transmute::<

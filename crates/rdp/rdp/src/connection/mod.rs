@@ -237,7 +237,8 @@ impl Rdp {
                         FreeRDP_Settings_Keys_Bool_FreeRDP_AudioCapture,
                         true.into(),
                     );
-                    channels(settings, "audin", None, false, true);
+                    let channel = format!("sys:{}", crate::addins::AUDIN_SUBSYSTEM_CUSTOM);
+                    channels(settings, "audin", Some(&channel), false, true);
                 }
                 // Webcam redirection
                 if let Some(ref webcam) = self.config.settings.webcam
