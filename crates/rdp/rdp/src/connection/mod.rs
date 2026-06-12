@@ -170,23 +170,11 @@ impl Rdp {
                 fn channels(
                     settings: *mut rdpSettings,
                     name: &str,
-                    channel: Option<&String>,
+                    channel: &str,
                     add_static: bool,
                     add_dynamic: bool,
                 ) {
                     // Note: We can use the internal freerdp rdpsnd channel subsystems
-
-                    let channel = if let Some(channel) = channel {
-                        channel.as_str()
-                    } else if cfg!(target_os = "windows") {
-                        "sys:winmm"
-                    } else if cfg!(target_os = "linux") {
-                        "sys:pulse" // add support for alsa
-                    } else if cfg!(target_os = "macos") {
-                        "sys:mac"
-                    } else {
-                        "sys:fake"
-                    };
 
                     let cname = std::ffi::CString::new(name).unwrap();
                     let cchannel = std::ffi::CString::new(channel).unwrap();
@@ -226,7 +214,7 @@ impl Rdp {
                         false.into(), // Always false, we want audio on client
                     );
                     let channel = format!("sys:{}", crate::addins::RDPSND_SUBSYSTEM_CUSTOM);
-                    channels(settings, "rdpsnd", Some(&channel), true, true);
+                    channels(settings, "rdpsnd", &channel, true, true);
                     // Default subsystem right now
                     // channels(settings, "rdpsnd", None, true, true);
                 }
@@ -238,7 +226,7 @@ impl Rdp {
                         true.into(),
                     );
                     let channel = format!("sys:{}", crate::addins::AUDIN_SUBSYSTEM_CUSTOM);
-                    channels(settings, "audin", Some(&channel), false, true);
+                    channels(settings, "audin", &channel, false, true);
                 }
                 // Webcam redirection
                 if let Some(ref webcam) = self.config.settings.redirections.webcam
@@ -297,7 +285,7 @@ impl Rdp {
                         webcam_int.set_limits(final_quality, final_fps, max_w, max_h);
 
                         let channel = format!("sys:{}", crate::addins::WEBCAM_SUBSYSTEM_CUSTOM);
-                        channels(settings, "rdpecam", Some(&channel), false, true);
+                        channels(settings, "rdpecam", &channel, false, true);
                     } else {
                         log::warn!(
                             "Webcam redirection enabled in settings, but no webcam was detected on the system. Webcam redirection will not be enabled."
