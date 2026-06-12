@@ -68,7 +68,9 @@ unsafe extern "C" fn custom_addin_provider(
         let addin_type = secure_cstr_from_lpcstr(psz_type);
         log::info!(
             "custom_addin_provider: name='{}', subsystem='{}', type='{}'",
-            name, subsystem, addin_type
+            name,
+            subsystem,
+            addin_type
         );
 
         if let Some(freerdp_addin_provider) = FREERDP_ADDIN_PROVIDER.get().unwrap() {

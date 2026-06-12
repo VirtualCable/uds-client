@@ -10,5 +10,5 @@ pub mod input;
 pub mod output;
 pub mod tools;
 
-pub use output::{AudioCommand, AudioHandle, AudioStats};
 pub use input::{MicCommand, MicHandle};
+pub use output::{AudioCommand, AudioHandle, AudioStats};

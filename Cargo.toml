@@ -11,7 +11,7 @@ members = [
     "crates/rdp/freerdp-sys",
     "crates/gui-tester",
     "crates/js",
-    "crates/multimedia",
+    "crates/channels",
     "crates/connection",
 ]
 resolver = "3"

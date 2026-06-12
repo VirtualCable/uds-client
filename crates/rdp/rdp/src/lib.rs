@@ -52,17 +52,19 @@ pub mod messaging;
 pub mod sys;
 
 pub mod channels;
+pub mod integrations;
 
 #[derive(Debug)]
 pub struct Config {
-    settings: settings::RdpSettings,
-    callbacks: callbacks::Callbacks,
-    use_rgba: bool, // Whether to use RGBA pixel format or BGRA
+    pub settings: settings::RdpSettings,
+    pub callbacks: callbacks::Callbacks,
+    pub use_rgba: bool, // Whether to use RGBA pixel format or BGRA
+    pub integrations: integrations::RdpIntegrations,
 }
 
 #[derive(Debug)]
 pub struct Rdp {
-    config: Config,
+    pub config: Config,
     instance: Option<utils::SafePtr<freerdp_sys::freerdp>>,
     update_tx: Option<messaging::Sender>,
     // GDI lock for thread safety
@@ -82,16 +84,18 @@ impl Rdp {
         settings: settings::RdpSettings,
         update_tx: messaging::Sender,
         use_rgba: bool,
+        channels: Option<Arc<RwLock<channels::RdpChannels>>>,
+        integrations: integrations::RdpIntegrations,
     ) -> (Self, commands::Sender) {
         let stop_event: freerdp_sys::HANDLE =
             unsafe { freerdp_sys::CreateEventW(std::ptr::null_mut(), 1, 0, std::ptr::null()) };
         let command_event: freerdp_sys::HANDLE =
             unsafe { freerdp_sys::CreateEventW(std::ptr::null_mut(), 0, 0, std::ptr::null()) }; // Auto-reset event
- 
+
         let stop_event = utils::SafeHandle::new(stop_event).unwrap();
         let command_event = utils::SafeHandle::new(command_event).unwrap();
         let (command_tx, command_rx) = flume::unbounded();
- 
+
         let is_rail = settings.rail.is_some();
 
         (
@@ -114,11 +118,13 @@ impl Rdp {
                     } else {
                         callbacks::Callbacks::default()
                     },
+                    integrations,
                 },
                 instance: None,
                 update_tx: Some(update_tx),
                 gdi_lock: Arc::new(RwLock::new(())),
-                channels: Arc::new(RwLock::new(channels::RdpChannels::new())),
+                channels: channels
+                    .unwrap_or_else(|| Arc::new(RwLock::new(channels::RdpChannels::new()))),
                 stop_event,
                 command_rx,
                 command_event,

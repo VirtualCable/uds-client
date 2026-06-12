@@ -243,22 +243,32 @@ impl Rdp {
                 // Webcam redirection
                 if let Some(ref webcam) = self.config.settings.webcam
                     && webcam.enabled
+                    && let Some(ref webcam_int) = self.config.integrations.webcam
                 {
-                    if let Some((cam_w, cam_h)) = multimedia::webcam::get_camera_dimensions() {
+                    let (cam_w, cam_h) = webcam_int.get_camera_dimensions();
+                    if cam_w > 0 && cam_h > 0 {
                         log::info!("Webcam redirection: Camera detected at {}x{}", cam_w, cam_h);
 
                         // Parse UDSLAUNCHER_LIMITS (width,height,fps,quality)
-                        let parse_launcher_limits = || -> (Option<u32>, Option<u32>, Option<u32>, Option<u32>) {
-                            if let Ok(val) = std::env::var("UDSLAUNCHER_LIMITS") {
-                                let parts: Vec<&str> = val.split(',').map(|s| s.trim()).collect();
-                                let get_part = |idx: usize| -> Option<u32> {
-                                    parts.get(idx).and_then(|&s| if s.is_empty() { None } else { s.parse::<u32>().ok() })
-                                };
-                                (get_part(0), get_part(1), get_part(2), get_part(3))
-                            } else {
-                                (None, None, None, None)
-                            }
-                        };
+                        let parse_launcher_limits =
+                            || -> (Option<u32>, Option<u32>, Option<u32>, Option<u32>) {
+                                if let Ok(val) = std::env::var("UDSLAUNCHER_LIMITS") {
+                                    let parts: Vec<&str> =
+                                        val.split(',').map(|s| s.trim()).collect();
+                                    let get_part = |idx: usize| -> Option<u32> {
+                                        parts.get(idx).and_then(|&s| {
+                                            if s.is_empty() {
+                                                None
+                                            } else {
+                                                s.parse::<u32>().ok()
+                                            }
+                                        })
+                                    };
+                                    (get_part(0), get_part(1), get_part(2), get_part(3))
+                                } else {
+                                    (None, None, None, None)
+                                }
+                            };
                         let (env_w, env_h, env_fps, env_q) = parse_launcher_limits();
 
                         // Base values from settings
@@ -284,15 +294,14 @@ impl Rdp {
                             max_h = if max_h == 0 { eh } else { max_h.min(eh) };
                         }
 
-                        multimedia::webcam::WEBCAM_QUALITY.store(final_quality, std::sync::atomic::Ordering::Relaxed);
-                        multimedia::webcam::WEBCAM_FPS.store(final_fps, std::sync::atomic::Ordering::Relaxed);
-                        multimedia::webcam::WEBCAM_MAX_WIDTH.store(max_w, std::sync::atomic::Ordering::Relaxed);
-                        multimedia::webcam::WEBCAM_MAX_HEIGHT.store(max_h, std::sync::atomic::Ordering::Relaxed);
+                        webcam_int.set_limits(final_quality, final_fps, max_w, max_h);
 
                         let channel = format!("sys:{}", crate::addins::WEBCAM_SUBSYSTEM_CUSTOM);
                         channels(settings, "rdpecam", Some(&channel), false, true);
                     } else {
-                        log::warn!("Webcam redirection enabled in settings, but no webcam was detected on the system. Webcam redirection will not be enabled.");
+                        log::warn!(
+                            "Webcam redirection enabled in settings, but no webcam was detected on the system. Webcam redirection will not be enabled."
+                        );
                     }
                 }
 
@@ -738,7 +747,9 @@ impl Drop for Rdp {
     fn drop(&mut self) {
         log::debug!(" **** Dropping RDP");
         // If we have a clipboard native, stop it
-        self.channels.read().unwrap().stop_native();
+        if let Some(ref clipboard) = self.config.integrations.clipboard {
+            clipboard.stop();
+        }
 
         log::debug!("* Dropping Rdp instance, cleaning up resources...");
         unsafe {

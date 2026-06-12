@@ -262,7 +262,9 @@ impl ApplicationHandler for AboutHandler<'_> {
             WindowEvent::CursorMoved { position, .. } => {
                 if let Some(s) = self.state.as_mut() {
                     s.last_mouse_pos = Some((position.x as f32, position.y as f32));
-                    if s.close_btn.handle_mouse_move(position.x as f32, position.y as f32) {
+                    if s.close_btn
+                        .handle_mouse_move(position.x as f32, position.y as f32)
+                    {
                         s.window.request_redraw();
                     }
                 }
@@ -295,9 +297,9 @@ impl crate::AppHandler {
             WindowEvent::CloseRequested => {
                 self.close_about();
             }
-            WindowEvent::MouseInput {
-                state, button, ..
-            } if state.is_pressed() && button == winit::event::MouseButton::Left => {
+            WindowEvent::MouseInput { state, button, .. }
+                if state.is_pressed() && button == winit::event::MouseButton::Left =>
+            {
                 if let Some(pos) = a.last_mouse_pos
                     && a.close_btn.contains(pos.0, pos.1)
                 {
@@ -306,7 +308,9 @@ impl crate::AppHandler {
             }
             WindowEvent::CursorMoved { position, .. } => {
                 a.last_mouse_pos = Some((position.x as f32, position.y as f32));
-                if a.close_btn.handle_mouse_move(position.x as f32, position.y as f32) {
+                if a.close_btn
+                    .handle_mouse_move(position.x as f32, position.y as f32)
+                {
                     a.window.request_redraw();
                 }
             }

@@ -31,7 +31,6 @@
 use std::sync::{Arc, RwLock};
 
 mod callbacks_c;
-pub(super) mod native;
 mod traits;
 
 use crate::utils;

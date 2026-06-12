@@ -11,9 +11,19 @@ pub enum InputEvent {
         pressed: bool,
         repeat: bool,
     },
-    Mouse { flags: u16, x: u16, y: u16 },
-    ExtendedMouse { flags: u16, x: u16, y: u16 },
-    Unicode { code: u16 },
+    Mouse {
+        flags: u16,
+        x: u16,
+        y: u16,
+    },
+    ExtendedMouse {
+        flags: u16,
+        x: u16,
+        y: u16,
+    },
+    Unicode {
+        code: u16,
+    },
 }
 
 #[derive(Debug, Clone, Zeroize)]

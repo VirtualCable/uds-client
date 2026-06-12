@@ -8,7 +8,6 @@ license.workspace = true
 [dependencies]
 freerdp-sys = { path = "../freerdp-sys" }
 shared = { path = "../../shared" }
-multimedia = { path = "../../multimedia" }
 
 anyhow.workspace = true
 
@@ -18,7 +17,6 @@ flume.workspace = true
 zeroize.workspace = true
 
 # Clipboard dependencies
-clipboard-rs.workspace = true
 
 # Windows dependencies
 [target.'cfg(windows)'.dependencies]

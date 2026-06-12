@@ -1,9 +1,36 @@
+// BSD 3-Clause License
+// Copyright (c) 2025, Virtual Cable S.L.
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//
+// 1. Redistributions of source code must retain the above copyright notice,
+//    this list of conditions and the following disclaimer.
+//
+// 2. Redistributions in binary form must reproduce the above copyright notice,
+//    this list of conditions and the following disclaimer in the documentation
+//    and/or other materials provided with the distribution.
+//
+// 3. Neither the name of the copyright holder nor the names of its contributors
+//    may be used to endorse or promote products derived from this software
+//    without specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 use std::sync::Arc;
 
-use freerdp_sys::{
-    CHANNEL_RC_OK, IWTSVirtualChannel, IWTSVirtualChannelCallback, UINT,
-};
-use multimedia::webcam::WebcamHandle;
+use crate::integrations::{WebcamIntegration, WebcamMode};
+use freerdp_sys::{CHANNEL_RC_OK, IWTSVirtualChannel, IWTSVirtualChannelCallback, UINT};
 use shared::log;
 
 use super::pdu::{self, parse_pdu_header, write_to_channel};
@@ -12,7 +39,7 @@ use super::pdu::{self, parse_pdu_header, write_to_channel};
 pub struct ChannelCtx {
     pub channel_cb: IWTSVirtualChannelCallback,
     pub channel: *mut IWTSVirtualChannel,
-    pub webcam: Arc<WebcamHandle>,
+    pub webcam: Arc<dyn WebcamIntegration>,
     pub stream_index: u8,
 }
 
@@ -113,8 +140,11 @@ fn handle_start_streams(ctx: &ChannelCtx, payload: &[u8]) {
     let mut format = media_type.Format;
     let width = media_type.Width;
     let height = media_type.Height;
-    let requested_fps = media_type.FrameRateNumerator.checked_div(media_type.FrameRateDenominator).unwrap_or(15);
-    let configured_fps = multimedia::webcam::WEBCAM_FPS.load(std::sync::atomic::Ordering::Relaxed);
+    let requested_fps = media_type
+        .FrameRateNumerator
+        .checked_div(media_type.FrameRateDenominator)
+        .unwrap_or(15);
+    let configured_fps = ctx.webcam.get_fps();
     let fps = requested_fps.min(configured_fps);
 
     if let Some(override_fmt) = get_overridden_format() {
@@ -124,38 +154,39 @@ fn handle_start_streams(ctx: &ChannelCtx, payload: &[u8]) {
 
     log::info!(
         "Webcam: StartStreams — stream={stream_idx} format={format} {}x{} @ {fps}fps (requested: {requested_fps}fps, configured: {configured_fps}fps)",
-        width, height
+        width,
+        height
     );
 
-    // Set the webcam mode depending on format selected by server.
-    // If server selected CAM_MEDIA_FORMAT_H264 (1) and we support it, encode as H264.
-    // If server selected CAM_MEDIA_FORMAT_MJPG (2), encode as MJPEG.
-    // Otherwise (e.g. YUY2, NV12, RGB24), send raw frame.
-    if format == freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264 && multimedia::webcam::h264_available() {
-        ctx.webcam.set_mode(multimedia::webcam::WebcamMode::H264);
+    if format == freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264
+        && ctx.webcam.is_h264_available()
+    {
+        ctx.webcam.set_mode(WebcamMode::H264);
     } else if format == freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_MJPG {
-        ctx.webcam.set_mode(multimedia::webcam::WebcamMode::MJPEG);
+        ctx.webcam.set_mode(WebcamMode::MJPEG);
     } else if format == freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_YUY2 {
-        ctx.webcam.set_mode(multimedia::webcam::WebcamMode::YUY2);
+        ctx.webcam.set_mode(WebcamMode::YUY2);
     } else {
         if format == freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264 {
-            log::warn!("Webcam: Server requested H264 but OpenH264 is unavailable. Falling back to MJPEG.");
-            ctx.webcam.set_mode(multimedia::webcam::WebcamMode::MJPEG);
+            log::warn!(
+                "Webcam: Server requested H264 but OpenH264 is unavailable. Falling back to MJPEG."
+            );
+            ctx.webcam.set_mode(WebcamMode::MJPEG);
         } else {
-            ctx.webcam.set_mode(multimedia::webcam::WebcamMode::Raw);
+            ctx.webcam.set_mode(WebcamMode::Raw);
         }
     }
 
-    ctx.webcam.start_stream(width, height, fps);
+    let rx = ctx.webcam.start_stream(width, height, fps);
     ctx.webcam.set_format(format as u32, width, height, fps);
-
-    let (tx, rx) = flume::unbounded::<multimedia::webcam::WebcamFrame>();
-    ctx.webcam.set_sender(tx);
 
     std::thread::spawn(move || {
         log::debug!("Webcam: Frame writer thread started for stream {stream_idx}");
         while let Ok(frame) = rx.recv() {
-            log::trace!("Webcam: Sending sample response of {} bytes, stream_idx={stream_idx}", frame.data.len());
+            log::trace!(
+                "Webcam: Sending sample response of {} bytes, stream_idx={stream_idx}",
+                frame.data.len()
+            );
             let pdu = pdu::build_sample_response(stream_idx, &frame.data);
             unsafe { pdu::write_to_channel(frame.channel_ptr as *mut _, &pdu) };
         }
@@ -167,20 +198,19 @@ fn handle_start_streams(ctx: &ChannelCtx, payload: &[u8]) {
 
 fn handle_stream_list(ctx: &ChannelCtx) {
     log::info!("Webcam: StreamListRequest — reporting 1 stream");
-    // FrameSourceTypes: CAM_STREAM_FRAME_SOURCE_TYPE_Color = 0x0001 (1u16)
-    // StreamCategory: CAM_STREAM_CATEGORY_Capture = 0x01 (1u8)
     let pdu = pdu::build_stream_list_response(1, 1, true, false);
     unsafe { write_to_channel(ctx.channel, &pdu) };
 }
 
 fn handle_media_type_list(ctx: &ChannelCtx) {
-    let h264_supported = multimedia::webcam::h264_available();
-    log::info!("Webcam: MediaTypeListRequest — H264 supported: {}", h264_supported);
+    let h264_supported = ctx.webcam.is_h264_available();
+    log::info!(
+        "Webcam: MediaTypeListRequest — H264 supported: {}",
+        h264_supported
+    );
 
-    // Determine target width & height dynamically
-    let (mut width, mut height) = multimedia::webcam::get_camera_dimensions().unwrap_or((640, 480));
-    let max_w = multimedia::webcam::WEBCAM_MAX_WIDTH.load(std::sync::atomic::Ordering::Relaxed);
-    let max_h = multimedia::webcam::WEBCAM_MAX_HEIGHT.load(std::sync::atomic::Ordering::Relaxed);
+    let (mut width, mut height) = ctx.webcam.get_camera_dimensions();
+    let (max_w, max_h) = ctx.webcam.get_max_dimensions();
     if max_w > 0 && width > max_w {
         width = max_w;
     }
@@ -188,8 +218,7 @@ fn handle_media_type_list(ctx: &ChannelCtx) {
         height = max_h;
     }
 
-    // Determine target FPS dynamically
-    let fps = multimedia::webcam::WEBCAM_FPS.load(std::sync::atomic::Ordering::Relaxed).max(1);
+    let fps = ctx.webcam.get_fps().max(1);
 
     let mjpeg_mt = freerdp_sys::CAM_MEDIA_TYPE_DESCRIPTION {
         Format: freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_MJPG,
@@ -214,7 +243,10 @@ fn handle_media_type_list(ctx: &ChannelCtx) {
     };
 
     let pdu = if let Some(override_fmt) = get_overridden_format() {
-        log::info!("Webcam: Forcing media format list override: {}", override_fmt);
+        log::info!(
+            "Webcam: Forcing media format list override: {}",
+            override_fmt
+        );
         if override_fmt == freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264 && h264_supported {
             pdu::build_media_type_list_response(&[h264_mt])
         } else {
@@ -230,13 +262,14 @@ fn handle_media_type_list(ctx: &ChannelCtx) {
 }
 
 fn handle_current_media_type(ctx: &ChannelCtx) {
-    let h264_supported = multimedia::webcam::h264_available();
-    log::info!("Webcam: CurrentMediaTypeRequest — H264 supported: {}", h264_supported);
+    let h264_supported = ctx.webcam.is_h264_available();
+    log::info!(
+        "Webcam: CurrentMediaTypeRequest — H264 supported: {}",
+        h264_supported
+    );
 
-    // Determine target width & height dynamically
-    let (mut width, mut height) = multimedia::webcam::get_camera_dimensions().unwrap_or((640, 480));
-    let max_w = multimedia::webcam::WEBCAM_MAX_WIDTH.load(std::sync::atomic::Ordering::Relaxed);
-    let max_h = multimedia::webcam::WEBCAM_MAX_HEIGHT.load(std::sync::atomic::Ordering::Relaxed);
+    let (mut width, mut height) = ctx.webcam.get_camera_dimensions();
+    let (max_w, max_h) = ctx.webcam.get_max_dimensions();
     if max_w > 0 && width > max_w {
         width = max_w;
     }
@@ -244,8 +277,7 @@ fn handle_current_media_type(ctx: &ChannelCtx) {
         height = max_h;
     }
 
-    // Determine target FPS dynamically
-    let fps = multimedia::webcam::WEBCAM_FPS.load(std::sync::atomic::Ordering::Relaxed).max(1);
+    let fps = ctx.webcam.get_fps().max(1);
 
     let mut selected_fmt = if h264_supported {
         freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264
@@ -254,7 +286,10 @@ fn handle_current_media_type(ctx: &ChannelCtx) {
     };
 
     if let Some(override_fmt) = get_overridden_format() {
-        log::info!("Webcam: Forcing current media type override: {}", override_fmt);
+        log::info!(
+            "Webcam: Forcing current media type override: {}",
+            override_fmt
+        );
         if override_fmt == freerdp_sys::CAM_MEDIA_FORMAT_CAM_MEDIA_FORMAT_H264 && h264_supported {
             selected_fmt = override_fmt;
         } else {
@@ -295,20 +330,15 @@ fn handle_property_list(ctx: &ChannelCtx) {
     unsafe { write_to_channel(ctx.channel, &pdu) };
 }
 
-
 fn send_success(ctx: &ChannelCtx) {
     log::info!("Webcam: Sending SuccessResponse");
-    let ok = pdu::build_response_header(
-        freerdp_sys::CAM_MSG_ID_CAM_MSG_ID_SuccessResponse as u8,
-    );
+    let ok = pdu::build_response_header(freerdp_sys::CAM_MSG_ID_CAM_MSG_ID_SuccessResponse as u8);
     unsafe { write_to_channel(ctx.channel, &ok) };
 }
 
 fn send_error(ctx: &ChannelCtx) {
     log::error!("Webcam: Sending ErrorResponse");
-    let err = pdu::build_response_header(
-        freerdp_sys::CAM_MSG_ID_CAM_MSG_ID_ErrorResponse as u8,
-    );
+    let err = pdu::build_response_header(freerdp_sys::CAM_MSG_ID_CAM_MSG_ID_ErrorResponse as u8);
     unsafe { write_to_channel(ctx.channel, &err) };
 }
 

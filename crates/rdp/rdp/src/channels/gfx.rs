@@ -117,7 +117,6 @@ extern "C" fn update_window_from_surface(
 
             // No swapping loop needed as we copy directly to the platform's native format
 
-
             if let Some(tx) = &owner.update_tx {
                 // log::debug!("GFX sending WindowPixels for id={}, {}x{}", window_id, mapped_width, mapped_height);
                 let _ = tx.try_send(crate::messaging::RdpMessage::WindowPixels {

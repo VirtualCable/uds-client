@@ -6,4 +6,5 @@
 // This file only contains the module declaration.
 
 pub mod audio;
+pub mod clipboard;
 pub mod webcam;

@@ -132,6 +132,9 @@ impl channels::ChannelsCallbacks for Rdp {
                     [..freerdp_sys::CLIPRDR_SVC_CHANNEL_NAME.len() - 1] =>
             {
                 log::debug!("**** CLIPRDR channel disconnected.");
+                if let Some(ref clipboard_integration) = self.config.integrations.clipboard {
+                    clipboard_integration.stop();
+                }
                 self.channels.write().unwrap().clear_cliprdr();
                 true
             }

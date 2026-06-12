@@ -252,7 +252,7 @@ impl ApplicationHandler for AppHandler {
             let now = Instant::now();
             let fps = self.fps_limit;
             let interval = Duration::from_secs_f64(1.0 / fps as f64);
-            
+
             let mut next_tick = self.next_tick.unwrap_or(now);
 
             if now >= next_tick {

@@ -787,6 +787,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "channels"
+version = "5.0.0"
+dependencies = [
+ "anyhow",
+ "clipboard-rs",
+ "cpal",
+ "flume 0.12.0",
+ "libc",
+ "libloading",
+ "nokhwa",
+ "rdp",
+ "shared",
+ "turbojpeg",
+]
+
+[[package]]
 name = "chrono"
 version = "0.4.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2095,6 +2111,7 @@ version = "5.0.0"
 dependencies = [
  "anyhow",
  "bytemuck",
+ "channels",
  "connection",
  "flume 0.12.0",
  "gettext",
@@ -3207,19 +3224,6 @@ checksum = "bb85c154ba489f01b25c0d36ae69a87e4a1c73a72631fc6c0eb6dde34a73e44b"
 dependencies = [
  "num-traits",
  "pxfm",
-]
-
-[[package]]
-name = "multimedia"
-version = "5.0.0"
-dependencies = [
- "cpal",
- "flume 0.12.0",
- "libc",
- "libloading",
- "nokhwa",
- "shared",
- "turbojpeg",
 ]
 
 [[package]]
@@ -4620,11 +4624,9 @@ name = "rdp"
 version = "5.0.0"
 dependencies = [
  "anyhow",
- "clipboard-rs",
  "flume 0.12.0",
  "freerdp-sys",
  "glob",
- "multimedia",
  "shared",
  "windows 0.62.2",
  "zeroize",

@@ -195,7 +195,9 @@ impl AppHandler {
                 }
                 #[cfg(not(feature = "gui-tester"))]
                 LaunchAction::ConnectRdp | LaunchAction::ConnectRail => {
-                    log::warn!("RDP Connect/RAIL test actions are disabled without 'gui-tester' feature");
+                    log::warn!(
+                        "RDP Connect/RAIL test actions are disabled without 'gui-tester' feature"
+                    );
                 }
             }
         }
