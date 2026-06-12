@@ -137,8 +137,8 @@ pub unsafe extern "C" fn on_control_data(
         pdu.push(1u8); // version
         pdu.push(5u8); // msg_id (CAM_MSG_ID_DeviceAddedNotification)
 
-        // DeviceName (UTF-16 LE null-terminated): "Mock Camera\0"
-        let name = "Mock Camera";
+        // DeviceName (UTF-16 LE null-terminated): e.g. "UDS Camera\0" or "Mock Camera\0"
+        let name = ctx.webcam.get_device_name();
         let mut utf16: Vec<u16> = name.encode_utf16().collect();
         utf16.push(0); // Null terminator
         for &val in &utf16 {
