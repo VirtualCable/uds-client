@@ -201,6 +201,7 @@ impl RdpSettings {
             desktop_scale: 1.0,
             use_local_scaler: self.use_local_scaler.unwrap_or(true),
             use_tunnel: self.use_tunnel.unwrap_or(defs.use_tunnel),
+            features: defs.features,
         }
     }
 }

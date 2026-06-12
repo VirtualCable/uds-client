@@ -385,6 +385,22 @@ impl Rdp {
                     );
                 });
 
+                if self.config.settings.features.disable_threading {
+                    freerdp_settings_set_uint32(
+                        settings,
+                        FreeRDP_Settings_Keys_UInt32_FreeRDP_ThreadingFlags,
+                        THREADING_FLAGS_DISABLE_THREADS,
+                    );
+                }
+
+                if self.config.settings.features.force_software_gdi {
+                    freerdp_settings_set_bool(
+                        settings,
+                        FreeRDP_Settings_Keys_Bool_FreeRDP_SoftwareGdi,
+                        true.into(),
+                    );
+                }
+
                 // Set perfromance flags from settings
                 freerdp_sys::freerdp_performance_flags_make(settings);
                 // Finally, set rail settings if needed
@@ -473,6 +489,14 @@ impl Rdp {
                 #[allow(clippy::single_element_loop)]
                 for key in [FreeRDP_Settings_Keys_Bool_FreeRDP_GfxH264] {
                     freerdp_settings_set_bool(settings, key, false.into());
+                }
+
+                if self.config.settings.features.force_software_gdi {
+                    freerdp_settings_set_bool(
+                        settings,
+                        FreeRDP_Settings_Keys_Bool_FreeRDP_SoftwareGdi,
+                        true.into(),
+                    );
                 }
 
                 // Enable Frame Acknowledge for GFX flow control

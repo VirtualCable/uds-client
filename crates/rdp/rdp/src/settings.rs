@@ -116,6 +116,14 @@ pub struct RdpRedirections {
     pub sound_latency_threshold: Option<u16>,
 }
 
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Zeroize, Default,
+)]
+pub struct RdpFeatures {
+    pub disable_threading: bool,
+    pub force_software_gdi: bool,
+}
+
 #[derive(Clone, Zeroize)]
 pub struct RdpSettings {
     pub server: String,
@@ -130,6 +138,7 @@ pub struct RdpSettings {
 
     pub redirections: RdpRedirections,
     pub rail: Option<RailSettings>,
+    pub features: RdpFeatures,
 
     pub desktop_scale: f64,
     pub use_local_scaler: bool,
@@ -158,6 +167,7 @@ impl Default for RdpSettings {
                 sound_latency_threshold: None,
             },
             rail: None,
+            features: RdpFeatures::default(),
             desktop_scale: 1.0,
             use_local_scaler: true,
             use_tunnel: false,
@@ -189,6 +199,7 @@ impl fmt::Debug for RdpSettings {
             .field("desktop_scale", &self.desktop_scale)
             .field("use_local_scaler", &self.use_local_scaler)
             .field("use_tunnel", &self.use_tunnel)
+            .field("features", &self.features)
             .finish()
     }
 }
