@@ -150,13 +150,20 @@ impl GfxChannel {
     /// Hooks the Graphics Pipeline into the GDI drawing engine.
     /// This handles drawing GFX frames into the GDI surface and
     /// automatically sends frame acknowledgments for flow control.
-    pub unsafe fn hook_gdi(&self, gdi: *mut rdpGdi, use_individual_windows: bool) -> bool {
+    pub unsafe fn hook_gdi(&self, gdi: *mut rdpGdi) -> bool {
         if let Some(ptr) = &self.ptr {
             log::debug!("GFX: Hooking GDI pipeline");
             let context = ptr.as_mut_ptr();
             unsafe {
                 if gdi_graphics_pipeline_init(gdi, context) != 0 {
                     log::info!("GFX: Graphics pipeline integrated with GDI.");
+                    let rdp_context = (*gdi).context;
+                    let use_individual_windows = if let Some(owner) = rdp_context.owner() {
+                        owner.config.settings.rail.as_ref().map(|r| r.behavior)
+                            == Some(crate::settings::RailBehavior::IndividualWindows)
+                    } else {
+                        false
+                    };
                     if use_individual_windows {
                         (*context).UpdateWindowFromSurface = Some(update_window_from_surface);
                     } else {

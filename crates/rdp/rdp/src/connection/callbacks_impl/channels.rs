@@ -85,15 +85,12 @@ impl channels::ChannelsCallbacks for Rdp {
                 let interface = p_interface as *mut RdpgfxClientContext;
                 self.channels.write().unwrap().set_gfx_ptr(interface);
                 unsafe {
-                    let use_individual_windows =
-                        self.config.settings.rail.as_ref().map(|r| r.behavior)
-                            == Some(crate::settings::RailBehavior::IndividualWindows);
                     self.channels
                         .read()
                         .unwrap()
                         .gfx()
                         .unwrap()
-                        .hook_gdi(self.gdi().unwrap(), use_individual_windows);
+                        .hook_gdi(self.gdi().unwrap());
 
                     // Re-register EndPaint/BeginPaint because gdi_graphics_pipeline_init overwrites them
                     let context = self.instance.as_deref().unwrap().context;
