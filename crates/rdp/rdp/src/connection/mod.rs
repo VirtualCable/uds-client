@@ -155,7 +155,7 @@ impl Rdp {
                     (FreeRDP_Settings_Keys_UInt32_FreeRDP_FrameAcknowledge, 0),
                     (
                         FreeRDP_Settings_Keys_UInt32_FreeRDP_DesktopScaleFactor,
-                        (self.config.settings.desktop_scale * 100.0) as u32,
+                        (self.config.settings.options.desktop_scale * 100.0) as u32,
                     ),
                     // 100% device = use desktop scale factor
                     // DeviceScaleFactor only allows 100, 140 y 180.. O.o
@@ -311,14 +311,14 @@ impl Rdp {
                 freerdp_settings_set_bool(
                     settings,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_IgnoreCertificate,
-                    (!self.config.settings.verify_cert).into(),
+                    (!self.config.settings.options.verify_cert).into(),
                 );
 
                 // NLA setting
                 freerdp_settings_set_bool(
                     settings,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_NlaSecurity,
-                    self.config.settings.use_nla.into(),
+                    self.config.settings.options.use_nla.into(),
                 );
 
                 let drives_to_redirect = std::ffi::CString::new(

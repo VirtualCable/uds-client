@@ -110,7 +110,7 @@ impl RdpState {
         );
         let (tx, rx) = bounded::<RdpMessage>(FRAMES_IN_FLIGHT);
 
-        let scale_factor = settings.desktop_scale;
+        let scale_factor = settings.options.desktop_scale;
         let rail_title = settings.rail.as_ref().and_then(|r| r.title.clone());
 
         let integrations = rdp_ffi::integrations::RdpIntegrations {
@@ -270,7 +270,7 @@ impl crate::AppHandler {
 
         let monitor_scale = crate::monitor::scale(0);
         let (desktop_w, desktop_h) = crate::monitor::size(0).unwrap_or((1920, 1080));
-        let use_local_scaler = settings.use_local_scaler;
+        let use_local_scaler = settings.options.use_local_scaler;
         let local_scale = if use_local_scaler { monitor_scale } else { 1.0 };
 
         let (rdp_w, rdp_h) = match (settings.screen_size, is_rail) {
@@ -282,10 +282,10 @@ impl crate::AppHandler {
             (rdp_ffi::geom::ScreenSize::Fixed(w, h), _) => (w, h),
         };
         let coords_scale = if use_local_scaler {
-            settings.desktop_scale = 1.0;
+            settings.options.desktop_scale = 1.0;
             monitor_scale
         } else {
-            settings.desktop_scale = monitor_scale;
+            settings.options.desktop_scale = monitor_scale;
             1.0
         };
         let desktop_size = (rdp_w, rdp_h);

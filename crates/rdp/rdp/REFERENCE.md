@@ -31,15 +31,25 @@ pub struct RdpSettings {
     pub user: String,
     pub password: String,
     pub domain: String,
-    pub verify_cert: bool,
-    pub use_nla: bool,
     pub screen_size: ScreenSize,
     pub best_experience: bool,
     pub redirections: RdpRedirections,
     pub rail: Option<RailSettings>,
-    pub desktop_scale: f64,
+    pub features: RdpFeatures,
+    pub options: RdpOptions,
+}
+
+pub struct RdpFeatures {
+    pub disable_threading: bool,
+    pub force_software_gdi: bool,
+}
+
+pub struct RdpOptions {
+    pub use_nla: bool,
+    pub verify_cert: bool,
     pub use_local_scaler: bool,
     pub use_tunnel: bool,
+    pub desktop_scale: f64,
 }
 ```
 
@@ -128,9 +138,20 @@ pub trait AudioInputIntegration: Send + Sync + std::fmt::Debug {
 Supplies captured webcam frames for the MS-RDPECAM channel.
 ```rust
 pub trait WebcamIntegration: Send + Sync + std::fmt::Debug {
-    fn on_webcam_start(&self);
-    fn on_webcam_stop(&self);
-    fn request_frame(&self) -> Option<WebcamFrame>;
+    fn is_h264_available(&self) -> bool;
+    fn get_camera_dimensions(&self) -> (u32, u32);
+    fn get_max_dimensions(&self) -> (u32, u32);
+    fn get_fps(&self) -> u32;
+    fn set_mode(&self, mode: WebcamMode);
+    fn set_format(&self, format: u32, width: u32, height: u32, fps: u32);
+    fn start_stream(&self, width: u32, height: u32, fps: u32) -> flume::Receiver<WebcamFrame>;
+    fn stop_stream(&self);
+    fn request_sample(&self, channel_ptr: usize);
+    fn push_frame(&self, data: Vec<u8>);
+    fn set_limits(&self, _quality: u32, _fps: u32, _max_width: u32, _max_height: u32) {}
+    fn get_device_name(&self) -> String {
+        "UDS Camera".to_string()
+    }
 }
 ```
 

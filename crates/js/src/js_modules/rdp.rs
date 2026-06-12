@@ -82,6 +82,14 @@ struct RdpRedirections {
     pub sound_latency_threshold: Option<u16>,
 }
 
+#[derive(Debug, Default, TryFromJs, Zeroize, ZeroizeOnDrop, Clone)]
+struct JsRdpOptions {
+    pub verify_cert: Option<bool>,
+    pub use_nla: Option<bool>,
+    pub use_local_scaler: Option<bool>,
+    pub use_tunnel: Option<bool>,
+}
+
 #[derive(Debug, TryFromJs, Zeroize, ZeroizeOnDrop)]
 struct RdpSettings {
     pub server: String,
@@ -89,15 +97,12 @@ struct RdpSettings {
     pub user: Option<String>,
     pub password: Option<String>,
     pub domain: Option<String>,
-    pub verify_cert: Option<bool>,
-    pub use_nla: Option<bool>,
     pub screen_width: Option<u32>,
     pub screen_height: Option<u32>,
     pub best_experience: Option<bool>,
     pub redirections: Option<RdpRedirections>,
     pub rail: Option<RailSettings>,
-    pub use_local_scaler: Option<bool>,
-    pub use_tunnel: Option<bool>,
+    pub options: Option<JsRdpOptions>,
 }
 
 impl Default for RdpSettings {
@@ -108,15 +113,12 @@ impl Default for RdpSettings {
             user: None,
             password: None,
             domain: None,
-            verify_cert: None,
-            use_nla: None,
             screen_width: None,
             screen_height: None,
             best_experience: None,
             redirections: None,
             rail: None,
-            use_local_scaler: None,
-            use_tunnel: None,
+            options: None,
         }
     }
 }
@@ -147,8 +149,6 @@ impl RdpSettings {
             user: self.user.clone().unwrap_or(defs.user),
             password: self.password.clone().unwrap_or(defs.password),
             domain: self.domain.clone().unwrap_or(defs.domain),
-            verify_cert: self.verify_cert.unwrap_or(defs.verify_cert),
-            use_nla: self.use_nla.unwrap_or(defs.use_nla),
             screen_size,
             best_experience: self.best_experience.unwrap_or(defs.best_experience),
             redirections: settings::RdpRedirections {
@@ -198,10 +198,17 @@ impl RdpSettings {
                     })
                     .unwrap_or(settings::RailBehavior::IndividualWindows),
             }),
-            desktop_scale: 1.0,
-            use_local_scaler: self.use_local_scaler.unwrap_or(true),
-            use_tunnel: self.use_tunnel.unwrap_or(defs.use_tunnel),
             features: defs.features,
+            options: {
+                let opt = self.options.clone().unwrap_or_default();
+                settings::RdpOptions {
+                    use_nla: opt.use_nla.unwrap_or(defs.options.use_nla),
+                    verify_cert: opt.verify_cert.unwrap_or(defs.options.verify_cert),
+                    use_local_scaler: opt.use_local_scaler.unwrap_or(defs.options.use_local_scaler),
+                    use_tunnel: opt.use_tunnel.unwrap_or(defs.options.use_tunnel),
+                    desktop_scale: 1.0,
+                }
+            },
         }
     }
 }
@@ -318,8 +325,10 @@ mod tests {
                 user: "testuser",
                 password: "password",
                 domain: "DOMAIN",
-                verify_cert: true,
-                use_nla: true,
+                options: {
+                    verify_cert: true,
+                    use_nla: true
+                },
                 screen_width: 1024,
                 screen_height: 768,
                 redirections: {
@@ -338,8 +347,8 @@ mod tests {
                     assert_eq!(settings.user, "testuser");
                     assert_eq!(settings.password, "password");
                     assert_eq!(settings.domain, "DOMAIN");
-                    assert!(settings.verify_cert);
-                    assert!(settings.use_nla);
+                    assert!(settings.options.verify_cert);
+                    assert!(settings.options.use_nla);
                     match settings.screen_size {
                         ScreenSize::Fixed(w, h) => {
                             assert_eq!(w, 1024);
@@ -393,8 +402,8 @@ mod tests {
                     assert_eq!(settings.user, "");
                     assert_eq!(settings.password, "");
                     assert_eq!(settings.domain, "");
-                    assert!(!settings.verify_cert);
-                    assert!(settings.use_nla);
+                    assert!(!settings.options.verify_cert);
+                    assert!(settings.options.use_nla);
                     match settings.screen_size {
                         ScreenSize::Full => {}
                         _ => panic!("Expected full screen size, got {:?}", settings.screen_size),
@@ -470,15 +479,18 @@ mod tests {
     #[test]
     fn to_core_use_local_scaler_defaults_true() {
         let s = RdpSettings::default();
-        assert!(s.to_core_settings().use_local_scaler);
+        assert!(s.to_core_settings().options.use_local_scaler);
     }
 
     #[test]
     fn to_core_use_local_scaler_explicit_false() {
         let mut s = RdpSettings::default();
         s.server = "h".into();
-        s.use_local_scaler = Some(false);
-        assert!(!s.to_core_settings().use_local_scaler);
+        s.options = Some(JsRdpOptions {
+            use_local_scaler: Some(false),
+            ..Default::default()
+        });
+        assert!(!s.to_core_settings().options.use_local_scaler);
     }
 
     #[test]

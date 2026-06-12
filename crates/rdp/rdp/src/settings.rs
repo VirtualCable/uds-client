@@ -124,6 +124,29 @@ pub struct RdpFeatures {
     pub force_software_gdi: bool,
 }
 
+#[derive(
+    Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize, Zeroize,
+)]
+pub struct RdpOptions {
+    pub use_nla: bool,
+    pub verify_cert: bool,
+    pub use_local_scaler: bool,
+    pub use_tunnel: bool,
+    pub desktop_scale: f64,
+}
+
+impl Default for RdpOptions {
+    fn default() -> Self {
+        Self {
+            use_nla: true,
+            verify_cert: false,
+            use_local_scaler: true,
+            use_tunnel: false,
+            desktop_scale: 1.0,
+        }
+    }
+}
+
 #[derive(Clone, Zeroize)]
 pub struct RdpSettings {
     pub server: String,
@@ -131,18 +154,13 @@ pub struct RdpSettings {
     pub user: String,
     pub password: String,
     pub domain: String,
-    pub verify_cert: bool,
-    pub use_nla: bool,
     pub screen_size: ScreenSize,
     pub best_experience: bool,
 
     pub redirections: RdpRedirections,
     pub rail: Option<RailSettings>,
     pub features: RdpFeatures,
-
-    pub desktop_scale: f64,
-    pub use_local_scaler: bool,
-    pub use_tunnel: bool,
+    pub options: RdpOptions,
 }
 
 impl Default for RdpSettings {
@@ -153,8 +171,6 @@ impl Default for RdpSettings {
             user: "".to_string(),
             password: "".to_string(),
             domain: "".to_string(),
-            verify_cert: false,
-            use_nla: true,
             screen_size: ScreenSize::Fixed(1024, 768),
             best_experience: true,
             redirections: RdpRedirections {
@@ -168,9 +184,7 @@ impl Default for RdpSettings {
             },
             rail: None,
             features: RdpFeatures::default(),
-            desktop_scale: 1.0,
-            use_local_scaler: true,
-            use_tunnel: false,
+            options: RdpOptions::default(),
         }
     }
 }
@@ -190,16 +204,12 @@ impl fmt::Debug for RdpSettings {
                     "\"****\"".to_string()
                 }
             })
-            .field("verify_cert", &self.verify_cert)
-            .field("use_nla", &self.use_nla)
             .field("screen_size", &self.screen_size)
             .field("best_experience", &self.best_experience)
             .field("redirections", &self.redirections)
             .field("rail", &self.rail)
-            .field("desktop_scale", &self.desktop_scale)
-            .field("use_local_scaler", &self.use_local_scaler)
-            .field("use_tunnel", &self.use_tunnel)
             .field("features", &self.features)
+            .field("options", &self.options)
             .finish()
     }
 }
@@ -215,7 +225,7 @@ mod tests {
 
     #[test]
     fn default_nla_is_true() {
-        assert!(RdpSettings::default().use_nla);
+        assert!(RdpSettings::default().options.use_nla);
     }
 
     #[test]

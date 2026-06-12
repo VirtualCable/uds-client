@@ -80,7 +80,7 @@ impl instance::InstanceCallbacks for Rdp {
     fn on_redirect(&mut self) -> bool {
         log::debug!(" **** Redirecting!");
         // Override FreeRDP_ServerHostname with original hostname if tunnel flag is set
-        if self.config.settings.use_tunnel
+        if self.config.settings.options.use_tunnel
             && let Some(settings) = self.settings()
             && let Ok(host) = CString::new(self.config.settings.server.as_str())
         {
