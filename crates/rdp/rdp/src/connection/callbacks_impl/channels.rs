@@ -85,8 +85,9 @@ impl channels::ChannelsCallbacks for Rdp {
                 let interface = p_interface as *mut RdpgfxClientContext;
                 self.channels.write().unwrap().set_gfx_ptr(interface);
                 unsafe {
-                    let use_individual_windows = self.config.settings.rail.as_ref().map(|r| r.behavior)
-                        == Some(crate::settings::RailBehavior::IndividualWindows);
+                    let use_individual_windows =
+                        self.config.settings.rail.as_ref().map(|r| r.behavior)
+                            == Some(crate::settings::RailBehavior::IndividualWindows);
                     self.channels
                         .read()
                         .unwrap()

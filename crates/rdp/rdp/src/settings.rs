@@ -79,7 +79,9 @@ impl Default for WebcamSettings {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Zeroize, Default)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Zeroize, Default,
+)]
 pub enum RailBehavior {
     CompositeGdi,
     #[default]

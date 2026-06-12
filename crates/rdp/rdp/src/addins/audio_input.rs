@@ -123,7 +123,11 @@ unsafe extern "C" fn set_format(
         frames_per_packet
     );
 
-    if let Some(tx) = plugin.rdpcontext.owner().and_then(|rdp| rdp.update_tx.as_ref()) {
+    if let Some(tx) = plugin
+        .rdpcontext
+        .owner()
+        .and_then(|rdp| rdp.update_tx.as_ref())
+    {
         let _ = tx.send(crate::messaging::RdpMessage::MicConfig {
             sample_rate: fmt.nSamplesPerSec,
             frames_per_packet,

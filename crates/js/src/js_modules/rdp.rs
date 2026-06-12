@@ -157,23 +157,24 @@ impl RdpSettings {
                     .unwrap_or(defs.redirections.clipboard),
                 audio: redirections.audio.unwrap_or(defs.redirections.audio),
                 mic: redirections.mic.unwrap_or(defs.redirections.mic),
-                printing: redirections
-                    .printing
-                    .unwrap_or(defs.redirections.printing),
+                printing: redirections.printing.unwrap_or(defs.redirections.printing),
                 drives: redirections
                     .drives
                     .clone()
                     .unwrap_or_else(|| defs.redirections.drives.clone()),
-                webcam: redirections.webcam.as_ref().map(|w| settings::WebcamSettings {
-                    enabled: w.enabled,
-                    quality: w.quality.unwrap_or(80),
-                    fps: w.fps.unwrap_or(15),
-                    codec: settings::WebcamCodec::Best,
-                    browser_h264: false,
-                    width: 640,
-                    height: 480,
-                    size_limit: w.size_limit,
-                }),
+                webcam: redirections
+                    .webcam
+                    .as_ref()
+                    .map(|w| settings::WebcamSettings {
+                        enabled: w.enabled,
+                        quality: w.quality.unwrap_or(80),
+                        fps: w.fps.unwrap_or(15),
+                        codec: settings::WebcamCodec::Best,
+                        browser_h264: false,
+                        width: 640,
+                        height: 480,
+                        size_limit: w.size_limit,
+                    }),
                 sound_latency_threshold: redirections.sound_latency_threshold,
             },
             rail: self.rail.as_ref().map(|r| settings::RailSettings {

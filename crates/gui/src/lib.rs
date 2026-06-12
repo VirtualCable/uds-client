@@ -31,10 +31,10 @@ mod session;
 
 use types::{AppState, GuiMessage, ReturnCode};
 use windows::about::AboutState;
-use windows::launcher::{LauncherInner, TestingLauncherState};
 use windows::popup::PopupState;
 use windows::progress::{ProgressPhase, ProgressState};
 use windows::rdp::{RdpMode, RdpState};
+use windows::testing_launcher_window::{TestingLauncherInner, TestingLauncherState};
 
 #[derive(Debug)]
 pub struct RawKey {
@@ -46,7 +46,7 @@ pub struct RawKey {
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum WindowKind {
-    Launcher,
+    TestingLauncher,
     Rdp,
     RdpRail(u32),
     Popup,
@@ -56,7 +56,7 @@ enum WindowKind {
 
 pub struct AppHandler {
     catalog: gettext::Catalog,
-    launcher: Option<TestingLauncherState>,
+    testing_launcher: Option<TestingLauncherState>,
     progress: Option<ProgressState>,
     rdp: Option<Box<RdpState>>,
     popup: Option<PopupState>,
@@ -74,14 +74,14 @@ pub struct AppHandler {
     rail_button_down: Option<u32>,
     rail_ipc: Option<crate::ipc::IpcListener>,
     return_code: ReturnCode,
-    initial_state: Option<AppState>,
+    initial_state: AppState,
     first_resume: bool,
     next_tick: Option<Instant>,
 }
 
 pub fn run_gui(
     catalog: gettext::Catalog,
-    initial_state: Option<AppState>,
+    initial_state: AppState,
     messages_rx: Receiver<GuiMessage>,
     stop: Trigger,
     fps_limit: Option<u32>,
@@ -92,7 +92,7 @@ pub fn run_gui(
 
     let mut app = AppHandler {
         catalog,
-        launcher: None,
+        testing_launcher: None,
         progress: None,
         rdp: None,
         popup: None,
@@ -132,7 +132,7 @@ impl AppHandler {
     fn tick_animations(&mut self) {
         if let Some(ref mut p) = self.progress {
             p.animation_time += 0.3;
-            if self.launcher.is_some() && p.pct < 100 {
+            if self.testing_launcher.is_some() && p.pct < 100 {
                 p.pct += 1;
                 if p.pct >= 100 {
                     p.phase = ProgressPhase::Connected;
@@ -155,11 +155,15 @@ impl ApplicationHandler for AppHandler {
         monitor::populate(el);
         if self.first_resume {
             self.first_resume = false;
-            let inner = match self.initial_state.take().unwrap_or_default() {
-                AppState::Test => LauncherInner::new_test(),
-                AppState::Progress => LauncherInner::default(),
-            };
-            let _ = self.open_launcher(el, inner);
+            match self.initial_state.clone() {
+                AppState::Test => {
+                    let inner = TestingLauncherInner::new_test();
+                    let _ = self.open_testing_launcher(el, inner);
+                }
+                AppState::Progress => {
+                    let _ = self.open_progress(el);
+                }
+            }
         }
     }
 
@@ -178,8 +182,8 @@ impl ApplicationHandler for AppHandler {
 
                 // Dispatch redraw by window kind
                 match self.windows.get(&wid) {
-                    Some(WindowKind::Launcher) => {
-                        self.handle_launcher_event(el, WindowEvent::RedrawRequested)
+                    Some(WindowKind::TestingLauncher) => {
+                        self.handle_testing_launcher_event(el, WindowEvent::RedrawRequested)
                     }
                     Some(WindowKind::Progress) => {
                         self.handle_progress_event(el, WindowEvent::RedrawRequested)
@@ -215,7 +219,9 @@ impl ApplicationHandler for AppHandler {
             _ => {
                 // Dispatch by window kind
                 match self.windows.get(&wid) {
-                    Some(WindowKind::Launcher) => self.handle_launcher_event(el, event),
+                    Some(WindowKind::TestingLauncher) => {
+                        self.handle_testing_launcher_event(el, event)
+                    }
                     Some(WindowKind::Progress) => self.handle_progress_event(el, event),
                     #[allow(clippy::collapsible_match)]
                     Some(WindowKind::Rdp) => {

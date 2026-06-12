@@ -112,7 +112,7 @@ fn main() {
     // Run the GUI, this will block until the GUI is closed
     gui::run_gui(
         intl::get_catalog().clone(),
-        None,
+        gui::types::AppState::Progress,
         messages_rx,
         stop.clone(),
         app_data.fps_limit,
