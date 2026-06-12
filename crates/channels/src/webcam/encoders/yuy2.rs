@@ -7,7 +7,10 @@ pub struct Yuy2Encoder {
 
 impl Yuy2Encoder {
     pub fn new() -> Self {
-        Self { width: 0, height: 0 }
+        Self {
+            width: 0,
+            height: 0,
+        }
     }
 }
 

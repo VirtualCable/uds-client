@@ -147,7 +147,7 @@ fn main() -> Result<()> {
 
     gui::run_gui(
         fake_catalog,
-        Some(gui::types::AppState::Progress),
+        gui::types::AppState::Progress,
         messages_rx,
         stop_trigger.clone(),
         app_data.fps_limit,

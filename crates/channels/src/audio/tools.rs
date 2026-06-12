@@ -137,7 +137,10 @@ pub fn f32_to_pcm(data: &[f32], bits_per_sample: u16) -> Vec<u8> {
             out
         }
         _ => {
-            log::error!("[audio_tools] Unsupported bits per sample: {}", bits_per_sample);
+            log::error!(
+                "[audio_tools] Unsupported bits per sample: {}",
+                bits_per_sample
+            );
             Vec::new()
         }
     }

@@ -113,7 +113,15 @@ impl RdpState {
         let scale_factor = settings.desktop_scale;
         let rail_title = settings.rail.as_ref().and_then(|r| r.title.clone());
 
-        let (rdp_instance, command_tx) = rdp_ffi::Rdp::new(settings, tx, use_rgba);
+        let integrations = rdp_ffi::integrations::RdpIntegrations {
+            audio_output: Some(Arc::new(channels::audio::output::AudioHandle::new())),
+            audio_input: Some(Arc::new(channels::audio::input::MicHandle::new())),
+            webcam: Some(Arc::new(channels::webcam::WebcamHandle::new())),
+            clipboard: Some(Arc::new(channels::clipboard::ClipboardHandle::new())),
+        };
+
+        let (rdp_instance, command_tx) =
+            rdp_ffi::Rdp::new(settings, tx, use_rgba, None, integrations);
         let command_event = rdp_instance.get_command_event();
 
         let mut rdp = Box::pin(rdp_instance);
@@ -492,7 +500,9 @@ impl crate::AppHandler {
                     // Set active cursor on the new window
                     if state.cursor.visible && !state.cursor.data.is_empty() {
                         let (rgba, w, h, hx, hy) = state.cursor.build_scaled_rgba();
-                        if let Ok(source) = winit::window::CustomCursor::from_rgba(rgba, w, h, hx, hy) {
+                        if let Ok(source) =
+                            winit::window::CustomCursor::from_rgba(rgba, w, h, hx, hy)
+                        {
                             let custom_cursor = el.create_custom_cursor(source);
                             window.set_cursor(custom_cursor);
                         }

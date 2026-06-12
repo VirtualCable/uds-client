@@ -8,6 +8,7 @@ use wgpu_text::glyph_brush::{OwnedSection, Section, Text};
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
 
+use crate::WindowKind;
 use crate::draw::ui::{
     progress,
     waves::{self, Wave},
@@ -323,6 +324,27 @@ impl ProgressState {
 }
 
 impl crate::AppHandler {
+    pub(crate) fn open_progress(&mut self, el: &ActiveEventLoop) -> anyhow::Result<()> {
+        macro_rules! tr {
+            ($msg:expr) => {
+                self.gettext($msg)
+            };
+        }
+        if self.progress.is_none() {
+            let p = ProgressState::new(
+                el,
+                tr!("UDS Launcher"),
+                tr!("CANCEL"),
+                tr!("Connecting to RDP server..."),
+                tr!("Connected."),
+            )?;
+            let wid = p.window.id();
+            self.register_window(wid, WindowKind::Progress);
+            self.progress = Some(p);
+        }
+        Ok(())
+    }
+
     pub(crate) fn handle_progress_event(&mut self, el: &ActiveEventLoop, event: WindowEvent) {
         let Some(ref mut p) = self.progress else {
             return;

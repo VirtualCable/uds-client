@@ -241,7 +241,9 @@ impl RdpState {
             if !is_stuck {
                 return;
             }
-            log::warn!("Desktop resize request was stuck/unacknowledged for > 2 seconds. Retrying...");
+            log::warn!(
+                "Desktop resize request was stuck/unacknowledged for > 2 seconds. Retrying..."
+            );
         }
 
         let sf = self.coords_scale.max(1.0);

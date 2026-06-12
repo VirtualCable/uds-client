@@ -2,11 +2,11 @@
 // Copyright (c) 2025, Virtual Cable S.L.
 // All rights reserved.
 
-use std::ffi::c_void;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Once;
-use std::path::PathBuf;
 use shared::log;
+use std::ffi::c_void;
+use std::path::PathBuf;
+use std::sync::Once;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub static OPENH264_AVAILABLE: AtomicBool = AtomicBool::new(false);
 static INIT: Once = Once::new();
@@ -69,17 +69,24 @@ pub struct ISVCEncoderVtbl {
     pub initialize_ext: unsafe extern "C" fn(*mut ISVCEncoder, *const c_void) -> libc::c_int,
     pub get_default_params: unsafe extern "C" fn(*mut ISVCEncoder, *mut c_void) -> libc::c_int,
     pub uninitialize: unsafe extern "C" fn(*mut ISVCEncoder) -> libc::c_int,
-    pub encode_frame: unsafe extern "C" fn(*mut ISVCEncoder, *const SSourcePicture, *mut SFrameBSInfo) -> libc::c_int,
-    pub encode_parameter_sets: unsafe extern "C" fn(*mut ISVCEncoder, *mut SFrameBSInfo) -> libc::c_int,
+    pub encode_frame: unsafe extern "C" fn(
+        *mut ISVCEncoder,
+        *const SSourcePicture,
+        *mut SFrameBSInfo,
+    ) -> libc::c_int,
+    pub encode_parameter_sets:
+        unsafe extern "C" fn(*mut ISVCEncoder, *mut SFrameBSInfo) -> libc::c_int,
     pub force_intra_frame: unsafe extern "C" fn(*mut ISVCEncoder, bool) -> libc::c_int,
     pub set_option: unsafe extern "C" fn(*mut ISVCEncoder, libc::c_int, *mut c_void) -> libc::c_int,
     pub get_option: unsafe extern "C" fn(*mut ISVCEncoder, libc::c_int, *mut c_void) -> libc::c_int,
 }
 
-pub type WelsTraceCallback = unsafe extern "C" fn(context: *mut c_void, level: libc::c_int, message: *const libc::c_char);
+pub type WelsTraceCallback =
+    unsafe extern "C" fn(context: *mut c_void, level: libc::c_int, message: *const libc::c_char);
 
 // Function types we need to load from the DLL/so/dylib
-type WelsCreateSVCEncoderFn = unsafe extern "C" fn(pp_encoder: *mut *mut ISVCEncoder) -> libc::c_int;
+type WelsCreateSVCEncoderFn =
+    unsafe extern "C" fn(pp_encoder: *mut *mut ISVCEncoder) -> libc::c_int;
 type WelsDestroySVCEncoderFn = unsafe extern "C" fn(p_encoder: *mut ISVCEncoder);
 
 // Keep the loaded library in memory once loaded
@@ -88,23 +95,23 @@ static mut CREATE_ENCODER_FN: Option<WelsCreateSVCEncoderFn> = None;
 static mut DESTROY_ENCODER_FN: Option<WelsDestroySVCEncoderFn> = None;
 
 pub fn h264_available() -> bool {
-    INIT.call_once(|| {
-        match init_openh264_library() {
-            Ok(_) => {
-                log::info!("OpenH264 library loaded successfully.");
-                OPENH264_AVAILABLE.store(true, Ordering::Relaxed);
-            }
-            Err(e) => {
-                log::warn!("OpenH264 library failed to load (will fallback to MJPEG): {e}");
-                OPENH264_AVAILABLE.store(false, Ordering::Relaxed);
-            }
+    INIT.call_once(|| match init_openh264_library() {
+        Ok(_) => {
+            log::info!("OpenH264 library loaded successfully.");
+            OPENH264_AVAILABLE.store(true, Ordering::Relaxed);
+        }
+        Err(e) => {
+            log::warn!("OpenH264 library failed to load (will fallback to MJPEG): {e}");
+            OPENH264_AVAILABLE.store(false, Ordering::Relaxed);
         }
     });
     OPENH264_AVAILABLE.load(Ordering::Relaxed)
 }
 
 fn get_executable_dir() -> Option<PathBuf> {
-    std::env::current_exe().ok().and_then(|p| p.parent().map(|p| p.to_path_buf()))
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
 }
 
 fn init_openh264_library() -> Result<(), String> {
@@ -131,7 +138,9 @@ fn init_openh264_library() -> Result<(), String> {
     // 2. Platform-specific paths
     #[cfg(target_os = "macos")]
     {
-        possible_paths.push(PathBuf::from("/Library/Application Support/UDSLauncher/openh264/libopenh264.dylib"));
+        possible_paths.push(PathBuf::from(
+            "/Library/Application Support/UDSLauncher/openh264/libopenh264.dylib",
+        ));
     }
 
     // 3. Fallback to system library paths (handled by libloading itself if we pass a simple name)
@@ -166,7 +175,10 @@ fn init_openh264_library() -> Result<(), String> {
         let mut loaded = None;
         let mut last_err = None;
         for &name in fallback_names {
-            log::info!("Trying to load OpenH264 from system library search path: {}", name);
+            log::info!(
+                "Trying to load OpenH264 from system library search path: {}",
+                name
+            );
             match unsafe { libloading::Library::new(name) } {
                 Ok(lib) => {
                     loaded = Some(lib);
@@ -189,9 +201,11 @@ fn init_openh264_library() -> Result<(), String> {
 
     // Load symbols
     unsafe {
-        let create_fn: libloading::Symbol<WelsCreateSVCEncoderFn> = lib.get(b"WelsCreateSVCEncoder")
+        let create_fn: libloading::Symbol<WelsCreateSVCEncoderFn> = lib
+            .get(b"WelsCreateSVCEncoder")
             .map_err(|e| format!("Failed to find symbol WelsCreateSVCEncoder: {e}"))?;
-        let destroy_fn: libloading::Symbol<WelsDestroySVCEncoderFn> = lib.get(b"WelsDestroySVCEncoder")
+        let destroy_fn: libloading::Symbol<WelsDestroySVCEncoderFn> = lib
+            .get(b"WelsDestroySVCEncoder")
             .map_err(|e| format!("Failed to find symbol WelsDestroySVCEncoder: {e}"))?;
 
         CREATE_ENCODER_FN = Some(*create_fn);
@@ -243,16 +257,24 @@ mod tests {
     fn test_manual_openh264_load() {
         let available = h264_available();
         println!("OpenH264 library load result: {}", available);
-        assert!(available, "OpenH264 was not successfully loaded from any path!");
+        assert!(
+            available,
+            "OpenH264 was not successfully loaded from any path!"
+        );
     }
 
     #[test]
     #[ignore]
     fn test_manual_openh264_encoder_init() {
-        let mut encoder = crate::webcam::encoders::H264Encoder::new().expect("Failed to instantiate H264Encoder");
+        let mut encoder =
+            crate::webcam::encoders::H264Encoder::new().expect("Failed to instantiate H264Encoder");
         let init_res = encoder.init(640, 480, 30, 80);
         println!("OpenH264 encoder initialization result: {:?}", init_res);
-        assert!(init_res.is_ok(), "Failed to initialize OpenH264 encoder: {:?}", init_res);
+        assert!(
+            init_res.is_ok(),
+            "Failed to initialize OpenH264 encoder: {:?}",
+            init_res
+        );
 
         let dummy_rgb = vec![128u8; 640 * 480 * 3];
         for i in 0..5 {

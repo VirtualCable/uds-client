@@ -30,7 +30,7 @@
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
 use std::collections::VecDeque;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -39,21 +39,33 @@ use shared::log;
 
 use super::tools::{ResamplerIterator, f32_to_pcm};
 
+use rdp::integrations::AudioInputIntegration;
+
 pub enum MicCommand {
     Stop,
 }
 
+#[derive(Debug, Clone)]
 pub struct MicHandle {
-    pub tx: Sender<MicCommand>,
+    pub tx: Arc<Mutex<Option<Sender<MicCommand>>>>,
 }
 
 impl MicHandle {
-    pub fn new(
+    pub fn new() -> Self {
+        MicHandle {
+            tx: Arc::new(Mutex::new(None)),
+        }
+    }
+}
+
+impl AudioInputIntegration for MicHandle {
+    fn start(
+        &self,
         sample_rate: u32,
         channels: u16,
         bits_per_sample: u16,
         frames_per_packet: u32,
-    ) -> (Self, Receiver<Vec<u8>>) {
+    ) -> anyhow::Result<Receiver<Vec<u8>>> {
         log::debug!(
             "Initializing mic: sample_rate={}, channels={}, bits_per_sample={}, frames_per_packet={}",
             sample_rate,
@@ -61,6 +73,7 @@ impl MicHandle {
             bits_per_sample,
             frames_per_packet
         );
+        self.stop();
 
         let (data_tx, data_rx) = unbounded::<Vec<u8>>();
         let (cmd_tx, cmd_rx) = unbounded::<MicCommand>();
@@ -133,7 +146,8 @@ impl MicHandle {
                             };
 
                             let processed: Vec<f32> = if need_downmix {
-                                let mut mono = Vec::with_capacity(processed.len() / actual_channels);
+                                let mut mono =
+                                    Vec::with_capacity(processed.len() / actual_channels);
                                 for frame in processed.chunks_exact(actual_channels) {
                                     mono.push(frame.iter().sum::<f32>() / actual_channels as f32);
                                 }
@@ -173,7 +187,15 @@ impl MicHandle {
             log::debug!("[MicHandle] Capture stopped");
         });
 
-        (Self { tx: cmd_tx }, data_rx)
+        *self.tx.lock().unwrap() = Some(cmd_tx);
+        Ok(data_rx)
+    }
+
+    fn stop(&self) {
+        let mut tx_guard = self.tx.lock().unwrap();
+        if let Some(tx) = tx_guard.take() {
+            let _ = tx.send(MicCommand::Stop);
+        }
     }
 }
 
@@ -222,9 +244,7 @@ fn get_input_config(
         sample_rate
     );
     for cfg in &all {
-        if cfg.min_sample_rate() <= sample_rate
-            && sample_rate <= cfg.max_sample_rate()
-        {
+        if cfg.min_sample_rate() <= sample_rate && sample_rate <= cfg.max_sample_rate() {
             return Some(
                 cfg.try_with_sample_rate(sample_rate)
                     .unwrap_or_else(|| cfg.with_max_sample_rate()),
@@ -236,9 +256,13 @@ fn get_input_config(
         "[MicHandle] No config for {}Hz, falling back to first available config",
         sample_rate
     );
-    all.into_iter()
-        .next()
-        .map(|cfg| cfg.with_max_sample_rate())
+    all.into_iter().next().map(|cfg| cfg.with_max_sample_rate())
+}
+
+impl Default for MicHandle {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -247,7 +271,8 @@ mod tests {
 
     #[test]
     fn test_mic_handle_creation() {
-        let (handle, _data_rx) = MicHandle::new(44100, 1, 16, 480);
-        assert!(handle.tx.send(MicCommand::Stop).is_ok());
+        let handle = MicHandle::new();
+        let _rx = handle.start(44100, 1, 16, 480);
+        handle.stop();
     }
 }

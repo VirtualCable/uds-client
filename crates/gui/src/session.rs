@@ -10,15 +10,10 @@ use crate::AppHandler;
 use crate::WindowKind;
 use crate::types::GuiMessage;
 use crate::windows::popup::{PopupKind, PopupState};
-use crate::windows::progress::{ProgressPhase, ProgressState};
+use crate::windows::progress::ProgressPhase;
 
 impl AppHandler {
     pub(crate) fn process_gui_messages(&mut self, el: &ActiveEventLoop) {
-        macro_rules! tr {
-            ($msg:expr) => {
-                self.gettext($msg)
-            };
-        }
         while let Ok(msg) = self.gui_messages_rx.try_recv() {
             match msg {
                 GuiMessage::Close => {
@@ -57,17 +52,7 @@ impl AppHandler {
                     }
                 }
                 GuiMessage::ShowProgress => {
-                    if let Ok(p) = ProgressState::new(
-                        el,
-                        tr!("UDS Launcher"),
-                        tr!("CANCEL"),
-                        tr!("Connecting to RDP server..."),
-                        tr!("Connected."),
-                    ) {
-                        let wid = p.window.id();
-                        self.register_window(wid, WindowKind::Progress);
-                        self.progress = Some(p);
-                    }
+                    let _ = self.open_progress(el);
                 }
                 GuiMessage::Progress(val, msg) => {
                     if let Some(ref mut p) = self.progress {
@@ -80,7 +65,7 @@ impl AppHandler {
                     }
                 }
                 GuiMessage::ConnectRdp(settings) => {
-                    self.close_launcher();
+                    self.close_testing_launcher();
                     if let Err(e) = self.open_rdp(el, *settings) {
                         log::error!("Failed to enter RDP: {e}");
                         self.stop.trigger();
@@ -92,32 +77,22 @@ impl AppHandler {
         }
 
         // Launcher test actions
-        if let Some(ref mut launcher) = self.launcher
+        if let Some(ref mut launcher) = self.testing_launcher
             && let Some(action) = launcher.inner.take_request()
         {
-            use crate::windows::launcher::LaunchAction;
+            use crate::windows::testing_launcher_window::TestingLaunchAction;
             match action {
-                LaunchAction::ShowProgress => {
-                    if let Ok(p) = ProgressState::new(
-                        el,
-                        tr!("UDS Launcher"),
-                        tr!("CANCEL"),
-                        tr!("Connecting to RDP server..."),
-                        tr!("Connected."),
-                    ) {
-                        let wid = p.window.id();
-                        self.register_window(wid, WindowKind::Progress);
-                        self.progress = Some(p);
-                    }
+                TestingLaunchAction::ShowProgress => {
+                    let _ = self.open_progress(el);
                 }
-                LaunchAction::ShowAbout => {
+                TestingLaunchAction::ShowAbout => {
                     if let Ok(a) = crate::windows::about::AboutState::new(el) {
                         let wid = a.window().id();
                         self.register_window(wid, WindowKind::About);
                         self.about = Some(a);
                     }
                 }
-                LaunchAction::ShowWarning => {
+                TestingLaunchAction::ShowWarning => {
                     if let Ok(p) = PopupState::new(
                         el,
                         PopupKind::Warning("This is a test warning message.".into()),
@@ -127,7 +102,7 @@ impl AppHandler {
                         self.popup = Some(p);
                     }
                 }
-                LaunchAction::ShowError => {
+                TestingLaunchAction::ShowError => {
                     if let Ok(p) = PopupState::new(
                         el,
                         PopupKind::Error("This is a test error message.".into()),
@@ -137,7 +112,7 @@ impl AppHandler {
                         self.popup = Some(p);
                     }
                 }
-                LaunchAction::ShowYesNo => {
+                TestingLaunchAction::ShowYesNo => {
                     let (rtx, _) = tokio::sync::oneshot::channel::<bool>();
                     if let Ok(p) = PopupState::new(
                         el,
@@ -154,39 +129,47 @@ impl AppHandler {
                     }
                 }
                 #[cfg(feature = "gui-tester")]
-                LaunchAction::ConnectRdp | LaunchAction::ConnectRail => {
-                    let is_rail = matches!(action, LaunchAction::ConnectRail);
+                TestingLaunchAction::ConnectRdp | TestingLaunchAction::ConnectRail => {
+                    let is_rail = matches!(action, TestingLaunchAction::ConnectRail);
                     let settings = rdp_ffi::settings::RdpSettings {
                         server: "172.27.247.161".to_string(),
                         user: "user".to_string(),
                         password: "temporal".to_string(),
                         screen_size: rdp_ffi::geom::ScreenSize::Fixed(800, 600),
-                        microphone_redirection: true,
-                        webcam: Some(rdp_ffi::settings::WebcamSettings {
-                            enabled: true,
-                            quality: 80,
-                            fps: 15,
-                            ..rdp_ffi::settings::WebcamSettings::default()
-                        }),
+                        redirections: rdp_ffi::settings::RdpRedirections {
+                            clipboard: true,
+                            audio: true,
+                            mic: true,
+                            printing: false,
+                            drives: vec!["all".to_string()],
+                            webcam: Some(rdp_ffi::settings::WebcamSettings {
+                                enabled: true,
+                                quality: 80,
+                                fps: 15,
+                                ..rdp_ffi::settings::WebcamSettings::default()
+                            }),
+                            sound_latency_threshold: None,
+                        },
                         best_experience: true,
                         use_local_scaler: true,
                         rail: if is_rail {
                             Some(rdp_ffi::settings::RailSettings {
-                                app: "||win32calc".to_string(),
+                                app: "c:\\windows\\system32\\calc.exe".to_string(),
                                 args: None,
                                 working_dir: None,
-                                title: Some("Ms Paint UDS App".to_string()),
+                                title: Some("Windows Calculator".to_string()),
                                 server_info: Some(rdp_ffi::settings::ServerInfo {
                                     id: "test-uds-rail".to_string(),
                                     token: "test-token".to_string(),
                                 }),
+                                ..Default::default()
                             })
                         } else {
                             None
                         },
                         ..Default::default()
                     };
-                    self.close_launcher();
+                    self.close_testing_launcher();
                     if let Err(e) = self.open_rdp(el, settings) {
                         log::error!("Failed to enter RDP: {e}");
                         self.stop.trigger();
@@ -194,8 +177,10 @@ impl AppHandler {
                     }
                 }
                 #[cfg(not(feature = "gui-tester"))]
-                LaunchAction::ConnectRdp | LaunchAction::ConnectRail => {
-                    log::warn!("RDP Connect/RAIL test actions are disabled without 'gui-tester' feature");
+                TestingLaunchAction::ConnectRdp | TestingLaunchAction::ConnectRail => {
+                    log::warn!(
+                        "RDP Connect/RAIL test actions are disabled without 'gui-tester' feature"
+                    );
                 }
             }
         }

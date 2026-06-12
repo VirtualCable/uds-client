@@ -322,15 +322,7 @@ impl AppHandler {
                 } else {
                     &[]
                 };
-                renderer.update_and_render(
-                    upload_data,
-                    rw.width,
-                    rw.height,
-                    &[],
-                    &[],
-                    None,
-                    None,
-                );
+                renderer.update_and_render(upload_data, rw.width, rw.height, &[], &[], None, None);
             }
         }
     }

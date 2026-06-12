@@ -170,23 +170,11 @@ impl Rdp {
                 fn channels(
                     settings: *mut rdpSettings,
                     name: &str,
-                    channel: Option<&String>,
+                    channel: &str,
                     add_static: bool,
                     add_dynamic: bool,
                 ) {
                     // Note: We can use the internal freerdp rdpsnd channel subsystems
-
-                    let channel = if let Some(channel) = channel {
-                        channel.as_str()
-                    } else if cfg!(target_os = "windows") {
-                        "sys:winmm"
-                    } else if cfg!(target_os = "linux") {
-                        "sys:pulse" // add support for alsa
-                    } else if cfg!(target_os = "macos") {
-                        "sys:mac"
-                    } else {
-                        "sys:fake"
-                    };
 
                     let cname = std::ffi::CString::new(name).unwrap();
                     let cchannel = std::ffi::CString::new(channel).unwrap();
@@ -210,7 +198,7 @@ impl Rdp {
                     }
                 }
 
-                if self.config.settings.audio_redirection {
+                if self.config.settings.redirections.audio {
                     // Sound redirection
                     // true-false = play on client
                     // false-true = play on server
@@ -226,39 +214,49 @@ impl Rdp {
                         false.into(), // Always false, we want audio on client
                     );
                     let channel = format!("sys:{}", crate::addins::RDPSND_SUBSYSTEM_CUSTOM);
-                    channels(settings, "rdpsnd", Some(&channel), true, true);
+                    channels(settings, "rdpsnd", &channel, true, true);
                     // Default subsystem right now
                     // channels(settings, "rdpsnd", None, true, true);
                 }
                 // Microphone redirection
-                if self.config.settings.microphone_redirection {
+                if self.config.settings.redirections.mic {
                     freerdp_settings_set_bool(
                         settings,
                         FreeRDP_Settings_Keys_Bool_FreeRDP_AudioCapture,
                         true.into(),
                     );
                     let channel = format!("sys:{}", crate::addins::AUDIN_SUBSYSTEM_CUSTOM);
-                    channels(settings, "audin", Some(&channel), false, true);
+                    channels(settings, "audin", &channel, false, true);
                 }
                 // Webcam redirection
-                if let Some(ref webcam) = self.config.settings.webcam
+                if let Some(ref webcam) = self.config.settings.redirections.webcam
                     && webcam.enabled
+                    && let Some(ref webcam_int) = self.config.integrations.webcam
                 {
-                    if let Some((cam_w, cam_h)) = multimedia::webcam::get_camera_dimensions() {
+                    let (cam_w, cam_h) = webcam_int.get_camera_dimensions();
+                    if cam_w > 0 && cam_h > 0 {
                         log::info!("Webcam redirection: Camera detected at {}x{}", cam_w, cam_h);
 
                         // Parse UDSLAUNCHER_LIMITS (width,height,fps,quality)
-                        let parse_launcher_limits = || -> (Option<u32>, Option<u32>, Option<u32>, Option<u32>) {
-                            if let Ok(val) = std::env::var("UDSLAUNCHER_LIMITS") {
-                                let parts: Vec<&str> = val.split(',').map(|s| s.trim()).collect();
-                                let get_part = |idx: usize| -> Option<u32> {
-                                    parts.get(idx).and_then(|&s| if s.is_empty() { None } else { s.parse::<u32>().ok() })
-                                };
-                                (get_part(0), get_part(1), get_part(2), get_part(3))
-                            } else {
-                                (None, None, None, None)
-                            }
-                        };
+                        let parse_launcher_limits =
+                            || -> (Option<u32>, Option<u32>, Option<u32>, Option<u32>) {
+                                if let Ok(val) = std::env::var("UDSLAUNCHER_LIMITS") {
+                                    let parts: Vec<&str> =
+                                        val.split(',').map(|s| s.trim()).collect();
+                                    let get_part = |idx: usize| -> Option<u32> {
+                                        parts.get(idx).and_then(|&s| {
+                                            if s.is_empty() {
+                                                None
+                                            } else {
+                                                s.parse::<u32>().ok()
+                                            }
+                                        })
+                                    };
+                                    (get_part(0), get_part(1), get_part(2), get_part(3))
+                                } else {
+                                    (None, None, None, None)
+                                }
+                            };
                         let (env_w, env_h, env_fps, env_q) = parse_launcher_limits();
 
                         // Base values from settings
@@ -284,15 +282,14 @@ impl Rdp {
                             max_h = if max_h == 0 { eh } else { max_h.min(eh) };
                         }
 
-                        multimedia::webcam::WEBCAM_QUALITY.store(final_quality, std::sync::atomic::Ordering::Relaxed);
-                        multimedia::webcam::WEBCAM_FPS.store(final_fps, std::sync::atomic::Ordering::Relaxed);
-                        multimedia::webcam::WEBCAM_MAX_WIDTH.store(max_w, std::sync::atomic::Ordering::Relaxed);
-                        multimedia::webcam::WEBCAM_MAX_HEIGHT.store(max_h, std::sync::atomic::Ordering::Relaxed);
+                        webcam_int.set_limits(final_quality, final_fps, max_w, max_h);
 
                         let channel = format!("sys:{}", crate::addins::WEBCAM_SUBSYSTEM_CUSTOM);
-                        channels(settings, "rdpecam", Some(&channel), false, true);
+                        channels(settings, "rdpecam", &channel, false, true);
                     } else {
-                        log::warn!("Webcam redirection enabled in settings, but no webcam was detected on the system. Webcam redirection will not be enabled.");
+                        log::warn!(
+                            "Webcam redirection enabled in settings, but no webcam was detected on the system. Webcam redirection will not be enabled."
+                        );
                     }
                 }
 
@@ -300,10 +297,10 @@ impl Rdp {
                 freerdp_settings_set_bool(
                     settings,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_RedirectClipboard,
-                    self.config.settings.clipboard_redirection.into(),
+                    self.config.settings.redirections.clipboard.into(),
                 );
 
-                if self.config.settings.printer_redirection {
+                if self.config.settings.redirections.printing {
                     freerdp_settings_set_bool(
                         settings,
                         FreeRDP_Settings_Keys_Bool_FreeRDP_RedirectPrinters,
@@ -327,7 +324,8 @@ impl Rdp {
                 let drives_to_redirect = std::ffi::CString::new(
                     self.config
                         .settings
-                        .drives_to_redirect
+                        .redirections
+                        .drives
                         .iter()
                         .map(|s| match s.as_str() {
                             "all" => "*",
@@ -339,11 +337,11 @@ impl Rdp {
                 )
                 .unwrap();
 
-                let len_drives = self.config.settings.drives_to_redirect.len();
+                let len_drives = self.config.settings.redirections.drives.len();
                 if len_drives > 0 {
                     log::debug!(
                         "Enabling drive redirection for: {}",
-                        self.config.settings.drives_to_redirect.join(", ")
+                        self.config.settings.redirections.drives.join(", ")
                     );
                     freerdp_settings_set_bool(
                         settings,
@@ -678,6 +676,7 @@ impl Rdp {
                             }
                             break;
                         }
+                        _ => {}
                     }
                 }
                 // Continue to wait/process events
@@ -738,7 +737,9 @@ impl Drop for Rdp {
     fn drop(&mut self) {
         log::debug!(" **** Dropping RDP");
         // If we have a clipboard native, stop it
-        self.channels.read().unwrap().stop_native();
+        if let Some(ref clipboard) = self.config.integrations.clipboard {
+            clipboard.stop();
+        }
 
         log::debug!("* Dropping Rdp instance, cleaning up resources...");
         unsafe {

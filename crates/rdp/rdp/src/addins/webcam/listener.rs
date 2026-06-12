@@ -1,10 +1,39 @@
-use std::sync::Arc;
+// BSD 3-Clause License
+// Copyright (c) 2025, Virtual Cable S.L.
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//
+// 1. Redistributions of source code must retain the above copyright notice,
+//    this list of conditions and the following disclaimer.
+//
+// 2. Redistributions in binary form must reproduce the above copyright notice,
+//    this list of conditions and the following disclaimer in the documentation
+//    and/or other materials provided with the distribution.
+//
+// 3. Neither the name of the copyright holder nor the names of its contributors
+//    may be used to endorse or promote products derived from this software
+//    without specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+use crate::integrations::WebcamIntegration;
 use freerdp_sys::{
-    BOOL, BYTE, CHANNEL_RC_OK, IWTSListener, IWTSListenerCallback,
-    IWTSVirtualChannel, IWTSVirtualChannelCallback, IWTSVirtualChannelManager, UINT,
+    BOOL, BYTE, CHANNEL_RC_OK, IWTSListener, IWTSListenerCallback, IWTSVirtualChannel,
+    IWTSVirtualChannelCallback, IWTSVirtualChannelManager, UINT,
 };
-use multimedia::webcam::WebcamHandle;
 use shared::log;
+use std::sync::Arc;
 
 use super::channel::{self, ChannelCtx};
 use super::pdu::write_to_channel;
@@ -14,7 +43,7 @@ use super::pdu::write_to_channel;
 #[repr(C)]
 pub struct ControlListenerCtx {
     pub listener_cb: IWTSListenerCallback,
-    pub webcam: Arc<WebcamHandle>,
+    pub webcam: Arc<dyn WebcamIntegration>,
     pub channel_mgr: *mut IWTSVirtualChannelManager,
 }
 
@@ -22,7 +51,7 @@ pub struct ControlListenerCtx {
 pub struct ControlChannelCtx {
     pub channel_cb: IWTSVirtualChannelCallback,
     pub channel: *mut IWTSVirtualChannel,
-    pub webcam: Arc<WebcamHandle>,
+    pub webcam: Arc<dyn WebcamIntegration>,
     pub channel_mgr: *mut IWTSVirtualChannelManager,
     pub dev_listener: Option<*mut IWTSListener>,
     pub dev_listener_ctx: Option<*mut DeviceListenerCtx>,
@@ -70,7 +99,7 @@ pub unsafe extern "C" fn on_new_control_channel(
 pub unsafe extern "C" fn on_control_open(cb: *mut IWTSVirtualChannelCallback) -> UINT {
     let ctx = cb as *mut ControlChannelCtx;
     log::info!("Webcam Control: Channel opened. Sending SelectVersionRequest...");
-    
+
     // SelectVersionRequest: version = 1, msg_id = 3
     let pdu = &[1u8, 3u8];
     unsafe { write_to_channel((*ctx).channel, pdu) };
@@ -88,22 +117,26 @@ pub unsafe extern "C" fn on_control_data(
 
     let s = unsafe { &*stream };
     let bytes = unsafe { std::slice::from_raw_parts(s.pointer, s.length) };
-    
+
     if bytes.len() < 2 {
         log::error!("Webcam Control PDU too short: {}", bytes.len());
         return CHANNEL_RC_OK;
     }
     let version = bytes[0];
     let msg_id = bytes[1];
-    log::info!("Webcam Control PDU received: version={version} msg_id={msg_id} len={}", bytes.len());
+    log::info!(
+        "Webcam Control PDU received: version={version} msg_id={msg_id} len={}",
+        bytes.len()
+    );
 
-    if msg_id == 0x04 { // CAM_MSG_ID_SelectVersionResponse
+    if msg_id == 0x04 {
+        // CAM_MSG_ID_SelectVersionResponse
         log::info!("Webcam Control: Version response received. Sending DeviceAddedNotification...");
         // Send DeviceAddedNotification: version = 1, msg_id = 5
         let mut pdu = Vec::new();
         pdu.push(1u8); // version
         pdu.push(5u8); // msg_id (CAM_MSG_ID_DeviceAddedNotification)
-        
+
         // DeviceName (UTF-16 LE null-terminated): "Mock Camera\0"
         let name = "Mock Camera";
         let mut utf16: Vec<u16> = name.encode_utf16().collect();
@@ -162,7 +195,7 @@ pub unsafe extern "C" fn on_control_close(cb: *mut IWTSVirtualChannelCallback) -
 #[repr(C)]
 pub struct DeviceListenerCtx {
     pub listener_cb: IWTSListenerCallback,
-    pub webcam: Arc<WebcamHandle>,
+    pub webcam: Arc<dyn WebcamIntegration>,
 }
 
 pub unsafe extern "C" fn on_new_device_channel(
@@ -203,7 +236,7 @@ pub unsafe extern "C" fn on_new_device_channel(
 // --- Public Initialization Functions ---
 
 pub(super) fn create_listener(
-    webcam: Arc<WebcamHandle>,
+    webcam: Arc<dyn WebcamIntegration>,
     channel_mgr: *mut IWTSVirtualChannelManager,
 ) -> (*mut ControlListenerCtx, *mut IWTSListener, UINT) {
     let mut listener_ctx = Box::new(ControlListenerCtx {
@@ -231,7 +264,7 @@ pub(super) fn create_listener(
 }
 
 pub(super) unsafe fn create_device_listener(
-    webcam: Arc<WebcamHandle>,
+    webcam: Arc<dyn WebcamIntegration>,
     channel_mgr: *mut IWTSVirtualChannelManager,
     device_id: &str,
 ) -> (*mut DeviceListenerCtx, *mut IWTSListener, UINT) {

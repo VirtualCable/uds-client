@@ -452,7 +452,7 @@ The RDP module provides functions for managing RDP connections.
 Starts an RDP connection with the specified settings.
 
 **Parameters:**
-- `settings` (object): An object containing RDP connection settings with the following optional properties:
+- `settings` (object): An object containing RDP connection settings with the following properties:
   - `server` (string): The RDP server address (required).
   - `port` (number, optional): The RDP server port (default: 3389).
   - `user` (string, optional): The username for authentication.
@@ -462,26 +462,28 @@ Starts an RDP connection with the specified settings.
   - `use_nla` (boolean, optional): Whether to use Network Level Authentication (default: false).
   - `screen_width` (number, optional): The screen width (0 for full screen). If not provided, a default fixed size of 1024x768 is used.
   - `screen_height` (number, optional): The screen height (0 for full screen). If not provided, a default fixed size of 1024x768 is used.
-  - `clipboard_redirection` (boolean, optional): Whether to enable clipboard redirection (default: true).
-  - `audio_redirection` (boolean, optional): Whether to enable audio redirection (default: true).
-  - `microphone_redirection` (boolean, optional): Whether to enable microphone redirection (default: false).
-  - `printer_redirection` (boolean, optional): Whether to enable printer redirection (default: false).
-  - `drives_to_redirect` (array of strings, optional): List of drive letters to redirect. Valid special values include `"all"` (all drives).
-  - `webcam` (object, optional): Webcam redirection settings. If provided, configures camera settings:
-    - `enabled` (boolean): Whether to enable webcam redirection (required if `webcam` is provided).
-    - `quality` (number, optional): Encoding quality from 1 to 100 (default: 80).
-    - `fps` (number, optional): Target frames per second (default: 15).
-    - `size_limit` (array of two numbers `[width, height]`, optional): Optional limit on maximum captured frame resolution. E.g. `[1280, 720]`. A value of `0` for a dimension means unlimited. Both dimensions are evaluated.
-  - `sound_latency_threshold` (number, optional): Threshold in ms for sound latency (default: 400).
   - `best_experience` (boolean, optional): Whether to enable best experience optimizations (default: true).
+  - `use_local_scaler` (boolean, optional): If true (default), the local client handles all DPI scaling and the server renders at 100% DPI, reducing bandwidth. If false, the server handles scaling at the native monitor DPI.
+  - `use_tunnel` (boolean, optional): If true, overrides the ServerHostname setting with the original connection hostname during redirection.
+  - `redirections` (object, optional): Grouped RDP redirection features:
+    - `clipboard` (boolean, optional): Whether to enable clipboard redirection (default: true).
+    - `audio` (boolean, optional): Whether to enable audio redirection (default: true).
+    - `mic` (boolean, optional): Whether to enable microphone redirection (default: false).
+    - `printing` (boolean, optional): Whether to enable printer redirection (default: false).
+    - `drives` (array of strings, optional): List of drive letters to redirect. Valid special values include `"all"` (all drives).
+    - `sound_latency_threshold` (number, optional): Threshold in ms for sound latency (default: 400).
+    - `webcam` (object, optional): Webcam redirection settings. If provided, configures camera settings:
+      - `enabled` (boolean): Whether to enable webcam redirection (required if `webcam` is provided).
+      - `quality` (number, optional): Encoding quality from 1 to 100 (default: 80).
+      - `fps` (number, optional): Target frames per second (default: 15).
+      - `size_limit` (array of two numbers `[width, height]`, optional): Optional limit on maximum captured frame resolution. E.g. `[1280, 720]`. A value of `0` for a dimension means unlimited. Both dimensions are evaluated.
   - `rail` (object, optional): RAIL (RemoteApp) settings. If provided, enables RAIL mode.
     - `app` (string): RemoteApp program path (e.g., `"c:\\windows\\notepad.exe"`). Required if `rail` is provided.
     - `args` (string, optional): Command-line arguments for the RemoteApp program.
     - `working_dir` (string, optional): Working directory for the RemoteApp program.
     - `title` (string, optional): Title for the RAIL control window (defaults to "UDS RemoteApps").
     - `server_info` (object, optional): `{ id: string, token: string }`. Allows launching new RemoteApps into an already-running RAIL session via local IPC.
-  - `use_local_scaler` (boolean, optional): If true (default), the local client handles all DPI scaling and the server renders at 100% DPI, reducing bandwidth. If false, the server handles scaling at the native monitor DPI.
-  - `use_tunnel` (boolean, optional): If true, overrides the ServerHostname setting with the original connection hostname during redirection.
+    - `behavior` (string, optional): Optional rendering mode: `"compositegdi"` or `"individualwindows"` (defaults to `"individualwindows"`).
 
 **Returns:** undefined
 
@@ -509,8 +511,10 @@ RDP.start({
     use_nla: true,
     screen_width: 1920,
     screen_height: 1080,
-    clipboard_redirection: true,
-    drives_to_redirect: ["C", "D"]
+    redirections: {
+        clipboard: true,
+        drives: ["C", "D"]
+    }
 });
 
 // Start a RemoteApp (RAIL) connection
@@ -522,7 +526,8 @@ RDP.start({
         app: "c:\\windows\\notepad.exe",
         args: "c:\\temp\\file.txt",
         working_dir: "c:\\temp",
-        title: "My Custom App"
+        title: "My Custom App",
+        behavior: "individualwindows"
     },
     // With local scaler (default): server renders at 100% DPI, client upscales
     use_local_scaler: true

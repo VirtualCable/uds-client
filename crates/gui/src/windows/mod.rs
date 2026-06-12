@@ -3,7 +3,7 @@
 // All rights reserved.
 
 pub mod about;
-pub mod launcher;
 pub mod popup;
 pub mod progress;
 pub mod rdp;
+pub mod testing_launcher_window;

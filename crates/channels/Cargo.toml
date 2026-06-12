@@ -1,13 +1,16 @@
 [package]
-name = "multimedia"
+name = "channels"
 version = "5.0.0"
 edition = "2024"
 
 [dependencies]
 shared = { path = "../shared" }
+rdp = { path = "../rdp/rdp" }
 
 cpal = { workspace = true }
 flume = { workspace = true }
+anyhow = { workspace = true }
+clipboard-rs = { workspace = true }
 
 nokhwa = { workspace = true }
 turbojpeg = { workspace = true }
