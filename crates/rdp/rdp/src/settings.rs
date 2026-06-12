@@ -79,9 +79,10 @@ impl Default for WebcamSettings {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Zeroize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Zeroize, Default)]
 pub enum RailBehavior {
     CompositeGdi,
+    #[default]
     IndividualWindows,
 }
 
@@ -92,7 +93,7 @@ pub struct ServerInfo {
     pub token: String,
 }
 
-#[derive(Debug, Clone, Zeroize)]
+#[derive(Debug, Clone, Zeroize, Default)]
 pub struct RailSettings {
     pub app: String,
     pub args: Option<String>,

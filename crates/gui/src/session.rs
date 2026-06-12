@@ -179,15 +179,15 @@ impl AppHandler {
                         use_local_scaler: true,
                         rail: if is_rail {
                             Some(rdp_ffi::settings::RailSettings {
-                                app: "||win32calc".to_string(),
+                                app: "c:\\windows\\system32\\calc.exe".to_string(),
                                 args: None,
                                 working_dir: None,
-                                title: Some("Ms Paint UDS App".to_string()),
+                                title: Some("Windows Calculator".to_string()),
                                 server_info: Some(rdp_ffi::settings::ServerInfo {
                                     id: "test-uds-rail".to_string(),
                                     token: "test-token".to_string(),
                                 }),
-                                behavior: rdp_ffi::settings::RailBehavior::IndividualWindows,
+                                ..Default::default()
                             })
                         } else {
                             None
