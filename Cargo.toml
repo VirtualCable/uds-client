@@ -132,7 +132,7 @@ tracing-log = "0.2"
 
 # Testing
 rcgen = "0.14"
-serial_test = "3.3"
+serial_test = "3.5"
 mockito = "1.7"
 
 # Building
