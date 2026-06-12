@@ -308,6 +308,14 @@ impl AppHandler {
             rw.window
                 .set_outer_position(winit::dpi::PhysicalPosition::new(px, py));
             if let Some(ref mut renderer) = rw.renderer.as_mut() {
+                // Ensure the WGPU surface matches the actual window size.
+                // request_inner_size() is async — the window may have resized
+                // since the last reconfigure, but we never handle Resized for
+                // Rail windows, so the surface config can be stale.
+                let phys = rw.window.inner_size();
+                if phys.width > 0 && phys.height > 0 {
+                    renderer.reconfigure(phys.width, phys.height);
+                }
                 let upload_data = if rw.rgba_dirty {
                     rw.rgba_dirty = false;
                     rw.rgba_data.as_deref().unwrap_or(&[])
