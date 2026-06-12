@@ -31,7 +31,6 @@
 #![allow(dead_code)]
 use std::sync::Arc;
 use std::thread;
-use std::time::Instant;
 
 use freerdp_sys::{
     AUDIO_FORMAT, AudinReceive, BOOL, BYTE, CHANNEL_RC_OK, IAudinDevice,
@@ -123,6 +122,14 @@ unsafe extern "C" fn set_format(
         fmt.wBitsPerSample,
         frames_per_packet
     );
+
+    if let Some(tx) = plugin.rdpcontext.owner().and_then(|rdp| rdp.update_tx.as_ref()) {
+        let _ = tx.send(crate::messaging::RdpMessage::MicConfig {
+            sample_rate: fmt.nSamplesPerSec,
+            frames_per_packet,
+        });
+    }
+
     CHANNEL_RC_OK
 }
 
@@ -170,6 +177,13 @@ unsafe extern "C" fn open(
         }
     };
 
+    if let Some(ref tx) = rdp.update_tx {
+        let _ = tx.send(crate::messaging::RdpMessage::MicConfig {
+            sample_rate,
+            frames_per_packet: fps,
+        });
+    }
+
     plugin.audio_input = Some(audio_input_integration.clone());
     let (stop_tx, stop_rx) = flume::bounded(1);
     plugin.stop_tx = Some(stop_tx);
@@ -211,22 +225,10 @@ unsafe extern "C" fn open(
             duration
         );
 
-        let mut next_packet_at = Instant::now() + duration;
-
-        loop {
+        while let Ok(mono_data) = data_rx.recv() {
             if stop_rx.try_recv().is_ok() {
                 break;
             }
-
-            let timeout = next_packet_at.saturating_duration_since(Instant::now());
-
-            let mono_data = match data_rx.recv_timeout(timeout) {
-                Ok(data) => data,
-                Err(flume::RecvTimeoutError::Timeout) => {
-                    vec![0u8; mono_packet_bytes]
-                }
-                Err(flume::RecvTimeoutError::Disconnected) => break,
-            };
 
             let mut stereo_data = Vec::with_capacity(stereo_packet_bytes);
             let bytes_per_sample = (bits as usize) / 8;
@@ -254,12 +256,6 @@ unsafe extern "C" fn open(
                     log::error!("Mic receive failed with {}", res);
                     break;
                 }
-            }
-
-            next_packet_at += duration;
-            let now = Instant::now();
-            if next_packet_at <= now {
-                next_packet_at = now + duration;
             }
         }
         log::info!("Mic reader thread ending");

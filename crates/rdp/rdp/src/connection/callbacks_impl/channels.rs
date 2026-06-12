@@ -49,7 +49,7 @@ impl channels::ChannelsCallbacks for Rdp {
                 == &freerdp_sys::CLIPRDR_SVC_CHANNEL_NAME
                     [..freerdp_sys::CLIPRDR_SVC_CHANNEL_NAME.len() - 1] =>
             {
-                if !self.config.settings.clipboard_redirection {
+                if !self.config.settings.redirections.clipboard {
                     log::debug!("**** CLIPRDR channel connection rejected (disabled in settings).");
                     return false;
                 }

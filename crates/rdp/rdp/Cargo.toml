@@ -15,6 +15,7 @@ flume.workspace = true
 
 # Security dependencies
 zeroize.workspace = true
+serde.workspace = true
 
 # Clipboard dependencies
 

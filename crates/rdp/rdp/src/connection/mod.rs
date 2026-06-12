@@ -210,7 +210,7 @@ impl Rdp {
                     }
                 }
 
-                if self.config.settings.audio_redirection {
+                if self.config.settings.redirections.audio {
                     // Sound redirection
                     // true-false = play on client
                     // false-true = play on server
@@ -231,7 +231,7 @@ impl Rdp {
                     // channels(settings, "rdpsnd", None, true, true);
                 }
                 // Microphone redirection
-                if self.config.settings.microphone_redirection {
+                if self.config.settings.redirections.mic {
                     freerdp_settings_set_bool(
                         settings,
                         FreeRDP_Settings_Keys_Bool_FreeRDP_AudioCapture,
@@ -241,7 +241,7 @@ impl Rdp {
                     channels(settings, "audin", Some(&channel), false, true);
                 }
                 // Webcam redirection
-                if let Some(ref webcam) = self.config.settings.webcam
+                if let Some(ref webcam) = self.config.settings.redirections.webcam
                     && webcam.enabled
                     && let Some(ref webcam_int) = self.config.integrations.webcam
                 {
@@ -309,10 +309,10 @@ impl Rdp {
                 freerdp_settings_set_bool(
                     settings,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_RedirectClipboard,
-                    self.config.settings.clipboard_redirection.into(),
+                    self.config.settings.redirections.clipboard.into(),
                 );
 
-                if self.config.settings.printer_redirection {
+                if self.config.settings.redirections.printing {
                     freerdp_settings_set_bool(
                         settings,
                         FreeRDP_Settings_Keys_Bool_FreeRDP_RedirectPrinters,
@@ -336,7 +336,8 @@ impl Rdp {
                 let drives_to_redirect = std::ffi::CString::new(
                     self.config
                         .settings
-                        .drives_to_redirect
+                        .redirections
+                        .drives
                         .iter()
                         .map(|s| match s.as_str() {
                             "all" => "*",
@@ -348,11 +349,11 @@ impl Rdp {
                 )
                 .unwrap();
 
-                let len_drives = self.config.settings.drives_to_redirect.len();
+                let len_drives = self.config.settings.redirections.drives.len();
                 if len_drives > 0 {
                     log::debug!(
                         "Enabling drive redirection for: {}",
-                        self.config.settings.drives_to_redirect.join(", ")
+                        self.config.settings.redirections.drives.join(", ")
                     );
                     freerdp_settings_set_bool(
                         settings,
@@ -687,6 +688,7 @@ impl Rdp {
                             }
                             break;
                         }
+                        _ => {}
                     }
                 }
                 // Continue to wait/process events

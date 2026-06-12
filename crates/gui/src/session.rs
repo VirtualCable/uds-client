@@ -161,13 +161,20 @@ impl AppHandler {
                         user: "user".to_string(),
                         password: "temporal".to_string(),
                         screen_size: rdp_ffi::geom::ScreenSize::Fixed(800, 600),
-                        microphone_redirection: true,
-                        webcam: Some(rdp_ffi::settings::WebcamSettings {
-                            enabled: true,
-                            quality: 80,
-                            fps: 15,
-                            ..rdp_ffi::settings::WebcamSettings::default()
-                        }),
+                        redirections: rdp_ffi::settings::RdpRedirections {
+                            clipboard: true,
+                            audio: true,
+                            mic: true,
+                            printing: false,
+                            drives: vec!["all".to_string()],
+                            webcam: Some(rdp_ffi::settings::WebcamSettings {
+                                enabled: true,
+                                quality: 80,
+                                fps: 15,
+                                ..rdp_ffi::settings::WebcamSettings::default()
+                            }),
+                            sound_latency_threshold: None,
+                        },
                         best_experience: true,
                         use_local_scaler: true,
                         rail: if is_rail {
@@ -180,6 +187,7 @@ impl AppHandler {
                                     id: "test-uds-rail".to_string(),
                                     token: "test-token".to_string(),
                                 }),
+                                behavior: rdp_ffi::settings::RailBehavior::IndividualWindows,
                             })
                         } else {
                             None

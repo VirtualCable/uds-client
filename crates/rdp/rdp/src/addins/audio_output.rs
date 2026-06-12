@@ -106,7 +106,7 @@ unsafe extern "C" fn open(
     let plugin = unsafe { &mut *(device as *mut SoundPlugin) };
 
     if let Some(rdp) = (unsafe { freerdp_rdpsnd_get_context(plugin.device.rdpsnd) }).owner() {
-        let latency_threshold = rdp.config.settings.sound_latency_threshold;
+        let latency_threshold = rdp.config.settings.redirections.sound_latency_threshold;
 
         if let Some(audio_integration) = &rdp.config.integrations.audio_output {
             if let Some(audio_handle) = plugin.audio.take() {

@@ -4627,6 +4627,7 @@ dependencies = [
  "flume 0.12.0",
  "freerdp-sys",
  "glob",
+ "serde",
  "shared",
  "windows 0.62.2",
  "zeroize",

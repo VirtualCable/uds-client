@@ -1,5 +1,5 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -28,10 +28,62 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 use std::fmt;
 use zeroize::Zeroize;
 
 use super::geom::ScreenSize;
+
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize, Zeroize,
+)]
+#[serde(rename_all = "lowercase")]
+pub enum WebcamCodec {
+    #[default]
+    Best,
+    Fastest,
+    Mjpeg,
+    H264,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Zeroize)]
+#[serde(default)]
+pub struct WebcamSettings {
+    pub enabled: bool,
+    pub quality: u32,
+    pub fps: u32,
+    pub codec: WebcamCodec,
+    /// Runtime: set before RDP connect from browser capabilities (query param ?h264=1)
+    #[serde(skip)]
+    pub browser_h264: bool,
+    /// Camera width (from browser getUserMedia). Default 640.
+    pub width: u32,
+    /// Camera height (from browser getUserMedia). Default 480.
+    pub height: u32,
+    /// Optional size limit for output frames (width, height).
+    pub size_limit: Option<(u32, u32)>,
+}
+
+impl Default for WebcamSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            quality: 80,
+            fps: 15,
+            codec: WebcamCodec::Best,
+            browser_h264: false,
+            width: 640,
+            height: 480,
+            size_limit: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Zeroize)]
+pub enum RailBehavior {
+    CompositeGdi,
+    IndividualWindows,
+}
 
 #[derive(Debug, Clone, Default, Zeroize)]
 pub struct ServerInfo {
@@ -40,24 +92,28 @@ pub struct ServerInfo {
     pub token: String,
 }
 
-#[derive(Debug, Zeroize, Clone)]
+#[derive(Debug, Clone, Zeroize)]
 pub struct RailSettings {
     pub app: String,
     pub args: Option<String>,
     pub working_dir: Option<String>,
     pub title: Option<String>,
     pub server_info: Option<ServerInfo>,
+    pub behavior: RailBehavior,
 }
 
-#[derive(Debug, Zeroize, Clone, Default)]
-pub struct WebcamSettings {
-    pub enabled: bool,
-    pub quality: u32,
-    pub fps: u32,
-    pub size_limit: Option<(u32, u32)>,
+#[derive(Debug, Clone, Zeroize)]
+pub struct RdpRedirections {
+    pub clipboard: bool,
+    pub audio: bool,
+    pub mic: bool,
+    pub printing: bool,
+    pub drives: Vec<String>,
+    pub webcam: Option<WebcamSettings>,
+    pub sound_latency_threshold: Option<u16>,
 }
 
-#[derive(Zeroize, Clone)]
+#[derive(Clone, Zeroize)]
 pub struct RdpSettings {
     pub server: String,
     pub port: u32,
@@ -67,15 +123,11 @@ pub struct RdpSettings {
     pub verify_cert: bool,
     pub use_nla: bool,
     pub screen_size: ScreenSize,
-    pub clipboard_redirection: bool,
-    pub audio_redirection: bool,
-    pub microphone_redirection: bool,
-    pub printer_redirection: bool,
-    pub drives_to_redirect: Vec<String>,
-    pub webcam: Option<WebcamSettings>,
-    pub sound_latency_threshold: Option<u16>,
     pub best_experience: bool,
+
+    pub redirections: RdpRedirections,
     pub rail: Option<RailSettings>,
+
     pub desktop_scale: f64,
     pub use_local_scaler: bool,
     pub use_tunnel: bool,
@@ -90,19 +142,21 @@ impl Default for RdpSettings {
             password: "".to_string(),
             domain: "".to_string(),
             verify_cert: false,
-            use_nla: true, // Defaults to true for better security, but can be disabled if needed
+            use_nla: true,
             screen_size: ScreenSize::Fixed(1024, 768),
-            clipboard_redirection: true,
-            audio_redirection: true,
-            microphone_redirection: false,
-            printer_redirection: false,
-            drives_to_redirect: vec!["all".to_string()], // By default, redirect all drives.
-            sound_latency_threshold: None,
             best_experience: true,
+            redirections: RdpRedirections {
+                clipboard: true,
+                audio: true,
+                mic: false,
+                printing: false,
+                drives: vec!["all".to_string()],
+                webcam: None,
+                sound_latency_threshold: None,
+            },
             rail: None,
             desktop_scale: 1.0,
             use_local_scaler: true,
-            webcam: None,
             use_tunnel: false,
         }
     }
@@ -126,17 +180,12 @@ impl fmt::Debug for RdpSettings {
             .field("verify_cert", &self.verify_cert)
             .field("use_nla", &self.use_nla)
             .field("screen_size", &self.screen_size)
-            .field("clipboard_redirection", &self.clipboard_redirection)
-            .field("audio_redirection", &self.audio_redirection)
-            .field("microphone_redirection", &self.microphone_redirection)
-            .field("printer_redirection", &self.printer_redirection)
-            .field("drives_to_redirect", &self.drives_to_redirect)
-            .field("webcam", &self.webcam)
-            .field("sound_latency_threshold", &self.sound_latency_threshold)
             .field("best_experience", &self.best_experience)
+            .field("redirections", &self.redirections)
             .field("rail", &self.rail)
             .field("desktop_scale", &self.desktop_scale)
             .field("use_local_scaler", &self.use_local_scaler)
+            .field("use_tunnel", &self.use_tunnel)
             .finish()
     }
 }
@@ -165,7 +214,7 @@ mod tests {
 
     #[test]
     fn default_drives_redirect_all() {
-        assert_eq!(RdpSettings::default().drives_to_redirect, vec!["all"]);
+        assert_eq!(RdpSettings::default().redirections.drives, vec!["all"]);
     }
 
     #[test]
@@ -190,7 +239,6 @@ mod tests {
             id: "myid".into(),
             token: "mytok".into(),
         };
-        use zeroize::Zeroize;
         info.zeroize();
         assert!(info.token.is_empty());
         assert!(!info.id.is_empty());

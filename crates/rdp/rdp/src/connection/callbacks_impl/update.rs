@@ -83,6 +83,14 @@ impl update::UpdateCallbacks for Rdp {
 impl Rdp {
     fn send_update(&self) -> bool {
         log::trace!("send_update called");
+
+        let is_individual_windows = self.config.settings.rail.as_ref().map(|r| r.behavior)
+            == Some(crate::settings::RailBehavior::IndividualWindows);
+        if is_individual_windows {
+            // Skip GDI updates when in IndividualWindows mode (Mode B)
+            return true;
+        }
+
         if let Some(tx) = &self.update_tx
             && let Some(gdi) = self.gdi()
         {

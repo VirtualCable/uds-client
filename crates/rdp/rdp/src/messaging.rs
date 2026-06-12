@@ -1,5 +1,5 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,8 +26,9 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+//
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 use flume;
 
 use crate::geom::Rect;
@@ -43,33 +44,30 @@ pub enum RdpMessage {
     ClipboardData(String),
     None, // Used on interrrupting recv by a timeout
 
-    // RAIL window events — metadata only, no pixel routing
-    // show_state: None = unknown, Some(2) = minimized, Some(3) = maximized, Some(1/5) = normal
+    // Unified RAIL window events
     WindowCreate {
         window_id: u32,
-        owner_id: Option<u32>,
-        style: Option<u32>,
-        ext_style: Option<u32>,
-        taskbar_button: Option<bool>,
+        owner_id: u32,
+        style: u32,
+        ext_style: u32,
+        taskbar_button: bool,
         title: String,
-        show_state: Option<u8>,
-        is_offscreen: Option<bool>,
-        pos: Option<(i32, i32)>,
-        size: Option<(u32, u32)>,
+        show_state: u32,
+        is_offscreen: bool,
+        pos: (i32, i32),
+        size: (u32, u32),
     },
     WindowUpdate {
         window_id: u32,
-        owner_id: Option<u32>,
-        style: Option<u32>,
-        ext_style: Option<u32>,
-        taskbar_button: Option<bool>,
+        owner_id: u32,
+        style: u32,
+        ext_style: u32,
+        taskbar_button: bool,
         title: String,
-        show_state: Option<u8>,
-        /// Some(true) when coordinates are in the offscreen/minimized zone (< -1000)
-        /// None when field flags don't specify coordinate updates
-        is_offscreen: Option<bool>,
-        pos: Option<(i32, i32)>,
-        size: Option<(u32, u32)>,
+        show_state: u32,
+        is_offscreen: bool,
+        pos: (i32, i32),
+        size: (u32, u32),
     },
     WindowDelete(u32),
     ClientWindowMove {
@@ -87,6 +85,16 @@ pub enum RdpMessage {
         sample_rate: u32,
         frames_per_packet: u32,
     },
+    WebcamConfig {
+        format: u32,
+        width: u32,
+        height: u32,
+        fps: u32,
+    },
+    StartWebcamStream,
+    StopWebcamStream,
+
+    // Mode B specific messages (unified)
     WindowPixels {
         window_id: u32,
         width: u32,
@@ -102,7 +110,7 @@ pub enum RdpMessage {
     DesktopResize(u32, u32),
 }
 
-// Debug without bin fields
+// Debug without printing huge binary/vector fields
 impl core::fmt::Debug for RdpMessage {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
@@ -156,6 +164,20 @@ impl core::fmt::Debug for RdpMessage {
                 .field("sample_rate", sample_rate)
                 .field("frames_per_packet", frames_per_packet)
                 .finish(),
+            RdpMessage::WebcamConfig {
+                format,
+                width,
+                height,
+                fps,
+            } => f
+                .debug_struct("WebcamConfig")
+                .field("format", format)
+                .field("width", width)
+                .field("height", height)
+                .field("fps", fps)
+                .finish(),
+            RdpMessage::StartWebcamStream => f.debug_struct("StartWebcamStream").finish(),
+            RdpMessage::StopWebcamStream => f.debug_struct("StopWebcamStream").finish(),
             RdpMessage::WindowPixels {
                 window_id,
                 width,
@@ -188,3 +210,4 @@ impl core::fmt::Debug for RdpMessage {
 }
 
 pub type Sender = flume::Sender<RdpMessage>;
+pub type Receiver = flume::Receiver<RdpMessage>;

@@ -147,20 +147,32 @@ impl RdpSettings {
             verify_cert: self.verify_cert.unwrap_or(defs.verify_cert),
             use_nla: self.use_nla.unwrap_or(defs.use_nla),
             screen_size,
-            clipboard_redirection: self
-                .clipboard_redirection
-                .unwrap_or(defs.clipboard_redirection),
-            audio_redirection: self.audio_redirection.unwrap_or(defs.audio_redirection),
-            microphone_redirection: self
-                .microphone_redirection
-                .unwrap_or(defs.microphone_redirection),
-            printer_redirection: self.printer_redirection.unwrap_or(defs.printer_redirection),
-            drives_to_redirect: self
-                .drives_to_redirect
-                .clone()
-                .unwrap_or_else(|| defs.drives_to_redirect.clone()),
-            sound_latency_threshold: self.sound_latency_threshold,
             best_experience: self.best_experience.unwrap_or(defs.best_experience),
+            redirections: settings::RdpRedirections {
+                clipboard: self
+                    .clipboard_redirection
+                    .unwrap_or(defs.redirections.clipboard),
+                audio: self.audio_redirection.unwrap_or(defs.redirections.audio),
+                mic: self.microphone_redirection.unwrap_or(defs.redirections.mic),
+                printing: self
+                    .printer_redirection
+                    .unwrap_or(defs.redirections.printing),
+                drives: self
+                    .drives_to_redirect
+                    .clone()
+                    .unwrap_or_else(|| defs.redirections.drives.clone()),
+                webcam: self.webcam.as_ref().map(|w| settings::WebcamSettings {
+                    enabled: w.enabled,
+                    quality: w.quality.unwrap_or(80),
+                    fps: w.fps.unwrap_or(15),
+                    codec: settings::WebcamCodec::Best,
+                    browser_h264: false,
+                    width: 640,
+                    height: 480,
+                    size_limit: w.size_limit,
+                }),
+                sound_latency_threshold: self.sound_latency_threshold,
+            },
             rail: self.rail.as_ref().map(|r| settings::RailSettings {
                 app: r.app.clone(),
                 args: r.args.clone(),
@@ -170,16 +182,11 @@ impl RdpSettings {
                     id: s.id.clone(),
                     token: s.token.clone(),
                 }),
+                behavior: settings::RailBehavior::IndividualWindows,
             }),
             desktop_scale: 1.0,
             use_local_scaler: self.use_local_scaler.unwrap_or(true),
             use_tunnel: self.use_tunnel.unwrap_or(defs.use_tunnel),
-            webcam: self.webcam.as_ref().map(|w| settings::WebcamSettings {
-                enabled: w.enabled,
-                quality: w.quality.unwrap_or(80),
-                fps: w.fps.unwrap_or(15),
-                size_limit: w.size_limit,
-            }),
         }
     }
 }
@@ -323,13 +330,13 @@ mod tests {
                         }
                         _ => panic!("Expected fixed screen size"),
                     }
-                    assert_eq!(settings.drives_to_redirect, vec!["C", "D"]);
+                    assert_eq!(settings.redirections.drives, vec!["C", "D"]);
                     // Defaults defined in `rdp::settings::RdpSettings`
-                    assert!(settings.clipboard_redirection);
-                    assert!(settings.audio_redirection);
-                    assert!(!settings.microphone_redirection);
-                    assert!(!settings.printer_redirection);
-                    assert_eq!(settings.sound_latency_threshold, None);
+                    assert!(settings.redirections.clipboard);
+                    assert!(settings.redirections.audio);
+                    assert!(!settings.redirections.mic);
+                    assert!(!settings.redirections.printing);
+                    assert_eq!(settings.redirections.sound_latency_threshold, None);
                 }
                 _ => panic!("Expected GuiMessage::ConnectRdp"),
             },
@@ -375,12 +382,12 @@ mod tests {
                         ScreenSize::Full => {}
                         _ => panic!("Expected full screen size, got {:?}", settings.screen_size),
                     }
-                    assert_eq!(settings.drives_to_redirect, vec!["all"]);
-                    assert!(settings.clipboard_redirection);
-                    assert!(settings.audio_redirection);
-                    assert!(!settings.microphone_redirection);
-                    assert!(!settings.printer_redirection);
-                    assert_eq!(settings.sound_latency_threshold, None);
+                    assert_eq!(settings.redirections.drives, vec!["all"]);
+                    assert!(settings.redirections.clipboard);
+                    assert!(settings.redirections.audio);
+                    assert!(!settings.redirections.mic);
+                    assert!(!settings.redirections.printing);
+                    assert_eq!(settings.redirections.sound_latency_threshold, None);
                 }
                 _ => panic!("Expected GuiMessage::ConnectRdp"),
             },
