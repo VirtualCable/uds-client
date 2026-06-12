@@ -69,7 +69,7 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
             pos,
             size,
         } => {
-            if (ext_style & 0x20) != 0 {
+            if ext_style.is_some_and(|s| (s & 0x20) != 0) {
                 log::debug!(
                     "Skipping RAIL window {} with style 0x20 (probably a menu)",
                     window_id
@@ -78,7 +78,7 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
             }
             let sf = state.coords_scale.max(1.0);
             let msf = state.window.window.scale_factor().max(1.0);
-            let is_off = is_offscreen;
+            let is_off = is_offscreen.unwrap_or(false);
 
             let mut exists = rail.windows.contains_key(&window_id);
             if !exists {
@@ -93,34 +93,67 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
             }
 
             if exists {
-                let hidden = show_state == 0 || is_off;
-                rail.actions
-                    .push(RailAction::SetVisible(window_id, !hidden));
+                if let Some(s) = show_state {
+                    let hidden = s == 0 || is_off;
+                    rail.actions
+                        .push(RailAction::SetVisible(window_id, !hidden));
+                } else if is_offscreen.is_some() {
+                    rail.actions
+                        .push(RailAction::SetVisible(window_id, !is_off));
+                }
 
-                if size.0 > 0 && size.1 > 0 {
-                    let x = pos.0;
-                    let y = pos.1;
-                    let w = (size.0 as f64 * sf / msf) as u32;
-                    let h = (size.1 as f64 * sf / msf) as u32;
+                if pos.is_some() || size.is_some() {
+                    let default_rect = rail
+                        .windows
+                        .get(&window_id)
+                        .map(|rw| rw.rect)
+                        .unwrap_or_else(|| rdp_ffi::geom::Rect::new(0, 0, 0, 0));
+                    let mut rect = default_rect;
+                    if !rail.windows.contains_key(&window_id) {
+                        for action in &rail.actions {
+                            if let RailAction::Create(id, _, r, ..) = action
+                                && *id == window_id
+                            {
+                                rect = *r;
+                            }
+                        }
+                    }
+
+                    let x = match pos {
+                        Some((x, _)) => x,
+                        None => rect.x,
+                    };
+                    let y = match pos {
+                        Some((_, y)) => y,
+                        None => rect.y,
+                    };
+                    let w = match size {
+                        Some((w, _)) => (w as f64 * sf / msf) as u32,
+                        None => rect.w,
+                    };
+                    let h = match size {
+                        Some((_, h)) => (h as f64 * sf / msf) as u32,
+                        None => rect.h,
+                    };
                     let new_rect = rdp_ffi::geom::Rect::new(x, y, w, h);
                     rail.actions
                         .push(RailAction::UpdatePosition(window_id, new_rect));
                 }
             } else {
-                let (w, h) = size;
+                let (w, h) = size.unwrap_or((0, 0));
                 if w > 0 && h > 0 {
-                    let (x, y) = pos;
+                    let (x, y) = pos.unwrap_or((0, 0));
                     let rect = rdp_ffi::geom::Rect::new(
-                        x,
-                        y,
+                        x as i32,
+                        y as i32,
                         (w as f64 * sf / msf) as u32,
                         (h as f64 * sf / msf) as u32,
                     );
-                    let is_tool = (ext_style & 0x80) != 0;
-                    let has_owner = owner_id != 0;
-                    let show_taskbar = taskbar_button || (!is_tool && !has_owner);
+                    let is_tool = ext_style.is_some_and(|s| (s & 0x80) != 0);
+                    let has_owner = owner_id.is_some() && owner_id != Some(0);
+                    let show_taskbar = taskbar_button.unwrap_or(!is_tool && !has_owner);
 
-                    let hidden = show_state == 0 || is_off;
+                    let hidden = show_state == Some(0) || is_off;
 
                     rail.actions.push(RailAction::Create(
                         window_id,

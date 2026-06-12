@@ -34,6 +34,8 @@ use crate::consts::*;
 use crate::messaging::RdpMessage;
 use freerdp_sys::{
     WINDOW_CACHED_ICON_ORDER, WINDOW_ICON_ORDER, WINDOW_ORDER_INFO, WINDOW_STATE_ORDER,
+    WINDOW_ORDER_FIELD_OWNER, WINDOW_ORDER_FIELD_SHOW, WINDOW_ORDER_FIELD_STYLE,
+    WINDOW_ORDER_FIELD_TASKBAR_BUTTON, WINDOW_ORDER_FIELD_WND_OFFSET, WINDOW_ORDER_FIELD_WND_SIZE,
 };
 use shared::log;
 
@@ -56,15 +58,15 @@ fn is_offscreen_pos(x: i32, y: i32) -> bool {
 
 struct RailWindowState {
     window_id: u32,
-    owner_id: u32,
-    style: u32,
-    ext_style: u32,
-    taskbar_button: bool,
+    owner_id: Option<u32>,
+    style: Option<u32>,
+    ext_style: Option<u32>,
+    taskbar_button: Option<bool>,
     title: String,
-    show_state: u32,
-    is_offscreen: bool,
-    pos: (i32, i32),
-    size: (u32, u32),
+    show_state: Option<u32>,
+    is_offscreen: Option<bool>,
+    pos: Option<(i32, i32)>,
+    size: Option<(u32, u32)>,
 }
 
 impl RailWindowState {
@@ -76,14 +78,39 @@ impl RailWindowState {
         let info = unsafe { &*order_info };
         let state = unsafe { &*window_state };
 
-        let owner_id = state.ownerWindowId;
-        let style = state.style;
-        let ext_style = state.extendedStyle;
-        let taskbar_button = state.TaskbarButton != 0;
-        let show_state = state.showState as u32;
-        let is_offscreen = is_offscreen_pos(state.windowOffsetX, state.windowOffsetY);
-        let pos = (state.windowOffsetX as i32, state.windowOffsetY as i32);
-        let size = (state.windowWidth as u32, state.windowHeight as u32);
+        let owner_id = if info.fieldFlags & WINDOW_ORDER_FIELD_OWNER != 0 {
+            Some(state.ownerWindowId)
+        } else {
+            None
+        };
+        let (style, ext_style) = if info.fieldFlags & WINDOW_ORDER_FIELD_STYLE != 0 {
+            (Some(state.style), Some(state.extendedStyle))
+        } else {
+            (None, None)
+        };
+        let taskbar_button = if info.fieldFlags & WINDOW_ORDER_FIELD_TASKBAR_BUTTON != 0 {
+            Some(state.TaskbarButton != 0)
+        } else {
+            None
+        };
+        let show_state = if info.fieldFlags & WINDOW_ORDER_FIELD_SHOW != 0 {
+            Some(state.showState as u32)
+        } else {
+            None
+        };
+        let (is_offscreen, pos) = if info.fieldFlags & WINDOW_ORDER_FIELD_WND_OFFSET != 0 {
+            (
+                Some(is_offscreen_pos(state.windowOffsetX, state.windowOffsetY)),
+                Some((state.windowOffsetX as i32, state.windowOffsetY as i32)),
+            )
+        } else {
+            (None, None)
+        };
+        let size = if info.fieldFlags & WINDOW_ORDER_FIELD_WND_SIZE != 0 {
+            Some((state.windowWidth as u32, state.windowHeight as u32))
+        } else {
+            None
+        };
 
         Self {
             window_id: info.windowId,
@@ -137,7 +164,7 @@ impl WindowCallbacks for Rdp {
             });
             // If the window is being created in SW_SHOW(5) or SW_SHOWMAXIMIZED(3) state,
             // trigger a screen sync to be safe.
-            if rw.show_state == SW_SHOWMAXIMIZED || rw.show_state == SW_SHOW {
+            if rw.show_state == Some(SW_SHOWMAXIMIZED) || rw.show_state == Some(SW_SHOW) {
                 let _ = tx.send(RdpMessage::UpdateRects(vec![crate::geom::Rect::new(
                     0,
                     0,
@@ -179,7 +206,10 @@ impl WindowCallbacks for Rdp {
                 size: rw.size,
             });
 
-            if [SW_SHOW, SW_SHOWNORMAL].contains(&rw.show_state) && !rw.is_offscreen {
+            if let Some(show_state) = rw.show_state
+                && [SW_SHOW, SW_SHOWNORMAL].contains(&show_state)
+                && rw.is_offscreen == Some(false)
+            {
                 log::info!(
                     "RAIL: Restoration nudge triggered for window {}",
                     rw.window_id
