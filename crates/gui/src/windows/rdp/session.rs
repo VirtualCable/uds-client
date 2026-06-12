@@ -232,6 +232,10 @@ impl RdpState {
         let phys = self.window.window.inner_size();
         self.window.renderer.reconfigure(phys.width, phys.height);
 
+        if !matches!(self.mode, RdpMode::Desktop { .. }) {
+            return;
+        }
+
         if self.pendings.resize {
             let is_stuck = if let RdpMode::Desktop { last_resize, .. } = self.mode {
                 last_resize.elapsed() > std::time::Duration::from_secs(2)
@@ -277,6 +281,10 @@ impl RdpState {
         self.pendings.resize = false;
         let phys = self.window.window.inner_size();
         self.window.renderer.reconfigure(phys.width, phys.height);
+
+        if !matches!(self.mode, RdpMode::Desktop { .. }) {
+            return;
+        }
 
         let sf = self.coords_scale.max(1.0);
         let (rdp_w_raw, rdp_h_raw) =
