@@ -30,7 +30,7 @@
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 use freerdp_sys::{BOOL, rdpContext, rdpPointer};
 
-use shared::log;
+use crate::utils::log;
 
 use super::{super::context::OwnerFromCtx, graphics::GraphicsCallbacks};
 

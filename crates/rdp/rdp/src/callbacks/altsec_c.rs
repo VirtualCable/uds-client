@@ -40,7 +40,7 @@ use super::{
     altsec::AltSecCallbacks,
 };
 
-use shared::log;
+use crate::utils::log;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

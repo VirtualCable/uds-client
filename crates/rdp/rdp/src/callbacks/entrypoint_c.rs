@@ -32,7 +32,7 @@ use freerdp_sys::{BOOL, freerdp, rdpContext};
 
 use super::{super::context::OwnerFromCtx, entrypoint::EntrypointCallbacks};
 use crate::context::RdpContext;
-use shared::log;
+use crate::utils::log;
 
 pub extern "C" fn client_global_init() -> BOOL {
     // We could do the WSA initialization here if needed

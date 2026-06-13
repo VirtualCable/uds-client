@@ -39,7 +39,7 @@ use freerdp_sys::{
 
 use crate::context::OwnerFromCtx;
 use crate::integrations::AudioInputIntegration;
-use shared::log;
+use crate::utils::log;
 
 #[repr(C)]
 pub struct MicPlugin {

@@ -38,7 +38,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use shared::system::trigger::Trigger;
+use crate::utils::trigger::Trigger;
 
 use super::RdpClipboard;
 

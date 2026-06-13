@@ -4628,7 +4628,7 @@ dependencies = [
  "freerdp-sys",
  "glob",
  "serde",
- "shared",
+ "tracing",
  "windows 0.62.2",
  "zeroize",
 ]

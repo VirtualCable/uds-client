@@ -30,7 +30,7 @@
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 use freerdp_sys::{AccessTokenType, SmartcardCertInfo};
 
-use shared::log::debug;
+use crate::utils::log::debug;
 
 pub trait InstanceCallbacks {
     fn on_pre_connect(&mut self) -> bool {

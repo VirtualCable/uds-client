@@ -30,7 +30,7 @@
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 use freerdp_sys::{INT16, UINT8, UINT16, UINT32};
 
-use shared::log::debug;
+use crate::utils::log::debug;
 
 pub trait InputCallbacks {
     fn on_synchronize_event(&mut self, flags: UINT32) -> bool {

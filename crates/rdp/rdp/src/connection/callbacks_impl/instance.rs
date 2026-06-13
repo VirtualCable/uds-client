@@ -30,7 +30,7 @@
 use std::ffi::CString;
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
-use shared::log;
+use crate::utils::log;
 
 use crate::callbacks::instance;
 use freerdp_sys::{

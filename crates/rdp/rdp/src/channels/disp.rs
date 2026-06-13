@@ -31,7 +31,7 @@
 use crate::utils;
 
 use crate::geom::Rect;
-use shared::log;
+use crate::utils::log;
 
 #[derive(Clone, Debug)]
 pub struct DispChannel {

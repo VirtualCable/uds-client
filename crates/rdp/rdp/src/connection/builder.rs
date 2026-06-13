@@ -33,8 +33,8 @@ use std::ffi::CString;
 use anyhow::Result;
 use freerdp_sys::*;
 
+use crate::utils::log;
 use crate::{callbacks::instance_c, utils::SafePtr};
-use shared::log;
 
 use super::{Rdp, context::RdpContext};
 

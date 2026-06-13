@@ -28,11 +28,11 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use crate::integrations::WebcamIntegration;
+use crate::utils::log;
 use freerdp_sys::{
     BOOL, BYTE, CHANNEL_RC_OK, IWTSListener, IWTSListenerCallback, IWTSVirtualChannel,
     IWTSVirtualChannelCallback, IWTSVirtualChannelManager, UINT,
 };
-use shared::log;
 use std::sync::Arc;
 
 use super::channel::{self, ChannelCtx};

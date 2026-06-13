@@ -30,7 +30,7 @@
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 use freerdp_sys::{BOOL, INT16, UINT8, UINT16, UINT32, rdpContext, rdpInput};
 
-use shared::log::debug;
+use crate::utils::log::debug;
 
 use super::{super::context::OwnerFromCtx, input::InputCallbacks};
 

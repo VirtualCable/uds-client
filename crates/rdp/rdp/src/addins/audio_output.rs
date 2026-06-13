@@ -39,7 +39,7 @@ use freerdp_sys::{
 
 use crate::context::OwnerFromCtx;
 use crate::integrations::AudioOutputIntegration;
-use shared::log;
+use crate::utils::log;
 
 #[repr(C)]
 pub struct SoundPlugin {

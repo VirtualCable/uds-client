@@ -28,7 +28,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
-use shared::log;
+use crate::utils::log;
 
 // RDP needs WinSock to be initialized befere, at least, open connection
 fn init_socks() {

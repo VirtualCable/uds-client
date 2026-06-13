@@ -30,7 +30,7 @@
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 use freerdp_sys::*;
 
-use shared::log;
+use crate::utils::log;
 
 use crate::{callbacks::channels, channels::cliprdr::register_cliprdr_callbacks};
 

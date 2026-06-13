@@ -39,7 +39,7 @@ use freerdp_sys::{
 use super::audio_input;
 use super::audio_output;
 use super::webcam;
-use shared::log;
+use crate::utils::log;
 
 static FREERDP_ADDIN_PROVIDER: OnceLock<FREERDP_LOAD_CHANNEL_ADDIN_ENTRY_FN> = OnceLock::new();
 

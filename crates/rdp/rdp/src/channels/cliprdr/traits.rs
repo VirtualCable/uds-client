@@ -29,7 +29,7 @@
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
-use shared::log;
+use crate::utils::log;
 
 pub use freerdp_sys::CHANNEL_RC_OK;
 

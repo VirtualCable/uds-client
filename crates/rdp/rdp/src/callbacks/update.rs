@@ -30,7 +30,7 @@
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 use freerdp_sys::{BITMAP_UPDATE, RECTANGLE_16, rdpBounds};
 
-use shared::log::debug;
+use crate::utils::log::debug;
 
 pub trait UpdateCallbacks {
     fn on_begin_paint(&mut self) -> bool {

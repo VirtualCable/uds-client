@@ -31,10 +31,10 @@ use std::sync::Arc;
 
 use crate::context::OwnerFromCtx;
 use crate::integrations::WebcamIntegration;
+use crate::utils::log;
 use freerdp_sys::{
     CHANNEL_RC_OK, IDRDYNVC_ENTRY_POINTS, IWTSListener, IWTSPlugin, IWTSVirtualChannelManager, UINT,
 };
-use shared::log;
 
 mod channel;
 mod listener;

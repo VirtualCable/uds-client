@@ -31,7 +31,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use shared::log;
+use crate::utils::log;
 
 use super::Rdp;
 

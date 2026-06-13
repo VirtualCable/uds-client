@@ -31,7 +31,7 @@
 
 use freerdp_sys::*;
 
-use shared::log;
+use crate::utils::log;
 
 use crate::callbacks::update;
 

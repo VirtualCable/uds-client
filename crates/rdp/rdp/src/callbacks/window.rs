@@ -33,7 +33,7 @@ use freerdp_sys::{
     WINDOW_ORDER_INFO, WINDOW_STATE_ORDER,
 };
 
-use shared::log::debug;
+use crate::utils::log::debug;
 
 pub trait WindowCallbacks {
     fn on_window_create(

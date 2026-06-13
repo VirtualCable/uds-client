@@ -35,7 +35,7 @@ use freerdp_sys::{
     STREAM_BITMAP_FIRST_ORDER, STREAM_BITMAP_NEXT_ORDER, SWITCH_SURFACE_ORDER, UINT8,
 };
 
-use shared::log::debug;
+use crate::utils::log::debug;
 
 pub trait AltSecCallbacks {
     fn on_create_offscreen_bitmap(&self, bitmap: *const CREATE_OFFSCREEN_BITMAP_ORDER) -> bool {

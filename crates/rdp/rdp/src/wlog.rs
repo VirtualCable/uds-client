@@ -28,8 +28,8 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+use crate::utils::log;
 use freerdp_sys::*;
-use shared::log;
 use std::ffi::CStr;
 use std::os::raw::c_char;
 

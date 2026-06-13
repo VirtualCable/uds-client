@@ -36,7 +36,7 @@ use freerdp_sys::{
     freerdp_client_OnChannelDisconnectedEventHandler, rdpContext,
 };
 
-use shared::log::debug;
+use crate::utils::log::debug;
 
 use super::{super::context::OwnerFromCtx, channels::ChannelsCallbacks};
 use crate::utils::ToStringLossy;

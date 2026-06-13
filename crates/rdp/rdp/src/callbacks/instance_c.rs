@@ -34,7 +34,7 @@ use freerdp_sys::{
     freerdp_get_logon_error_info_type, gdi_free, gdi_init, rdp_auth_reason,
 };
 
-use shared::log::debug;
+use crate::utils::log::debug;
 
 use crate::{
     callbacks::{graphics_c, primary_c},

@@ -32,7 +32,7 @@ use anyhow::Result;
 
 use freerdp_sys::*;
 
-use shared::log::debug;
+use crate::utils::log::debug;
 
 use super::{Rdp, addins::addin};
 use crate::callbacks::entrypoint_c;

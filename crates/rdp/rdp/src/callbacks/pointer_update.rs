@@ -33,7 +33,7 @@ use freerdp_sys::{
     POINTER_POSITION_UPDATE, POINTER_SYSTEM_UPDATE,
 };
 
-use shared::log::debug;
+use crate::utils::log::debug;
 
 pub trait PointerCallbacks {
     fn on_pointer_position(&self, pointer_position: *const POINTER_POSITION_UPDATE) -> bool {

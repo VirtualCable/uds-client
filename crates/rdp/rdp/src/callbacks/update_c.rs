@@ -34,7 +34,7 @@ use freerdp_sys::{
 };
 
 use super::{super::context::OwnerFromCtx, update::UpdateCallbacks};
-use shared::log::debug;
+use crate::utils::log::debug;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

@@ -30,7 +30,7 @@
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 use freerdp_sys::rdpPointer;
 
-use shared::log::debug;
+use crate::utils::log::debug;
 
 pub trait GraphicsCallbacks {
     /// # Safety

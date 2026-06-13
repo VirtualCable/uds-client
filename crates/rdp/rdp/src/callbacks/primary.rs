@@ -28,6 +28,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+use crate::utils::log::debug;
 use freerdp_sys::{
     DRAW_NINE_GRID_ORDER, DSTBLT_ORDER, ELLIPSE_CB_ORDER, ELLIPSE_SC_ORDER, FAST_GLYPH_ORDER,
     FAST_INDEX_ORDER, GLYPH_INDEX_ORDER, LINE_TO_ORDER, MEM3BLT_ORDER, MEMBLT_ORDER,
@@ -35,7 +36,6 @@ use freerdp_sys::{
     MULTI_SCRBLT_ORDER, OPAQUE_RECT_ORDER, ORDER_INFO, PATBLT_ORDER, POLYGON_CB_ORDER,
     POLYGON_SC_ORDER, POLYLINE_ORDER, SAVE_BITMAP_ORDER, SCRBLT_ORDER,
 };
-use shared::log::debug;
 
 pub trait PrimaryCallbacks {
     fn on_dst_blt(&self, dstblt: *const DSTBLT_ORDER) -> bool {

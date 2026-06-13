@@ -28,7 +28,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
-use shared::log::debug;
+use crate::utils::log::debug;
 
 pub trait EntrypointCallbacks {
     fn client_start(&mut self) -> bool {

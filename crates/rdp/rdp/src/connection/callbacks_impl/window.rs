@@ -32,12 +32,12 @@
 use crate::callbacks::window::WindowCallbacks;
 use crate::consts::*;
 use crate::messaging::RdpMessage;
+use crate::utils::log;
 use freerdp_sys::{
     WINDOW_CACHED_ICON_ORDER, WINDOW_ICON_ORDER, WINDOW_ORDER_FIELD_OWNER, WINDOW_ORDER_FIELD_SHOW,
     WINDOW_ORDER_FIELD_STYLE, WINDOW_ORDER_FIELD_TASKBAR_BUTTON, WINDOW_ORDER_FIELD_WND_OFFSET,
     WINDOW_ORDER_FIELD_WND_SIZE, WINDOW_ORDER_INFO, WINDOW_STATE_ORDER,
 };
-use shared::log;
 
 use super::Rdp;
 

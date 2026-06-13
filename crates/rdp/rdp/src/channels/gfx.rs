@@ -31,8 +31,8 @@
 
 use crate::context::OwnerFromCtx;
 use crate::utils;
+use crate::utils::log;
 use freerdp_sys::*;
-use shared::log;
 
 #[derive(Clone, Debug)]
 pub struct GfxChannel {

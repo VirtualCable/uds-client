@@ -30,8 +30,8 @@
 use std::sync::Arc;
 
 use crate::integrations::{WebcamIntegration, WebcamMode};
+use crate::utils::log;
 use freerdp_sys::{CHANNEL_RC_OK, IWTSVirtualChannel, IWTSVirtualChannelCallback, UINT};
-use shared::log;
 
 use super::pdu::{self, parse_pdu_header, write_to_channel};
 

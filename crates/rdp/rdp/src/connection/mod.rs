@@ -32,7 +32,7 @@ use anyhow::Result;
 
 use freerdp_sys::*;
 
-use shared::log;
+use crate::utils::log;
 
 use crate::{Rdp, context, messaging::RdpMessage};
 

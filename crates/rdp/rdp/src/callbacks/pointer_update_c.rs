@@ -33,7 +33,7 @@ use freerdp_sys::{
     POINTER_POSITION_UPDATE, POINTER_SYSTEM_UPDATE, rdpContext,
 };
 
-use shared::log;
+use crate::utils::log;
 
 use super::super::context::OwnerFromCtx;
 use super::pointer_update::PointerCallbacks;

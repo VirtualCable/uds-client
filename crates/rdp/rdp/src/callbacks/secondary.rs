@@ -33,7 +33,7 @@ use freerdp_sys::{
     CACHE_COLOR_TABLE_ORDER, CACHE_GLYPH_ORDER, CACHE_GLYPH_V2_ORDER, INT16, UINT8, UINT16,
 };
 
-use shared::log::debug;
+use crate::utils::log::debug;
 
 pub trait SecondaryCallbacks {
     fn on_cache_bitmap(&self, cache_bitmap_order: *const CACHE_BITMAP_ORDER) -> bool {
