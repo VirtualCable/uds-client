@@ -198,7 +198,10 @@ impl RdpSettings {
                     })
                     .unwrap_or(settings::RailBehavior::IndividualWindows),
             }),
-            features: defs.features,
+            features: settings::RdpFeatures {
+                disable_threading: false,
+                force_software_gdi: false,
+            },
             options: {
                 let opt = self.options.clone().unwrap_or_default();
                 settings::RdpOptions {
