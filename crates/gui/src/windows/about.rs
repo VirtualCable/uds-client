@@ -23,6 +23,8 @@ const ABOUT_LINES: &[&str] = &[
     "Developed by Virtual Cable S.L.",
     "https://www.udsenterprise.com",
     "",
+    "OpenH264 Video Codec provided by Cisco Systems, Inc.",
+    "",
     "This software is provided 'as-is',",
     "without any express or implied warranty.",
     "In no event will the authors be held liable",
@@ -48,7 +50,7 @@ impl AboutState {
     pub fn new(event_loop: &ActiveEventLoop) -> Result<Self> {
         let (dw, dh) = crate::monitor::size(0).unwrap_or((1920, 1080));
         let ww = 460.0;
-        let wh = 500.0;
+        let wh = 530.0;
         let sf = crate::monitor::scale(0) as f32;
         let px = (dw as f32 - ww * sf) / 2.0;
         let py = (dh as f32 - wh * sf) / 2.0;
