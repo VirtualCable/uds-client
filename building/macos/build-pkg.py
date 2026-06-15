@@ -52,6 +52,9 @@ FREERDP_ROOT: Path = Path(os.environ.get("FREERDP_ROOT", "/usr/local/"))
 
 OPENH264_RPATH: typing.Final[str] = "/Library/Application Support/UDSLauncher/openh264"
 
+# H264 Binary License file (required by Cisco's BSD license terms)
+H264_LICENSE_SRC: typing.Final[Path] = SCRIPT_DIR / "H264_BINARY_LICENSE.txt"
+
 
 def ad_hoc_sign(path: Path, deep: bool = False) -> None:
     print(f"[SIGN] Ad-hoc signing {path}")
@@ -490,6 +493,15 @@ def main() -> None:
     print("==> Copying application icon")
     icon_src = WORKSPACE_ROOT / "assets" / "macos" / "uds.icns"
     shutil.copy(icon_src, APP_DIR / "Contents" / "Resources")
+
+    # Copy H264 binary license (required by Cisco's BSD license terms for binary redistribution)
+    print("==> Copying H264 binary license (Cisco/OpenH264)")
+    licenses_dir = APP_DIR / "Contents" / "Resources" / "Licenses"
+    licenses_dir.mkdir(parents=True, exist_ok=True)
+    if not H264_LICENSE_SRC.exists():
+        fail(f"H264_BINARY_LICENSE.txt not found at: {H264_LICENSE_SRC}")
+    shutil.copy(H264_LICENSE_SRC, licenses_dir)
+    print(f">> Copied H264 license to {licenses_dir}")
 
     print("==> Copying Info.plist")
     if not plist_source.is_file():
