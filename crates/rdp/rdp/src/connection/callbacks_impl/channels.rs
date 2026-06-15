@@ -1,5 +1,5 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,11 +26,12 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+//
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 use freerdp_sys::*;
 
-use shared::log;
+use crate::utils::log;
 
 use crate::{callbacks::channels, channels::cliprdr::register_cliprdr_callbacks};
 
@@ -85,15 +86,12 @@ impl channels::ChannelsCallbacks for Rdp {
                 let interface = p_interface as *mut RdpgfxClientContext;
                 self.channels.write().unwrap().set_gfx_ptr(interface);
                 unsafe {
-                    let use_individual_windows =
-                        self.config.settings.rail.as_ref().map(|r| r.behavior)
-                            == Some(crate::settings::RailBehavior::IndividualWindows);
                     self.channels
                         .read()
                         .unwrap()
                         .gfx()
                         .unwrap()
-                        .hook_gdi(self.gdi().unwrap(), use_individual_windows);
+                        .hook_gdi(self.gdi().unwrap());
 
                     // Re-register EndPaint/BeginPaint because gdi_graphics_pipeline_init overwrites them
                     let context = self.instance.as_deref().unwrap().context;

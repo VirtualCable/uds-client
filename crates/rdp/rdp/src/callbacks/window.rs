@@ -1,5 +1,5 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,14 +26,15 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+//
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 use freerdp_sys::{
     MONITORED_DESKTOP_ORDER, NOTIFY_ICON_STATE_ORDER, WINDOW_CACHED_ICON_ORDER, WINDOW_ICON_ORDER,
     WINDOW_ORDER_INFO, WINDOW_STATE_ORDER,
 };
 
-use shared::log::debug;
+use crate::utils::log::debug;
 
 pub trait WindowCallbacks {
     fn on_window_create(

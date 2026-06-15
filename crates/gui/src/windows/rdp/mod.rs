@@ -68,7 +68,7 @@ pub struct RdpState {
     pub gdi: *mut rdp_ffi::sys::rdpGdi,
     pub gdi_lock: Arc<RwLock<()>>,
     pub channels: Arc<RwLock<rdp_ffi::channels::RdpChannels>>,
-    pub command_tx: rdp_ffi::commands::Sender,
+    pub command_tx: rdp_ffi::messaging::CommandSender,
     pub command_event: rdp_ffi::utils::SafeHandle,
     pub coords_scale: f64,
     pub desktop_size: (u32, u32),
@@ -110,7 +110,7 @@ impl RdpState {
         );
         let (tx, rx) = bounded::<RdpMessage>(FRAMES_IN_FLIGHT);
 
-        let scale_factor = settings.desktop_scale;
+        let scale_factor = settings.options.desktop_scale;
         let rail_title = settings.rail.as_ref().and_then(|r| r.title.clone());
 
         let integrations = rdp_ffi::integrations::RdpIntegrations {
@@ -270,7 +270,7 @@ impl crate::AppHandler {
 
         let monitor_scale = crate::monitor::scale(0);
         let (desktop_w, desktop_h) = crate::monitor::size(0).unwrap_or((1920, 1080));
-        let use_local_scaler = settings.use_local_scaler;
+        let use_local_scaler = settings.options.use_local_scaler;
         let local_scale = if use_local_scaler { monitor_scale } else { 1.0 };
 
         let (rdp_w, rdp_h) = match (settings.screen_size, is_rail) {
@@ -282,10 +282,10 @@ impl crate::AppHandler {
             (rdp_ffi::geom::ScreenSize::Fixed(w, h), _) => (w, h),
         };
         let coords_scale = if use_local_scaler {
-            settings.desktop_scale = 1.0;
+            settings.options.desktop_scale = 1.0;
             monitor_scale
         } else {
-            settings.desktop_scale = monitor_scale;
+            settings.options.desktop_scale = monitor_scale;
             1.0
         };
         let desktop_size = (rdp_w, rdp_h);
@@ -342,7 +342,7 @@ impl crate::AppHandler {
                 let cmd_tx = state.command_tx.clone();
                 let cmd_ev = state.command_event;
                 self.rail_ipc = crate::ipc::bind(&srv.id, &srv.token, move |msg| {
-                    let _ = cmd_tx.send(rdp_ffi::commands::RdpCommand::LaunchRailApp {
+                    let _ = cmd_tx.send(rdp_ffi::messaging::RdpCommand::LaunchRailApp {
                         app: msg.app.clone(),
                         args: msg.args.clone(),
                         dir: msg.working_dir.clone(),
@@ -616,16 +616,16 @@ impl crate::AppHandler {
         }
         while let Ok(raw_key) = state.keys_rx.try_recv() {
             if let Some(sc) = crate::keymap::RdpScanCode::get_from_key(Some(&raw_key.keycode)) {
-                let _ = state.command_tx.send(rdp_ffi::commands::RdpCommand::Input(
-                    rdp_ffi::commands::InputEvent::Keyboard {
+                let _ = state.command_tx.send(rdp_ffi::messaging::RdpCommand::Input(
+                    rdp_ffi::messaging::InputEvent::Keyboard {
                         scancode: sc as u16,
                         pressed: raw_key.pressed,
                         repeat: raw_key.repeat,
                     },
                 ));
                 if sc == crate::keymap::RdpScanCode::RMenu && !raw_key.pressed {
-                    let _ = state.command_tx.send(rdp_ffi::commands::RdpCommand::Input(
-                        rdp_ffi::commands::InputEvent::Keyboard {
+                    let _ = state.command_tx.send(rdp_ffi::messaging::RdpCommand::Input(
+                        rdp_ffi::messaging::InputEvent::Keyboard {
                             scancode: crate::keymap::RdpScanCode::LControl as u16,
                             pressed: false,
                             repeat: false,

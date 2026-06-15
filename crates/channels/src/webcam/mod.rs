@@ -523,6 +523,23 @@ impl WebcamIntegration for WebcamHandle {
         WEBCAM_MAX_WIDTH.store(max_width, Ordering::Relaxed);
         WEBCAM_MAX_HEIGHT.store(max_height, Ordering::Relaxed);
     }
+
+    fn get_device_name(&self) -> String {
+        let force_mock = std::env::var("UDSLAUNCHER_CAM_MOCK")
+            .map(|v| v == "1" || v.to_lowercase() == "true")
+            .unwrap_or(false);
+        if force_mock {
+            return "Mock Camera".to_string();
+        }
+        if let Ok(devices) = nokhwa::query(nokhwa::utils::ApiBackend::Auto) {
+            if devices.is_empty() {
+                return "Mock Camera".to_string();
+            }
+        } else {
+            return "Mock Camera".to_string();
+        }
+        "UDS Camera".to_string()
+    }
 }
 
 impl Default for WebcamHandle {

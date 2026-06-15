@@ -1,5 +1,5 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,13 +26,14 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+//
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 use anyhow::Result;
 
 use freerdp_sys::*;
 
-use shared::log;
+use crate::utils::log;
 
 use crate::{Rdp, context, messaging::RdpMessage};
 
@@ -155,7 +156,7 @@ impl Rdp {
                     (FreeRDP_Settings_Keys_UInt32_FreeRDP_FrameAcknowledge, 0),
                     (
                         FreeRDP_Settings_Keys_UInt32_FreeRDP_DesktopScaleFactor,
-                        (self.config.settings.desktop_scale * 100.0) as u32,
+                        (self.config.settings.options.desktop_scale * 100.0) as u32,
                     ),
                     // 100% device = use desktop scale factor
                     // DeviceScaleFactor only allows 100, 140 y 180.. O.o
@@ -311,14 +312,14 @@ impl Rdp {
                 freerdp_settings_set_bool(
                     settings,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_IgnoreCertificate,
-                    (!self.config.settings.verify_cert).into(),
+                    (!self.config.settings.options.verify_cert).into(),
                 );
 
                 // NLA setting
                 freerdp_settings_set_bool(
                     settings,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_NlaSecurity,
-                    self.config.settings.use_nla.into(),
+                    self.config.settings.options.use_nla.into(),
                 );
 
                 let drives_to_redirect = std::ffi::CString::new(
@@ -384,6 +385,22 @@ impl Rdp {
                         self.config.settings.best_experience.into(),
                     );
                 });
+
+                if self.config.settings.features.disable_threading {
+                    freerdp_settings_set_uint32(
+                        settings,
+                        FreeRDP_Settings_Keys_UInt32_FreeRDP_ThreadingFlags,
+                        THREADING_FLAGS_DISABLE_THREADS,
+                    );
+                }
+
+                if self.config.settings.features.force_software_gdi {
+                    freerdp_settings_set_bool(
+                        settings,
+                        FreeRDP_Settings_Keys_Bool_FreeRDP_SoftwareGdi,
+                        true.into(),
+                    );
+                }
 
                 // Set perfromance flags from settings
                 freerdp_sys::freerdp_performance_flags_make(settings);
@@ -473,6 +490,14 @@ impl Rdp {
                 #[allow(clippy::single_element_loop)]
                 for key in [FreeRDP_Settings_Keys_Bool_FreeRDP_GfxH264] {
                     freerdp_settings_set_bool(settings, key, false.into());
+                }
+
+                if self.config.settings.features.force_software_gdi {
+                    freerdp_settings_set_bool(
+                        settings,
+                        FreeRDP_Settings_Keys_Bool_FreeRDP_SoftwareGdi,
+                        true.into(),
+                    );
                 }
 
                 // Enable Frame Acknowledge for GFX flow control
@@ -608,7 +633,7 @@ impl Rdp {
             if wait_result == (handle_count as u32 + 1) {
                 while let Ok(cmd) = self.command_rx.try_recv() {
                     match cmd {
-                        crate::commands::RdpCommand::Input(ev) => unsafe {
+                        crate::messaging::RdpCommand::Input(ev) => unsafe {
                             if let Some(instance) = self.instance.as_ref() {
                                 let instance_ptr = instance.as_mut_ptr();
                                 if instance_ptr.is_null() {
@@ -624,7 +649,7 @@ impl Rdp {
                                 }
 
                                 match ev {
-                                    crate::commands::InputEvent::Keyboard {
+                                    crate::messaging::InputEvent::Keyboard {
                                         scancode,
                                         pressed,
                                         repeat,
@@ -636,19 +661,19 @@ impl Rdp {
                                             scancode as u32,
                                         );
                                     }
-                                    crate::commands::InputEvent::Mouse { flags, x, y } => {
+                                    crate::messaging::InputEvent::Mouse { flags, x, y } => {
                                         freerdp_input_send_mouse_event(input, flags, x, y);
                                     }
-                                    crate::commands::InputEvent::ExtendedMouse { flags, x, y } => {
+                                    crate::messaging::InputEvent::ExtendedMouse { flags, x, y } => {
                                         freerdp_input_send_extended_mouse_event(input, flags, x, y);
                                     }
-                                    crate::commands::InputEvent::Unicode { code } => {
+                                    crate::messaging::InputEvent::Unicode { code } => {
                                         freerdp_input_send_unicode_keyboard_event(input, 0, code);
                                     }
                                 }
                             }
                         },
-                        crate::commands::RdpCommand::ViewportMove {
+                        crate::messaging::RdpCommand::ViewportMove {
                             window_id,
                             left,
                             top,
@@ -659,12 +684,12 @@ impl Rdp {
                                 rail.send_window_move(window_id, left, top, right, bottom);
                             }
                         }
-                        crate::commands::RdpCommand::LaunchRailApp { app, args, dir } => {
+                        crate::messaging::RdpCommand::LaunchRailApp { app, args, dir } => {
                             if let Some(rail) = self.channels.read().unwrap().rail() {
                                 rail.send_execute(&app, &args, &dir);
                             }
                         }
-                        crate::commands::RdpCommand::Close => {
+                        crate::messaging::RdpCommand::Close => {
                             unsafe {
                                 freerdp_set_last_error_ex(
                                     context as *mut rdpContext,

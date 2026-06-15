@@ -458,13 +458,14 @@ Starts an RDP connection with the specified settings.
   - `user` (string, optional): The username for authentication.
   - `password` (string, optional): The password for authentication.
   - `domain` (string, optional): The domain for authentication.
-  - `verify_cert` (boolean, optional): Whether to verify the server certificate (default: false).
-  - `use_nla` (boolean, optional): Whether to use Network Level Authentication (default: false).
+  - `options` (object, optional): Grouped general configuration options:
+    - `verify_cert` (boolean, optional): Whether to verify the server certificate (default: false).
+    - `use_nla` (boolean, optional): Whether to use Network Level Authentication (default: false).
+    - `use_local_scaler` (boolean, optional): If true (default), the local client handles all DPI scaling and the server renders at 100% DPI, reducing bandwidth. If false, the server handles scaling at the native monitor DPI.
+    - `use_tunnel` (boolean, optional): If true, overrides the ServerHostname setting with the original connection hostname during redirection.
   - `screen_width` (number, optional): The screen width (0 for full screen). If not provided, a default fixed size of 1024x768 is used.
   - `screen_height` (number, optional): The screen height (0 for full screen). If not provided, a default fixed size of 1024x768 is used.
   - `best_experience` (boolean, optional): Whether to enable best experience optimizations (default: true).
-  - `use_local_scaler` (boolean, optional): If true (default), the local client handles all DPI scaling and the server renders at 100% DPI, reducing bandwidth. If false, the server handles scaling at the native monitor DPI.
-  - `use_tunnel` (boolean, optional): If true, overrides the ServerHostname setting with the original connection hostname during redirection.
   - `redirections` (object, optional): Grouped RDP redirection features:
     - `clipboard` (boolean, optional): Whether to enable clipboard redirection (default: true).
     - `audio` (boolean, optional): Whether to enable audio redirection (default: true).
@@ -507,8 +508,10 @@ RDP.start({
     user: "username",
     password: "password",
     domain: "DOMAIN",
-    verify_cert: true,
-    use_nla: true,
+    options: {
+        verify_cert: true,
+        use_nla: true
+    },
     screen_width: 1920,
     screen_height: 1080,
     redirections: {
@@ -530,7 +533,9 @@ RDP.start({
         behavior: "individualwindows"
     },
     // With local scaler (default): server renders at 100% DPI, client upscales
-    use_local_scaler: true
+    options: {
+        use_local_scaler: true
+    }
 });
 
 // Start full desktop with server-side scaling
@@ -540,7 +545,9 @@ RDP.start({
     password: "password",
     screen_width: 0,   // fullscreen
     screen_height: 0,  // fullscreen
-    use_local_scaler: false  // server handles DPI scaling
+    options: {
+        use_local_scaler: false  // server handles DPI scaling
+    }
 });
 
   // Sign an RDP file/string through the broker

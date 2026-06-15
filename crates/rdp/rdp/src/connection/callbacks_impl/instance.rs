@@ -1,5 +1,5 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,11 +26,11 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-use std::ffi::CString;
-
+//
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
-use shared::log;
+
+use crate::utils::log;
+use std::ffi::CString;
 
 use crate::callbacks::instance;
 use freerdp_sys::{
@@ -80,7 +80,7 @@ impl instance::InstanceCallbacks for Rdp {
     fn on_redirect(&mut self) -> bool {
         log::debug!(" **** Redirecting!");
         // Override FreeRDP_ServerHostname with original hostname if tunnel flag is set
-        if self.config.settings.use_tunnel
+        if self.config.settings.options.use_tunnel
             && let Some(settings) = self.settings()
             && let Ok(host) = CString::new(self.config.settings.server.as_str())
         {

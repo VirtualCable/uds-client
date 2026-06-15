@@ -151,7 +151,10 @@ impl AppHandler {
                             sound_latency_threshold: None,
                         },
                         best_experience: true,
-                        use_local_scaler: true,
+                        options: rdp_ffi::settings::RdpOptions {
+                            use_local_scaler: true,
+                            ..Default::default()
+                        },
                         rail: if is_rail {
                             Some(rdp_ffi::settings::RailSettings {
                                 app: "c:\\windows\\system32\\calc.exe".to_string(),

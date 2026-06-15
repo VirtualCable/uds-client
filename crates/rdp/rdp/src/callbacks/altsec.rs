@@ -1,5 +1,5 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,8 +26,9 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+//
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 use freerdp_sys::{
     CREATE_NINE_GRID_BITMAP_ORDER, CREATE_OFFSCREEN_BITMAP_ORDER, DRAW_GDIPLUS_CACHE_END_ORDER,
     DRAW_GDIPLUS_CACHE_FIRST_ORDER, DRAW_GDIPLUS_CACHE_NEXT_ORDER, DRAW_GDIPLUS_END_ORDER,
@@ -35,7 +36,7 @@ use freerdp_sys::{
     STREAM_BITMAP_FIRST_ORDER, STREAM_BITMAP_NEXT_ORDER, SWITCH_SURFACE_ORDER, UINT8,
 };
 
-use shared::log::debug;
+use crate::utils::log::debug;
 
 pub trait AltSecCallbacks {
     fn on_create_offscreen_bitmap(&self, bitmap: *const CREATE_OFFSCREEN_BITMAP_ORDER) -> bool {

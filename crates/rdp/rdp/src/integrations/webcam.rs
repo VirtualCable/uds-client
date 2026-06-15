@@ -27,4 +27,7 @@ pub trait WebcamIntegration: Send + Sync + std::fmt::Debug {
     fn request_sample(&self, channel_ptr: usize);
     fn push_frame(&self, data: Vec<u8>);
     fn set_limits(&self, _quality: u32, _fps: u32, _max_width: u32, _max_height: u32) {}
+    fn get_device_name(&self) -> String {
+        "UDS Camera".to_string()
+    }
 }
