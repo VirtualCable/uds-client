@@ -31,7 +31,7 @@
 
 use freerdp_sys::{BOOL, INT16, UINT8, UINT16, UINT32, rdpContext, rdpInput};
 
-use crate::utils::log::debug;
+use crate::utils::log;
 
 use super::{super::context::OwnerFromCtx, input::InputCallbacks};
 
@@ -71,12 +71,12 @@ impl Callbacks {
 pub unsafe fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
     unsafe {
         if context.is_null() {
-            debug!("input_c::set_callbacks: context is null");
+            log::error!("Context is null, cannot override callbacks.");
             return;
         }
         let input = (*context).input;
         if input.is_null() {
-            debug!(" ⁉️ **** Input not initialized, cannot override callbacks.");
+            log::error!("Input not initialized, cannot override callbacks.");
             return;
         }
         for override_cb in overrides {

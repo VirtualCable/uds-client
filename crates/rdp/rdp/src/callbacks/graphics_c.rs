@@ -31,21 +31,20 @@
 
 use freerdp_sys::{BOOL, rdpContext, rdpPointer};
 
-use crate::utils::log;
-
 use super::{super::context::OwnerFromCtx, graphics::GraphicsCallbacks};
+use crate::utils::log;
 
 /// # Safety
 /// This function is unsafe because it dereferences raw pointers to set callback functions.
 pub unsafe fn set_callbacks(context: *mut rdpContext) {
     unsafe {
         if context.is_null() {
-            log::error!("graphics_c::set_callbacks: context is null");
+            log::error!("Context is null, cannot override callbacks.");
             return;
         }
         let graphics = (*context).graphics;
         if graphics.is_null() {
-            log::error!("graphics_c::set_callbacks: graphics is null");
+            log::error!("Graphics not initialized, cannot override callbacks.");
             return;
         }
 

@@ -36,7 +36,7 @@ use freerdp_sys::{
 
 use super::{super::context::OwnerFromCtx, window::WindowCallbacks};
 
-use crate::utils::log::debug;
+use crate::utils::log;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -76,17 +76,21 @@ impl Callbacks {
 pub unsafe fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
     unsafe {
         if context.is_null() {
-            debug!("window_c::set_callbacks: context is null");
+            log::error!("Context is null, cannot override callbacks.");
             return;
         }
         let update = (*context).update;
         if update.is_null() {
-            debug!(" **** Update not initialized, cannot override callbacks.");
+            log::error!("Update not initialized, cannot override callbacks.");
             return;
         }
         let window = (*update).window;
+        log::debug!(
+            " **** Setting window callbacks. Window struct: {:?}",
+            window
+        );
         if window.is_null() {
-            debug!(" **** Window not initialized, cannot override callbacks.");
+            log::error!("Window structure not initialized, cannot override callbacks.");
             return;
         }
         for override_cb in overrides {
