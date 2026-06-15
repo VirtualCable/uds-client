@@ -442,8 +442,7 @@ impl crate::AppHandler {
             let RdpMode::Rail(ref mut rail) = state.mode else {
                 break;
             };
-            match action {
-                RailAction::Create(id, title, rect, taskbar, decorations, visible) => {
+            match action {                RailAction::Create(id, title, rect, taskbar, decorations, visible, minimized) => {
                     if rail.windows.contains_key(id) {
                         continue;
                     }
@@ -460,6 +459,11 @@ impl crate::AppHandler {
                     ) else {
                         continue;
                     };
+
+                    if *minimized {
+                        window.set_minimized(true);
+                    }
+
                     let wid = window.id();
                     let sf = state.coords_scale.max(1.0);
                     let (px, py) = crate::monitor::logic_2_phys_pos((rect.x, rect.y), sf);
@@ -548,6 +552,11 @@ impl crate::AppHandler {
                     if let Some(rw) = rail.windows.get_mut(id) {
                         rw.window.set_visible(*visible);
                         rw.offscreen = !*visible;
+                    }
+                }
+                RailAction::SetMinimized(id, minimized) => {
+                    if let Some(rw) = rail.windows.get_mut(id) {
+                        rw.window.set_minimized(*minimized);
                     }
                 }
             }

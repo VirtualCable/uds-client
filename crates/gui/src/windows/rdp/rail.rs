@@ -28,10 +28,11 @@ pub struct RailState {
 
 /// Pending RAIL action to be executed by the event loop
 pub enum RailAction {
-    Create(u32, String, rdp_ffi::geom::Rect, bool, bool, bool),
+    Create(u32, String, rdp_ffi::geom::Rect, bool, bool, bool, bool),
     Delete(u32),
     UpdatePosition(u32, rdp_ffi::geom::Rect),
     SetVisible(u32, bool),
+    SetMinimized(u32, bool),
 }
 
 // ── RAIL Message Dispatcher ───
@@ -93,13 +94,24 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
             }
 
             if exists {
+                let is_minimized = show_state.is_some_and(|s| {
+                    s == 2 || s == 6 || s == 7 || s == 11
+                });
                 if let Some(s) = show_state {
-                    let hidden = s == 0 || is_off;
+                    let hidden = s == 0 || (is_off && !is_minimized);
                     rail.actions
                         .push(RailAction::SetVisible(window_id, !hidden));
-                } else if is_offscreen.is_some() {
+                    if is_minimized {
+                        rail.actions.push(RailAction::SetMinimized(window_id, true));
+                    } else if s == 1 || s == 3 || s == 5 || s == 9 {
+                        rail.actions.push(RailAction::SetMinimized(window_id, false));
+                    }
+                } else if let Some(is_off_val) = is_offscreen {
+                    if !is_off_val {
+                        rail.actions.push(RailAction::SetMinimized(window_id, false));
+                    }
                     rail.actions
-                        .push(RailAction::SetVisible(window_id, !is_off));
+                        .push(RailAction::SetVisible(window_id, !is_off_val));
                 }
 
                 if pos.is_some() || size.is_some() {
@@ -153,7 +165,10 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                     let has_owner = owner_id.is_some() && owner_id != Some(0);
                     let show_taskbar = taskbar_button.unwrap_or(false) || (!is_tool && !has_owner);
 
-                    let hidden = show_state == Some(0) || is_off;
+                    let is_minimized = show_state.is_some_and(|s| {
+                        s == 2 || s == 6 || s == 7 || s == 11
+                    });
+                    let hidden = show_state == Some(0) || (is_off && !is_minimized);
 
                     rail.actions.push(RailAction::Create(
                         window_id,
@@ -162,6 +177,7 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                         show_taskbar,
                         false,
                         !hidden,
+                        is_minimized,
                     ));
                 }
             }
