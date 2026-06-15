@@ -41,7 +41,6 @@ pub mod utils;
 pub mod events;
 pub mod wlog;
 
-pub mod consts;
 pub mod geom;
 pub mod settings;
 
@@ -52,6 +51,7 @@ pub mod messaging;
 pub mod sys;
 
 pub mod channels;
+pub mod consts;
 pub mod integrations;
 
 #[derive(Debug)]
@@ -96,15 +96,17 @@ impl Rdp {
         let command_event = utils::SafeHandle::new(command_event).unwrap();
         let (command_tx, command_rx) = flume::unbounded();
 
-        let is_rail = settings.rail.is_some();
+        let is_rail_windows = match &settings.rail {
+            Some(rail) => rail.behavior == settings::RailBehavior::IndividualWindows,
+            None => false,
+        };
 
         (
             Rdp {
                 config: Config {
                     settings,
                     use_rgba,
-                    // Add window callbacks only if RDP is running in RAIL mode
-                    callbacks: if is_rail {
+                    callbacks: if is_rail_windows {
                         callbacks::Callbacks {
                             window: vec![
                                 callbacks::window_c::Callbacks::Create,
@@ -205,5 +207,9 @@ impl Rdp {
 
     pub fn use_rgba(&self) -> bool {
         self.config.use_rgba
+    }
+
+    pub fn update_tx(&self) -> messaging::Sender {
+        self.update_tx.as_ref().unwrap().clone()
     }
 }

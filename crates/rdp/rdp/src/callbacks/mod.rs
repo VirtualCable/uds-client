@@ -82,6 +82,7 @@ impl Default for Callbacks {
                 update_c::Callbacks::BeginPaint,
                 update_c::Callbacks::EndPaint,
                 update_c::Callbacks::DesktopResize,
+                update_c::Callbacks::SurfaceFrameMarker,
             ],
             window: vec![],
             secondary: vec![],
