@@ -97,6 +97,10 @@ impl Rdp {
         let (command_tx, command_rx) = flume::unbounded();
 
         let is_rail = settings.rail.is_some();
+        let is_rail_windows = match &settings.rail {
+            Some(rail) => rail.behavior == settings::RailBehavior::IndividualWindows,
+            None => false,
+        };
 
         (
             Rdp {
@@ -105,7 +109,17 @@ impl Rdp {
                     use_rgba,
                     callbacks: if is_rail {
                         callbacks::Callbacks {
-                            window: callbacks::window_c::Callbacks::all(),
+                            window: if is_rail_windows {
+                                vec![
+                                    callbacks::window_c::Callbacks::Create,
+                                    callbacks::window_c::Callbacks::Update,
+                                    callbacks::window_c::Callbacks::Delete,
+                                    callbacks::window_c::Callbacks::Icon,
+                                    callbacks::window_c::Callbacks::CachedIcon,
+                                ]
+                            } else {
+                                callbacks::window_c::Callbacks::all()
+                            },
                             ..callbacks::Callbacks::default()
                         }
                     } else {
