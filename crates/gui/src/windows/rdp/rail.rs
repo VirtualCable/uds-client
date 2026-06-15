@@ -18,6 +18,7 @@ pub struct RailWindow {
     pub last_focused: bool,
     pub offscreen: bool,
     pub was_minimized: bool,
+    pub server_minimized: bool,
     pub rgba_dirty: bool,
 }
 
@@ -100,6 +101,10 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                 });
                 if let Some(s) = show_state {
                     let hidden = s == 0 || (is_off && !is_minimized);
+                    // Track server-side minimized state so offscreen updates don't undo it
+                    if let Some(rw) = rail.windows.get_mut(&window_id) {
+                        rw.server_minimized = is_minimized;
+                    }
                     rail.actions
                         .push(RailAction::SetVisible(window_id, !hidden));
                     if is_minimized {
@@ -108,11 +113,17 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                         rail.actions.push(RailAction::SetMinimized(window_id, false));
                     }
                 } else if let Some(is_off_val) = is_offscreen {
-                    if !is_off_val {
-                        rail.actions.push(RailAction::SetMinimized(window_id, false));
+                    // If the server told us this window is minimized, ignore offscreen
+                    // updates — the (-32000,-32000) position is expected.
+                    let server_minimized = rail.windows.get(&window_id)
+                        .is_some_and(|rw| rw.server_minimized);
+                    if !server_minimized {
+                        if !is_off_val {
+                            rail.actions.push(RailAction::SetMinimized(window_id, false));
+                        }
+                        rail.actions
+                            .push(RailAction::SetVisible(window_id, !is_off_val));
                     }
-                    rail.actions
-                        .push(RailAction::SetVisible(window_id, !is_off_val));
                 }
 
                 if pos.is_some() || size.is_some() {

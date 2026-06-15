@@ -496,6 +496,7 @@ impl crate::AppHandler {
                             last_focused: false,
                             offscreen: false,
                             was_minimized: *minimized,
+                            server_minimized: *minimized,
                             rgba_dirty: true,
                         },
                     );
@@ -558,6 +559,7 @@ impl crate::AppHandler {
                 RailAction::SetMinimized(id, minimized) => {
                     if let Some(rw) = rail.windows.get_mut(id) {
                         rw.window.set_minimized(*minimized);
+                        rw.was_minimized = *minimized;
                     }
                 }
             }
