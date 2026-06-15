@@ -151,7 +151,7 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                     );
                     let is_tool = ext_style.is_some_and(|s| (s & 0x80) != 0);
                     let has_owner = owner_id.is_some() && owner_id != Some(0);
-                    let show_taskbar = taskbar_button.unwrap_or(!is_tool && !has_owner);
+                    let show_taskbar = taskbar_button.unwrap_or(false) || (!is_tool && !has_owner);
 
                     let hidden = show_state == Some(0) || is_off;
 
