@@ -346,6 +346,14 @@ impl AppHandler {
             WindowEvent::CloseRequested => {
                 rail_channel.send_system_command(rail_id, rdp_ffi::consts::SC_CLOSE as u16);
             }
+            WindowEvent::Occluded(occluded) => {
+                let cmd = if occluded {
+                    rdp_ffi::consts::SC_MINIMIZE
+                } else {
+                    rdp_ffi::consts::SC_RESTORE
+                };
+                rail_channel.send_system_command(rail_id, cmd as u16);
+            }
             WindowEvent::Focused(focused) => {
                 if let Some(rw) = rail.windows.get_mut(&rail_id) {
                     if focused && !rw.last_focused && rw.show_in_taskbar {
