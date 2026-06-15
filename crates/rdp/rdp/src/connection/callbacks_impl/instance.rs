@@ -30,6 +30,7 @@
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
 use crate::utils::log;
+use std::ffi::CString;
 
 use crate::callbacks::instance;
 use freerdp_sys::{

@@ -68,7 +68,7 @@ pub struct RdpState {
     pub gdi: *mut rdp_ffi::sys::rdpGdi,
     pub gdi_lock: Arc<RwLock<()>>,
     pub channels: Arc<RwLock<rdp_ffi::channels::RdpChannels>>,
-    pub command_tx: rdp_ffi::commands::Sender,
+    pub command_tx: rdp_ffi::messaging::CommandSender,
     pub command_event: rdp_ffi::utils::SafeHandle,
     pub coords_scale: f64,
     pub desktop_size: (u32, u32),
@@ -342,7 +342,7 @@ impl crate::AppHandler {
                 let cmd_tx = state.command_tx.clone();
                 let cmd_ev = state.command_event;
                 self.rail_ipc = crate::ipc::bind(&srv.id, &srv.token, move |msg| {
-                    let _ = cmd_tx.send(rdp_ffi::commands::RdpCommand::LaunchRailApp {
+                    let _ = cmd_tx.send(rdp_ffi::messaging::RdpCommand::LaunchRailApp {
                         app: msg.app.clone(),
                         args: msg.args.clone(),
                         dir: msg.working_dir.clone(),
@@ -616,16 +616,16 @@ impl crate::AppHandler {
         }
         while let Ok(raw_key) = state.keys_rx.try_recv() {
             if let Some(sc) = crate::keymap::RdpScanCode::get_from_key(Some(&raw_key.keycode)) {
-                let _ = state.command_tx.send(rdp_ffi::commands::RdpCommand::Input(
-                    rdp_ffi::commands::InputEvent::Keyboard {
+                let _ = state.command_tx.send(rdp_ffi::messaging::RdpCommand::Input(
+                    rdp_ffi::messaging::InputEvent::Keyboard {
                         scancode: sc as u16,
                         pressed: raw_key.pressed,
                         repeat: raw_key.repeat,
                     },
                 ));
                 if sc == crate::keymap::RdpScanCode::RMenu && !raw_key.pressed {
-                    let _ = state.command_tx.send(rdp_ffi::commands::RdpCommand::Input(
-                        rdp_ffi::commands::InputEvent::Keyboard {
+                    let _ = state.command_tx.send(rdp_ffi::messaging::RdpCommand::Input(
+                        rdp_ffi::messaging::InputEvent::Keyboard {
                             scancode: crate::keymap::RdpScanCode::LControl as u16,
                             pressed: false,
                             repeat: false,

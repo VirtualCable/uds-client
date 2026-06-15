@@ -32,7 +32,6 @@
 use std::sync::{Arc, RwLock};
 
 pub mod callbacks;
-pub mod commands;
 
 mod addins;
 pub mod connection;
@@ -74,7 +73,7 @@ pub struct Rdp {
     // because they are initialized after connection is created, on a later step
     channels: Arc<RwLock<channels::RdpChannels>>,
     stop_event: utils::SafeHandle,
-    command_rx: commands::Receiver,
+    command_rx: messaging::CommandReceiver,
     command_event: utils::SafeHandle, // Win32 event to signal new commands
     _pin: std::marker::PhantomPinned, // Do not allow moving
 }
@@ -87,7 +86,7 @@ impl Rdp {
         use_rgba: bool,
         channels: Option<Arc<RwLock<channels::RdpChannels>>>,
         integrations: integrations::RdpIntegrations,
-    ) -> (Self, commands::Sender) {
+    ) -> (Self, messaging::CommandSender) {
         let stop_event: freerdp_sys::HANDLE =
             unsafe { freerdp_sys::CreateEventW(std::ptr::null_mut(), 1, 0, std::ptr::null()) };
         let command_event: freerdp_sys::HANDLE =

@@ -633,7 +633,7 @@ impl Rdp {
             if wait_result == (handle_count as u32 + 1) {
                 while let Ok(cmd) = self.command_rx.try_recv() {
                     match cmd {
-                        crate::commands::RdpCommand::Input(ev) => unsafe {
+                        crate::messaging::RdpCommand::Input(ev) => unsafe {
                             if let Some(instance) = self.instance.as_ref() {
                                 let instance_ptr = instance.as_mut_ptr();
                                 if instance_ptr.is_null() {
@@ -649,7 +649,7 @@ impl Rdp {
                                 }
 
                                 match ev {
-                                    crate::commands::InputEvent::Keyboard {
+                                    crate::messaging::InputEvent::Keyboard {
                                         scancode,
                                         pressed,
                                         repeat,
@@ -661,19 +661,19 @@ impl Rdp {
                                             scancode as u32,
                                         );
                                     }
-                                    crate::commands::InputEvent::Mouse { flags, x, y } => {
+                                    crate::messaging::InputEvent::Mouse { flags, x, y } => {
                                         freerdp_input_send_mouse_event(input, flags, x, y);
                                     }
-                                    crate::commands::InputEvent::ExtendedMouse { flags, x, y } => {
+                                    crate::messaging::InputEvent::ExtendedMouse { flags, x, y } => {
                                         freerdp_input_send_extended_mouse_event(input, flags, x, y);
                                     }
-                                    crate::commands::InputEvent::Unicode { code } => {
+                                    crate::messaging::InputEvent::Unicode { code } => {
                                         freerdp_input_send_unicode_keyboard_event(input, 0, code);
                                     }
                                 }
                             }
                         },
-                        crate::commands::RdpCommand::ViewportMove {
+                        crate::messaging::RdpCommand::ViewportMove {
                             window_id,
                             left,
                             top,
@@ -684,12 +684,12 @@ impl Rdp {
                                 rail.send_window_move(window_id, left, top, right, bottom);
                             }
                         }
-                        crate::commands::RdpCommand::LaunchRailApp { app, args, dir } => {
+                        crate::messaging::RdpCommand::LaunchRailApp { app, args, dir } => {
                             if let Some(rail) = self.channels.read().unwrap().rail() {
                                 rail.send_execute(&app, &args, &dir);
                             }
                         }
-                        crate::commands::RdpCommand::Close => {
+                        crate::messaging::RdpCommand::Close => {
                             unsafe {
                                 freerdp_set_last_error_ex(
                                     context as *mut rdpContext,

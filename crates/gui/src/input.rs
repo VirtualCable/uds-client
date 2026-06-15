@@ -164,8 +164,8 @@ impl AppHandler {
                 let y = ((position.y * gdi_h as f64) / phys_h as f64)
                     .round()
                     .clamp(0.0, (gdi_h - 1) as f64) as u16;
-                let _ = s.command_tx.send(rdp_ffi::commands::RdpCommand::Input(
-                    rdp_ffi::commands::InputEvent::Mouse {
+                let _ = s.command_tx.send(rdp_ffi::messaging::RdpCommand::Input(
+                    rdp_ffi::messaging::InputEvent::Mouse {
                         flags: rdp_ffi::sys::PTR_FLAGS_MOVE as u16,
                         x,
                         y,
@@ -239,8 +239,8 @@ impl AppHandler {
                             } else {
                                 0
                             };
-                        let _ = s.command_tx.send(rdp_ffi::commands::RdpCommand::Input(
-                            rdp_ffi::commands::InputEvent::Mouse { flags: f, x, y },
+                        let _ = s.command_tx.send(rdp_ffi::messaging::RdpCommand::Input(
+                            rdp_ffi::messaging::InputEvent::Mouse { flags: f, x, y },
                         ));
                         unsafe {
                             rdp_ffi::sys::SetEvent(s.command_event.as_handle());
@@ -269,8 +269,8 @@ impl AppHandler {
                     } else {
                         flags | step
                     };
-                    let _ = s.command_tx.send(rdp_ffi::commands::RdpCommand::Input(
-                        rdp_ffi::commands::InputEvent::Mouse {
+                    let _ = s.command_tx.send(rdp_ffi::messaging::RdpCommand::Input(
+                        rdp_ffi::messaging::InputEvent::Mouse {
                             flags: cflags,
                             x: 0,
                             y: 0,
@@ -384,8 +384,8 @@ impl AppHandler {
                         rw.rect.w,
                         rw.rect.h,
                     );
-                    let _ = cmd_tx.send(rdp_ffi::commands::RdpCommand::Input(
-                        rdp_ffi::commands::InputEvent::Mouse {
+                    let _ = cmd_tx.send(rdp_ffi::messaging::RdpCommand::Input(
+                        rdp_ffi::messaging::InputEvent::Mouse {
                             flags: rdp_ffi::sys::PTR_FLAGS_MOVE as u16,
                             x: gx,
                             y: gy,
@@ -455,8 +455,8 @@ impl AppHandler {
                         rw.rect.w,
                         rw.rect.h
                     );
-                    let _ = cmd_tx.send(rdp_ffi::commands::RdpCommand::Input(
-                        rdp_ffi::commands::InputEvent::Mouse {
+                    let _ = cmd_tx.send(rdp_ffi::messaging::RdpCommand::Input(
+                        rdp_ffi::messaging::InputEvent::Mouse {
                             flags: f,
                             x: gx,
                             y: gy,
@@ -488,8 +488,8 @@ impl AppHandler {
                     } else {
                         flags | step
                     };
-                    let _ = cmd_tx.send(rdp_ffi::commands::RdpCommand::Input(
-                        rdp_ffi::commands::InputEvent::Mouse {
+                    let _ = cmd_tx.send(rdp_ffi::messaging::RdpCommand::Input(
+                        rdp_ffi::messaging::InputEvent::Mouse {
                             flags: cflags,
                             x: 0,
                             y: 0,
