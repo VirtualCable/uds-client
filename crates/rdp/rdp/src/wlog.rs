@@ -38,6 +38,11 @@ extern "C" fn my_message_cb(msg: *const wLogMessage) -> BOOL {
     if msg.is_null() {
         return 0;
     }
+    let filename = if !unsafe { (*msg).FileName }.is_null() {
+        unsafe { CStr::from_ptr((*msg).FileName as *const c_char).to_string_lossy() }
+    } else {
+        std::borrow::Cow::Borrowed("unknown")
+    };
 
     let text_ptr = unsafe { (*msg).TextString };
     let text = if !text_ptr.is_null() {
@@ -48,13 +53,13 @@ extern "C" fn my_message_cb(msg: *const wLogMessage) -> BOOL {
 
     unsafe {
         match (*msg).Level {
-            WLOG_FATAL => log::error!(target: "freerdp", "FATAL: {}", text),
-            WLOG_ERROR => log::error!(target: "freerdp", "{}", text),
-            WLOG_WARN => log::warn!(target: "freerdp", "{}", text),
-            WLOG_INFO => log::info!(target: "freerdp", "{}", text),
-            WLOG_DEBUG => log::debug!(target: "freerdp", "{}", text),
-            WLOG_TRACE => log::trace!(target: "freerdp", "{}", text),
-            _ => log::info!(target: "freerdp", "{}", text),
+            WLOG_FATAL => log::error!(target: "freerdp", "FATAL: {}: {}", filename, text),
+            WLOG_ERROR => log::error!(target: "freerdp", "{}: {}", filename, text),
+            WLOG_WARN => log::warn!(target: "freerdp", "{}: {}", filename, text),
+            WLOG_INFO => log::info!(target: "freerdp", "{}: {}", filename, text),
+            WLOG_DEBUG => log::debug!(target: "freerdp", "{}: {}", filename, text),
+            WLOG_TRACE => log::trace!(target: "freerdp", "{}: {}", filename, text),
+            _ => log::info!(target: "freerdp", "{}: {}", filename, text),
         }
     };
 
@@ -107,10 +112,10 @@ pub fn set_wlog_level(tag: Option<&str>, level: WLogLevel) {
 pub fn setup_freerdp_logger(level: WLogLevel) {
     unsafe {
         let callbacks = wLogCallbacks {
-            data: None,
+            data: Some(my_message_cb),
             image: None,
             message: Some(my_message_cb),
-            package: None,
+            package: Some(my_message_cb),
         };
 
         let root = WLog_GetRoot();
@@ -124,7 +129,7 @@ pub fn setup_freerdp_logger(level: WLogLevel) {
         );
 
         set_wlog_level(None, level);
-        set_wlog_level(Some("com.freerdp.utils.ringbuffer"), WLogLevel::Info);
-        set_wlog_level(Some("com.freerdp.primitives"), WLogLevel::Trace);
+        // set_wlog_level(Some("com.freerdp.utils.ringbuffer"), WLogLevel::Info);
+        // set_wlog_level(Some("com.freerdp.primitives"), WLogLevel::Trace);
     }
 }

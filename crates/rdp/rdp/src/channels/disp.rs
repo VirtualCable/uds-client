@@ -54,11 +54,13 @@ impl DispChannel {
         desktop_scale_factor: u32,
         device_scale_factor: u32,
     ) {
-        log::debug!("Sending monitor layout: {:?}", rect);
+        log::debug!(
+            "Sending monitor layout: {:?}, scale: {}/{}",
+            rect,
+            desktop_scale_factor,
+            device_scale_factor
+        );
         if let Some(ptr) = &self.ptr {
-            // We need the disp channel to send the resize request, not alredy implemented in our code
-            // Note: avoid too fast resizing, as it may cause issues
-            // with the server or client. (simply, implement a delay or debounce mechanism os 200ms or so)
             let dcml = freerdp_sys::DISPLAY_CONTROL_MONITOR_LAYOUT {
                 Flags: freerdp_sys::DISPLAY_CONTROL_MONITOR_PRIMARY,
                 Left: rect.x as freerdp_sys::INT32,
@@ -74,16 +76,71 @@ impl DispChannel {
             let mut dcml_vec = vec![dcml];
             // call calback
             if let Some(func) = ptr.SendMonitorLayout {
-                let _ = unsafe {
+                log::debug!("Calling SendMonitorLayout callback...");
+                let result = unsafe {
                     func(
                         ptr.as_mut_ptr(),
                         dcml_vec.len() as freerdp_sys::UINT32,
                         dcml_vec.as_mut_ptr(),
                     )
                 };
+                log::debug!("SendMonitorLayout result: {}", result);
             } else {
-                log::debug!("SendMonitorLayout callback not set");
+                log::warn!("SendMonitorLayout callback not set in DispClientContext");
             }
+        } else {
+            log::error!("DispChannel pointer is NULL, cannot send monitor layout");
         }
+    }
+}
+
+extern "C" fn disp_caps(
+    _context: *mut freerdp_sys::DispClientContext,
+    max_num_monitors: freerdp_sys::UINT32,
+    max_monitor_area_factor_a: freerdp_sys::UINT32,
+    max_monitor_area_factor_b: freerdp_sys::UINT32,
+) -> freerdp_sys::UINT32 {
+    log::debug!(
+        "DISP: Received DisplayControlCaps: {} {} {}",
+        max_num_monitors,
+        max_monitor_area_factor_a,
+        max_monitor_area_factor_b
+    );
+    0 // CHANNEL_RC_OK
+}
+
+/// # Safety
+///
+/// The context must be valid and the pointer must be valid.
+pub unsafe fn register_disp_callbacks(context: *mut freerdp_sys::DispClientContext) {
+    unsafe {
+        (*context).DisplayControlCaps = Some(disp_caps);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_disp_channel_new_null() {
+        let ch = DispChannel::new(std::ptr::null_mut());
+        let debug = format!("{:?}", ch);
+        assert!(debug.starts_with("DispChannel"));
+    }
+
+    #[test]
+    fn test_disp_channel_new_null_send_monitor_layout() {
+        // Should not panic with null ptr
+        let ch = DispChannel::new(std::ptr::null_mut());
+        ch.send_monitor_layout(Rect::new(0, 0, 800, 600), 0, 100, 100);
+    }
+
+    #[test]
+    fn test_disp_channel_clone() {
+        let ch = DispChannel::new(std::ptr::null_mut());
+        let cloned = ch.clone();
+        let debug = format!("{:?}", cloned);
+        assert!(debug.starts_with("DispChannel"));
     }
 }
