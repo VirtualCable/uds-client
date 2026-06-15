@@ -72,6 +72,7 @@ pub struct Rdp {
     // Note: We need a clonable safe struct for channels
     // because they are initialized after connection is created, on a later step
     channels: Arc<RwLock<channels::RdpChannels>>,
+    pub icon_cache: Arc<RwLock<std::collections::HashMap<(u32, u32), (Vec<u8>, u32, u32)>>>,
     stop_event: utils::SafeHandle,
     command_rx: messaging::CommandReceiver,
     command_event: utils::SafeHandle, // Win32 event to signal new commands
@@ -118,6 +119,7 @@ impl Rdp {
                 gdi_lock: Arc::new(RwLock::new(())),
                 channels: channels
                     .unwrap_or_else(|| Arc::new(RwLock::new(channels::RdpChannels::new()))),
+                icon_cache: Arc::new(RwLock::new(std::collections::HashMap::new())),
                 stop_event,
                 command_rx,
                 command_event,
