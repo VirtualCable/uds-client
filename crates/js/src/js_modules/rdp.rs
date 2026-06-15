@@ -207,7 +207,9 @@ impl RdpSettings {
                 settings::RdpOptions {
                     use_nla: opt.use_nla.unwrap_or(defs.options.use_nla),
                     verify_cert: opt.verify_cert.unwrap_or(defs.options.verify_cert),
-                    use_local_scaler: opt.use_local_scaler.unwrap_or(defs.options.use_local_scaler),
+                    use_local_scaler: opt
+                        .use_local_scaler
+                        .unwrap_or(defs.options.use_local_scaler),
                     use_tunnel: opt.use_tunnel.unwrap_or(defs.options.use_tunnel),
                     desktop_scale: 1.0,
                 }

@@ -124,9 +124,7 @@ pub struct RdpFeatures {
     pub force_software_gdi: bool,
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize, Zeroize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize, Zeroize)]
 pub struct RdpOptions {
     pub use_nla: bool,
     pub verify_cert: bool,
