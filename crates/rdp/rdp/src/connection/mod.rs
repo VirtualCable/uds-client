@@ -760,24 +760,19 @@ impl Rdp {
 
 impl Drop for Rdp {
     fn drop(&mut self) {
-        log::debug!(" **** Dropping RDP");
+        log::trace!(" **** Dropping RDP");
         // If we have a clipboard native, stop it
         if let Some(ref clipboard) = self.config.integrations.clipboard {
             clipboard.stop();
         }
 
-        log::debug!("* Dropping Rdp instance, cleaning up resources...");
+        log::trace!(" * Dropping Rdp instance...");
         unsafe {
             if let Some(conn) = self.instance {
-                let ctx = conn.context as *mut context::RdpContext;
-                if !ctx.is_null() {
-                    log::debug!(" **** Clearing owner in context to prevent UAF in callbacks");
-                    (*ctx).owner = std::ptr::null_mut();
-                }
-
                 freerdp_disconnect(conn.as_mut_ptr());
-                freerdp_context_free(conn.as_mut_ptr());
-                freerdp_free(conn.as_mut_ptr());
+                freerdp_client_stop(conn.context);
+                freerdp_client_context_free(conn.context);
+
                 self.instance = None;
                 // Destroy the stop event
                 CloseHandle(self.stop_event.as_handle());
