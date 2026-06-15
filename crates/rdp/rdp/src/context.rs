@@ -13,7 +13,7 @@
 //    and/or other materials provided with the distribution.
 //
 // 3. Neither the name of the copyright holder nor the names of its contributors
-//    may be used to endorse or promote products derived from this software
+//    may be used to endorse or promote promote derived from this software
 //    without specific prior written permission.
 //
 // THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
@@ -33,7 +33,7 @@ use anyhow::Result;
 
 use freerdp_sys::*;
 
-use crate::utils::log::debug;
+use crate::utils::log;
 
 use super::{Rdp, addins::addin};
 use crate::callbacks::entrypoint_c;
@@ -90,7 +90,7 @@ impl RdpContext {
 
 impl Drop for RdpContext {
     fn drop(&mut self) {
-        debug!("****** Dropping RdpContext, cleaning up resources... !!!!!!");
+        log::debug!("****** Dropping RdpContext, cleaning up resources... !!!!!!");
     }
 }
 

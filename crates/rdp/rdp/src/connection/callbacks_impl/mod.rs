@@ -37,6 +37,7 @@ mod update; // implements update callbacks // implements channel callbacks
 // Clipboard is set on channel connection. Callbacks will be registered then
 // and will invoke us
 mod clipboard; // implements clipboard callbacks
+mod window; // implements window callbacks
 
 use crate::callbacks::{altsec, entrypoint, input, pointer_update, primary, secondary};
 
@@ -47,5 +48,4 @@ impl pointer_update::PointerCallbacks for Rdp {}
 impl primary::PrimaryCallbacks for Rdp {}
 impl secondary::SecondaryCallbacks for Rdp {}
 impl altsec::AltSecCallbacks for Rdp {}
-pub mod window;
 impl entrypoint::EntrypointCallbacks for Rdp {}
