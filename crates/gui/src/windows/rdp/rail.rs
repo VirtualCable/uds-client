@@ -17,6 +17,7 @@ pub struct RailWindow {
     pub has_decorations: bool,
     pub last_focused: bool,
     pub offscreen: bool,
+    pub was_minimized: bool,
     pub rgba_dirty: bool,
 }
 

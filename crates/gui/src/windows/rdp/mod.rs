@@ -495,6 +495,7 @@ impl crate::AppHandler {
                             has_decorations: *decorations,
                             last_focused: false,
                             offscreen: false,
+                            was_minimized: *minimized,
                             rgba_dirty: true,
                         },
                     );

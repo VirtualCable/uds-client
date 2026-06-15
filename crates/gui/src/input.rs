@@ -296,11 +296,29 @@ impl AppHandler {
             && let RdpMode::Rail(ref mut rail) = state.mode
             && let Some(rw) = rail.windows.get_mut(&rail_id)
         {
-            // Force position every frame to prevent Windows cascading offset
-            let sf = state.coords_scale.max(1.0);
-            let (px, py) = monitor::logic_2_phys_pos((rw.rect.x, rw.rect.y), sf);
-            rw.window
-                .set_outer_position(winit::dpi::PhysicalPosition::new(px, py));
+            // Force position every frame to prevent Windows cascading offset.
+            // Only for on-screen windows — off-screen coords are for minimized/offscreen.
+            const OFFSCREEN: i32 = rdp_ffi::consts::OFFSCREEN_THRESHOLD;
+            if rw.rect.x > OFFSCREEN && rw.rect.y > OFFSCREEN {
+                let sf = state.coords_scale.max(1.0);
+                let (px, py) = monitor::logic_2_phys_pos((rw.rect.x, rw.rect.y), sf);
+                rw.window.set_outer_position(winit::dpi::PhysicalPosition::new(px, py));
+            }
+
+            // Detect minimize/restore transitions via polling (Occluded is unsupported
+            // on Windows/Android/Wayland). When the OS restores a window, tell the server.
+            let is_minimized = rw.window.is_minimized().unwrap_or(false);
+            if is_minimized != rw.was_minimized {
+                if let Some(ref channel) = rail.channel {
+                    let cmd = if is_minimized {
+                        rdp_ffi::consts::SC_MINIMIZE as u16
+                    } else {
+                        rdp_ffi::consts::SC_RESTORE as u16
+                    };
+                    channel.send_system_command(rail_id, cmd);
+                }
+                rw.was_minimized = is_minimized;
+            }
             if let Some(ref mut renderer) = rw.renderer.as_mut() {
                 // Ensure the WGPU surface matches the actual window size.
                 // request_inner_size() is async — the window may have resized
@@ -346,13 +364,9 @@ impl AppHandler {
             WindowEvent::CloseRequested => {
                 rail_channel.send_system_command(rail_id, rdp_ffi::consts::SC_CLOSE as u16);
             }
-            WindowEvent::Occluded(occluded) => {
-                let cmd = if occluded {
-                    rdp_ffi::consts::SC_MINIMIZE
-                } else {
-                    rdp_ffi::consts::SC_RESTORE
-                };
-                rail_channel.send_system_command(rail_id, cmd as u16);
+            WindowEvent::Occluded(_) => {
+                // Occluded unsupported on Windows/Android/Wayland/Orbital.
+                // Minimize/restore handled via is_minimized() polling in handle_rail_redraw.
             }
             WindowEvent::Focused(focused) => {
                 if let Some(rw) = rail.windows.get_mut(&rail_id) {
