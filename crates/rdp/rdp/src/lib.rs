@@ -166,6 +166,12 @@ impl Rdp {
         }
     }
 
+    pub fn set_command_event(command_event: &crate::utils::SafeHandle) {
+        unsafe {
+            freerdp_sys::SetEvent(command_event.as_handle());
+        }
+    }
+
     pub fn input(&self) -> Option<*mut freerdp_sys::rdpInput> {
         if let Some(context) = self.context() {
             let input = context.context().input;

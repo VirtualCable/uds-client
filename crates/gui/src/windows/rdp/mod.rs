@@ -347,9 +347,7 @@ impl crate::AppHandler {
                         args: msg.args.clone(),
                         dir: msg.working_dir.clone(),
                     });
-                    unsafe {
-                        rdp_ffi::sys::SetEvent(cmd_ev.as_handle());
-                    }
+                    rdp_ffi::Rdp::set_command_event(&cmd_ev);
                 })
                 .ok();
             }
@@ -632,9 +630,7 @@ impl crate::AppHandler {
                         },
                     ));
                 }
-                unsafe {
-                    rdp_ffi::sys::SetEvent(state.command_event.as_handle());
-                }
+                    rdp_ffi::Rdp::set_command_event(&state.command_event);
             }
         }
         if let RdpMode::Desktop { ref mut fps, .. } = state.mode {

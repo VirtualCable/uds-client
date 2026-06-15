@@ -171,9 +171,7 @@ impl AppHandler {
                         y,
                     },
                 ));
-                unsafe {
-                    rdp_ffi::sys::SetEvent(s.command_event.as_handle());
-                }
+                rdp_ffi::Rdp::set_command_event(&s.command_event);
                 // Pinbar
                 if let RdpMode::Desktop {
                     ref mut pinbar,
@@ -242,9 +240,7 @@ impl AppHandler {
                         let _ = s.command_tx.send(rdp_ffi::messaging::RdpCommand::Input(
                             rdp_ffi::messaging::InputEvent::Mouse { flags: f, x, y },
                         ));
-                        unsafe {
-                            rdp_ffi::sys::SetEvent(s.command_event.as_handle());
-                        }
+                        rdp_ffi::Rdp::set_command_event(&s.command_event);
                     }
                 }
             }
@@ -276,9 +272,7 @@ impl AppHandler {
                             y: 0,
                         },
                     ));
-                    unsafe {
-                        rdp_ffi::sys::SetEvent(s.command_event.as_handle());
-                    }
+                    rdp_ffi::Rdp::set_command_event(&s.command_event);
                 }
             }
             _ => {}
@@ -391,9 +385,7 @@ impl AppHandler {
                             y: gy,
                         },
                     ));
-                    unsafe {
-                        rdp_ffi::sys::SetEvent(cmd_ev.as_handle());
-                    }
+                    rdp_ffi::Rdp::set_command_event(&cmd_ev);
                 }
             }
             WindowEvent::CursorLeft { .. } => {
@@ -462,9 +454,7 @@ impl AppHandler {
                             y: gy,
                         },
                     ));
-                    unsafe {
-                        rdp_ffi::sys::SetEvent(cmd_ev.as_handle());
-                    }
+                    rdp_ffi::Rdp::set_command_event(&cmd_ev);
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {
@@ -495,9 +485,7 @@ impl AppHandler {
                             y: 0,
                         },
                     ));
-                    unsafe {
-                        rdp_ffi::sys::SetEvent(cmd_ev.as_handle());
-                    }
+                    rdp_ffi::Rdp::set_command_event(&cmd_ev);
                 }
             }
             _ => {}
