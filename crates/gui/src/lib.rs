@@ -2,6 +2,8 @@
 // Copyright (c) 2025, Virtual Cable S.L.
 // All rights reserved.
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+extern crate rdp as rdp_ffi;
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
