@@ -311,7 +311,7 @@ impl WindowCallbacks for Rdp {
                     rgba.push(chunk[2]); // R
                     rgba.push(chunk[1]); // G
                     rgba.push(chunk[0]); // B
-                    rgba.push(255);      // A
+                    rgba.push(255); // A
                 }
             }
             16 => {
@@ -344,7 +344,7 @@ impl WindowCallbacks for Rdp {
 
         // Apply 1-bpp AND transparency mask if present
         if !icon_info.bitsMask.is_null() {
-            let mask_stride = ((w + 31) / 32 * 4) as usize;
+            let mask_stride = (w.div_ceil(32) * 4) as usize;
             let mask_len = mask_stride * h as usize;
             if (icon_info.cbBitsMask as usize) >= mask_len {
                 let mask = unsafe { std::slice::from_raw_parts(icon_info.bitsMask, mask_len) };
@@ -399,17 +399,16 @@ impl WindowCallbacks for Rdp {
         let cache_id = unsafe { (*cached).cachedIcon.cacheId };
         let cache_entry = unsafe { (*cached).cachedIcon.cacheEntry };
 
-        if let Ok(cache) = self.icon_cache.read() {
-            if let Some((rgba, w, h)) = cache.get(&(cache_id, cache_entry)) {
-                if let Some(tx) = &self.update_tx {
-                    let _ = tx.send(RdpMessage::WindowIcon {
-                        window_id,
-                        rgba: rgba.clone(),
-                        width: *w,
-                        height: *h,
-                    });
-                }
-            }
+        if let Ok(cache) = self.icon_cache.read()
+            && let Some((rgba, w, h)) = cache.get(&(cache_id, cache_entry))
+            && let Some(tx) = &self.update_tx
+        {
+            let _ = tx.send(RdpMessage::WindowIcon {
+                window_id,
+                rgba: rgba.clone(),
+                width: *w,
+                height: *h,
+            });
         }
         true
     }

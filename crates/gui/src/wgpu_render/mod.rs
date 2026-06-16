@@ -7,6 +7,7 @@ mod gdi;
 mod overlay;
 
 use std::sync::Arc;
+use std::sync::OnceLock;
 
 use anyhow::Result;
 use wgpu_text::glyph_brush::ab_glyph::FontRef;
@@ -60,43 +61,50 @@ impl TextRenderer {
     }
 }
 
-pub struct WgpuRenderer {
-    _window: Arc<winit::window::Window>,
-    surface: wgpu::Surface<'static>,
+// ── Shared GPU context ──────
+
+struct GpuCtx {
+    _instance: wgpu::Instance,
+    adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
-    config: wgpu::SurfaceConfiguration,
-    pub gdi: gdi::GdiRenderer,
-    pub overlay: OverlayRenderer,
-    pub text: TextRenderer,
+    format: wgpu::TextureFormat,
     max_texture_size: u32,
 }
 
-impl WgpuRenderer {
-    pub fn new(window: Arc<winit::window::Window>, _w: u32, _h: u32) -> Result<Self> {
-        let size = window.inner_size();
+static GPU: OnceLock<GpuCtx> = OnceLock::new();
+
+fn gpu() -> &'static GpuCtx {
+    GPU.get().expect("GPU not initialized")
+}
+
+fn gpu_from_window(window: &winit::window::Window) -> &'static GpuCtx {
+    GPU.get_or_init(|| {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-        let sw: &'static winit::window::Window = unsafe { &*Arc::as_ptr(&window) };
-        let surface = instance.create_surface(wgpu::SurfaceTarget::from(sw))?;
+        let surface = instance
+            .create_surface(wgpu::SurfaceTarget::from(window))
+            .expect("Failed to create surface");
 
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
             compatible_surface: Some(&surface),
             force_fallback_adapter: false,
-        }))?;
+        }))
+        .expect("No suitable GPU adapter");
+
         let max_texture_size = adapter.limits().max_texture_dimension_2d;
-        let (device, queue) =
-            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-                label: Some("UDS"),
-                required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits {
-                    max_texture_dimension_2d: max_texture_size,
-                    ..wgpu::Limits::default()
-                },
-                memory_hints: wgpu::MemoryHints::Performance,
-                trace: wgpu::Trace::Off,
-                experimental_features: wgpu::ExperimentalFeatures::disabled(),
-            }))?;
+        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+            label: Some("UDS"),
+            required_features: wgpu::Features::empty(),
+            required_limits: wgpu::Limits {
+                max_texture_dimension_2d: max_texture_size,
+                ..wgpu::Limits::default()
+            },
+            memory_hints: wgpu::MemoryHints::Performance,
+            trace: wgpu::Trace::Off,
+            experimental_features: wgpu::ExperimentalFeatures::disabled(),
+        }))
+        .expect("Failed to create GPU device");
 
         let caps = surface.get_capabilities(&adapter);
         let format = caps
@@ -105,44 +113,80 @@ impl WgpuRenderer {
             .find(|f| f.is_srgb())
             .copied()
             .unwrap_or(caps.formats[0]);
+
+        GpuCtx {
+            _instance: instance,
+            adapter,
+            device,
+            queue,
+            format,
+            max_texture_size,
+        }
+    })
+}
+
+// ── WgpuRenderer ──────
+
+pub struct WgpuRenderer {
+    _window: Arc<winit::window::Window>,
+    surface: wgpu::Surface<'static>,
+    config: wgpu::SurfaceConfiguration,
+    pub gdi: gdi::GdiRenderer,
+    pub overlay: OverlayRenderer,
+    pub text: TextRenderer,
+}
+
+impl WgpuRenderer {
+    pub fn new(window: Arc<winit::window::Window>, _w: u32, _h: u32) -> Result<Self> {
+        let size = window.inner_size();
+
+        // SAFETY: The `Arc<Window>` is stored in `self._window` and lives as long
+        // as this WgpuRenderer. The cast to `&'static` is sound because the Arc
+        // guarantees the window outlives the `Surface<'static>` created below.
+        let sw: &'static winit::window::Window = unsafe { &*Arc::as_ptr(&window) };
+
+        let g = gpu_from_window(sw);
+
+        let surface = g._instance.create_surface(wgpu::SurfaceTarget::from(sw))?;
+
+        let caps = surface.get_capabilities(&g.adapter);
+        let alpha_mode = caps
+            .alpha_modes
+            .iter()
+            .copied()
+            .find(|m| {
+                matches!(
+                    m,
+                    wgpu::CompositeAlphaMode::PostMultiplied
+                        | wgpu::CompositeAlphaMode::PreMultiplied
+                        | wgpu::CompositeAlphaMode::Inherit
+                )
+            })
+            .unwrap_or(wgpu::CompositeAlphaMode::Auto);
+
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format,
+            format: g.format,
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::AutoVsync,
-            alpha_mode: caps
-                .alpha_modes
-                .iter()
-                .copied()
-                .find(|m| {
-                    matches!(
-                        m,
-                        wgpu::CompositeAlphaMode::PostMultiplied
-                            | wgpu::CompositeAlphaMode::PreMultiplied
-                            | wgpu::CompositeAlphaMode::Inherit
-                    )
-                })
-                .unwrap_or(wgpu::CompositeAlphaMode::Auto),
+            alpha_mode,
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
-        surface.configure(&device, &config);
+        surface.configure(&g.device, &config);
 
-        let gdi = gdi::GdiRenderer::new(&device, format);
-        let overlay = OverlayRenderer::new(&device, format);
-        let text = TextRenderer::new(&device, &queue, format, crate::draw::INTER_FONT_DATA);
+        let gdi = gdi::GdiRenderer::new(&g.device, g.format);
+        let overlay = OverlayRenderer::new(&g.device, g.format);
+        let text = TextRenderer::new(&g.device, &g.queue, g.format, crate::draw::INTER_FONT_DATA);
 
         Ok(WgpuRenderer {
             _window: window,
             surface,
-            device,
-            queue,
             config,
             gdi,
             overlay,
             text,
-            max_texture_size,
         })
     }
 
@@ -153,8 +197,8 @@ impl WgpuRenderer {
         sh: u32,
         rects: Option<&[(u32, u32, u32, u32)]>,
     ) {
-        self.gdi
-            .upload(&self.device, &self.queue, rgba, sw, sh, rects);
+        let g = gpu();
+        self.gdi.upload(&g.device, &g.queue, rgba, sw, sh, rects);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -168,8 +212,9 @@ impl WgpuRenderer {
         cursor: Option<&OverlayParams>,
         rects: Option<&[(u32, u32, u32, u32)]>,
     ) {
-        let sw = sw.min(self.max_texture_size);
-        let sh = sh.min(self.max_texture_size);
+        let g = gpu();
+        let sw = sw.min(g.max_texture_size);
+        let sh = sh.min(g.max_texture_size);
         if sw == 0 || sh == 0 {
             return;
         }
@@ -188,11 +233,9 @@ impl WgpuRenderer {
         let pw = self.config.width;
         let ph = self.config.height;
 
-        let gdi_bg = self
-            .gdi
-            .upload(&self.device, &self.queue, rgba, sw, sh, rects);
+        let gdi_bg = self.gdi.upload(&g.device, &g.queue, rgba, sw, sh, rects);
 
-        let mut enc = self
+        let mut enc = g
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("enc") });
         {
@@ -222,28 +265,29 @@ impl WgpuRenderer {
                 self.gdi.draw(&mut rp, bg);
             }
             self.overlay
-                .upload_and_draw(&self.device, &self.queue, &mut rp, overlays, pw, ph);
+                .upload_and_draw(&g.device, &g.queue, &mut rp, overlays, pw, ph);
             self.text
-                .queue_and_draw(&self.device, &self.queue, &mut rp, sections);
+                .queue_and_draw(&g.device, &g.queue, &mut rp, sections);
             if let Some(cur) = cursor {
                 self.overlay
-                    .draw_single(&self.device, &self.queue, &mut rp, cur, pw, ph);
+                    .draw_single(&g.device, &g.queue, &mut rp, cur, pw, ph);
             }
         }
-        self.queue.submit(std::iter::once(enc.finish()));
+        g.queue.submit(std::iter::once(enc.finish()));
         self._window.pre_present_notify();
         output.present();
     }
 
     pub fn reconfigure(&mut self, w: u32, h: u32) {
-        let w = w.min(self.max_texture_size);
-        let h = h.min(self.max_texture_size);
+        let g = gpu();
+        let w = w.min(g.max_texture_size);
+        let h = h.min(g.max_texture_size);
         if w == 0 || h == 0 {
             return;
         }
         self.config.width = w;
         self.config.height = h;
-        self.surface.configure(&self.device, &self.config);
-        self.text.resize(w, h, &self.queue);
+        self.surface.configure(&g.device, &self.config);
+        self.text.resize(w, h, &g.queue);
     }
 }

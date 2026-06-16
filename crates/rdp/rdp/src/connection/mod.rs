@@ -654,14 +654,28 @@ impl Rdp {
                                                         scancode as u32,
                                                     );
                                                 }
-                                                crate::messaging::InputEvent::Mouse { flags, x, y } => {
-                                                    freerdp_input_send_mouse_event(input, flags, x, y);
+                                                crate::messaging::InputEvent::Mouse {
+                                                    flags,
+                                                    x,
+                                                    y,
+                                                } => {
+                                                    freerdp_input_send_mouse_event(
+                                                        input, flags, x, y,
+                                                    );
                                                 }
-                                                crate::messaging::InputEvent::ExtendedMouse { flags, x, y } => {
-                                                    freerdp_input_send_extended_mouse_event(input, flags, x, y);
+                                                crate::messaging::InputEvent::ExtendedMouse {
+                                                    flags,
+                                                    x,
+                                                    y,
+                                                } => {
+                                                    freerdp_input_send_extended_mouse_event(
+                                                        input, flags, x, y,
+                                                    );
                                                 }
                                                 crate::messaging::InputEvent::Unicode { code } => {
-                                                    freerdp_input_send_unicode_keyboard_event(input, 0, code);
+                                                    freerdp_input_send_unicode_keyboard_event(
+                                                        input, 0, code,
+                                                    );
                                                 }
                                             }
                                         }

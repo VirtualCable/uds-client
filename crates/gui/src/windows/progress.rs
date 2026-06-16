@@ -59,6 +59,7 @@ impl ProgressState {
         let window = Arc::new(
             el.create_window(
                 winit::window::Window::default_attributes()
+                    .with_visible(false)
                     .with_title(title)
                     .with_inner_size(winit::dpi::LogicalSize::new(ww, wh))
                     .with_window_icon(Some(crate::logo::load_icon()))
@@ -69,6 +70,7 @@ impl ProgressState {
         );
 
         let phys = window.inner_size();
+
         let renderer = WgpuRenderer::new(window.clone(), phys.width, phys.height)?;
 
         let pw = phys.width as f32;
@@ -95,7 +97,7 @@ impl ProgressState {
             },
         );
 
-        Ok(Self {
+        let state = Self {
             window,
             renderer,
             pct: 0,
@@ -136,7 +138,8 @@ impl ProgressState {
             last_mouse_pos: None,
             connecting_text,
             connected_text,
-        })
+        };
+        Ok(state)
     }
 
     pub fn handle_mouse_move(&mut self, phys_x: f32, phys_y: f32) -> bool {
@@ -340,6 +343,8 @@ impl crate::AppHandler {
             )?;
             let wid = p.window.id();
             self.register_window(wid, WindowKind::Progress);
+            p.window.set_visible(true);
+            p.window.request_redraw();
             self.progress = Some(p);
         }
         Ok(())

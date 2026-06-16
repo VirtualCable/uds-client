@@ -58,6 +58,7 @@ impl AboutState {
         let window = Arc::new(
             event_loop.create_window(
                 Window::default_attributes()
+                    .with_visible(false)
                     .with_title("About UDS Launcher")
                     .with_inner_size(winit::dpi::LogicalSize::new(ww, wh))
                     .with_resizable(false)

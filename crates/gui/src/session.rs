@@ -28,6 +28,8 @@ impl AppHandler {
                     if let Ok(p) = PopupState::new(el, PopupKind::Error(err)) {
                         let wid = p.window.id();
                         self.register_window(wid, WindowKind::Popup);
+                        p.window.set_visible(true);
+                        p.window.request_redraw();
                         self.popup = Some(p);
                     }
                 }
@@ -35,6 +37,8 @@ impl AppHandler {
                     if let Ok(p) = PopupState::new(el, PopupKind::Warning(msg)) {
                         let wid = p.window.id();
                         self.register_window(wid, WindowKind::Popup);
+                        p.window.set_visible(true);
+                        p.window.request_redraw();
                         self.popup = Some(p);
                     }
                 }
@@ -48,6 +52,8 @@ impl AppHandler {
                     ) {
                         let wid = p.window.id();
                         self.register_window(wid, WindowKind::Popup);
+                        p.window.set_visible(true);
+                        p.window.request_redraw();
                         self.popup = Some(p);
                     }
                 }
@@ -89,6 +95,8 @@ impl AppHandler {
                     if let Ok(a) = crate::windows::about::AboutState::new(el) {
                         let wid = a.window().id();
                         self.register_window(wid, WindowKind::About);
+                        a.window().set_visible(true);
+                        a.window().request_redraw();
                         self.about = Some(a);
                     }
                 }
@@ -99,6 +107,8 @@ impl AppHandler {
                     ) {
                         let wid = p.window.id();
                         self.register_window(wid, WindowKind::Popup);
+                        p.window.set_visible(true);
+                        p.window.request_redraw();
                         self.popup = Some(p);
                     }
                 }
@@ -109,6 +119,8 @@ impl AppHandler {
                     ) {
                         let wid = p.window.id();
                         self.register_window(wid, WindowKind::Popup);
+                        p.window.set_visible(true);
+                        p.window.request_redraw();
                         self.popup = Some(p);
                     }
                 }
@@ -125,6 +137,8 @@ impl AppHandler {
                     ) {
                         let wid = p.window.id();
                         self.register_window(wid, WindowKind::Popup);
+                        p.window.set_visible(true);
+                        p.window.request_redraw();
                         self.popup = Some(p);
                     }
                 }

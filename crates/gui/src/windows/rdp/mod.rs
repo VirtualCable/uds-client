@@ -308,6 +308,7 @@ impl crate::AppHandler {
             let window = Arc::new(
                 el.create_window(
                     winit::window::Window::default_attributes()
+                        .with_visible(false)
                         .with_title("UDS RemoteApp")
                         .with_inner_size(winit::dpi::LogicalSize::new(300.0, 40.0))
                         .with_decorations(false) // Borderless
@@ -356,6 +357,7 @@ impl crate::AppHandler {
             let window = Arc::new(
                 el.create_window(
                     winit::window::Window::default_attributes()
+                        .with_visible(false)
                         .with_title("UDS Remote Desktop")
                         .with_inner_size(winit::dpi::LogicalSize::new(
                             window_logical_w,
@@ -403,6 +405,7 @@ impl crate::AppHandler {
         self.processing_events.store(true, Ordering::Relaxed);
         if let Some(ref state) = self.rdp {
             state.window.window.set_cursor_visible(false);
+            state.window.window.set_visible(true);
             state.window.window.request_redraw();
         }
 
@@ -442,7 +445,8 @@ impl crate::AppHandler {
             let RdpMode::Rail(ref mut rail) = state.mode else {
                 break;
             };
-            match action {                RailAction::Create(id, title, rect, taskbar, decorations, visible, minimized) => {
+            match action {
+                RailAction::Create(id, title, rect, taskbar, decorations, visible, minimized) => {
                     if rail.windows.contains_key(id) {
                         continue;
                     }
@@ -642,7 +646,7 @@ impl crate::AppHandler {
                         },
                     ));
                 }
-                    rdp_ffi::Rdp::set_command_event(&state.command_event);
+                rdp_ffi::Rdp::set_command_event(&state.command_event);
             }
         }
         if let RdpMode::Desktop { ref mut fps, .. } = state.mode {

@@ -302,7 +302,8 @@ impl AppHandler {
             if rw.rect.x > OFFSCREEN && rw.rect.y > OFFSCREEN {
                 let sf = state.coords_scale.max(1.0);
                 let (px, py) = monitor::logic_2_phys_pos((rw.rect.x, rw.rect.y), sf);
-                rw.window.set_outer_position(winit::dpi::PhysicalPosition::new(px, py));
+                rw.window
+                    .set_outer_position(winit::dpi::PhysicalPosition::new(px, py));
             }
 
             // Detect minimize/restore transitions via polling (Occluded is unsupported

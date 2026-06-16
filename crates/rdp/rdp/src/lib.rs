@@ -31,6 +31,8 @@
 
 use std::sync::{Arc, RwLock};
 
+type IconCache = std::collections::HashMap<(u32, u32), (Vec<u8>, u32, u32)>;
+
 pub mod callbacks;
 
 mod addins;
@@ -72,7 +74,7 @@ pub struct Rdp {
     // Note: We need a clonable safe struct for channels
     // because they are initialized after connection is created, on a later step
     channels: Arc<RwLock<channels::RdpChannels>>,
-    pub icon_cache: Arc<RwLock<std::collections::HashMap<(u32, u32), (Vec<u8>, u32, u32)>>>,
+    pub icon_cache: Arc<RwLock<IconCache>>,
     stop_event: utils::SafeHandle,
     command_rx: messaging::CommandReceiver,
     command_event: utils::SafeHandle, // Win32 event to signal new commands

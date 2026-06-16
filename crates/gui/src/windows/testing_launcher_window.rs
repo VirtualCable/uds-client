@@ -214,6 +214,7 @@ impl AppHandler {
         let window = Arc::new(
             el.create_window(
                 Window::default_attributes()
+                    .with_visible(false)
                     .with_title("UDS Launcher")
                     .with_inner_size(winit::dpi::LogicalSize::new(ww, wh))
                     .with_window_icon(Some(logo::load_icon()))
@@ -223,7 +224,12 @@ impl AppHandler {
         );
         let wid = window.id();
         let phys = window.inner_size();
+
         let renderer = WgpuRenderer::new(window.clone(), phys.width, phys.height)?;
+
+        window.set_visible(true);
+        window.request_redraw();
+
         self.testing_launcher = Some(TestingLauncherState {
             window: Some(window),
             renderer: Some(renderer),

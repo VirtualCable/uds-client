@@ -96,9 +96,8 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
             }
 
             if exists {
-                let is_minimized = show_state.is_some_and(|s| {
-                    s == 2 || s == 6 || s == 7 || s == 11
-                });
+                let is_minimized =
+                    show_state.is_some_and(|s| s == 2 || s == 6 || s == 7 || s == 11);
                 if let Some(s) = show_state {
                     let hidden = s == 0 || (is_off && !is_minimized);
                     // Track server-side minimized state so offscreen updates don't undo it
@@ -110,16 +109,20 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                     if is_minimized {
                         rail.actions.push(RailAction::SetMinimized(window_id, true));
                     } else if s == 1 || s == 3 || s == 5 || s == 9 {
-                        rail.actions.push(RailAction::SetMinimized(window_id, false));
+                        rail.actions
+                            .push(RailAction::SetMinimized(window_id, false));
                     }
                 } else if let Some(is_off_val) = is_offscreen {
                     // If the server told us this window is minimized, ignore offscreen
                     // updates — the (-32000,-32000) position is expected.
-                    let server_minimized = rail.windows.get(&window_id)
+                    let server_minimized = rail
+                        .windows
+                        .get(&window_id)
                         .is_some_and(|rw| rw.server_minimized);
                     if !server_minimized {
                         if !is_off_val {
-                            rail.actions.push(RailAction::SetMinimized(window_id, false));
+                            rail.actions
+                                .push(RailAction::SetMinimized(window_id, false));
                         }
                         rail.actions
                             .push(RailAction::SetVisible(window_id, !is_off_val));
@@ -177,9 +180,8 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                     let has_owner = owner_id.is_some() && owner_id != Some(0);
                     let show_taskbar = taskbar_button.unwrap_or(false) || (!is_tool && !has_owner);
 
-                    let is_minimized = show_state.is_some_and(|s| {
-                        s == 2 || s == 6 || s == 7 || s == 11
-                    });
+                    let is_minimized =
+                        show_state.is_some_and(|s| s == 2 || s == 6 || s == 7 || s == 11);
                     let hidden = show_state == Some(0) || (is_off && !is_minimized);
 
                     rail.actions.push(RailAction::Create(
