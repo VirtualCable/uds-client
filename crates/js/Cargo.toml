@@ -6,7 +6,7 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-rdp = { path = "../rdp/rdp" }
+rdp.workspace = true
 shared = { path = "../shared" }
 connection = { path = "../connection" }
 gui = { path = "../gui" }

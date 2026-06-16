@@ -8,7 +8,7 @@ license.workspace = true
 [dependencies]
 shared = { path = "../shared" }
 js = { path = "../js" }
-rdp = { path = "../rdp/rdp" }
+rdp.workspace = true
 gui = { path = "../gui" }
 connection = { path = "../connection" }
 

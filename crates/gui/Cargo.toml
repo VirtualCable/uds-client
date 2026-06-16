@@ -8,7 +8,7 @@ license.workspace = true
 [dependencies]
 shared = { path = "../shared" }
 connection = { path = "../connection" }
-rdp_ffi = { path = "../rdp/rdp", package = "rdp" }
+rdp = { workspace = true }
 channels = { path = "../channels" }
 
 anyhow.workspace = true

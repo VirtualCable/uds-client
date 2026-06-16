@@ -7,8 +7,6 @@ members = [
     "crates/crypt",
     "crates/script-tester",
     "crates/gui",
-    "crates/rdp/rdp",
-    "crates/rdp/freerdp-sys",
     "crates/gui-tester",
     "crates/js",
     "crates/channels",
@@ -161,3 +159,10 @@ widestring = { version = "1.2" }
 objc2 = "0.6"
 objc2-foundation = "0.3"
 objc2-app-kit = "0.3"
+
+rdp = { git = "https://github.com/VirtualCable/freerdp-integration.git", package = "rdp", branch = "master" }
+freerdp-sys = { git = "https://github.com/VirtualCable/freerdp-integration.git", package = "freerdp-sys", branch = "master" }
+
+# [patch."https://github.com/VirtualCable/freerdp-integration.git"]
+# rdp = { path = "../freerdp-integration/rdp" }
+# freerdp-sys = { path = "../freerdp-integration/freerdp-sys" }

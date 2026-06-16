@@ -1772,6 +1772,7 @@ dependencies = [
 [[package]]
 name = "freerdp-sys"
 version = "5.0.0"
+source = "git+https://github.com/VirtualCable/freerdp-integration.git?branch=master#05becf25291c013429105b30ad5a903b9cccef87"
 dependencies = [
  "bindgen 0.72.1",
  "cc",
@@ -4622,6 +4623,7 @@ dependencies = [
 [[package]]
 name = "rdp"
 version = "5.0.0"
+source = "git+https://github.com/VirtualCable/freerdp-integration.git?branch=master#05becf25291c013429105b30ad5a903b9cccef87"
 dependencies = [
  "anyhow",
  "flume 0.12.0",
