@@ -33,7 +33,7 @@ license = "BSD-3-Clause"
 # Utilities
 anyhow = "1.0"
 thiserror = "2.0"
-zeroize = { version = "1.8", features = ["derive"] }
+zeroize = { version = "1.9", features = ["derive"] }
 chrono = { version = "0.4" }
 directories-next = "2.0"
 hostname = "0.4"
