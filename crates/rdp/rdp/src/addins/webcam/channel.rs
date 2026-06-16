@@ -41,6 +41,7 @@ pub struct ChannelCtx {
     pub channel: *mut IWTSVirtualChannel,
     pub webcam: Arc<dyn WebcamIntegration>,
     pub stream_index: u8,
+    pub rdpcontext: *mut freerdp_sys::rdpContext,
 }
 
 pub unsafe extern "C" fn on_data(
@@ -340,6 +341,12 @@ fn send_error(ctx: &ChannelCtx) {
     log::error!("Webcam: Sending ErrorResponse");
     let err = pdu::build_response_header(freerdp_sys::CAM_MSG_ID_CAM_MSG_ID_ErrorResponse as u8);
     unsafe { write_to_channel(ctx.channel, &err) };
+}
+
+pub unsafe extern "C" fn on_open(cb: *mut IWTSVirtualChannelCallback) -> UINT {
+    let _ctx = cb as *mut ChannelCtx;
+    log::debug!("Webcam Device: Channel opened");
+    CHANNEL_RC_OK
 }
 
 pub unsafe extern "C" fn on_close(cb: *mut IWTSVirtualChannelCallback) -> UINT {

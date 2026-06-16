@@ -128,7 +128,8 @@ unsafe extern "C" fn initialize(
 
     wp.webcam = Some(webcam.clone());
 
-    let (raw_ctx, listener_handle, error) = listener::create_listener(webcam, channel_mgr);
+    let (raw_ctx, listener_handle, error) =
+        listener::create_listener(webcam, channel_mgr, wp.rdpcontext);
 
     if error != CHANNEL_RC_OK {
         log::error!("Webcam: CreateListener failed with {error}");

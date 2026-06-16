@@ -86,14 +86,6 @@ pub enum RdpMessage {
         sample_rate: u32,
         frames_per_packet: u32,
     },
-    WebcamConfig {
-        format: u32,
-        width: u32,
-        height: u32,
-        fps: u32,
-    },
-    StartWebcamStream,
-    StopWebcamStream,
 
     // Mode B specific messages (unified)
     WindowPixels {
@@ -165,20 +157,6 @@ impl core::fmt::Debug for RdpMessage {
                 .field("sample_rate", sample_rate)
                 .field("frames_per_packet", frames_per_packet)
                 .finish(),
-            RdpMessage::WebcamConfig {
-                format,
-                width,
-                height,
-                fps,
-            } => f
-                .debug_struct("WebcamConfig")
-                .field("format", format)
-                .field("width", width)
-                .field("height", height)
-                .field("fps", fps)
-                .finish(),
-            RdpMessage::StartWebcamStream => f.debug_struct("StartWebcamStream").finish(),
-            RdpMessage::StopWebcamStream => f.debug_struct("StopWebcamStream").finish(),
             RdpMessage::WindowPixels {
                 window_id,
                 width,
@@ -732,35 +710,5 @@ mod tests {
         } else {
             panic!("Expected DesktopResize");
         }
-
-        let msg_webcam_cfg = RdpMessage::WebcamConfig {
-            format: 1,
-            width: 640,
-            height: 480,
-            fps: 30,
-        };
-        if let RdpMessage::WebcamConfig {
-            format,
-            width,
-            height,
-            fps,
-        } = msg_webcam_cfg
-        {
-            assert_eq!(format, 1);
-            assert_eq!(width, 640);
-            assert_eq!(height, 480);
-            assert_eq!(fps, 30);
-        } else {
-            panic!("Expected WebcamConfig");
-        }
-
-        assert!(matches!(
-            RdpMessage::StartWebcamStream,
-            RdpMessage::StartWebcamStream
-        ));
-        assert!(matches!(
-            RdpMessage::StopWebcamStream,
-            RdpMessage::StopWebcamStream
-        ));
     }
 }

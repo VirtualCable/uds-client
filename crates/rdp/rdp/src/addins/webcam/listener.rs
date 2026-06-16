@@ -45,6 +45,7 @@ pub struct ControlListenerCtx {
     pub listener_cb: IWTSListenerCallback,
     pub webcam: Arc<dyn WebcamIntegration>,
     pub channel_mgr: *mut IWTSVirtualChannelManager,
+    pub rdpcontext: *mut freerdp_sys::rdpContext,
 }
 
 #[repr(C)]
@@ -55,6 +56,7 @@ pub struct ControlChannelCtx {
     pub channel_mgr: *mut IWTSVirtualChannelManager,
     pub dev_listener: Option<*mut IWTSListener>,
     pub dev_listener_ctx: Option<*mut DeviceListenerCtx>,
+    pub rdpcontext: *mut freerdp_sys::rdpContext,
 }
 
 pub unsafe extern "C" fn on_new_control_channel(
@@ -67,6 +69,7 @@ pub unsafe extern "C" fn on_new_control_channel(
     let lctx = listener_cb as *mut ControlListenerCtx;
     let webcam = unsafe { (*lctx).webcam.clone() };
     let channel_mgr = unsafe { (*lctx).channel_mgr };
+    let rdpcontext = unsafe { (*lctx).rdpcontext };
 
     log::info!("Webcam Control: OnNewChannelConnection — channel={p_channel:?}, accepting");
 
@@ -86,6 +89,7 @@ pub unsafe extern "C" fn on_new_control_channel(
         channel_mgr,
         dev_listener: None,
         dev_listener_ctx: None,
+        rdpcontext,
     });
 
     unsafe {
@@ -157,6 +161,7 @@ pub unsafe extern "C" fn on_control_data(
                 ctx.webcam.clone(),
                 ctx.channel_mgr,
                 "RDCamera_Capture_Device_0",
+                ctx.rdpcontext,
             )
         };
         if err == CHANNEL_RC_OK {
@@ -196,6 +201,7 @@ pub unsafe extern "C" fn on_control_close(cb: *mut IWTSVirtualChannelCallback) -
 pub struct DeviceListenerCtx {
     pub listener_cb: IWTSListenerCallback,
     pub webcam: Arc<dyn WebcamIntegration>,
+    pub rdpcontext: *mut freerdp_sys::rdpContext,
 }
 
 pub unsafe extern "C" fn on_new_device_channel(
@@ -207,6 +213,7 @@ pub unsafe extern "C" fn on_new_device_channel(
 ) -> UINT {
     let lctx = listener_cb as *mut DeviceListenerCtx;
     let webcam = unsafe { (*lctx).webcam.clone() };
+    let rdpcontext = unsafe { (*lctx).rdpcontext };
 
     log::info!("Webcam Device: OnNewChannelConnection — channel={p_channel:?}, accepting");
 
@@ -217,12 +224,14 @@ pub unsafe extern "C" fn on_new_device_channel(
     let mut channel_ctx = Box::new(ChannelCtx {
         channel_cb: IWTSVirtualChannelCallback {
             OnDataReceived: Some(channel::on_data),
+            OnOpen: Some(channel::on_open),
             OnClose: Some(channel::on_close),
             ..unsafe { std::mem::zeroed() }
         },
         channel: p_channel,
         webcam,
         stream_index: 0,
+        rdpcontext,
     });
 
     unsafe {
@@ -238,6 +247,7 @@ pub unsafe extern "C" fn on_new_device_channel(
 pub(super) fn create_listener(
     webcam: Arc<dyn WebcamIntegration>,
     channel_mgr: *mut IWTSVirtualChannelManager,
+    rdpcontext: *mut freerdp_sys::rdpContext,
 ) -> (*mut ControlListenerCtx, *mut IWTSListener, UINT) {
     let mut listener_ctx = Box::new(ControlListenerCtx {
         listener_cb: IWTSListenerCallback {
@@ -246,6 +256,7 @@ pub(super) fn create_listener(
         },
         webcam,
         channel_mgr,
+        rdpcontext,
     });
 
     let mut listener_handle: *mut IWTSListener = std::ptr::null_mut();
@@ -267,6 +278,7 @@ pub(super) unsafe fn create_device_listener(
     webcam: Arc<dyn WebcamIntegration>,
     channel_mgr: *mut IWTSVirtualChannelManager,
     device_id: &str,
+    rdpcontext: *mut freerdp_sys::rdpContext,
 ) -> (*mut DeviceListenerCtx, *mut IWTSListener, UINT) {
     let mut listener_ctx = Box::new(DeviceListenerCtx {
         listener_cb: IWTSListenerCallback {
@@ -274,6 +286,7 @@ pub(super) unsafe fn create_device_listener(
             pInterface: std::ptr::null_mut(),
         },
         webcam,
+        rdpcontext,
     });
 
     let mut listener_handle: *mut IWTSListener = std::ptr::null_mut();
