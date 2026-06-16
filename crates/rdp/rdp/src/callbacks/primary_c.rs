@@ -38,7 +38,7 @@ use freerdp_sys::{
 };
 
 use super::{super::context::OwnerFromCtx, super::utils::ToStringLossy, primary::PrimaryCallbacks};
-use crate::utils::log::debug;
+use crate::utils::log;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -104,20 +104,19 @@ impl Callbacks {
 pub unsafe fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
     unsafe {
         if context.is_null() {
-            debug!("primary_c::set_callbacks: context is null");
+            log::error!("Context is null, cannot override callbacks.");
             return;
         }
         let update = (*context).update;
         if update.is_null() {
-            debug!(" **** Update not initialized, cannot override callbacks.");
+            log::error!("Update not initialized, cannot override callbacks.");
             return;
         }
         let primary = (*update).primary;
         if primary.is_null() {
-            debug!(" **** Primary not initialized, cannot override callbacks.");
+            log::error!("Primary not initialized, cannot override callbacks.");
             return;
         }
-
         for override_cb in overrides {
             match override_cb {
                 Callbacks::DstBlt => {
@@ -195,7 +194,7 @@ pub unsafe fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
 }
 
 pub extern "C" fn dst_blt(context: *mut rdpContext, dstblt: *const DSTBLT_ORDER) -> BOOL {
-    debug!(" **** DST BLT called...");
+    log::trace!(" **** DST BLT called...");
     if let Some(owner) = context.owner() {
         owner.on_dst_blt(dstblt).into()
     } else {
@@ -204,7 +203,7 @@ pub extern "C" fn dst_blt(context: *mut rdpContext, dstblt: *const DSTBLT_ORDER)
 }
 
 pub extern "C" fn pat_blt(context: *mut rdpContext, patblt: *mut PATBLT_ORDER) -> BOOL {
-    debug!(" **** PAT BLT called...");
+    log::trace!(" **** PAT BLT called...");
     if let Some(owner) = context.owner() {
         owner.on_pat_blt(patblt).into()
     } else {
@@ -213,7 +212,7 @@ pub extern "C" fn pat_blt(context: *mut rdpContext, patblt: *mut PATBLT_ORDER) -
 }
 
 pub extern "C" fn scr_blt(context: *mut rdpContext, scrblt: *const SCRBLT_ORDER) -> BOOL {
-    debug!(" **** SCR BLT called...");
+    log::trace!(" **** SCR BLT called...");
     if let Some(owner) = context.owner() {
         owner.on_scr_blt(scrblt).into()
     } else {
@@ -225,7 +224,7 @@ pub extern "C" fn opaque_rect(
     context: *mut rdpContext,
     opaque_rect: *const OPAQUE_RECT_ORDER,
 ) -> BOOL {
-    debug!(" **** OPAQUE RECT called...");
+    log::trace!(" **** OPAQUE RECT called...");
     if let Some(owner) = context.owner() {
         owner.on_opaque_rect(opaque_rect).into()
     } else {
@@ -237,7 +236,7 @@ pub extern "C" fn draw_nine_grid(
     context: *mut rdpContext,
     draw_nine_grid: *const DRAW_NINE_GRID_ORDER,
 ) -> BOOL {
-    debug!(" **** DRAW NINE GRID called...");
+    log::trace!(" **** DRAW NINE GRID called...");
     if let Some(owner) = context.owner() {
         owner.on_draw_nine_grid(draw_nine_grid).into()
     } else {
@@ -249,7 +248,7 @@ pub extern "C" fn multi_dst_blt(
     context: *mut rdpContext,
     multi_dstblt: *const MULTI_DSTBLT_ORDER,
 ) -> BOOL {
-    debug!(" **** MULTI DST BLT called...");
+    log::trace!(" **** MULTI DST BLT called...");
     if let Some(owner) = context.owner() {
         owner.on_multi_dst_blt(multi_dstblt).into()
     } else {
@@ -261,7 +260,7 @@ pub extern "C" fn multi_pat_blt(
     context: *mut rdpContext,
     multi_patblt: *const MULTI_PATBLT_ORDER,
 ) -> BOOL {
-    debug!(" **** MULTI PAT BLT called...");
+    log::trace!(" **** MULTI PAT BLT called...");
     if let Some(owner) = context.owner() {
         owner.on_multi_pat_blt(multi_patblt).into()
     } else {
@@ -273,7 +272,7 @@ pub extern "C" fn multi_scr_blt(
     context: *mut rdpContext,
     multi_scrblt: *const MULTI_SCRBLT_ORDER,
 ) -> BOOL {
-    debug!(" **** MULTI SCR BLT called...");
+    log::trace!(" **** MULTI SCR BLT called...");
     if let Some(owner) = context.owner() {
         owner.on_multi_scr_blt(multi_scrblt).into()
     } else {
@@ -285,7 +284,7 @@ pub extern "C" fn multi_opaque_rect(
     context: *mut rdpContext,
     multi_opaque_rect: *const MULTI_OPAQUE_RECT_ORDER,
 ) -> BOOL {
-    debug!(" **** MULTI OPAQUE RECT called...");
+    log::trace!(" **** MULTI OPAQUE RECT called...");
     if let Some(owner) = context.owner() {
         owner.on_multi_opaque_rect(multi_opaque_rect).into()
     } else {
@@ -297,7 +296,7 @@ pub extern "C" fn multi_draw_nine_grid(
     context: *mut rdpContext,
     multi_draw_nine_grid: *const MULTI_DRAW_NINE_GRID_ORDER,
 ) -> BOOL {
-    debug!(" **** MULTI DRAW NINE GRID called...");
+    log::trace!(" **** MULTI DRAW NINE GRID called...");
     if let Some(owner) = context.owner() {
         owner.on_multi_draw_nine_grid(multi_draw_nine_grid).into()
     } else {
@@ -306,7 +305,7 @@ pub extern "C" fn multi_draw_nine_grid(
 }
 
 pub extern "C" fn line_to(context: *mut rdpContext, line_to: *const LINE_TO_ORDER) -> BOOL {
-    debug!(" **** LINE TO called...");
+    log::trace!(" **** LINE TO called...");
     if let Some(owner) = context.owner() {
         owner.on_line_to(line_to).into()
     } else {
@@ -315,7 +314,7 @@ pub extern "C" fn line_to(context: *mut rdpContext, line_to: *const LINE_TO_ORDE
 }
 
 pub extern "C" fn polyline(context: *mut rdpContext, polyline: *const POLYLINE_ORDER) -> BOOL {
-    debug!(" **** POLYLINE called...");
+    log::trace!(" **** POLYLINE called...");
     if let Some(owner) = context.owner() {
         owner.on_polyline(polyline).into()
     } else {
@@ -324,7 +323,7 @@ pub extern "C" fn polyline(context: *mut rdpContext, polyline: *const POLYLINE_O
 }
 
 pub extern "C" fn mem_blt(context: *mut rdpContext, memblt: *mut MEMBLT_ORDER) -> BOOL {
-    debug!(" **** MEM BLT called...");
+    log::trace!(" **** MEM BLT called...");
     if let Some(owner) = context.owner() {
         owner.on_mem_blt(memblt).into()
     } else {
@@ -333,7 +332,7 @@ pub extern "C" fn mem_blt(context: *mut rdpContext, memblt: *mut MEMBLT_ORDER) -
 }
 
 pub extern "C" fn mem3_blt(context: *mut rdpContext, memblt: *mut MEM3BLT_ORDER) -> BOOL {
-    debug!(" **** MEM3 BLT called...");
+    log::trace!(" **** MEM3 BLT called...");
     if let Some(owner) = context.owner() {
         owner.on_mem3_blt(memblt).into()
     } else {
@@ -345,7 +344,7 @@ pub extern "C" fn save_bitmap(
     context: *mut rdpContext,
     bitmap_data: *const SAVE_BITMAP_ORDER,
 ) -> BOOL {
-    debug!(" **** SAVE BITMAP called...");
+    log::trace!(" **** SAVE BITMAP called...");
     if let Some(owner) = context.owner() {
         owner.on_save_bitmap(bitmap_data).into()
     } else {
@@ -357,7 +356,7 @@ pub extern "C" fn glyph_index(
     context: *mut rdpContext,
     glyph_index: *mut GLYPH_INDEX_ORDER,
 ) -> BOOL {
-    debug!(" **** GLYPH INDEX called...");
+    log::trace!(" **** GLYPH INDEX called...");
     if let Some(owner) = context.owner() {
         owner.on_glyph_index(glyph_index).into()
     } else {
@@ -366,7 +365,7 @@ pub extern "C" fn glyph_index(
 }
 
 pub extern "C" fn fast_index(context: *mut rdpContext, glyph: *const FAST_INDEX_ORDER) -> BOOL {
-    debug!(" **** FAST INDEX called...");
+    log::trace!(" **** FAST INDEX called...");
     if let Some(owner) = context.owner() {
         owner.on_fast_index(glyph).into()
     } else {
@@ -375,7 +374,7 @@ pub extern "C" fn fast_index(context: *mut rdpContext, glyph: *const FAST_INDEX_
 }
 
 pub extern "C" fn fast_glyph(context: *mut rdpContext, glyph: *const FAST_GLYPH_ORDER) -> BOOL {
-    debug!(" **** FAST GLYPH called...");
+    log::trace!(" **** FAST GLYPH called...");
     if let Some(owner) = context.owner() {
         owner.on_fast_glyph(glyph).into()
     } else {
@@ -387,7 +386,7 @@ pub extern "C" fn polygon_sc(
     context: *mut rdpContext,
     polygon_sc: *const POLYGON_SC_ORDER,
 ) -> BOOL {
-    debug!(" **** POLYGON SC called...");
+    log::trace!(" **** POLYGON SC called...");
     if let Some(owner) = context.owner() {
         owner.on_polygon_sc(polygon_sc).into()
     } else {
@@ -396,7 +395,7 @@ pub extern "C" fn polygon_sc(
 }
 
 pub extern "C" fn polygon_cb(context: *mut rdpContext, polygon_cb: *mut POLYGON_CB_ORDER) -> BOOL {
-    debug!(" **** POLYGON CB called...");
+    log::trace!(" **** POLYGON CB called...");
     if let Some(owner) = context.owner() {
         owner.on_polygon_cb(polygon_cb).into()
     } else {
@@ -408,7 +407,7 @@ pub extern "C" fn ellipse_sc(
     context: *mut rdpContext,
     ellipse_sc: *const ELLIPSE_SC_ORDER,
 ) -> BOOL {
-    debug!(" **** ELLIPSE SC called...");
+    log::trace!(" **** ELLIPSE SC called...");
     if let Some(owner) = context.owner() {
         owner.on_ellipse_sc(ellipse_sc).into()
     } else {
@@ -420,7 +419,7 @@ pub extern "C" fn ellipse_cb(
     context: *mut rdpContext,
     ellipse_cb: *const ELLIPSE_CB_ORDER,
 ) -> BOOL {
-    debug!(" **** ELLIPSE CB called...");
+    log::trace!(" **** ELLIPSE CB called...");
     if let Some(owner) = context.owner() {
         owner.on_ellipse_cb(ellipse_cb).into()
     } else {
@@ -433,7 +432,7 @@ pub extern "C" fn order_info(
     order_info: *const ORDER_INFO,
     order_name: *const ::std::os::raw::c_char,
 ) -> BOOL {
-    debug!(" **** ORDER INFO called...");
+    log::trace!(" **** ORDER INFO called...");
     if let Some(owner) = context.owner() {
         let order_name = order_name.to_string_lossy();
         owner.on_order_info(order_info, &order_name).into()

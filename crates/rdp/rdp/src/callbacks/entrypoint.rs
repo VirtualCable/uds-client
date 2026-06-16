@@ -29,16 +29,16 @@
 //
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
-use crate::utils::log::debug;
+use crate::utils::log;
 
 pub trait EntrypointCallbacks {
     fn client_start(&mut self) -> bool {
-        println!(" 🏁 **** Client started");
+        log::debug!("**** Client started");
         true
     }
 
     fn client_stop(&mut self) -> bool {
-        debug!(" 🏁 **** Client stopped");
+        log::debug!("**** Client stopped");
         true
     }
 }

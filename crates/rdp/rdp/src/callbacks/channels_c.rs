@@ -36,7 +36,7 @@ use freerdp_sys::{
     freerdp_client_OnChannelDisconnectedEventHandler, rdpContext,
 };
 
-use crate::utils::log::debug;
+use crate::utils::log;
 
 use super::{super::context::OwnerFromCtx, channels::ChannelsCallbacks};
 use crate::utils::ToStringLossy;
@@ -53,20 +53,26 @@ pub unsafe extern "C" fn on_channel_connected(
     let name = unsafe { (*e).name }.to_string_lossy();
     let p_interface = unsafe { (*e).pInterface };
 
-    debug!(
+    log::debug!(
         "**** ChannelConnected Event: size={}, sender={}, name={}, pInterface={:?} (context={:?})",
-        size, sender, name, p_interface, context
+        size,
+        sender,
+        name,
+        p_interface,
+        context
     );
 
     // Here we get for example the DISP_DVC_CHANNEL_NAME when the display virtual channel is connected.
     if let Some(rdp) = context.owner() {
         // Here we could notify the Rdp instance if needed.
         if rdp.on_channel_connected(size, &sender, &name, p_interface) {
-            debug!("++++  {name} Channel connection accepted by Rdp instance.");
+            log::debug!("++++  {name} Channel connection accepted by Rdp instance.");
             return;
         } else {
-            debug!("----  {name} Channel connection not processed by Rdp instance.");
+            log::debug!("----  {name} Channel connection not processed by Rdp instance.");
         }
+    } else {
+        log::debug!("----  No Rdp instance found for channel connection event.");
     }
 
     unsafe {
@@ -86,18 +92,22 @@ pub unsafe extern "C" fn on_channel_disconnected(
     let name = unsafe { (*e).name }.to_string_lossy();
     let p_interface = unsafe { (*e).pInterface };
 
-    debug!(
+    log::debug!(
         "**** ChannelDisconnected Event: size={}, sender={}, name={}, pInterface={:?} (context={:?})",
-        size, sender, name, p_interface, context
+        size,
+        sender,
+        name,
+        p_interface,
+        context
     );
 
     if let Some(rdp) = context.owner() {
         // Here we could notify the Rdp instance if needed.
         if rdp.on_channel_disconnected(size, &sender, &name, p_interface) {
-            debug!("**** Channel disconnection accepted by Rdp instance.");
-            return;
+            log::debug!("**** Channel disconnection accepted by Rdp instance.");
+            // Do not return here, we still want to clean up if it's the graphics channel
         } else {
-            debug!("**** Channel disconnection not accepted by Rdp instance.");
+            log::debug!("**** Channel disconnection not accepted by Rdp instance.");
         }
     }
 
