@@ -44,26 +44,28 @@ pub mod callbacks_impl;
 impl Rdp {
     #[cfg(debug_assertions)]
     pub fn debug_assert_instance(&self) {
-        assert!(self.instance.is_some(), "RDP instance is not initialized");
-        // Context intsance
+        if self.instance.is_none() {
+            log::error!("RDP instance is not initialized");
+            return;
+        }
+        // Context instance
         unsafe {
             let instance = self.instance.as_ref().unwrap();
-            assert!(
-                !instance.context.is_null(),
-                "RDP context is not initialized"
-            );
+            if instance.context.is_null() {
+                log::error!("RDP context is not initialized");
+                return;
+            }
             // owner should point to self
             let ctx = instance.context as *mut context::RdpContext;
-            assert!(
-                !(*ctx).owner.is_null(),
-                "RDP context owner is not initialized"
-            );
+            if (*ctx).owner.is_null() {
+                log::error!("RDP context owner is not initialized");
+                return;
+            }
             let owner = &*(*ctx).owner;
             let self_ptr: *const Rdp = self as *const Rdp;
-            assert_eq!(
-                owner as *const Rdp, self_ptr,
-                "RDP context owner does not match self"
-            );
+            if !std::ptr::eq(owner as *const Rdp, self_ptr) {
+                log::error!("RDP context owner does not match self");
+            }
         }
     }
 
@@ -404,8 +406,6 @@ impl Rdp {
 
                 // Set perfromance flags from settings
                 freerdp_sys::freerdp_performance_flags_make(settings);
-                // Finally, set rail settings if needed
-                self.set_rail_settings();
             } else {
                 log::debug!("Connection not built, cannot optimize settings.");
             }
@@ -419,77 +419,119 @@ impl Rdp {
             if let Some(settings) = self.settings()
                 && let Some(ref rail) = self.config.settings.rail
             {
+                let app = rail.app.clone();
                 log::debug!("Enabling RAIL mode in FreeRDP settings");
-                freerdp_settings_set_bool(
-                    settings,
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteApplicationMode,
-                    true.into(),
-                );
-                #[allow(clippy::unnecessary_cast)]
-                // Windows/linux/mac differ on UINT32 implementation
-                freerdp_settings_set_uint32(
-                    settings,
-                    FreeRDP_Settings_Keys_UInt32_FreeRDP_RemoteApplicationSupportLevel,
-                    (freerdp_sys::RAIL_LEVEL_SUPPORTED
-                        | freerdp_sys::RAIL_LEVEL_HANDSHAKE_EX_SUPPORTED
-                        | freerdp_sys::RAIL_LEVEL_SHELL_INTEGRATION_SUPPORTED
-                        | freerdp_sys::RAIL_LEVEL_LANGUAGE_IME_SYNC_SUPPORTED
-                        | freerdp_sys::RAIL_LEVEL_SERVER_TO_CLIENT_IME_SYNC_SUPPORTED
-                        | freerdp_sys::RAIL_LEVEL_HIDE_MINIMIZED_APPS_SUPPORTED
-                        | freerdp_sys::RAIL_LEVEL_WINDOW_CLOAKING_SUPPORTED)
-                        as u32,
-                );
-                freerdp_settings_set_uint32(
-                    settings,
-                    FreeRDP_Settings_Keys_UInt32_FreeRDP_RemoteApplicationSupportMask,
-                    0xFFFFFFFF, // Allow all capabilities negotiated with server
-                );
 
-                let capp = std::ffi::CString::new(rail.app.clone()).unwrap();
-                freerdp_settings_set_string(
-                    settings,
-                    FreeRDP_Settings_Keys_String_FreeRDP_RemoteApplicationProgram,
-                    capp.as_ptr(),
-                );
+                let is_html5 = self.config.settings.features.force_software_gdi;
 
-                if let Some(rail_args) = &rail.args {
-                    let cargs = std::ffi::CString::new(rail_args.clone()).unwrap();
-                    freerdp_settings_set_string(
+                if is_html5 {
+                    // Restore full RAIL support mask to prevent handshake errors
+                    // We'll fix the 'disappearing' problem by making rendering more targeted.
+                    freerdp_settings_set_uint32(
                         settings,
-                        FreeRDP_Settings_Keys_String_FreeRDP_RemoteApplicationCmdLine,
-                        cargs.as_ptr(),
+                        FreeRDP_Settings_Keys_UInt32_FreeRDP_RemoteApplicationSupportMask,
+                        0x81,
+                    );
+                    freerdp_settings_set_uint32(
+                        settings,
+                        FreeRDP_Settings_Keys_UInt32_FreeRDP_RemoteApplicationSupportLevel,
+                        1,
+                    );
+                } else {
+                    freerdp_settings_set_bool(
+                        settings,
+                        FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteApplicationMode,
+                        true.into(),
+                    );
+                    #[allow(clippy::unnecessary_cast)]
+                    // Windows/linux/mac differ on UINT32 implementation
+                    freerdp_settings_set_uint32(
+                        settings,
+                        FreeRDP_Settings_Keys_UInt32_FreeRDP_RemoteApplicationSupportLevel,
+                        (freerdp_sys::RAIL_LEVEL_SUPPORTED
+                            | freerdp_sys::RAIL_LEVEL_HANDSHAKE_EX_SUPPORTED
+                            | freerdp_sys::RAIL_LEVEL_SHELL_INTEGRATION_SUPPORTED
+                            | freerdp_sys::RAIL_LEVEL_LANGUAGE_IME_SYNC_SUPPORTED
+                            | freerdp_sys::RAIL_LEVEL_SERVER_TO_CLIENT_IME_SYNC_SUPPORTED
+                            | freerdp_sys::RAIL_LEVEL_HIDE_MINIMIZED_APPS_SUPPORTED
+                            | freerdp_sys::RAIL_LEVEL_WINDOW_CLOAKING_SUPPORTED)
+                            as u32,
+                    );
+                    freerdp_settings_set_uint32(
+                        settings,
+                        FreeRDP_Settings_Keys_UInt32_FreeRDP_RemoteApplicationSupportMask,
+                        0xFFFFFFFF, // Allow all capabilities negotiated with server
                     );
                 }
 
-                if let Some(rail_dir) = &rail.working_dir {
-                    let cdir = std::ffi::CString::new(rail_dir.clone()).unwrap();
+                freerdp_settings_set_string(
+                    settings,
+                    FreeRDP_Settings_Keys_String_FreeRDP_RemoteApplicationProgram,
+                    std::ffi::CString::new(app.clone()).unwrap().as_ptr(),
+                );
+
+                if let Some(dir) = rail.working_dir.clone() {
                     freerdp_settings_set_string(
                         settings,
                         FreeRDP_Settings_Keys_String_FreeRDP_RemoteApplicationWorkingDir,
-                        cdir.as_ptr(),
+                        std::ffi::CString::new(dir).unwrap().as_ptr(),
+                    );
+                }
+                if let Some(args) = rail.args.clone() {
+                    freerdp_settings_set_string(
+                        settings,
+                        FreeRDP_Settings_Keys_String_FreeRDP_RemoteApplicationCmdLine,
+                        std::ffi::CString::new(args).unwrap().as_ptr(),
                     );
                 }
 
                 for key in [
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteApplicationMode,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteAppLanguageBarSupported,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_Workarea,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_DisableWallpaper,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_DisableFullWindowDrag,
+                    // We use gfx for html5 only for RAIL, that is mandatory for it to work
                     FreeRDP_Settings_Keys_Bool_FreeRDP_GfxH264,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_SupportGraphicsPipeline,
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_Workarea,
-                    // Explicitly enable markers
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_FrameMarkerCommandEnabled,
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_SurfaceFrameMarkerEnabled,
-                    // If enabled this, stops working :)
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_HiDefRemoteApp,
                 ] {
                     freerdp_settings_set_bool(settings, key, true.into());
                 }
 
-                // Allow for now single element, will include more in a future
-                #[allow(clippy::single_element_loop)]
-                for key in [FreeRDP_Settings_Keys_Bool_FreeRDP_GfxH264] {
-                    freerdp_settings_set_bool(settings, key, false.into());
+                if is_html5 {
+                    // Dieta estricta en RAIL
+                    for key in [
+                        FreeRDP_Settings_Keys_Bool_FreeRDP_GfxAVC444,
+                        FreeRDP_Settings_Keys_Bool_FreeRDP_GfxAVC444v2,
+                        FreeRDP_Settings_Keys_Bool_FreeRDP_GfxProgressive,
+                        FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteFxCodec,
+                        FreeRDP_Settings_Keys_Bool_FreeRDP_GfxThinClient,
+                    ] {
+                        freerdp_settings_set_bool(settings, key, false.into());
+                    }
+
+                    // RAIL Specific optimizations
+                    freerdp_settings_set_bool(
+                        settings,
+                        FreeRDP_Settings_Keys_Bool_FreeRDP_HiDefRemoteApp,
+                        false.into(),
+                    );
+                    freerdp_settings_set_bool(
+                        settings,
+                        FreeRDP_Settings_Keys_Bool_FreeRDP_Workarea,
+                        true.into(),
+                    );
+                } else {
+                    // Allow for now single element, will include more in a future
+                    #[allow(clippy::single_element_loop)]
+                    for key in [FreeRDP_Settings_Keys_Bool_FreeRDP_GfxH264] {
+                        freerdp_settings_set_bool(settings, key, false.into());
+                    }
+                    freerdp_settings_set_bool(
+                        settings,
+                        FreeRDP_Settings_Keys_Bool_FreeRDP_HiDefRemoteApp,
+                        true.into(),
+                    );
                 }
 
                 if self.config.settings.features.force_software_gdi {
@@ -589,6 +631,13 @@ impl Rdp {
     /// Connects to the RDP server using the current settings
     pub fn connect(&self) -> Result<()> {
         self.set_rdp_settings();
+        // RAIL settings must be set after our optimizations, to ensure their settings are not overwritten by the optimizations
+        self.set_rail_settings();
+
+        let is_html5 = self.config.settings.features.force_software_gdi;
+        if is_html5 {
+            unsafe { freerdp_client_start(self.instance.as_ref().unwrap().context) };
+        }
 
         unsafe {
             if let Some(instance) = self.instance {
