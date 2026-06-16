@@ -1,5 +1,5 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,10 +26,11 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+//
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 use zeroize::Zeroize;
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Rect {
     pub x: i32,
     pub y: i32,
@@ -40,6 +41,27 @@ pub struct Rect {
 impl Rect {
     pub fn new(x: i32, y: i32, w: u32, h: u32) -> Self {
         Self { x, y, w, h }
+    }
+
+    /// Returns the area of the rectangle
+    pub fn area(&self) -> u64 {
+        self.w as u64 * self.h as u64
+    }
+
+    /// Returns true if the two rectangles intersect
+    pub fn intersects(&self, other: &Rect) -> bool {
+        self.x < other.x + other.w as i32
+            && self.x + self.w as i32 > other.x
+            && self.y < other.y + other.h as i32
+            && self.y + self.h as i32 > other.y
+    }
+
+    /// Returns true if the other rectangle is contained within this rectangle
+    pub fn contains(&self, other: &Rect) -> bool {
+        self.x <= other.x
+            && self.y <= other.y
+            && self.x + self.w as i32 >= other.x + other.w as i32
+            && self.y + self.h as i32 >= other.y + other.h as i32
     }
 
     pub fn union(&self, other: &Rect) -> Rect {
@@ -157,5 +179,29 @@ mod tests {
         assert_eq!(s.width(), 1920);
         assert_eq!(s.height(), 1080);
         assert_eq!(s.get_fixed_size(), Some((1920, 1080)));
+    }
+
+    #[test]
+    fn test_rect_area() {
+        let r = Rect::new(0, 0, 10, 20);
+        assert_eq!(r.area(), 200);
+    }
+
+    #[test]
+    fn test_rect_intersects() {
+        let r1 = Rect::new(0, 0, 10, 10);
+        let r2 = Rect::new(5, 5, 10, 10);
+        let r3 = Rect::new(10, 10, 5, 5);
+        assert!(r1.intersects(&r2));
+        assert!(!r1.intersects(&r3));
+    }
+
+    #[test]
+    fn test_rect_contains() {
+        let r1 = Rect::new(0, 0, 20, 20);
+        let r2 = Rect::new(5, 5, 10, 10);
+        let r3 = Rect::new(5, 5, 20, 20);
+        assert!(r1.contains(&r2));
+        assert!(!r1.contains(&r3));
     }
 }

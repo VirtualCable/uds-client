@@ -8,6 +8,7 @@ use wgpu_text::glyph_brush::{OwnedSection, Section, Text};
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
 
+use crate::WindowKind;
 use crate::draw::ui::{
     progress,
     waves::{self, Wave},
@@ -58,6 +59,7 @@ impl ProgressState {
         let window = Arc::new(
             el.create_window(
                 winit::window::Window::default_attributes()
+                    .with_visible(false)
                     .with_title(title)
                     .with_inner_size(winit::dpi::LogicalSize::new(ww, wh))
                     .with_window_icon(Some(crate::logo::load_icon()))
@@ -68,6 +70,7 @@ impl ProgressState {
         );
 
         let phys = window.inner_size();
+
         let renderer = WgpuRenderer::new(window.clone(), phys.width, phys.height)?;
 
         let pw = phys.width as f32;
@@ -94,7 +97,7 @@ impl ProgressState {
             },
         );
 
-        Ok(Self {
+        let state = Self {
             window,
             renderer,
             pct: 0,
@@ -135,7 +138,8 @@ impl ProgressState {
             last_mouse_pos: None,
             connecting_text,
             connected_text,
-        })
+        };
+        Ok(state)
     }
 
     pub fn handle_mouse_move(&mut self, phys_x: f32, phys_y: f32) -> bool {
@@ -323,6 +327,29 @@ impl ProgressState {
 }
 
 impl crate::AppHandler {
+    pub(crate) fn open_progress(&mut self, el: &ActiveEventLoop) -> anyhow::Result<()> {
+        macro_rules! tr {
+            ($msg:expr) => {
+                self.gettext($msg)
+            };
+        }
+        if self.progress.is_none() {
+            let p = ProgressState::new(
+                el,
+                tr!("UDS Launcher"),
+                tr!("CANCEL"),
+                tr!("Connecting to RDP server..."),
+                tr!("Connected."),
+            )?;
+            let wid = p.window.id();
+            self.register_window(wid, WindowKind::Progress);
+            p.window.set_visible(true);
+            p.window.request_redraw();
+            self.progress = Some(p);
+        }
+        Ok(())
+    }
+
     pub(crate) fn handle_progress_event(&mut self, el: &ActiveEventLoop, event: WindowEvent) {
         let Some(ref mut p) = self.progress else {
             return;

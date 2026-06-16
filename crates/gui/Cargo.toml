@@ -9,6 +9,7 @@ license.workspace = true
 shared = { path = "../shared" }
 connection = { path = "../connection" }
 rdp_ffi = { path = "../rdp/rdp", package = "rdp" }
+channels = { path = "../channels" }
 
 anyhow.workspace = true
 

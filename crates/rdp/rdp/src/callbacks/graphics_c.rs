@@ -1,5 +1,5 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,25 +26,25 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+//
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 use freerdp_sys::{BOOL, rdpContext, rdpPointer};
 
-use shared::log;
-
 use super::{super::context::OwnerFromCtx, graphics::GraphicsCallbacks};
+use crate::utils::log;
 
 /// # Safety
 /// This function is unsafe because it dereferences raw pointers to set callback functions.
 pub unsafe fn set_callbacks(context: *mut rdpContext) {
     unsafe {
         if context.is_null() {
-            log::error!("graphics_c::set_callbacks: context is null");
+            log::error!("Context is null, cannot override callbacks.");
             return;
         }
         let graphics = (*context).graphics;
         if graphics.is_null() {
-            log::error!("graphics_c::set_callbacks: graphics is null");
+            log::error!("Graphics not initialized, cannot override callbacks.");
             return;
         }
 

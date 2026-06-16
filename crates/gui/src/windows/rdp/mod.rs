@@ -68,7 +68,7 @@ pub struct RdpState {
     pub gdi: *mut rdp_ffi::sys::rdpGdi,
     pub gdi_lock: Arc<RwLock<()>>,
     pub channels: Arc<RwLock<rdp_ffi::channels::RdpChannels>>,
-    pub command_tx: rdp_ffi::commands::Sender,
+    pub command_tx: rdp_ffi::messaging::CommandSender,
     pub command_event: rdp_ffi::utils::SafeHandle,
     pub coords_scale: f64,
     pub desktop_size: (u32, u32),
@@ -110,10 +110,18 @@ impl RdpState {
         );
         let (tx, rx) = bounded::<RdpMessage>(FRAMES_IN_FLIGHT);
 
-        let scale_factor = settings.desktop_scale;
+        let scale_factor = settings.options.desktop_scale;
         let rail_title = settings.rail.as_ref().and_then(|r| r.title.clone());
 
-        let (rdp_instance, command_tx) = rdp_ffi::Rdp::new(settings, tx, use_rgba);
+        let integrations = rdp_ffi::integrations::RdpIntegrations {
+            audio_output: Some(Arc::new(channels::audio::output::AudioHandle::new())),
+            audio_input: Some(Arc::new(channels::audio::input::MicHandle::new())),
+            webcam: Some(Arc::new(channels::webcam::WebcamHandle::new())),
+            clipboard: Some(Arc::new(channels::clipboard::ClipboardHandle::new())),
+        };
+
+        let (rdp_instance, command_tx) =
+            rdp_ffi::Rdp::new(settings, tx, use_rgba, None, integrations);
         let command_event = rdp_instance.get_command_event();
 
         let mut rdp = Box::pin(rdp_instance);
@@ -262,7 +270,7 @@ impl crate::AppHandler {
 
         let monitor_scale = crate::monitor::scale(0);
         let (desktop_w, desktop_h) = crate::monitor::size(0).unwrap_or((1920, 1080));
-        let use_local_scaler = settings.use_local_scaler;
+        let use_local_scaler = settings.options.use_local_scaler;
         let local_scale = if use_local_scaler { monitor_scale } else { 1.0 };
 
         let (rdp_w, rdp_h) = match (settings.screen_size, is_rail) {
@@ -274,10 +282,10 @@ impl crate::AppHandler {
             (rdp_ffi::geom::ScreenSize::Fixed(w, h), _) => (w, h),
         };
         let coords_scale = if use_local_scaler {
-            settings.desktop_scale = 1.0;
+            settings.options.desktop_scale = 1.0;
             monitor_scale
         } else {
-            settings.desktop_scale = monitor_scale;
+            settings.options.desktop_scale = monitor_scale;
             1.0
         };
         let desktop_size = (rdp_w, rdp_h);
@@ -300,6 +308,7 @@ impl crate::AppHandler {
             let window = Arc::new(
                 el.create_window(
                     winit::window::Window::default_attributes()
+                        .with_visible(false)
                         .with_title("UDS RemoteApp")
                         .with_inner_size(winit::dpi::LogicalSize::new(300.0, 40.0))
                         .with_decorations(false) // Borderless
@@ -334,14 +343,12 @@ impl crate::AppHandler {
                 let cmd_tx = state.command_tx.clone();
                 let cmd_ev = state.command_event;
                 self.rail_ipc = crate::ipc::bind(&srv.id, &srv.token, move |msg| {
-                    let _ = cmd_tx.send(rdp_ffi::commands::RdpCommand::LaunchRailApp {
+                    let _ = cmd_tx.send(rdp_ffi::messaging::RdpCommand::LaunchRailApp {
                         app: msg.app.clone(),
                         args: msg.args.clone(),
                         dir: msg.working_dir.clone(),
                     });
-                    unsafe {
-                        rdp_ffi::sys::SetEvent(cmd_ev.as_handle());
-                    }
+                    rdp_ffi::Rdp::set_command_event(&cmd_ev);
                 })
                 .ok();
             }
@@ -350,6 +357,7 @@ impl crate::AppHandler {
             let window = Arc::new(
                 el.create_window(
                     winit::window::Window::default_attributes()
+                        .with_visible(false)
                         .with_title("UDS Remote Desktop")
                         .with_inner_size(winit::dpi::LogicalSize::new(
                             window_logical_w,
@@ -397,6 +405,7 @@ impl crate::AppHandler {
         self.processing_events.store(true, Ordering::Relaxed);
         if let Some(ref state) = self.rdp {
             state.window.window.set_cursor_visible(false);
+            state.window.window.set_visible(true);
             state.window.window.request_redraw();
         }
 
@@ -437,7 +446,7 @@ impl crate::AppHandler {
                 break;
             };
             match action {
-                RailAction::Create(id, title, rect, taskbar, decorations, visible) => {
+                RailAction::Create(id, title, rect, taskbar, decorations, visible, minimized) => {
                     if rail.windows.contains_key(id) {
                         continue;
                     }
@@ -454,6 +463,11 @@ impl crate::AppHandler {
                     ) else {
                         continue;
                     };
+
+                    if *minimized {
+                        window.set_minimized(true);
+                    }
+
                     let wid = window.id();
                     let sf = state.coords_scale.max(1.0);
                     let (px, py) = crate::monitor::logic_2_phys_pos((rect.x, rect.y), sf);
@@ -485,6 +499,8 @@ impl crate::AppHandler {
                             has_decorations: *decorations,
                             last_focused: false,
                             offscreen: false,
+                            was_minimized: *minimized,
+                            server_minimized: *minimized,
                             rgba_dirty: true,
                         },
                     );
@@ -492,7 +508,9 @@ impl crate::AppHandler {
                     // Set active cursor on the new window
                     if state.cursor.visible && !state.cursor.data.is_empty() {
                         let (rgba, w, h, hx, hy) = state.cursor.build_scaled_rgba();
-                        if let Ok(source) = winit::window::CustomCursor::from_rgba(rgba, w, h, hx, hy) {
+                        if let Ok(source) =
+                            winit::window::CustomCursor::from_rgba(rgba, w, h, hx, hy)
+                        {
                             let custom_cursor = el.create_custom_cursor(source);
                             window.set_cursor(custom_cursor);
                         }
@@ -540,6 +558,12 @@ impl crate::AppHandler {
                     if let Some(rw) = rail.windows.get_mut(id) {
                         rw.window.set_visible(*visible);
                         rw.offscreen = !*visible;
+                    }
+                }
+                RailAction::SetMinimized(id, minimized) => {
+                    if let Some(rw) = rail.windows.get_mut(id) {
+                        rw.window.set_minimized(*minimized);
+                        rw.was_minimized = *minimized;
                     }
                 }
             }
@@ -606,25 +630,23 @@ impl crate::AppHandler {
         }
         while let Ok(raw_key) = state.keys_rx.try_recv() {
             if let Some(sc) = crate::keymap::RdpScanCode::get_from_key(Some(&raw_key.keycode)) {
-                let _ = state.command_tx.send(rdp_ffi::commands::RdpCommand::Input(
-                    rdp_ffi::commands::InputEvent::Keyboard {
+                let _ = state.command_tx.send(rdp_ffi::messaging::RdpCommand::Input(
+                    rdp_ffi::messaging::InputEvent::Keyboard {
                         scancode: sc as u16,
                         pressed: raw_key.pressed,
                         repeat: raw_key.repeat,
                     },
                 ));
                 if sc == crate::keymap::RdpScanCode::RMenu && !raw_key.pressed {
-                    let _ = state.command_tx.send(rdp_ffi::commands::RdpCommand::Input(
-                        rdp_ffi::commands::InputEvent::Keyboard {
+                    let _ = state.command_tx.send(rdp_ffi::messaging::RdpCommand::Input(
+                        rdp_ffi::messaging::InputEvent::Keyboard {
                             scancode: crate::keymap::RdpScanCode::LControl as u16,
                             pressed: false,
                             repeat: false,
                         },
                     ));
                 }
-                unsafe {
-                    rdp_ffi::sys::SetEvent(state.command_event.as_handle());
-                }
+                rdp_ffi::Rdp::set_command_event(&state.command_event);
             }
         }
         if let RdpMode::Desktop { ref mut fps, .. } = state.mode {

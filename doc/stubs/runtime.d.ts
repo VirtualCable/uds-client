@@ -60,8 +60,12 @@ declare module "runtime" {
       user?: string;
       password?: string;
       domain?: string;
-      verify_cert?: boolean;
-      use_nla?: boolean;
+      options?: {
+        verify_cert?: boolean;
+        use_nla?: boolean;
+        use_local_scaler?: boolean;
+        use_tunnel?: boolean;
+      };
       screen_width?: number;
       screen_height?: number;
       clipboard_redirection?: boolean;
@@ -84,8 +88,6 @@ declare module "runtime" {
         title?: string;
         server_info?: { id: string; token: string };
       };
-      use_local_scaler?: boolean;
-      use_tunnel?: boolean;
     }): void;
     function sign(rdp_string: string, ticket: string): Promise<string>;
   }

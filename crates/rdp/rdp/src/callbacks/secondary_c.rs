@@ -1,5 +1,5 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,8 +26,9 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+//
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 use freerdp_sys::{
     BOOL, CACHE_BITMAP_ORDER, CACHE_BITMAP_V2_ORDER, CACHE_BITMAP_V3_ORDER, CACHE_BRUSH_ORDER,
     CACHE_COLOR_TABLE_ORDER, CACHE_GLYPH_ORDER, CACHE_GLYPH_V2_ORDER, INT16, UINT8, UINT16,
@@ -37,7 +38,7 @@ use freerdp_sys::{
 use super::{
     super::context::OwnerFromCtx, super::utils::ToStringLossy, secondary::SecondaryCallbacks,
 };
-use shared::log::debug;
+use crate::utils::log;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -73,17 +74,17 @@ impl Callbacks {
 pub unsafe fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
     unsafe {
         if context.is_null() {
-            debug!("secondary_c::set_callbacks: context is null");
+            log::error!("Context is null, cannot override callbacks.");
             return;
         }
         let update = (*context).update;
         if update.is_null() {
-            debug!(" **** Update not initialized, cannot override callbacks.");
+            log::error!("Update not initialized, cannot override callbacks.");
             return;
         }
         let secondary = (*update).secondary;
         if secondary.is_null() {
-            debug!(" **** Secondary not initialized, cannot override callbacks.");
+            log::error!("Secondary not initialized, cannot override callbacks.");
             return;
         }
         for override_cb in overrides {

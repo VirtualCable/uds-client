@@ -1,5 +1,5 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,15 +26,28 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+//
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
-use std::collections::HashSet;
 
-use shared::log;
+use std::collections::HashSet;
+use std::sync::Arc;
+
+use crate::utils::log;
 
 use super::Rdp;
 
-use crate::channels::cliprdr::{ClipboardHandler, RdpClipboardFormat};
+use crate::channels::cliprdr::{ClipboardHandler, RdpClipboard, RdpClipboardFormat};
+use crate::integrations::ClipboardCallback;
+
+struct RdpClipboardCallback {
+    rdp_clipboard: RdpClipboard,
+}
+
+impl ClipboardCallback for RdpClipboardCallback {
+    fn send_text_is_available(&self, text: &str) {
+        self.rdp_clipboard.send_text_is_available(text);
+    }
+}
 
 impl ClipboardHandler for Rdp {
     fn on_monitor_ready(&mut self, monitor_ready: &freerdp_sys::CLIPRDR_MONITOR_READY) -> u32 {
@@ -45,14 +58,17 @@ impl ClipboardHandler for Rdp {
         if let Some(context) = self.channels.read().unwrap().cliprdr() {
             // Server expect capabilities + initial clipboard status available
             context.send_client_capabilities(freerdp_sys::CB_USE_LONG_FORMAT_NAMES);
-            // Remove it and leave empty until we have real clipboard data
-            if let Some(native) = self.channels.read().unwrap().native()
-                && let Ok(text) = native.read().unwrap().get_text()
-                && !text.is_empty()
-            {
-                context.send_text_is_available(&text);
+
+            if let Some(ref clipboard_integration) = self.config.integrations.clipboard {
+                clipboard_integration.start(Arc::new(RdpClipboardCallback {
+                    rdp_clipboard: context.clone(),
+                }));
+                if let Ok(text) = clipboard_integration.get_text()
+                    && !text.is_empty()
+                {
+                    context.send_text_is_available(&text);
+                }
             }
-            // context.send_client_format_list(&[RdpClipboardFormat::TextUnicode]);
 
             freerdp_sys::CHANNEL_RC_OK
         } else {
@@ -172,14 +188,12 @@ impl ClipboardHandler for Rdp {
             {
                 match format {
                     RdpClipboardFormat::TextUnicode => {
-                        // Here we would retrieve the clipboard text from the local system
-                        let clipboard_text = {
-                            if let Some(rdpclipboard) = &self.channels.read().unwrap().cliprdr() {
-                                rdpclipboard.get_local_text()
-                            } else {
-                                log::warn!("No RDP clipboard available to get local text");
-                                String::new()
-                            }
+                        let clipboard_text = if let Some(ref clipboard_integration) =
+                            self.config.integrations.clipboard
+                        {
+                            clipboard_integration.get_text().unwrap_or_default()
+                        } else {
+                            String::new()
                         };
 
                         log::debug!("Providing clipboard text data: {}", clipboard_text);
@@ -212,7 +226,6 @@ impl ClipboardHandler for Rdp {
                 );
             }
         }
-        // Check if the requested format is text, currently only text is supported
         freerdp_sys::CHANNEL_RC_OK
     }
 
@@ -240,8 +253,8 @@ impl ClipboardHandler for Rdp {
         if let Ok(text) = String::from_utf16(u16_data_trimmed) {
             log::debug!("Received clipboard text data: {}", text);
             // Set to local clipboard
-            if let Some(native) = self.channels.read().unwrap().native()
-                && let Err(e) = native.read().unwrap().set_text(&text)
+            if let Some(ref clipboard_integration) = self.config.integrations.clipboard
+                && let Err(e) = clipboard_integration.set_text(&text)
             {
                 log::error!("Failed to set local clipboard text: {}", e);
             }

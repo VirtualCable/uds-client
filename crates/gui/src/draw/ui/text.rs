@@ -42,11 +42,7 @@ pub(crate) fn word_wrap(text: &str, max_chars: usize) -> Vec<&str> {
 
         // Try to break at a word boundary within the last ~20% of the line
         let search_window = (max_chars / 5).max(1);
-        let search_start = match text[start..end]
-            .char_indices()
-            .rev()
-            .nth(search_window)
-        {
+        let search_start = match text[start..end].char_indices().rev().nth(search_window) {
             Some((offset, _)) => start + offset,
             None => start,
         };
@@ -119,7 +115,10 @@ mod tests {
         assert!(lines.len() >= 3, "should break multiple times");
         // Verify every slice is valid UTF-8 (no panic = success)
         for line in &lines {
-            assert!(line.len() <= 15, "byte length may exceed max_chars but must not panic");
+            assert!(
+                line.len() <= 15,
+                "byte length may exceed max_chars but must not panic"
+            );
         }
     }
 
@@ -129,7 +128,10 @@ mod tests {
         assert!(lines.len() >= 2, "should break at word boundaries");
         // Ensure no line exceeds max_chars characters
         for line in &lines {
-            assert!(line.chars().count() <= 8, "char count must respect max_chars");
+            assert!(
+                line.chars().count() <= 8,
+                "char count must respect max_chars"
+            );
         }
     }
 
@@ -139,7 +141,10 @@ mod tests {
         let lines = word_wrap("aáéíóúbáéíóúcáéíóúdáéíóú", 5);
         assert!(lines.len() >= 4, "should hard-break multiple times");
         for line in &lines {
-            assert!(line.chars().count() <= 5, "each line must have at most max_chars characters");
+            assert!(
+                line.chars().count() <= 5,
+                "each line must have at most max_chars characters"
+            );
         }
     }
 }

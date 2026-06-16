@@ -1,5 +1,5 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,9 +26,12 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+//
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 #![allow(dead_code)]
+use std::sync::Arc;
+
 use freerdp_sys::{
     AUDIO_FORMAT, BOOL, BYTE, CHANNEL_RC_NO_MEMORY, CHANNEL_RC_OK,
     PFREERDP_RDPSND_DEVICE_ENTRY_POINTS, UINT, UINT32, WAVE_FORMAT_PCM, freerdp_rdpsnd_get_context,
@@ -36,15 +39,15 @@ use freerdp_sys::{
 };
 
 use crate::context::OwnerFromCtx;
-use multimedia::audio::{AudioCommand, AudioHandle};
-use shared::log;
+use crate::integrations::AudioOutputIntegration;
+use crate::utils::log;
 
 #[repr(C)]
 pub struct SoundPlugin {
     device: rdpsndDevicePlugin,
 
     // Custom data
-    audio: Option<AudioHandle>,
+    audio: Option<Arc<dyn AudioOutputIntegration>>,
 }
 
 // Returns CHANNEL_RC_OK on success, or an error code on failure. (it's marked as BOOL on freerdp lib, but ist's actually a UINT32)
@@ -70,9 +73,6 @@ pub unsafe extern "C" fn sound_entry(p_entry_points: PFREERDP_RDPSND_DEVICE_ENTR
         },
         audio: None,
     });
-
-    // let args: *const ADDIN_ARGV = unsafe { (*p_entry_points).args };
-    // mayby use args to configure the plugin
 
     unsafe {
         if let Some(register_fnc) = (*p_entry_points).pRegisterRdpsndDevice {
@@ -105,28 +105,32 @@ unsafe extern "C" fn open(
         latency
     );
     let plugin = unsafe { &mut *(device as *mut SoundPlugin) };
-    let latency_threshold =
-        if let Some(rdp) = (unsafe { freerdp_rdpsnd_get_context(plugin.device.rdpsnd) }).owner() {
-            rdp.config.settings.sound_latency_threshold
+
+    if let Some(rdp) = (unsafe { freerdp_rdpsnd_get_context(plugin.device.rdpsnd) }).owner() {
+        let latency_threshold = rdp.config.settings.redirections.sound_latency_threshold;
+
+        if let Some(audio_integration) = &rdp.config.integrations.audio_output {
+            if let Some(audio_handle) = plugin.audio.take() {
+                log::debug!("Sound device already opened, closing existing audio handle.");
+                audio_handle.close();
+            }
+
+            audio_integration.open(
+                unsafe { (*format).nChannels },
+                unsafe { (*format).nSamplesPerSec },
+                unsafe { (*format).wBitsPerSample },
+                latency_threshold.map(|v| v as u32),
+            );
+            plugin.audio = Some(audio_integration.clone());
+            true.into()
         } else {
-            Some(185 * 2) // default value
-        };
-    if let Some(audio_handle) = plugin.audio.take() {
-        // Already opened, close it first
-        log::debug!("Sound device already opened, closing existing audio handle.");
-        audio_handle
-            .tx
-            .send(AudioCommand::Close)
-            .unwrap_or_else(|e| log::error!("Failed to send Close command: {}", e));
+            log::warn!("Audio output integration not configured.");
+            false.into()
+        }
+    } else {
+        log::error!("Failed to obtain Rdp owner context in sound open.");
+        false.into()
     }
-    let audio_handle = AudioHandle::new(
-        unsafe { (*format).nChannels },
-        unsafe { (*format).nSamplesPerSec },
-        unsafe { (*format).wBitsPerSample },
-        latency_threshold,
-    );
-    plugin.audio = Some(audio_handle);
-    true.into()
 }
 
 unsafe extern "C" fn format_supported(
@@ -154,7 +158,7 @@ unsafe extern "C" fn format_supported(
 unsafe extern "C" fn get_volume(device: *mut rdpsndDevicePlugin) -> UINT32 {
     let plugin = unsafe { &*(device as *mut SoundPlugin) };
     if let Some(audio) = &plugin.audio {
-        *audio.volume.read().unwrap()
+        audio.get_volume()
     } else {
         0
     }
@@ -163,7 +167,7 @@ unsafe extern "C" fn get_volume(device: *mut rdpsndDevicePlugin) -> UINT32 {
 unsafe extern "C" fn set_volume(device: *mut rdpsndDevicePlugin, volume: UINT32) -> BOOL {
     let plugin = unsafe { &mut *(device as *mut SoundPlugin) };
     if let Some(audio) = &plugin.audio {
-        *audio.volume.write().unwrap() = volume;
+        audio.set_volume(volume);
     }
     true.into()
 }
@@ -176,11 +180,7 @@ unsafe extern "C" fn play(
     let plugin = unsafe { &mut *(_device as *mut SoundPlugin) };
     if let Some(audio) = &plugin.audio {
         let slice = unsafe { std::slice::from_raw_parts(data, size) };
-        audio
-            .play(slice.to_vec())
-            .unwrap_or_else(|e| log::error!("Failed to send Play command: {}", e));
-        // Note, latency is 1 frame behind, as we return the latency of the previous play call
-        *audio.latency.read().unwrap()
+        audio.play(slice)
     } else {
         log::error!("Audio handle not initialized in play.");
         0 // No latency if audio not initialized
@@ -190,11 +190,8 @@ unsafe extern "C" fn play(
 unsafe extern "C" fn close(_device: *mut rdpsndDevicePlugin) {
     log::debug!("Sound device close called.");
     let plugin = unsafe { &mut *(_device as *mut SoundPlugin) };
-    if let Some(audio) = &plugin.audio.take() {
-        audio
-            .tx
-            .send(AudioCommand::Close)
-            .unwrap_or_else(|e| log::error!("Failed to send Close command: {}", e));
+    if let Some(audio) = plugin.audio.take() {
+        audio.close();
     }
 }
 

@@ -164,16 +164,14 @@ impl AppHandler {
                 let y = ((position.y * gdi_h as f64) / phys_h as f64)
                     .round()
                     .clamp(0.0, (gdi_h - 1) as f64) as u16;
-                let _ = s.command_tx.send(rdp_ffi::commands::RdpCommand::Input(
-                    rdp_ffi::commands::InputEvent::Mouse {
+                let _ = s.command_tx.send(rdp_ffi::messaging::RdpCommand::Input(
+                    rdp_ffi::messaging::InputEvent::Mouse {
                         flags: rdp_ffi::sys::PTR_FLAGS_MOVE as u16,
                         x,
                         y,
                     },
                 ));
-                unsafe {
-                    rdp_ffi::sys::SetEvent(s.command_event.as_handle());
-                }
+                rdp_ffi::Rdp::set_command_event(&s.command_event);
                 // Pinbar
                 if let RdpMode::Desktop {
                     ref mut pinbar,
@@ -239,12 +237,10 @@ impl AppHandler {
                             } else {
                                 0
                             };
-                        let _ = s.command_tx.send(rdp_ffi::commands::RdpCommand::Input(
-                            rdp_ffi::commands::InputEvent::Mouse { flags: f, x, y },
+                        let _ = s.command_tx.send(rdp_ffi::messaging::RdpCommand::Input(
+                            rdp_ffi::messaging::InputEvent::Mouse { flags: f, x, y },
                         ));
-                        unsafe {
-                            rdp_ffi::sys::SetEvent(s.command_event.as_handle());
-                        }
+                        rdp_ffi::Rdp::set_command_event(&s.command_event);
                     }
                 }
             }
@@ -269,16 +265,14 @@ impl AppHandler {
                     } else {
                         flags | step
                     };
-                    let _ = s.command_tx.send(rdp_ffi::commands::RdpCommand::Input(
-                        rdp_ffi::commands::InputEvent::Mouse {
+                    let _ = s.command_tx.send(rdp_ffi::messaging::RdpCommand::Input(
+                        rdp_ffi::messaging::InputEvent::Mouse {
                             flags: cflags,
                             x: 0,
                             y: 0,
                         },
                     ));
-                    unsafe {
-                        rdp_ffi::sys::SetEvent(s.command_event.as_handle());
-                    }
+                    rdp_ffi::Rdp::set_command_event(&s.command_event);
                 }
             }
             _ => {}
@@ -302,11 +296,30 @@ impl AppHandler {
             && let RdpMode::Rail(ref mut rail) = state.mode
             && let Some(rw) = rail.windows.get_mut(&rail_id)
         {
-            // Force position every frame to prevent Windows cascading offset
-            let sf = state.coords_scale.max(1.0);
-            let (px, py) = monitor::logic_2_phys_pos((rw.rect.x, rw.rect.y), sf);
-            rw.window
-                .set_outer_position(winit::dpi::PhysicalPosition::new(px, py));
+            // Force position every frame to prevent Windows cascading offset.
+            // Only for on-screen windows — off-screen coords are for minimized/offscreen.
+            const OFFSCREEN: i32 = rdp_ffi::consts::OFFSCREEN_THRESHOLD;
+            if rw.rect.x > OFFSCREEN && rw.rect.y > OFFSCREEN {
+                let sf = state.coords_scale.max(1.0);
+                let (px, py) = monitor::logic_2_phys_pos((rw.rect.x, rw.rect.y), sf);
+                rw.window
+                    .set_outer_position(winit::dpi::PhysicalPosition::new(px, py));
+            }
+
+            // Detect minimize/restore transitions via polling (Occluded is unsupported
+            // on Windows/Android/Wayland). When the OS restores a window, tell the server.
+            let is_minimized = rw.window.is_minimized().unwrap_or(false);
+            if is_minimized != rw.was_minimized {
+                if let Some(ref channel) = rail.channel {
+                    let cmd = if is_minimized {
+                        rdp_ffi::consts::SC_MINIMIZE as u16
+                    } else {
+                        rdp_ffi::consts::SC_RESTORE as u16
+                    };
+                    channel.send_system_command(rail_id, cmd);
+                }
+                rw.was_minimized = is_minimized;
+            }
             if let Some(ref mut renderer) = rw.renderer.as_mut() {
                 // Ensure the WGPU surface matches the actual window size.
                 // request_inner_size() is async — the window may have resized
@@ -322,15 +335,7 @@ impl AppHandler {
                 } else {
                     &[]
                 };
-                renderer.update_and_render(
-                    upload_data,
-                    rw.width,
-                    rw.height,
-                    &[],
-                    &[],
-                    None,
-                    None,
-                );
+                renderer.update_and_render(upload_data, rw.width, rw.height, &[], &[], None, None);
             }
         }
     }
@@ -359,6 +364,10 @@ impl AppHandler {
         match event {
             WindowEvent::CloseRequested => {
                 rail_channel.send_system_command(rail_id, rdp_ffi::consts::SC_CLOSE as u16);
+            }
+            WindowEvent::Occluded(_) => {
+                // Occluded unsupported on Windows/Android/Wayland/Orbital.
+                // Minimize/restore handled via is_minimized() polling in handle_rail_redraw.
             }
             WindowEvent::Focused(focused) => {
                 if let Some(rw) = rail.windows.get_mut(&rail_id) {
@@ -392,16 +401,14 @@ impl AppHandler {
                         rw.rect.w,
                         rw.rect.h,
                     );
-                    let _ = cmd_tx.send(rdp_ffi::commands::RdpCommand::Input(
-                        rdp_ffi::commands::InputEvent::Mouse {
+                    let _ = cmd_tx.send(rdp_ffi::messaging::RdpCommand::Input(
+                        rdp_ffi::messaging::InputEvent::Mouse {
                             flags: rdp_ffi::sys::PTR_FLAGS_MOVE as u16,
                             x: gx,
                             y: gy,
                         },
                     ));
-                    unsafe {
-                        rdp_ffi::sys::SetEvent(cmd_ev.as_handle());
-                    }
+                    rdp_ffi::Rdp::set_command_event(&cmd_ev);
                 }
             }
             WindowEvent::CursorLeft { .. } => {
@@ -463,16 +470,14 @@ impl AppHandler {
                         rw.rect.w,
                         rw.rect.h
                     );
-                    let _ = cmd_tx.send(rdp_ffi::commands::RdpCommand::Input(
-                        rdp_ffi::commands::InputEvent::Mouse {
+                    let _ = cmd_tx.send(rdp_ffi::messaging::RdpCommand::Input(
+                        rdp_ffi::messaging::InputEvent::Mouse {
                             flags: f,
                             x: gx,
                             y: gy,
                         },
                     ));
-                    unsafe {
-                        rdp_ffi::sys::SetEvent(cmd_ev.as_handle());
-                    }
+                    rdp_ffi::Rdp::set_command_event(&cmd_ev);
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {
@@ -496,16 +501,14 @@ impl AppHandler {
                     } else {
                         flags | step
                     };
-                    let _ = cmd_tx.send(rdp_ffi::commands::RdpCommand::Input(
-                        rdp_ffi::commands::InputEvent::Mouse {
+                    let _ = cmd_tx.send(rdp_ffi::messaging::RdpCommand::Input(
+                        rdp_ffi::messaging::InputEvent::Mouse {
                             flags: cflags,
                             x: 0,
                             y: 0,
                         },
                     ));
-                    unsafe {
-                        rdp_ffi::sys::SetEvent(cmd_ev.as_handle());
-                    }
+                    rdp_ffi::Rdp::set_command_event(&cmd_ev);
                 }
             }
             _ => {}

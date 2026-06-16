@@ -1,5 +1,5 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,14 +26,15 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+//
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 use freerdp_sys::{
     BOOL, POINTER_CACHED_UPDATE, POINTER_COLOR_UPDATE, POINTER_LARGE_UPDATE, POINTER_NEW_UPDATE,
     POINTER_POSITION_UPDATE, POINTER_SYSTEM_UPDATE, rdpContext,
 };
 
-use shared::log;
+use crate::utils::log;
 
 use super::super::context::OwnerFromCtx;
 use super::pointer_update::PointerCallbacks;
@@ -69,17 +70,17 @@ pub unsafe fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
     log::debug!(" **** Setting Pointer Update Callbacks: {:?}", overrides);
     unsafe {
         if context.is_null() {
-            log::error!("pointer_update_c::set_callbacks: context is null");
+            log::error!("Context is null, cannot override callbacks.");
             return;
         }
         let update = (*context).update;
         if update.is_null() {
-            log::debug!(" **** Update not initialized, cannot override callbacks.");
+            log::error!("Update not initialized, cannot override callbacks.");
             return;
         }
         let pointer = (*update).pointer;
         if pointer.is_null() {
-            log::debug!(" **** Pointer not initialized, cannot override callbacks.");
+            log::error!("Pointer structure not initialized, cannot override callbacks.");
             return;
         }
         for override_cb in overrides {

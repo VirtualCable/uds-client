@@ -1,5 +1,5 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,15 +26,16 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+//
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 use freerdp_sys::{
     AccessTokenType, BOOL, BYTE, DWORD, SSIZE_T, SmartcardCertInfo, UINT16, UINT32, WCHAR, freerdp,
     freerdp_client_load_channels, freerdp_get_logon_error_info_data,
     freerdp_get_logon_error_info_type, gdi_free, gdi_init, rdp_auth_reason,
 };
 
-use shared::log::debug;
+use crate::utils::log::debug;
 
 use crate::{
     callbacks::{graphics_c, primary_c},

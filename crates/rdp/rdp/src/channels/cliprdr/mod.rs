@@ -1,5 +1,5 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,12 +26,12 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+//
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 use std::sync::{Arc, RwLock};
 
 mod callbacks_c;
-pub(super) mod native;
 mod traits;
 
 use crate::utils;
@@ -272,6 +272,22 @@ mod tests {
     }
 
     #[test]
+    fn from_format_id_oem() {
+        assert_eq!(
+            RdpClipboardFormat::from_format_id(freerdp_sys::CF_OEMTEXT),
+            Some(RdpClipboardFormat::TextOem)
+        );
+    }
+
+    #[test]
+    fn from_format_id_image() {
+        assert_eq!(
+            RdpClipboardFormat::from_format_id(freerdp_sys::CF_DIB),
+            Some(RdpClipboardFormat::Image)
+        );
+    }
+
+    #[test]
     fn from_format_id_unknown() {
         assert_eq!(RdpClipboardFormat::from_format_id(99999), None);
     }
@@ -287,5 +303,61 @@ mod tests {
             let id = fmt.to_format_id();
             assert_eq!(RdpClipboardFormat::from_format_id(id), Some(fmt));
         }
+    }
+
+    #[test]
+    fn test_clipboard_format_debug() {
+        let fmt = RdpClipboardFormat::TextUnicode;
+        let debug = format!("{:?}", fmt);
+        assert!(debug.starts_with("TextUnicode"));
+    }
+
+    #[test]
+    fn test_clipboard_format_clone_eq() {
+        let a = RdpClipboardFormat::TextUnicode;
+        let b = a.clone();
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn test_clipboard_format_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(RdpClipboardFormat::TextUnicode);
+        set.insert(RdpClipboardFormat::TextUnicode);
+        assert_eq!(set.len(), 1);
+    }
+
+    #[test]
+    fn test_rdp_clipboard_new_null() {
+        let cb = RdpClipboard::new(std::ptr::null_mut());
+        assert!(cb.ptr.is_none());
+        assert_eq!(cb.caps_flags, 0);
+        assert!(cb.remote_formats.is_empty());
+        assert_eq!(*cb.text.read().unwrap(), "");
+    }
+
+    #[test]
+    fn test_rdp_clipboard_text_cache() {
+        let cb = RdpClipboard::new(std::ptr::null_mut());
+        assert_eq!(cb.get_local_text(), "");
+        cb.send_text_is_available("hello clipboard");
+        assert_eq!(cb.get_local_text(), "hello clipboard");
+        cb.send_text_is_available("updated");
+        assert_eq!(cb.get_local_text(), "updated");
+    }
+
+    #[test]
+    fn test_rdp_clipboard_with_null_ptr_does_not_panic() {
+        let cb = RdpClipboard::new(std::ptr::null_mut());
+        assert_eq!(cb.send_client_capabilities(0), freerdp_sys::CHANNEL_RC_OK);
+        assert_eq!(
+            cb.send_client_format_list(&[RdpClipboardFormat::TextUnicode]),
+            freerdp_sys::CHANNEL_RC_OK
+        );
+        assert_eq!(
+            cb.send_format_list_response(true),
+            freerdp_sys::CHANNEL_RC_OK
+        );
     }
 }

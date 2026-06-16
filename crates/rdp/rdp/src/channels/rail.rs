@@ -31,8 +31,8 @@
 
 use crate::context::OwnerFromCtx;
 use crate::utils;
+use crate::utils::log;
 use freerdp_sys::*;
-use shared::log;
 
 #[derive(Clone, Debug)]
 pub struct RailChannel {
@@ -161,6 +161,7 @@ impl RailChannel {
     }
 }
 
+#[allow(clippy::collapsible_if)]
 fn complete_handshake(context: *mut RailClientContext) -> UINT {
     unsafe {
         let rdp_context = (*context).custom as *mut rdpContext;
@@ -191,31 +192,31 @@ fn complete_handshake(context: *mut RailClientContext) -> UINT {
             }
 
             // 3. Client Execute (Launch RemoteApp)
-            if let Some(ref rail) = rdp.config.settings.rail
-                && let Some(execute_fn) = (*context).ClientExecute
-            {
-                let capp = std::ffi::CString::new(rail.app.clone()).unwrap();
-                let cdir = std::ffi::CString::new(
-                    rail.working_dir
-                        .as_deref()
-                        .filter(|s| !s.is_empty())
-                        .unwrap_or("C:\\"),
-                )
-                .unwrap();
-                let cargs = std::ffi::CString::new(rail.args.as_deref().unwrap_or("")).unwrap();
-                let exec = RAIL_EXEC_ORDER {
-                    flags: RAIL_EXEC_FLAG_EXPAND_ARGUMENTS as u16,
-                    RemoteApplicationProgram: capp.as_ptr(),
-                    RemoteApplicationWorkingDir: cdir.as_ptr(),
-                    RemoteApplicationArguments: cargs.as_ptr(),
-                };
-                log::info!(
-                    "RAIL: Sending ClientExecute for RemoteApp: {:?} (args={:?}, dir={:?})",
-                    rail.app,
-                    rail.args,
-                    rail.working_dir
-                );
-                execute_fn(context, &exec);
+            if let Some(ref rail) = rdp.config.settings.rail {
+                if let Some(execute_fn) = (*context).ClientExecute {
+                    let capp = std::ffi::CString::new(rail.app.clone()).unwrap();
+                    let cdir = std::ffi::CString::new(
+                        rail.working_dir
+                            .as_deref()
+                            .filter(|s| !s.is_empty())
+                            .unwrap_or("C:\\"),
+                    )
+                    .unwrap();
+                    let cargs = std::ffi::CString::new(rail.args.as_deref().unwrap_or("")).unwrap();
+                    let exec = RAIL_EXEC_ORDER {
+                        flags: RAIL_EXEC_FLAG_EXPAND_ARGUMENTS as u16,
+                        RemoteApplicationProgram: capp.as_ptr(),
+                        RemoteApplicationWorkingDir: cdir.as_ptr(),
+                        RemoteApplicationArguments: cargs.as_ptr(),
+                    };
+                    log::info!(
+                        "RAIL: Sending ClientExecute for RemoteApp: {:?} (args={:?}, dir={:?})",
+                        rail.app,
+                        rail.args,
+                        rail.working_dir
+                    );
+                    execute_fn(context, &exec);
+                }
             }
         }
     }

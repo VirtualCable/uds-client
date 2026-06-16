@@ -1,5 +1,5 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,11 +26,8 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+//
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
-use std::sync::{Arc, RwLock};
-
-use shared::log;
 
 pub mod cliprdr;
 pub mod disp;
@@ -41,10 +38,6 @@ pub mod rail;
 pub struct RdpChannels {
     disp: Option<disp::DispChannel>,
     cliprdr: Option<cliprdr::RdpClipboard>,
-
-    // Helper for clipbrdr channel, to connect with native clipboard
-    native: Option<Arc<RwLock<cliprdr::native::ClipboardNative>>>,
-
     rail: Option<rail::RailChannel>,
     gfx: Option<gfx::GfxChannel>,
 }
@@ -54,7 +47,6 @@ impl RdpChannels {
         RdpChannels {
             disp: None,
             cliprdr: None,
-            native: None,
             rail: None,
             gfx: None,
         }
@@ -74,22 +66,15 @@ impl RdpChannels {
 
     pub fn set_cliprdr_ptr(&mut self, cliprdr: *mut freerdp_sys::CliprdrClientContext) {
         let clipboard = cliprdr::RdpClipboard::new(cliprdr);
-        self.cliprdr = Some(clipboard.clone());
-        self.native = cliprdr::native::ClipboardNative::new(clipboard);
+        self.cliprdr = Some(clipboard);
     }
 
     pub fn clear_cliprdr(&mut self) {
-        self.stop_native();
         self.cliprdr = None;
-        self.native = None;
     }
 
     pub fn cliprdr(&self) -> Option<cliprdr::RdpClipboard> {
         self.cliprdr.clone()
-    }
-
-    pub fn native(&self) -> Option<Arc<RwLock<cliprdr::native::ClipboardNative>>> {
-        self.native.clone()
     }
 
     pub fn set_rail_ptr(&mut self, rail: *mut freerdp_sys::RailClientContext) {
@@ -114,13 +99,6 @@ impl RdpChannels {
 
     pub fn gfx(&self) -> Option<gfx::GfxChannel> {
         self.gfx.clone()
-    }
-
-    pub fn stop_native(&self) {
-        if let Some(native) = &self.native {
-            log::debug!("Stopping clipboard native watcher");
-            native.write().unwrap().stop();
-        }
     }
 }
 

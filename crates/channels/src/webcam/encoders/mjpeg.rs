@@ -1,6 +1,6 @@
 use super::VideoEncoder;
-use turbojpeg::{Image, OutputBuf, PixelFormat};
 use shared::log;
+use turbojpeg::{Image, OutputBuf, PixelFormat};
 
 pub struct MjpegEncoder {
     width: u32,

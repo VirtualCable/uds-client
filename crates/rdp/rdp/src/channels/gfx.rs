@@ -31,8 +31,8 @@
 
 use crate::context::OwnerFromCtx;
 use crate::utils;
+use crate::utils::log;
 use freerdp_sys::*;
-use shared::log;
 
 #[derive(Clone, Debug)]
 pub struct GfxChannel {
@@ -117,7 +117,6 @@ extern "C" fn update_window_from_surface(
 
             // No swapping loop needed as we copy directly to the platform's native format
 
-
             if let Some(tx) = &owner.update_tx {
                 // log::debug!("GFX sending WindowPixels for id={}, {}x{}", window_id, mapped_width, mapped_height);
                 let _ = tx.try_send(crate::messaging::RdpMessage::WindowPixels {
@@ -158,7 +157,18 @@ impl GfxChannel {
             unsafe {
                 if gdi_graphics_pipeline_init(gdi, context) != 0 {
                     log::info!("GFX: Graphics pipeline integrated with GDI.");
-                    (*context).UpdateWindowFromSurface = Some(update_window_from_surface);
+                    let rdp_context = (*gdi).context;
+                    let use_individual_windows = if let Some(owner) = rdp_context.owner() {
+                        owner.config.settings.rail.as_ref().map(|r| r.behavior)
+                            == Some(crate::settings::RailBehavior::IndividualWindows)
+                    } else {
+                        false
+                    };
+                    if use_individual_windows {
+                        (*context).UpdateWindowFromSurface = Some(update_window_from_surface);
+                    } else {
+                        (*context).UpdateWindowFromSurface = None;
+                    }
                     return true;
                 }
             }

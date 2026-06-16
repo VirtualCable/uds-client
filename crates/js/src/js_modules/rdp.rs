@@ -59,6 +59,8 @@ struct RailSettings {
     pub working_dir: Option<String>,
     pub title: Option<String>,
     pub server_info: Option<ServerInfo>,
+    #[zeroize(skip)]
+    pub behavior: Option<String>,
 }
 
 #[derive(Debug, TryFromJs, Zeroize, ZeroizeOnDrop, Clone)]
@@ -69,6 +71,25 @@ struct WebcamSettings {
     pub size_limit: Option<(u32, u32)>,
 }
 
+#[derive(Debug, Default, TryFromJs, Zeroize, ZeroizeOnDrop, Clone)]
+struct RdpRedirections {
+    pub clipboard: Option<bool>,
+    pub audio: Option<bool>,
+    pub mic: Option<bool>,
+    pub printing: Option<bool>,
+    pub drives: Option<Vec<String>>,
+    pub webcam: Option<WebcamSettings>,
+    pub sound_latency_threshold: Option<u16>,
+}
+
+#[derive(Debug, Default, TryFromJs, Zeroize, ZeroizeOnDrop, Clone)]
+struct JsRdpOptions {
+    pub verify_cert: Option<bool>,
+    pub use_nla: Option<bool>,
+    pub use_local_scaler: Option<bool>,
+    pub use_tunnel: Option<bool>,
+}
+
 #[derive(Debug, TryFromJs, Zeroize, ZeroizeOnDrop)]
 struct RdpSettings {
     pub server: String,
@@ -76,21 +97,12 @@ struct RdpSettings {
     pub user: Option<String>,
     pub password: Option<String>,
     pub domain: Option<String>,
-    pub verify_cert: Option<bool>,
-    pub use_nla: Option<bool>,
     pub screen_width: Option<u32>,
     pub screen_height: Option<u32>,
-    pub clipboard_redirection: Option<bool>,
-    pub audio_redirection: Option<bool>,
-    pub microphone_redirection: Option<bool>,
-    pub webcam: Option<WebcamSettings>,
-    pub printer_redirection: Option<bool>,
-    pub drives_to_redirect: Option<Vec<String>>,
-    pub sound_latency_threshold: Option<u16>,
     pub best_experience: Option<bool>,
+    pub redirections: Option<RdpRedirections>,
     pub rail: Option<RailSettings>,
-    pub use_local_scaler: Option<bool>,
-    pub use_tunnel: Option<bool>,
+    pub options: Option<JsRdpOptions>,
 }
 
 impl Default for RdpSettings {
@@ -101,21 +113,12 @@ impl Default for RdpSettings {
             user: None,
             password: None,
             domain: None,
-            verify_cert: None,
-            use_nla: None,
             screen_width: None,
             screen_height: None,
-            clipboard_redirection: None,
-            audio_redirection: None,
-            microphone_redirection: None,
-            webcam: None,
-            printer_redirection: None,
-            drives_to_redirect: None,
-            sound_latency_threshold: None,
             best_experience: None,
+            redirections: None,
             rail: None,
-            use_local_scaler: None,
-            use_tunnel: None,
+            options: None,
         }
     }
 }
@@ -138,29 +141,42 @@ impl RdpSettings {
             };
 
         let defs = settings::RdpSettings::default();
+        let redirections = self.redirections.clone().unwrap_or_default();
+
         settings::RdpSettings {
             server: self.server.clone(),
             port: self.port.unwrap_or(defs.port),
             user: self.user.clone().unwrap_or(defs.user),
             password: self.password.clone().unwrap_or(defs.password),
             domain: self.domain.clone().unwrap_or(defs.domain),
-            verify_cert: self.verify_cert.unwrap_or(defs.verify_cert),
-            use_nla: self.use_nla.unwrap_or(defs.use_nla),
             screen_size,
-            clipboard_redirection: self
-                .clipboard_redirection
-                .unwrap_or(defs.clipboard_redirection),
-            audio_redirection: self.audio_redirection.unwrap_or(defs.audio_redirection),
-            microphone_redirection: self
-                .microphone_redirection
-                .unwrap_or(defs.microphone_redirection),
-            printer_redirection: self.printer_redirection.unwrap_or(defs.printer_redirection),
-            drives_to_redirect: self
-                .drives_to_redirect
-                .clone()
-                .unwrap_or_else(|| defs.drives_to_redirect.clone()),
-            sound_latency_threshold: self.sound_latency_threshold,
             best_experience: self.best_experience.unwrap_or(defs.best_experience),
+            redirections: settings::RdpRedirections {
+                clipboard: redirections
+                    .clipboard
+                    .unwrap_or(defs.redirections.clipboard),
+                audio: redirections.audio.unwrap_or(defs.redirections.audio),
+                mic: redirections.mic.unwrap_or(defs.redirections.mic),
+                printing: redirections.printing.unwrap_or(defs.redirections.printing),
+                drives: redirections
+                    .drives
+                    .clone()
+                    .unwrap_or_else(|| defs.redirections.drives.clone()),
+                webcam: redirections
+                    .webcam
+                    .as_ref()
+                    .map(|w| settings::WebcamSettings {
+                        enabled: w.enabled,
+                        quality: w.quality.unwrap_or(80),
+                        fps: w.fps.unwrap_or(15),
+                        codec: settings::WebcamCodec::Best,
+                        browser_h264: false,
+                        width: 640,
+                        height: 480,
+                        size_limit: w.size_limit,
+                    }),
+                sound_latency_threshold: redirections.sound_latency_threshold,
+            },
             rail: self.rail.as_ref().map(|r| settings::RailSettings {
                 app: r.app.clone(),
                 args: r.args.clone(),
@@ -170,16 +186,34 @@ impl RdpSettings {
                     id: s.id.clone(),
                     token: s.token.clone(),
                 }),
+                behavior: r
+                    .behavior
+                    .as_deref()
+                    .map(|b| match b.to_lowercase().as_str() {
+                        "compositegdi" | "composite" => settings::RailBehavior::CompositeGdi,
+                        "individualwindows" | "individual" => {
+                            settings::RailBehavior::IndividualWindows
+                        }
+                        _ => settings::RailBehavior::IndividualWindows,
+                    })
+                    .unwrap_or(settings::RailBehavior::IndividualWindows),
             }),
-            desktop_scale: 1.0,
-            use_local_scaler: self.use_local_scaler.unwrap_or(true),
-            use_tunnel: self.use_tunnel.unwrap_or(defs.use_tunnel),
-            webcam: self.webcam.as_ref().map(|w| settings::WebcamSettings {
-                enabled: w.enabled,
-                quality: w.quality.unwrap_or(80),
-                fps: w.fps.unwrap_or(15),
-                size_limit: w.size_limit,
-            }),
+            features: settings::RdpFeatures {
+                disable_threading: false,
+                force_software_gdi: false,
+            },
+            options: {
+                let opt = self.options.clone().unwrap_or_default();
+                settings::RdpOptions {
+                    use_nla: opt.use_nla.unwrap_or(defs.options.use_nla),
+                    verify_cert: opt.verify_cert.unwrap_or(defs.options.verify_cert),
+                    use_local_scaler: opt
+                        .use_local_scaler
+                        .unwrap_or(defs.options.use_local_scaler),
+                    use_tunnel: opt.use_tunnel.unwrap_or(defs.options.use_tunnel),
+                    desktop_scale: 1.0,
+                }
+            },
         }
     }
 }
@@ -296,11 +330,15 @@ mod tests {
                 user: "testuser",
                 password: "password",
                 domain: "DOMAIN",
-                verify_cert: true,
-                use_nla: true,
+                options: {
+                    verify_cert: true,
+                    use_nla: true
+                },
                 screen_width: 1024,
                 screen_height: 768,
-                drives_to_redirect: ["C", "D"]
+                redirections: {
+                    drives: ["C", "D"]
+                }
             };
             RDP.start(rdpSettings);
         "#;
@@ -314,8 +352,8 @@ mod tests {
                     assert_eq!(settings.user, "testuser");
                     assert_eq!(settings.password, "password");
                     assert_eq!(settings.domain, "DOMAIN");
-                    assert!(settings.verify_cert);
-                    assert!(settings.use_nla);
+                    assert!(settings.options.verify_cert);
+                    assert!(settings.options.use_nla);
                     match settings.screen_size {
                         ScreenSize::Fixed(w, h) => {
                             assert_eq!(w, 1024);
@@ -323,13 +361,13 @@ mod tests {
                         }
                         _ => panic!("Expected fixed screen size"),
                     }
-                    assert_eq!(settings.drives_to_redirect, vec!["C", "D"]);
+                    assert_eq!(settings.redirections.drives, vec!["C", "D"]);
                     // Defaults defined in `rdp::settings::RdpSettings`
-                    assert!(settings.clipboard_redirection);
-                    assert!(settings.audio_redirection);
-                    assert!(!settings.microphone_redirection);
-                    assert!(!settings.printer_redirection);
-                    assert_eq!(settings.sound_latency_threshold, None);
+                    assert!(settings.redirections.clipboard);
+                    assert!(settings.redirections.audio);
+                    assert!(!settings.redirections.mic);
+                    assert!(!settings.redirections.printing);
+                    assert_eq!(settings.redirections.sound_latency_threshold, None);
                 }
                 _ => panic!("Expected GuiMessage::ConnectRdp"),
             },
@@ -369,18 +407,18 @@ mod tests {
                     assert_eq!(settings.user, "");
                     assert_eq!(settings.password, "");
                     assert_eq!(settings.domain, "");
-                    assert!(!settings.verify_cert);
-                    assert!(settings.use_nla);
+                    assert!(!settings.options.verify_cert);
+                    assert!(settings.options.use_nla);
                     match settings.screen_size {
                         ScreenSize::Full => {}
                         _ => panic!("Expected full screen size, got {:?}", settings.screen_size),
                     }
-                    assert_eq!(settings.drives_to_redirect, vec!["all"]);
-                    assert!(settings.clipboard_redirection);
-                    assert!(settings.audio_redirection);
-                    assert!(!settings.microphone_redirection);
-                    assert!(!settings.printer_redirection);
-                    assert_eq!(settings.sound_latency_threshold, None);
+                    assert_eq!(settings.redirections.drives, vec!["all"]);
+                    assert!(settings.redirections.clipboard);
+                    assert!(settings.redirections.audio);
+                    assert!(!settings.redirections.mic);
+                    assert!(!settings.redirections.printing);
+                    assert_eq!(settings.redirections.sound_latency_threshold, None);
                 }
                 _ => panic!("Expected GuiMessage::ConnectRdp"),
             },
@@ -446,15 +484,18 @@ mod tests {
     #[test]
     fn to_core_use_local_scaler_defaults_true() {
         let s = RdpSettings::default();
-        assert!(s.to_core_settings().use_local_scaler);
+        assert!(s.to_core_settings().options.use_local_scaler);
     }
 
     #[test]
     fn to_core_use_local_scaler_explicit_false() {
         let mut s = RdpSettings::default();
         s.server = "h".into();
-        s.use_local_scaler = Some(false);
-        assert!(!s.to_core_settings().use_local_scaler);
+        s.options = Some(JsRdpOptions {
+            use_local_scaler: Some(false),
+            ..Default::default()
+        });
+        assert!(!s.to_core_settings().options.use_local_scaler);
     }
 
     #[test]
@@ -470,6 +511,7 @@ mod tests {
                 id: "myid".into(),
                 token: "mytok".into(),
             }),
+            behavior: None,
         });
         let core = s.to_core_settings();
         let si = core.rail.unwrap().server_info.unwrap();

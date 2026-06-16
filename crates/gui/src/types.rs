@@ -24,13 +24,12 @@ pub enum GuiMessage {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReturnCode {
     Exit,
-    RestartLauncher,
+    RestartTestingLauncher,
 }
 
 /// Initial state for the GUI
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub enum AppState {
-    #[default]
     Test,
     Progress,
 }

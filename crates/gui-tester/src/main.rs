@@ -47,7 +47,7 @@ fn main() {
 
     gui::run_gui(
         fake_catalog,
-        Some(gui::types::AppState::Test),
+        gui::types::AppState::Test,
         messages_rx,
         stop_trigger.clone(),
         None,

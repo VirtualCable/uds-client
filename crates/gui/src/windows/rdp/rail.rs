@@ -17,6 +17,8 @@ pub struct RailWindow {
     pub has_decorations: bool,
     pub last_focused: bool,
     pub offscreen: bool,
+    pub was_minimized: bool,
+    pub server_minimized: bool,
     pub rgba_dirty: bool,
 }
 
@@ -28,10 +30,11 @@ pub struct RailState {
 
 /// Pending RAIL action to be executed by the event loop
 pub enum RailAction {
-    Create(u32, String, rdp_ffi::geom::Rect, bool, bool, bool),
+    Create(u32, String, rdp_ffi::geom::Rect, bool, bool, bool, bool),
     Delete(u32),
     UpdatePosition(u32, rdp_ffi::geom::Rect),
     SetVisible(u32, bool),
+    SetMinimized(u32, bool),
 }
 
 // ── RAIL Message Dispatcher ───
@@ -93,13 +96,37 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
             }
 
             if exists {
+                let is_minimized =
+                    show_state.is_some_and(|s| s == 2 || s == 6 || s == 7 || s == 11);
                 if let Some(s) = show_state {
-                    let hidden = s == 0 || is_off;
+                    let hidden = s == 0 || (is_off && !is_minimized);
+                    // Track server-side minimized state so offscreen updates don't undo it
+                    if let Some(rw) = rail.windows.get_mut(&window_id) {
+                        rw.server_minimized = is_minimized;
+                    }
                     rail.actions
                         .push(RailAction::SetVisible(window_id, !hidden));
-                } else if is_offscreen.is_some() {
-                    rail.actions
-                        .push(RailAction::SetVisible(window_id, !is_off));
+                    if is_minimized {
+                        rail.actions.push(RailAction::SetMinimized(window_id, true));
+                    } else if s == 1 || s == 3 || s == 5 || s == 9 {
+                        rail.actions
+                            .push(RailAction::SetMinimized(window_id, false));
+                    }
+                } else if let Some(is_off_val) = is_offscreen {
+                    // If the server told us this window is minimized, ignore offscreen
+                    // updates — the (-32000,-32000) position is expected.
+                    let server_minimized = rail
+                        .windows
+                        .get(&window_id)
+                        .is_some_and(|rw| rw.server_minimized);
+                    if !server_minimized {
+                        if !is_off_val {
+                            rail.actions
+                                .push(RailAction::SetMinimized(window_id, false));
+                        }
+                        rail.actions
+                            .push(RailAction::SetVisible(window_id, !is_off_val));
+                    }
                 }
 
                 if pos.is_some() || size.is_some() {
@@ -151,9 +178,11 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                     );
                     let is_tool = ext_style.is_some_and(|s| (s & 0x80) != 0);
                     let has_owner = owner_id.is_some() && owner_id != Some(0);
-                    let show_taskbar = taskbar_button.unwrap_or(!is_tool && !has_owner);
+                    let show_taskbar = taskbar_button.unwrap_or(false) || (!is_tool && !has_owner);
 
-                    let hidden = show_state == Some(0) || is_off;
+                    let is_minimized =
+                        show_state.is_some_and(|s| s == 2 || s == 6 || s == 7 || s == 11);
+                    let hidden = show_state == Some(0) || (is_off && !is_minimized);
 
                     rail.actions.push(RailAction::Create(
                         window_id,
@@ -162,6 +191,7 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                         show_taskbar,
                         false,
                         !hidden,
+                        is_minimized,
                     ));
                 }
             }
@@ -178,7 +208,12 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
             height,
             data,
         } => {
-            log::debug!("WindowPixels: {}x{} for window {}", width, height, window_id);
+            log::debug!(
+                "WindowPixels: {}x{} for window {}",
+                width,
+                height,
+                window_id
+            );
             if let Some(rw) = rail.windows.get_mut(&window_id) {
                 let sf = state.coords_scale.max(1.0);
                 let msf = rw.window.scale_factor().max(1.0);

@@ -82,13 +82,7 @@ impl Cursor {
                     }
                 }
             }
-            (
-                scaled,
-                sw as u16,
-                sh as u16,
-                hx as u16,
-                hy as u16,
-            )
+            (scaled, sw as u16, sh as u16, hx as u16, hy as u16)
         } else {
             (
                 self.data.clone(),

@@ -1,5 +1,5 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,11 +26,12 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+//
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 use freerdp_sys::*;
 
-use shared::log;
+use crate::utils::log;
 
 use crate::{callbacks::channels, channels::cliprdr::register_cliprdr_callbacks};
 
@@ -49,7 +50,7 @@ impl channels::ChannelsCallbacks for Rdp {
                 == &freerdp_sys::CLIPRDR_SVC_CHANNEL_NAME
                     [..freerdp_sys::CLIPRDR_SVC_CHANNEL_NAME.len() - 1] =>
             {
-                if !self.config.settings.clipboard_redirection {
+                if !self.config.settings.redirections.clipboard {
                     log::debug!("**** CLIPRDR channel connection rejected (disabled in settings).");
                     return false;
                 }
@@ -132,6 +133,9 @@ impl channels::ChannelsCallbacks for Rdp {
                     [..freerdp_sys::CLIPRDR_SVC_CHANNEL_NAME.len() - 1] =>
             {
                 log::debug!("**** CLIPRDR channel disconnected.");
+                if let Some(ref clipboard_integration) = self.config.integrations.clipboard {
+                    clipboard_integration.stop();
+                }
                 self.channels.write().unwrap().clear_cliprdr();
                 true
             }

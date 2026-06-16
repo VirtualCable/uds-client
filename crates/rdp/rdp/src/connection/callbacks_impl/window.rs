@@ -32,12 +32,12 @@
 use crate::callbacks::window::WindowCallbacks;
 use crate::consts::*;
 use crate::messaging::RdpMessage;
+use crate::utils::log;
 use freerdp_sys::{
     WINDOW_CACHED_ICON_ORDER, WINDOW_ICON_ORDER, WINDOW_ORDER_FIELD_OWNER, WINDOW_ORDER_FIELD_SHOW,
     WINDOW_ORDER_FIELD_STYLE, WINDOW_ORDER_FIELD_TASKBAR_BUTTON, WINDOW_ORDER_FIELD_WND_OFFSET,
     WINDOW_ORDER_FIELD_WND_SIZE, WINDOW_ORDER_INFO, WINDOW_STATE_ORDER,
 };
-use shared::log;
 
 use super::Rdp;
 
@@ -63,7 +63,7 @@ struct RailWindowState {
     ext_style: Option<u32>,
     taskbar_button: Option<bool>,
     title: String,
-    show_state: Option<u8>,
+    show_state: Option<u32>,
     is_offscreen: Option<bool>,
     pos: Option<(i32, i32)>,
     size: Option<(u32, u32)>,
@@ -75,10 +75,9 @@ impl RailWindowState {
         order_info: *const WINDOW_ORDER_INFO,
         window_state: *const WINDOW_STATE_ORDER,
     ) -> Self {
-        // WINDOW_ORDER_TYPE_WINDOW  must always be set
-        // WINDOW_ORDER_STATE_NEW --> set if create_window, else update_window
         let info = unsafe { &*order_info };
         let state = unsafe { &*window_state };
+
         let owner_id = if info.fieldFlags & WINDOW_ORDER_FIELD_OWNER != 0 {
             Some(state.ownerWindowId)
         } else {
@@ -95,7 +94,7 @@ impl RailWindowState {
             None
         };
         let show_state = if info.fieldFlags & WINDOW_ORDER_FIELD_SHOW != 0 {
-            Some(state.showState as u8)
+            Some(state.showState as u32)
         } else {
             None
         };
@@ -157,7 +156,7 @@ impl WindowCallbacks for Rdp {
                 style: rw.style,
                 ext_style: rw.ext_style,
                 taskbar_button: rw.taskbar_button,
-                title: rw.title,
+                title: rw.title.clone(),
                 show_state: rw.show_state,
                 is_offscreen: rw.is_offscreen,
                 pos: rw.pos,
@@ -165,9 +164,7 @@ impl WindowCallbacks for Rdp {
             });
             // If the window is being created in SW_SHOW(5) or SW_SHOWMAXIMIZED(3) state,
             // trigger a screen sync to be safe.
-            if rw.show_state.map(|s| s as u32) == Some(SW_SHOWMAXIMIZED)
-                || rw.show_state.map(|s| s as u32) == Some(SW_SHOW)
-            {
+            if rw.show_state == Some(SW_SHOWMAXIMIZED) || rw.show_state == Some(SW_SHOW) {
                 let _ = tx.send(RdpMessage::UpdateRects(vec![crate::geom::Rect::new(
                     0,
                     0,
@@ -210,7 +207,7 @@ impl WindowCallbacks for Rdp {
             });
 
             if let Some(show_state) = rw.show_state
-                && [SW_SHOW, SW_SHOWNORMAL].contains(&(show_state as u32))
+                && [SW_SHOW, SW_SHOWNORMAL].contains(&show_state)
                 && rw.is_offscreen == Some(false)
             {
                 log::info!(
@@ -260,13 +257,19 @@ impl WindowCallbacks for Rdp {
         order_info: *const WINDOW_ORDER_INFO,
         icon: *const WINDOW_ICON_ORDER,
     ) -> bool {
+        let is_individual = self.config.settings.rail.as_ref().map(|r| r.behavior)
+            == Some(crate::settings::RailBehavior::IndividualWindows);
+        if !is_individual {
+            return true;
+        }
+
         let window_id = unsafe { (*order_info).windowId };
         if icon.is_null() || unsafe { (*icon).iconInfo.is_null() } {
             return true;
         }
         let icon_info = unsafe { &*(*icon).iconInfo };
-        if icon_info.bpp != 32 || icon_info.bitsColor.is_null() {
-            return true; // Only handle 32-bpp icons
+        if icon_info.bitsColor.is_null() {
+            return true;
         }
         let w = icon_info.width;
         let h = icon_info.height;
@@ -277,38 +280,95 @@ impl WindowCallbacks for Rdp {
             return true;
         }
 
-        let len = match (w as usize)
-            .checked_mul(h as usize)
-            .and_then(|m| m.checked_mul(4))
-        {
-            Some(l) => l,
-            None => {
-                log::error!("RAIL: Icon size overflow: {}x{}", w, h);
+        let cache_id = icon_info.cacheId;
+        let cache_entry = icon_info.cacheEntry;
+
+        let mut rgba = Vec::with_capacity((w as usize) * (h as usize) * 4);
+
+        match icon_info.bpp {
+            32 => {
+                let len = (w as usize) * (h as usize) * 4;
+                if (icon_info.cbBitsColor as usize) < len {
+                    log::error!("RAIL: Icon buffer too small for 32-bpp {}x{}", w, h);
+                    return true;
+                }
+                let src = unsafe { std::slice::from_raw_parts(icon_info.bitsColor, len) };
+                for chunk in src.chunks_exact(4) {
+                    rgba.push(chunk[2]); // R
+                    rgba.push(chunk[1]); // G
+                    rgba.push(chunk[0]); // B
+                    rgba.push(chunk[3]); // A
+                }
+            }
+            24 => {
+                let len = (w as usize) * (h as usize) * 3;
+                if (icon_info.cbBitsColor as usize) < len {
+                    log::error!("RAIL: Icon buffer too small for 24-bpp {}x{}", w, h);
+                    return true;
+                }
+                let src = unsafe { std::slice::from_raw_parts(icon_info.bitsColor, len) };
+                for chunk in src.chunks_exact(3) {
+                    rgba.push(chunk[2]); // R
+                    rgba.push(chunk[1]); // G
+                    rgba.push(chunk[0]); // B
+                    rgba.push(255); // A
+                }
+            }
+            16 => {
+                let len = (w as usize) * (h as usize) * 2;
+                if (icon_info.cbBitsColor as usize) < len {
+                    log::error!("RAIL: Icon buffer too small for 16-bpp {}x{}", w, h);
+                    return true;
+                }
+                let src = unsafe {
+                    std::slice::from_raw_parts(
+                        icon_info.bitsColor as *const u16,
+                        (w as usize) * (h as usize),
+                    )
+                };
+                for &pixel in src {
+                    let r = ((pixel >> 11) & 0x1F) as u8;
+                    let g = ((pixel >> 5) & 0x3F) as u8;
+                    let b = (pixel & 0x1F) as u8;
+                    rgba.push((r << 3) | (r >> 2));
+                    rgba.push((g << 2) | (g >> 4));
+                    rgba.push((b << 3) | (b >> 2));
+                    rgba.push(255);
+                }
+            }
+            _ => {
+                log::warn!("RAIL: Unsupported icon bpp: {}", icon_info.bpp);
                 return true;
             }
-        };
-
-        // Defensive check: ensure the provided buffer is large enough for the calculated dimensions
-        if (icon_info.cbBitsColor as usize) < len {
-            log::error!(
-                "RAIL: Icon buffer too small for {}x{}: {} < {}",
-                w,
-                h,
-                icon_info.cbBitsColor,
-                len
-            );
-            return true;
         }
 
-        let src = unsafe { std::slice::from_raw_parts(icon_info.bitsColor, len) };
-        // BGRA → RGBA swizzle (same as GDI path for non-macOS)
-        let mut rgba = Vec::with_capacity(len);
-        for chunk in src.chunks_exact(4) {
-            rgba.push(chunk[2]); // R ← B
-            rgba.push(chunk[1]); // G
-            rgba.push(chunk[0]); // B ← R
-            rgba.push(chunk[3]); // A
+        // Apply 1-bpp AND transparency mask if present
+        if !icon_info.bitsMask.is_null() {
+            let mask_stride = (w.div_ceil(32) * 4) as usize;
+            let mask_len = mask_stride * h as usize;
+            if (icon_info.cbBitsMask as usize) >= mask_len {
+                let mask = unsafe { std::slice::from_raw_parts(icon_info.bitsMask, mask_len) };
+                for y in 0..h as usize {
+                    for x in 0..w as usize {
+                        let byte_idx = y * mask_stride + (x / 8);
+                        let bit_idx = 7 - (x % 8);
+                        let is_transparent = (mask[byte_idx] & (1 << bit_idx)) != 0;
+                        if is_transparent {
+                            let rgba_idx = (y * w as usize + x) * 4;
+                            if rgba_idx + 3 < rgba.len() {
+                                rgba[rgba_idx + 3] = 0;
+                            }
+                        }
+                    }
+                }
+            }
         }
+
+        // Save in cache
+        if let Ok(mut cache) = self.icon_cache.write() {
+            cache.insert((cache_id, cache_entry), (rgba.clone(), w, h));
+        }
+
         if let Some(tx) = &self.update_tx {
             let _ = tx.send(RdpMessage::WindowIcon {
                 window_id,
@@ -323,10 +383,33 @@ impl WindowCallbacks for Rdp {
     #[allow(clippy::not_unsafe_ptr_arg_deref)]
     fn on_window_cached_icon(
         &self,
-        _order_info: *const WINDOW_ORDER_INFO,
-        _cached: *const WINDOW_CACHED_ICON_ORDER,
+        order_info: *const WINDOW_ORDER_INFO,
+        cached: *const WINDOW_CACHED_ICON_ORDER,
     ) -> bool {
-        // Acknowledge without action — the server will send full icons periodically
+        let is_individual = self.config.settings.rail.as_ref().map(|r| r.behavior)
+            == Some(crate::settings::RailBehavior::IndividualWindows);
+        if !is_individual {
+            return true;
+        }
+        if order_info.is_null() || cached.is_null() {
+            return true;
+        }
+
+        let window_id = unsafe { (*order_info).windowId };
+        let cache_id = unsafe { (*cached).cachedIcon.cacheId };
+        let cache_entry = unsafe { (*cached).cachedIcon.cacheEntry };
+
+        if let Ok(cache) = self.icon_cache.read()
+            && let Some((rgba, w, h)) = cache.get(&(cache_id, cache_entry))
+            && let Some(tx) = &self.update_tx
+        {
+            let _ = tx.send(RdpMessage::WindowIcon {
+                window_id,
+                rgba: rgba.clone(),
+                width: *w,
+                height: *h,
+            });
+        }
         true
     }
 }

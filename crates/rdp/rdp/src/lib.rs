@@ -1,5 +1,5 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,12 +26,14 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+//
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 use std::sync::{Arc, RwLock};
 
+type IconCache = std::collections::HashMap<(u32, u32), (Vec<u8>, u32, u32)>;
+
 pub mod callbacks;
-pub mod commands;
 
 mod addins;
 pub mod connection;
@@ -41,7 +43,6 @@ pub mod utils;
 pub mod events;
 pub mod wlog;
 
-pub mod consts;
 pub mod geom;
 pub mod settings;
 
@@ -52,17 +53,20 @@ pub mod messaging;
 pub mod sys;
 
 pub mod channels;
+pub mod consts;
+pub mod integrations;
 
 #[derive(Debug)]
 pub struct Config {
-    settings: settings::RdpSettings,
-    callbacks: callbacks::Callbacks,
-    use_rgba: bool, // Whether to use RGBA pixel format or BGRA
+    pub settings: settings::RdpSettings,
+    pub callbacks: callbacks::Callbacks,
+    pub use_rgba: bool, // Whether to use RGBA pixel format or BGRA
+    pub integrations: integrations::RdpIntegrations,
 }
 
 #[derive(Debug)]
 pub struct Rdp {
-    config: Config,
+    pub config: Config,
     instance: Option<utils::SafePtr<freerdp_sys::freerdp>>,
     update_tx: Option<messaging::Sender>,
     // GDI lock for thread safety
@@ -70,8 +74,9 @@ pub struct Rdp {
     // Note: We need a clonable safe struct for channels
     // because they are initialized after connection is created, on a later step
     channels: Arc<RwLock<channels::RdpChannels>>,
+    pub icon_cache: Arc<RwLock<IconCache>>,
     stop_event: utils::SafeHandle,
-    command_rx: commands::Receiver,
+    command_rx: messaging::CommandReceiver,
     command_event: utils::SafeHandle, // Win32 event to signal new commands
     _pin: std::marker::PhantomPinned, // Do not allow moving
 }
@@ -82,16 +87,18 @@ impl Rdp {
         settings: settings::RdpSettings,
         update_tx: messaging::Sender,
         use_rgba: bool,
-    ) -> (Self, commands::Sender) {
+        channels: Option<Arc<RwLock<channels::RdpChannels>>>,
+        integrations: integrations::RdpIntegrations,
+    ) -> (Self, messaging::CommandSender) {
         let stop_event: freerdp_sys::HANDLE =
             unsafe { freerdp_sys::CreateEventW(std::ptr::null_mut(), 1, 0, std::ptr::null()) };
         let command_event: freerdp_sys::HANDLE =
             unsafe { freerdp_sys::CreateEventW(std::ptr::null_mut(), 0, 0, std::ptr::null()) }; // Auto-reset event
- 
+
         let stop_event = utils::SafeHandle::new(stop_event).unwrap();
         let command_event = utils::SafeHandle::new(command_event).unwrap();
         let (command_tx, command_rx) = flume::unbounded();
- 
+
         let is_rail = settings.rail.is_some();
 
         (
@@ -99,26 +106,22 @@ impl Rdp {
                 config: Config {
                     settings,
                     use_rgba,
-                    // Add window callbacks only if RDP is running in RAIL mode
                     callbacks: if is_rail {
                         callbacks::Callbacks {
-                            window: vec![
-                                callbacks::window_c::Callbacks::Create,
-                                callbacks::window_c::Callbacks::Update,
-                                callbacks::window_c::Callbacks::Delete,
-                                callbacks::window_c::Callbacks::Icon,
-                                callbacks::window_c::Callbacks::CachedIcon,
-                            ],
+                            window: callbacks::window_c::Callbacks::all(),
                             ..callbacks::Callbacks::default()
                         }
                     } else {
                         callbacks::Callbacks::default()
                     },
+                    integrations,
                 },
                 instance: None,
                 update_tx: Some(update_tx),
                 gdi_lock: Arc::new(RwLock::new(())),
-                channels: Arc::new(RwLock::new(channels::RdpChannels::new())),
+                channels: channels
+                    .unwrap_or_else(|| Arc::new(RwLock::new(channels::RdpChannels::new()))),
+                icon_cache: Arc::new(RwLock::new(std::collections::HashMap::new())),
                 stop_event,
                 command_rx,
                 command_event,
@@ -155,6 +158,12 @@ impl Rdp {
     pub fn set_stop_event(stop_event: &crate::utils::SafeHandle) {
         unsafe {
             freerdp_sys::SetEvent(stop_event.as_handle());
+        }
+    }
+
+    pub fn set_command_event(command_event: &crate::utils::SafeHandle) {
+        unsafe {
+            freerdp_sys::SetEvent(command_event.as_handle());
         }
     }
 
@@ -199,5 +208,9 @@ impl Rdp {
 
     pub fn use_rgba(&self) -> bool {
         self.config.use_rgba
+    }
+
+    pub fn update_tx(&self) -> messaging::Sender {
+        self.update_tx.as_ref().unwrap().clone()
     }
 }

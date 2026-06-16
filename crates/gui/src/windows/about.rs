@@ -23,6 +23,8 @@ const ABOUT_LINES: &[&str] = &[
     "Developed by Virtual Cable S.L.",
     "https://www.udsenterprise.com",
     "",
+    "OpenH264 Video Codec provided by Cisco Systems, Inc.",
+    "",
     "This software is provided 'as-is',",
     "without any express or implied warranty.",
     "In no event will the authors be held liable",
@@ -48,7 +50,7 @@ impl AboutState {
     pub fn new(event_loop: &ActiveEventLoop) -> Result<Self> {
         let (dw, dh) = crate::monitor::size(0).unwrap_or((1920, 1080));
         let ww = 460.0;
-        let wh = 500.0;
+        let wh = 530.0;
         let sf = crate::monitor::scale(0) as f32;
         let px = (dw as f32 - ww * sf) / 2.0;
         let py = (dh as f32 - wh * sf) / 2.0;
@@ -56,6 +58,7 @@ impl AboutState {
         let window = Arc::new(
             event_loop.create_window(
                 Window::default_attributes()
+                    .with_visible(false)
                     .with_title("About UDS Launcher")
                     .with_inner_size(winit::dpi::LogicalSize::new(ww, wh))
                     .with_resizable(false)
@@ -262,7 +265,9 @@ impl ApplicationHandler for AboutHandler<'_> {
             WindowEvent::CursorMoved { position, .. } => {
                 if let Some(s) = self.state.as_mut() {
                     s.last_mouse_pos = Some((position.x as f32, position.y as f32));
-                    if s.close_btn.handle_mouse_move(position.x as f32, position.y as f32) {
+                    if s.close_btn
+                        .handle_mouse_move(position.x as f32, position.y as f32)
+                    {
                         s.window.request_redraw();
                     }
                 }
@@ -295,9 +300,9 @@ impl crate::AppHandler {
             WindowEvent::CloseRequested => {
                 self.close_about();
             }
-            WindowEvent::MouseInput {
-                state, button, ..
-            } if state.is_pressed() && button == winit::event::MouseButton::Left => {
+            WindowEvent::MouseInput { state, button, .. }
+                if state.is_pressed() && button == winit::event::MouseButton::Left =>
+            {
                 if let Some(pos) = a.last_mouse_pos
                     && a.close_btn.contains(pos.0, pos.1)
                 {
@@ -306,7 +311,9 @@ impl crate::AppHandler {
             }
             WindowEvent::CursorMoved { position, .. } => {
                 a.last_mouse_pos = Some((position.x as f32, position.y as f32));
-                if a.close_btn.handle_mouse_move(position.x as f32, position.y as f32) {
+                if a.close_btn
+                    .handle_mouse_move(position.x as f32, position.y as f32)
+                {
                     a.window.request_redraw();
                 }
             }

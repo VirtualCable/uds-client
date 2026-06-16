@@ -1,5 +1,5 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,11 +26,12 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+//
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 use freerdp_sys::{BOOL, INT16, UINT8, UINT16, UINT32, rdpContext, rdpInput};
 
-use shared::log::debug;
+use crate::utils::log;
 
 use super::{super::context::OwnerFromCtx, input::InputCallbacks};
 
@@ -70,12 +71,12 @@ impl Callbacks {
 pub unsafe fn set_callbacks(context: *mut rdpContext, overrides: &[Callbacks]) {
     unsafe {
         if context.is_null() {
-            debug!("input_c::set_callbacks: context is null");
+            log::error!("Context is null, cannot override callbacks.");
             return;
         }
         let input = (*context).input;
         if input.is_null() {
-            debug!(" ⁉️ **** Input not initialized, cannot override callbacks.");
+            log::error!("Input not initialized, cannot override callbacks.");
             return;
         }
         for override_cb in overrides {

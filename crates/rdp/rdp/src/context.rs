@@ -1,5 +1,5 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,13 +26,14 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+//
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 use anyhow::Result;
 
 use freerdp_sys::*;
 
-use shared::log::debug;
+use crate::utils::log;
 
 use super::{Rdp, addins::addin};
 use crate::callbacks::entrypoint_c;
@@ -89,7 +90,7 @@ impl RdpContext {
 
 impl Drop for RdpContext {
     fn drop(&mut self) {
-        debug!("****** Dropping RdpContext, cleaning up resources... !!!!!!");
+        log::debug!("****** Dropping RdpContext, cleaning up resources... !!!!!!");
     }
 }
 

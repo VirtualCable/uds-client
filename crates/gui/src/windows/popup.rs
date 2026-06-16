@@ -47,6 +47,7 @@ impl PopupState {
         let window = Arc::new(
             event_loop.create_window(
                 winit::window::Window::default_attributes()
+                    .with_visible(false)
                     .with_title("UDS Alert")
                     .with_inner_size(winit::dpi::LogicalSize::new(ww, wh))
                     .with_resizable(false)

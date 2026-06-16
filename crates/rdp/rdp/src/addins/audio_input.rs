@@ -1,5 +1,5 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,33 +26,40 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+//
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 #![allow(dead_code)]
+use std::sync::Arc;
 use std::thread;
-use std::time::Instant;
 
 use freerdp_sys::{
-    AUDIO_FORMAT, BOOL, BYTE, CHANNEL_RC_OK,
-    IAudinDevice, AudinReceive, UINT, UINT32, WAVE_FORMAT_PCM,
-    PFREERDP_AUDIN_DEVICE_ENTRY_POINTS,
+    AUDIO_FORMAT, AudinReceive, BOOL, BYTE, CHANNEL_RC_OK, IAudinDevice,
+    PFREERDP_AUDIN_DEVICE_ENTRY_POINTS, UINT, UINT32, WAVE_FORMAT_PCM,
 };
 
-use multimedia::audio::{MicCommand, MicHandle};
-use shared::log;
+use crate::context::OwnerFromCtx;
+use crate::integrations::AudioInputIntegration;
+use crate::utils::log;
 
 #[repr(C)]
 pub struct MicPlugin {
     iface: IAudinDevice,
-    format_buf: AUDIO_FORMAT,
+
+    // Custom data
+    rdpcontext: *mut freerdp_sys::rdpContext,
+    format: AUDIO_FORMAT,
     frames_per_packet: u32,
-    mic: Option<MicHandle>,
+    audio_input: Option<Arc<dyn AudioInputIntegration>>,
+    stop_tx: Option<flume::Sender<()>>,
 }
 
 pub unsafe extern "C" fn mic_entry(p_entry_points: PFREERDP_AUDIN_DEVICE_ENTRY_POINTS) -> UINT {
     if p_entry_points.is_null() {
         return 1;
     }
+
+    let rdpcontext = unsafe { (*p_entry_points).rdpcontext };
 
     let mut plugin = Box::new(MicPlugin {
         iface: IAudinDevice {
@@ -62,14 +69,19 @@ pub unsafe extern "C" fn mic_entry(p_entry_points: PFREERDP_AUDIN_DEVICE_ENTRY_P
             Close: Some(close),
             Free: Some(free),
         },
-        format_buf: unsafe { std::mem::zeroed() },
+        rdpcontext,
+        format: unsafe { std::mem::zeroed() },
         frames_per_packet: 0,
-        mic: None,
+        audio_input: None,
+        stop_tx: None,
     });
 
     unsafe {
         if let Some(register_fn) = (*p_entry_points).pRegisterAudinDevice {
-            register_fn((*p_entry_points).plugin, &mut plugin.iface as *mut IAudinDevice);
+            register_fn(
+                (*p_entry_points).plugin,
+                &mut plugin.iface as *mut IAudinDevice,
+            );
         }
     }
 
@@ -102,7 +114,7 @@ unsafe extern "C" fn set_format(
     let mut fmt = unsafe { *format };
     fmt.nBlockAlign = (fmt.wBitsPerSample / 8) * fmt.nChannels;
     fmt.nAvgBytesPerSec = fmt.nSamplesPerSec * fmt.nBlockAlign as u32;
-    plugin.format_buf = fmt;
+    plugin.format = fmt;
     plugin.frames_per_packet = frames_per_packet;
     log::debug!(
         "Mic set_format: sample_rate={}, channels={}, bits={}, fps={}",
@@ -111,6 +123,18 @@ unsafe extern "C" fn set_format(
         fmt.wBitsPerSample,
         frames_per_packet
     );
+
+    if let Some(tx) = plugin
+        .rdpcontext
+        .owner()
+        .and_then(|rdp| rdp.update_tx.as_ref())
+    {
+        let _ = tx.send(crate::messaging::RdpMessage::MicConfig {
+            sample_rate: fmt.nSamplesPerSec,
+            frames_per_packet,
+        });
+    }
+
     CHANNEL_RC_OK
 }
 
@@ -128,38 +152,63 @@ unsafe extern "C" fn open(
         return CHANNEL_RC_OK;
     }
 
+    let rdp = if let Some(rdp) = plugin.rdpcontext.owner() {
+        rdp
+    } else {
+        log::error!("Failed to obtain Rdp owner context in mic open");
+        return 1;
+    };
+
+    let audio_input_integration = if let Some(ref integration) = rdp.config.integrations.audio_input
+    {
+        integration
+    } else {
+        log::warn!("Audio input integration not configured");
+        return CHANNEL_RC_OK;
+    };
+
     let receive_cb = receive.unwrap();
     let user_data_usize = user_data as usize;
     let fps = plugin.frames_per_packet;
-    let sample_rate = plugin.format_buf.nSamplesPerSec;
-    let bits = plugin.format_buf.wBitsPerSample;
-    let mono_fmt = plugin.format_buf;
+    let sample_rate = plugin.format.nSamplesPerSec;
+    let bits = plugin.format.wBitsPerSample;
+    let channels = plugin.format.nChannels;
 
-    let (mic, data_rx) = MicHandle::new(
-        sample_rate,
-        mono_fmt.nChannels,
-        bits,
-        fps,
-    );
+    let data_rx = match audio_input_integration.start(sample_rate, channels, bits, fps) {
+        Ok(rx) => rx,
+        Err(e) => {
+            log::error!("Failed to start audio input integration: {}", e);
+            return 1;
+        }
+    };
 
-    plugin.mic = Some(mic);
+    if let Some(ref tx) = rdp.update_tx {
+        let _ = tx.send(crate::messaging::RdpMessage::MicConfig {
+            sample_rate,
+            frames_per_packet: fps,
+        });
+    }
 
-    let st_format_tag = mono_fmt.wFormatTag;
-    let st_sample_rate = mono_fmt.nSamplesPerSec;
-    let st_bits_sample = mono_fmt.wBitsPerSample;
-    let st_block_align = mono_fmt.nBlockAlign * 2;
-    let st_avg_bps = mono_fmt.nAvgBytesPerSec * 2;
+    plugin.audio_input = Some(audio_input_integration.clone());
+    let (stop_tx, stop_rx) = flume::bounded(1);
+    plugin.stop_tx = Some(stop_tx);
+
+    let format_tag = plugin.format.wFormatTag;
+    let sample_rate_val = plugin.format.nSamplesPerSec;
+    let bits_val = plugin.format.wBitsPerSample;
+    let block_align = plugin.format.nBlockAlign * 2;
+    let avg_bps = plugin.format.nAvgBytesPerSec * 2;
 
     thread::spawn(move || {
         let ud = user_data_usize as *mut std::ffi::c_void;
 
         let stereo_fmt = AUDIO_FORMAT {
-            wFormatTag: st_format_tag,
+            wFormatTag: format_tag,
             nChannels: 2,
-            nSamplesPerSec: st_sample_rate,
-            nAvgBytesPerSec: st_avg_bps,
-            nBlockAlign: st_block_align,
-            wBitsPerSample: st_bits_sample,
+            nSamplesPerSec: sample_rate_val,
+            nAvgBytesPerSec: avg_bps,
+            nBlockAlign: block_align,
+            wBitsPerSample: bits_val,
             cbSize: 0,
             data: std::ptr::null_mut(),
         };
@@ -169,8 +218,8 @@ unsafe extern "C" fn open(
             return;
         }
 
-        let nanos = (fps as u64 * 1_000_000_000) / sample_rate as u64;
-        let duration = std::time::Duration::from_nanos(nanos);
+        let duration =
+            std::time::Duration::from_nanos((fps as u64 * 1_000_000_000) / sample_rate as u64);
         let mono_packet_bytes = fps as usize * (bits as usize / 8);
         let stereo_packet_bytes = mono_packet_bytes * 2;
 
@@ -181,18 +230,10 @@ unsafe extern "C" fn open(
             duration
         );
 
-        let mut next_packet_at = Instant::now() + duration;
-
-        loop {
-            let timeout = next_packet_at.saturating_duration_since(Instant::now());
-
-            let mono_data = match data_rx.recv_timeout(timeout) {
-                Ok(data) => data,
-                Err(flume::RecvTimeoutError::Timeout) => {
-                    vec![0u8; mono_packet_bytes]
-                }
-                Err(flume::RecvTimeoutError::Disconnected) => break,
-            };
+        while let Ok(mono_data) = data_rx.recv() {
+            if stop_rx.try_recv().is_ok() {
+                break;
+            }
 
             let mut stereo_data = Vec::with_capacity(stereo_packet_bytes);
             let bytes_per_sample = (bits as usize) / 8;
@@ -221,21 +262,15 @@ unsafe extern "C" fn open(
                     break;
                 }
             }
-
-            next_packet_at += duration;
-            let now = Instant::now();
-            if next_packet_at <= now {
-                next_packet_at = now + duration;
-            }
         }
         log::info!("Mic reader thread ending");
     });
 
     log::debug!(
         "Mic opened: sample_rate={}, channels={}, bits={}, fps={}",
-        mono_fmt.nSamplesPerSec,
-        mono_fmt.nChannels,
-        mono_fmt.wBitsPerSample,
+        plugin.format.nSamplesPerSec,
+        plugin.format.nChannels,
+        plugin.format.wBitsPerSample,
         fps
     );
     CHANNEL_RC_OK
@@ -244,9 +279,11 @@ unsafe extern "C" fn open(
 unsafe extern "C" fn close(device: *mut IAudinDevice) -> UINT {
     log::debug!("Mic close called");
     let plugin = unsafe { &mut *(device as *mut MicPlugin) };
-    if let Some(mic) = plugin.mic.take() {
-        let _ = mic.tx.send(MicCommand::Stop);
-        drop(mic);
+    if let Some(stop_tx) = plugin.stop_tx.take() {
+        let _ = stop_tx.send(());
+    }
+    if let Some(audio_input) = plugin.audio_input.take() {
+        audio_input.stop();
     }
     CHANNEL_RC_OK
 }
