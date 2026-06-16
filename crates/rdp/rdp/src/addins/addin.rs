@@ -37,9 +37,7 @@ use freerdp_sys::{
     freerdp_register_addin_provider,
 };
 
-use super::audio_input;
-use super::audio_output;
-use super::webcam;
+use super::{audio_input, audio_output, webcam};
 use crate::utils::log;
 
 static FREERDP_ADDIN_PROVIDER: OnceLock<FREERDP_LOAD_CHANNEL_ADDIN_ENTRY_FN> = OnceLock::new();
@@ -48,12 +46,7 @@ fn secure_cstr_from_lpcstr(psz: LPCSTR) -> String {
     if psz.is_null() {
         "<null>".to_string()
     } else {
-        unsafe {
-            std::ffi::CStr::from_ptr(psz)
-                .to_str()
-                .unwrap_or("<invalid utf8>")
-                .to_string()
-        }
+        unsafe { std::ffi::CStr::from_ptr(psz).to_string_lossy().to_string() }
     }
 }
 
@@ -66,23 +59,23 @@ unsafe extern "C" fn custom_addin_provider(
     unsafe {
         let name = secure_cstr_from_lpcstr(psz_name);
         let subsystem = secure_cstr_from_lpcstr(psz_subsystem);
-        let addin_type = secure_cstr_from_lpcstr(psz_type);
-        log::info!(
-            "custom_addin_provider: name='{}', subsystem='{}', type='{}'",
+
+        log::debug!(
+            "Addin provider called with name: '{}', subsystem: '{}', type: '{}', flags: {}",
             name,
             subsystem,
-            addin_type
+            secure_cstr_from_lpcstr(psz_type),
+            dw_flags
         );
 
+        // Setup our custom rdpsnd channel addin if requested, otherwise delegate to the original provider
         if let Some(freerdp_addin_provider) = FREERDP_ADDIN_PROVIDER.get().unwrap() {
             if name.as_bytes() == &RDPSND_CHANNEL_NAME[..RDPSND_CHANNEL_NAME.len() - 1]
                 && subsystem == super::RDPSND_SUBSYSTEM_CUSTOM
             {
                 log::info!("rdpsnd channel addin requested.");
                 Some(std::mem::transmute::<
-                    unsafe extern "C" fn(
-                        *mut freerdp_sys::FREERDP_RDPSND_DEVICE_ENTRY_POINTS,
-                    ) -> UINT,
+                    unsafe extern "C" fn(freerdp_sys::PFREERDP_RDPSND_DEVICE_ENTRY_POINTS) -> UINT,
                     unsafe extern "C" fn(*mut freerdp_sys::tagCHANNEL_ENTRY_POINTS) -> BOOL,
                 >(audio_output::sound_entry))
             } else if name.as_bytes() == &AUDIN_CHANNEL_NAME[..AUDIN_CHANNEL_NAME.len() - 1]
@@ -90,18 +83,19 @@ unsafe extern "C" fn custom_addin_provider(
             {
                 log::info!("audin channel addin requested.");
                 Some(std::mem::transmute::<
-                    unsafe extern "C" fn(
-                        *mut freerdp_sys::FREERDP_AUDIN_DEVICE_ENTRY_POINTS,
-                    ) -> UINT,
+                    unsafe extern "C" fn(freerdp_sys::PFREERDP_AUDIN_DEVICE_ENTRY_POINTS) -> UINT,
                     unsafe extern "C" fn(*mut freerdp_sys::tagCHANNEL_ENTRY_POINTS) -> BOOL,
                 >(audio_input::mic_entry))
-            } else if name == "rdpecam" {
+            } else if name == "rdpecam"
+                && (subsystem == super::WEBCAM_SUBSYSTEM_CUSTOM || psz_subsystem.is_null())
+            {
                 log::info!("rdpecam channel addin requested.");
                 Some(std::mem::transmute::<
                     unsafe extern "C" fn(*mut freerdp_sys::IDRDYNVC_ENTRY_POINTS) -> UINT,
                     unsafe extern "C" fn(*mut freerdp_sys::tagCHANNEL_ENTRY_POINTS) -> BOOL,
                 >(webcam::webcam_entry))
             } else {
+                log::debug!("Delegating to underlying addin provider");
                 freerdp_addin_provider(psz_name, psz_subsystem, psz_type, dw_flags)
             }
         } else {
@@ -110,6 +104,25 @@ unsafe extern "C" fn custom_addin_provider(
         }
     }
 }
+
+// #[allow(clippy::missing_transmute_annotations)]
+// pub fn load_addin(context: *mut freerdp_sys::rdpContext, name: &str) {
+//     let cname = std::ffi::CString::new(name).unwrap();
+//     unsafe {
+//         let entry_ex = freerdp_sys::freerdp_load_channel_addin_entry(
+//             cname.as_ptr(),
+//             std::ptr::null(),
+//             std::ptr::null(),
+//             FREERDP_ADDIN_CHANNEL_DYNAMIC | FREERDP_ADDIN_CHANNEL_ENTRYEX,
+//         );
+//         freerdp_sys::freerdp_channels_client_load_ex(
+//             (*context).channels,
+//             (*context).settings,
+//             std::mem::transmute(entry_ex),
+//             (*context).settings as *mut std::ffi::c_void,
+//         );
+//     }
+// }
 
 pub fn register_channel_addin_loader() {
     FREERDP_ADDIN_PROVIDER
