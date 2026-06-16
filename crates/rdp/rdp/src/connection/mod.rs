@@ -522,6 +522,70 @@ impl Rdp {
     // * The fd must be already connected
     // * Freerdp will close the fd on disconnect (it takes ownership)
 
+    pub fn connection_error(&self) -> Option<String> {
+        let code = if let Some(instance) = self.instance {
+            unsafe {
+                if instance.context.is_null() {
+                    return None;
+                }
+                freerdp_get_last_error(instance.context)
+            }
+        } else {
+            return None;
+        };
+        // Maps FreeRDP ERRCONNECT_* codes to actionable, operator-facing hints for logging.
+        // Returns `None` for unknown codes so the caller can fall back to the raw FreeRDP string.
+        let hint = match code {
+            0x00020001 => Some("Pre-connect failed (check RDP target host/port)"),
+            0x00020004 | 0x00020005 => Some("DNS resolution failed for RDP target host"),
+            0x00020006 => {
+                Some("Could not reach RDP target (host down, port blocked, or wrong port)")
+            }
+            0x00020008 => {
+                Some("TLS handshake with RDP target failed (certificate or protocol mismatch)")
+            }
+            0x00020009 => Some("NLA authentication failed (invalid credentials or domain)"),
+            0x0002000A => Some("Insufficient privileges to log on to RDP target"),
+            0x0002000B => Some("Connection cancelled"),
+            0x0002000C => Some("Security negotiation failed (NLA/TLS/RDP-Security mismatch)"),
+            0x0002000D => Some("Transport error during connection"),
+            0x0002000E => Some("Account password has expired"),
+            0x0002000F => Some("Client certificate has been revoked"),
+            0x00020010 => Some("Kerberos KDC unreachable"),
+            0x00020011 => Some("Account is disabled"),
+            0x00020012 => Some("Password has expired"),
+            0x00020013 => Some("Password must be changed before logon"),
+            0x00020014 => {
+                Some("Invalid credentials (logon failure) — check username, password, or domain")
+            }
+            0x00020015 => Some("Wrong password"),
+            0x00020016 => Some("Access denied by RDP target"),
+            0x00020017 => {
+                Some("Account restricted (logon hours, workstation restriction, or policy)")
+            }
+            0x00020018 => Some("Account is locked out"),
+            0x00020019 => Some("Account has expired"),
+            _ => None,
+        };
+
+        let error_str = unsafe {
+            let error_str = freerdp_get_last_error_string(code);
+            if error_str.is_null() {
+                "Unknown error".to_string()
+            } else {
+                std::ffi::CStr::from_ptr(error_str)
+                    .to_string_lossy()
+                    .into_owned()
+            }
+        };
+        let msg = if let Some(hint) = hint {
+            format!("{} ({}) : {:08X}", hint, error_str, code)
+        } else {
+            format!("{} : {:08X}", error_str, code)
+        };
+        Some(msg)
+    }
+
     /// Connects to the RDP server using the current settings
     pub fn connect(&self) -> Result<()> {
         self.set_rdp_settings();
@@ -529,17 +593,10 @@ impl Rdp {
         unsafe {
             if let Some(instance) = self.instance {
                 if freerdp_connect(instance.as_mut_ptr()) == 0 {
-                    let code = freerdp_get_last_error(instance.context); // Allow panic if context is null
-                    // Get error string
-                    let error_str = freerdp_get_last_error_string(code);
-                    let error_str = if error_str.is_null() {
-                        "Unknown error".to_string()
-                    } else {
-                        std::ffi::CStr::from_ptr(error_str)
-                            .to_string_lossy()
-                            .into_owned()
-                    };
-                    return Err(anyhow::anyhow!("{} : {:08X}", error_str, code));
+                    return Err(anyhow::anyhow!(
+                        self.connection_error()
+                            .unwrap_or_else(|| "Unknown error".to_string())
+                    ));
                 }
                 log::debug!("Connected to RDP server successfully.");
             } else {
