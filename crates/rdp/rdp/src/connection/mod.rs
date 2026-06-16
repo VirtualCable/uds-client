@@ -422,9 +422,9 @@ impl Rdp {
                 let app = rail.app.clone();
                 log::debug!("Enabling RAIL mode in FreeRDP settings");
 
-                let is_html5 = self.config.settings.features.force_software_gdi;
+                let is_composite = rail.behavior == crate::settings::RailBehavior::CompositeGdi;
 
-                if is_html5 {
+                if is_composite {
                     // Restore full RAIL support mask to prevent handshake errors
                     // We'll fix the 'disappearing' problem by making rendering more targeted.
                     freerdp_settings_set_uint32(
@@ -498,7 +498,7 @@ impl Rdp {
                     freerdp_settings_set_bool(settings, key, true.into());
                 }
 
-                if is_html5 {
+                if is_composite {
                     // Dieta estricta en RAIL
                     for key in [
                         FreeRDP_Settings_Keys_Bool_FreeRDP_GfxAVC444,
@@ -634,13 +634,11 @@ impl Rdp {
         // RAIL settings must be set after our optimizations, to ensure their settings are not overwritten by the optimizations
         self.set_rail_settings();
 
-        let is_html5 = self.config.settings.features.force_software_gdi;
-        if is_html5 {
-            unsafe { freerdp_client_start(self.instance.as_ref().unwrap().context) };
-        }
-
         unsafe {
             if let Some(instance) = self.instance {
+                // For FreeRDP 3, freerdp_client_start is generally safe and recommended to call before connect
+                freerdp_client_start(instance.context);
+
                 if freerdp_connect(instance.as_mut_ptr()) == 0 {
                     return Err(anyhow::anyhow!(
                         self.connection_error()
