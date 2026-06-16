@@ -105,6 +105,10 @@ impl Rdp {
                     FreeRDP_Settings_Keys_Bool_FreeRDP_DrawAllowSkipAlpha,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_GfxAVC444v2,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_GfxAVC444,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_GfxProgressive,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_GfxProgressiveV2,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteFxCodec,
+                    FreeRDP_Settings_Keys_Bool_FreeRDP_GfxThinClient,
                 ]
                 .iter()
                 .for_each(|i| {
@@ -112,8 +116,6 @@ impl Rdp {
                 });
                 // Then Trues
                 [
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_GfxThinClient,
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_GfxProgressive,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_AllowCacheWaitingList,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_DesktopResize,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_DynamicResolutionUpdate,
@@ -127,8 +129,6 @@ impl Rdp {
                     // Graphics
                     // TODO: Test this settings on all platforms (gfx related and h264)
                     FreeRDP_Settings_Keys_Bool_FreeRDP_GfxH264,
-                    FreeRDP_Settings_Keys_Bool_FreeRDP_GfxProgressiveV2,
-                    //FreeRDP_Settings_Keys_Bool_FreeRDP_RemoteFxCodec,
                     FreeRDP_Settings_Keys_Bool_FreeRDP_SupportGraphicsPipeline,
                 ]
                 .iter()
