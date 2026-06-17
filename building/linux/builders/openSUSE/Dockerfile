@@ -1,7 +1,7 @@
 FROM opensuse/leap:15.6
 
 RUN zypper refresh && zypper install -y \
-    curl gcc gcc-c++ make pkgconf cmake ninja git \
+    curl gcc gcc-c++ make pkgconf cmake ninja git nasm\
     libopenssl-devel Mesa-libGL-devel glu-devel \
     libXft-devel libXext-devel libXinerama-devel \
     libXcursor-devel libXfixes-devel \

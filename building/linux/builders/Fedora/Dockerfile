@@ -1,7 +1,7 @@
 FROM fedora:42
 
 RUN dnf install -y \
-    curl gcc gcc-c++ make pkgconf-pkg-config cmake \
+    curl gcc gcc-c++ make pkgconf-pkg-config cmake nasm git\
     openssl-devel mesa-libGL-devel mesa-libGLU-devel \
     libXft-devel libXext-devel libXinerama-devel libXcursor-devel libXfixes-devel \
     pango-devel cairo-devel glib2-devel \
