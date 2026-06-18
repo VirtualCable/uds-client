@@ -1,8 +1,7 @@
 use anyhow::{Context, Result};
+use capture_loop::CaptureLoop;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::Duration;
 
 use flume::{Sender, unbounded};
 use nokhwa::{
@@ -11,6 +10,7 @@ use nokhwa::{
 };
 use shared::log;
 
+mod capture_loop;
 mod encoders;
 mod mock;
 pub mod openh264;
@@ -119,7 +119,7 @@ fn select_camera_index() -> nokhwa::utils::CameraIndex {
     nokhwa::utils::CameraIndex::Index(0)
 }
 
-fn init_real_camera(width: u32, height: u32, fps: u32) -> Result<nokhwa::Camera> {
+pub(crate) fn init_real_camera(width: u32, height: u32, fps: u32) -> Result<nokhwa::Camera> {
     let index = select_camera_index();
 
     let requested_none = nokhwa::utils::RequestedFormat::new::<nokhwa::pixel_format::RgbFormat>(
@@ -133,7 +133,7 @@ fn init_real_camera(width: u32, height: u32, fps: u32) -> Result<nokhwa::Camera>
             let res_diff = (f.width() as i32 - width as i32).unsigned_abs()
                 + (f.height() as i32 - height as i32).unsigned_abs();
             let fps_diff = (f.frame_rate() as i32 - fps as i32).unsigned_abs();
-            (res_diff, fps_diff)  // Best match prioritizes resolution closeness, then fps closeness
+            (res_diff, fps_diff) // Best match prioritizes resolution closeness, then fps closeness
         });
 
         if let Some(&closest_format) = best_format {
@@ -151,6 +151,8 @@ fn init_real_camera(width: u32, height: u32, fps: u32) -> Result<nokhwa::Camera>
     Ok(cam)
 }
 
+// Capture loop lives in capture_loop.rs (CaptureLoop::run)
+
 impl WebcamHandle {
     pub fn new() -> Self {
         Self::with_mode(WebcamMode::Raw)
@@ -166,265 +168,16 @@ impl WebcamHandle {
         let samples_requested = Arc::new(Mutex::new(0u32));
         let active_channel = Arc::new(Mutex::new(None::<usize>));
 
-        let frame_out = latest_frame.clone();
-        let cam_mode = mode.clone();
-        let frame_tx_cb = frame_tx.clone();
-        let samples_req = samples_requested.clone();
-        let active_chan = active_channel.clone();
-        thread::spawn(move || {
-            let mut state: Option<StreamState> = None;
-            let mut frame_count: u64 = 0;
-            let mut bytes_count: u64 = 0;
-            let mut last_report = std::time::Instant::now();
-            let mut stream_start_time = std::time::Instant::now();
-            let mut encoder: Box<dyn VideoEncoder> = Box::new(RawEncoder);
-            let mut current_mode: Option<WebcamMode> = None;
-            let mut camera: Option<nokhwa::Camera> = None;
-            let mut is_mock = false;
-
-            loop {
-                // Non-blocking query of commands
-                while let Ok(cmd) = cmd_rx.try_recv() {
-                    match cmd {
-                        WebcamCommand::StartStream { width, height, fps } => {
-                            log::info!("Webcam: StartStream {width}x{height} @ {fps}fps");
-                            current_mode = None;
-                            frame_count = 0;
-                            bytes_count = 0;
-                            last_report = std::time::Instant::now();
-                            stream_start_time = std::time::Instant::now();
-                            state = Some(StreamState {
-                                width,
-                                height,
-                                fps,
-                                format: 2, // Default to MJPEG format ID
-                                color_offset: 0,
-                            });
-
-                            let force_mock = std::env::var("UDSLAUNCHER_CAM_MOCK")
-                                .map(|v| v == "1" || v.to_lowercase() == "true")
-                                .unwrap_or(false);
-                            if force_mock {
-                                log::info!("Mock Webcam forced by environment variable");
-                                is_mock = true;
-                                camera = None;
-                            } else {
-                                match init_real_camera(width, height, fps) {
-                                    Ok(cam) => {
-                                        camera = Some(cam);
-                                        is_mock = false;
-                                        log::info!("Real camera initialized successfully");
-                                    }
-                                    Err(e) => {
-                                        log::warn!(
-                                            "Real camera initialization failed, falling back to mock: {}",
-                                            e
-                                        );
-                                        camera = None;
-                                        is_mock = true;
-                                    }
-                                }
-                            }
-                        }
-                        WebcamCommand::SetFormat {
-                            format: _,
-                            width,
-                            height,
-                            fps,
-                        } => {
-                            log::info!("Webcam: SetFormat {width}x{height} @ {fps}fps");
-                            current_mode = None;
-                            let mut needs_restart = true;
-                            if let Some(ref mut s) = state {
-                                if s.width == width
-                                    && s.height == height
-                                    && s.fps == fps
-                                    && camera.is_some()
-                                {
-                                    needs_restart = false;
-                                    log::info!(
-                                        "Webcam: Format matches current stream, skipping camera restart"
-                                    );
-                                } else {
-                                    s.width = width;
-                                    s.height = height;
-                                    s.fps = fps;
-                                }
-                            }
-
-                            if !is_mock && needs_restart {
-                                if let Some(ref mut cam) = camera {
-                                    let _ = cam.stop_stream();
-                                }
-                                match init_real_camera(width, height, fps) {
-                                    Ok(cam) => {
-                                        camera = Some(cam);
-                                        is_mock = false;
-                                    }
-                                    Err(e) => {
-                                        log::warn!(
-                                            "Failed to re-initialize camera for new format, falling back to mock: {e}"
-                                        );
-                                        camera = None;
-                                        is_mock = true;
-                                    }
-                                }
-                            }
-                        }
-                        WebcamCommand::StopStream => {
-                            log::info!("Webcam: StopStream");
-                            if let Some(mut cam) = camera.take() {
-                                let _ = cam.stop_stream();
-                            }
-                            state = None;
-                            *frame_out.lock().unwrap() = None;
-                        }
-                        WebcamCommand::Close => {
-                            log::info!("Webcam: Close");
-                            if let Some(mut cam) = camera.take() {
-                                let _ = cam.stop_stream();
-                            }
-                            return;
-                        }
-                    }
-                }
-
-                if let Some(ref mut s) = state {
-                    log::trace!(
-                        "Webcam capture loop iteration: frame_count = {}",
-                        frame_count
-                    );
-                    let (rgb, src_w, src_h) = if is_mock {
-                        (generate_mock_frame(s), s.width, s.height)
-                    } else if let Some(ref mut cam) = camera {
-                        log::trace!("Calling cam.frame()...");
-                        match cam.frame() {
-                            Ok(frame) => {
-                                log::trace!("cam.frame() returned Ok");
-                                match frame.decode_image::<nokhwa::pixel_format::RgbFormat>() {
-                                    Ok(img) => {
-                                        let w = img.width();
-                                        let h = img.height();
-                                        (img.into_raw(), w, h)
-                                    }
-                                    Err(e) => {
-                                        log::error!("Failed to decode camera frame: {e}");
-                                        (generate_mock_frame(s), s.width, s.height)
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                log::error!("Failed to capture camera frame: {e}");
-                                (generate_mock_frame(s), s.width, s.height)
-                            }
-                        }
-                    } else {
-                        (generate_mock_frame(s), s.width, s.height)
-                    };
-
-                    let (dst_w, dst_h) = calculate_scaled_dimensions(s.width, s.height);
-                    let rgb_scaled = resize_rgb(&rgb, src_w, src_h, dst_w, dst_h);
-
-                    let mode_val = *cam_mode.lock().unwrap();
-                    if current_mode != Some(mode_val) {
-                        encoder = match mode_val {
-                            WebcamMode::MJPEG => Box::new(MjpegEncoder::new()),
-                            WebcamMode::YUY2 => Box::new(Yuy2Encoder::new()),
-                            WebcamMode::H264 => match encoders::H264Encoder::new() {
-                                Ok(enc) => Box::new(enc),
-                                Err(e) => {
-                                    log::error!(
-                                        "Failed to create H264Encoder, falling back to MJPEG: {e}"
-                                    );
-                                    Box::new(MjpegEncoder::new())
-                                }
-                            },
-                            WebcamMode::Raw => Box::new(RawEncoder),
-                        };
-                        let q = WEBCAM_QUALITY.load(Ordering::Relaxed);
-                        let _ = encoder.init(dst_w, dst_h, s.fps, q);
-                        current_mode = Some(mode_val);
-                        log::info!(
-                            "Webcam encoder initialized: Mode={:?}, Resolution={}x{}, FPS={}",
-                            mode_val,
-                            dst_w,
-                            dst_h,
-                            s.fps
-                        );
-                    }
-
-                    let output = match encoder.encode(&rgb_scaled) {
-                        Ok(out) => out,
-                        Err(e) => {
-                            log::error!("Webcam encoder error: {e}");
-                            rgb_scaled.clone()
-                        }
-                    };
-
-                    *frame_out.lock().unwrap() = Some(output.clone());
-                    frame_count += 1;
-                    bytes_count += output.len() as u64;
-
-                    let mut reqs = samples_req.lock().unwrap();
-                    if *reqs > 0
-                        && let (Some(chan), Some(tx)) = (
-                            *active_chan.lock().unwrap(),
-                            frame_tx_cb.lock().unwrap().as_ref(),
-                        )
-                    {
-                        *reqs -= 1;
-                        let _ = tx.send(WebcamFrame {
-                            data: output,
-                            channel_ptr: chan,
-                        });
-                    }
-
-                    let elapsed_total = stream_start_time.elapsed().as_secs();
-                    let report_interval = if elapsed_total <= 60 {
-                        5
-                    } else if elapsed_total <= 120 {
-                        15
-                    } else if elapsed_total <= 240 {
-                        30
-                    } else {
-                        60
-                    };
-
-                    let duration = last_report.elapsed().as_secs_f64();
-                    if duration >= report_interval as f64 {
-                        if frame_count > 0 {
-                            let fps = frame_count as f64 / duration;
-                            let bytes_per_sec = bytes_count as f64 / duration;
-                            let bytes_per_frame = bytes_count as f64 / frame_count as f64;
-                            let mode_name = match current_mode {
-                                Some(WebcamMode::MJPEG) => "MJPEG",
-                                Some(WebcamMode::H264) => "H264",
-                                Some(WebcamMode::YUY2) => "YUY2",
-                                Some(WebcamMode::Raw) => "Raw",
-                                None => "None",
-                            };
-                            log::debug!(
-                                "Webcam [{}]: {} frames in {:.1}s (~{:.1} fps), {:.0} bytes/s, {:.0} bytes/frame",
-                                mode_name,
-                                frame_count,
-                                duration,
-                                fps,
-                                bytes_per_sec,
-                                bytes_per_frame,
-                            );
-                        }
-                        frame_count = 0;
-                        bytes_count = 0;
-                        last_report = std::time::Instant::now();
-                    }
-
-                    let interval = Duration::from_secs_f64(1.0 / s.fps.max(1) as f64);
-                    thread::sleep(interval);
-                } else {
-                    thread::sleep(Duration::from_millis(50));
-                }
-            }
-        });
+        // Creates the capture loop thread that will handle webcam streaming and commands.
+        CaptureLoop::new(
+            cmd_rx,
+            latest_frame.clone(),
+            mode.clone(),
+            frame_tx.clone(),
+            samples_requested.clone(),
+            active_channel.clone(),
+        )
+        .run();
 
         WebcamHandle {
             cmd_tx,
@@ -553,7 +306,7 @@ impl Drop for WebcamHandle {
     }
 }
 
-fn calculate_scaled_dimensions(w: u32, h: u32) -> (u32, u32) {
+pub(crate) fn calculate_scaled_dimensions(w: u32, h: u32) -> (u32, u32) {
     let max_w = WEBCAM_MAX_WIDTH.load(Ordering::Relaxed);
     let max_h = WEBCAM_MAX_HEIGHT.load(Ordering::Relaxed);
 
@@ -577,7 +330,7 @@ fn calculate_scaled_dimensions(w: u32, h: u32) -> (u32, u32) {
     (target_w.max(2), target_h.max(2))
 }
 
-fn resize_rgb(src: &[u8], src_w: u32, src_h: u32, dst_w: u32, dst_h: u32) -> Vec<u8> {
+pub(crate) fn resize_rgb(src: &[u8], src_w: u32, src_h: u32, dst_w: u32, dst_h: u32) -> Vec<u8> {
     if src_w == dst_w && src_h == dst_h {
         return src.to_vec();
     }
@@ -637,6 +390,7 @@ pub fn compatible_formats() -> Vec<CameraFormat> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     #[test]
     fn webcam_handle_creation() {
