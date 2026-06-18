@@ -1,6 +1,7 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
+// Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
 use std::sync::{Arc, RwLock};
 use tiny_skia::{Color, FillRule, Paint, PathBuilder, Pixmap, Stroke, Transform};

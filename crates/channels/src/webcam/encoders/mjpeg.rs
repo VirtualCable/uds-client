@@ -1,4 +1,10 @@
+// BSD 3-Clause License
+// Copyright (c) 2026, Virtual Cable S.L.
+// All rights reserved.
+// Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 use super::VideoEncoder;
+use anyhow::{Result, bail};
 use shared::log;
 use turbojpeg::{Image, OutputBuf, PixelFormat};
 
@@ -25,7 +31,7 @@ impl Default for MjpegEncoder {
 }
 
 impl VideoEncoder for MjpegEncoder {
-    fn init(&mut self, width: u32, height: u32, _fps: u32, quality: u32) -> Result<(), String> {
+    fn init(&mut self, width: u32, height: u32, _fps: u32, quality: u32) -> Result<()> {
         self.width = width;
         self.height = height;
         if self.compressor.is_none() {
@@ -34,7 +40,7 @@ impl VideoEncoder for MjpegEncoder {
                     let _ = c.set_quality(quality as i32);
                     self.compressor = Some(c);
                 }
-                Err(e) => return Err(format!("Failed to create turbojpeg compressor: {e}")),
+                Err(e) => bail!("Failed to create turbojpeg compressor: {e}"),
             }
         } else if let Some(ref mut c) = self.compressor {
             let _ = c.set_quality(quality as i32);
@@ -42,7 +48,7 @@ impl VideoEncoder for MjpegEncoder {
         Ok(())
     }
 
-    fn encode(&mut self, rgb: &[u8]) -> Result<Vec<u8>, String> {
+    fn encode(&mut self, rgb: &[u8]) -> Result<Vec<u8>> {
         if let Some(ref mut compressor) = self.compressor {
             let image = Image {
                 pixels: rgb,

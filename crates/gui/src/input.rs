@@ -1,3 +1,8 @@
+// BSD 3-Clause License
+// Copyright (c) 2026, Virtual Cable S.L.
+// All rights reserved.
+// Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 use std::sync::atomic::Ordering;
 
 use winit::event::WindowEvent;
@@ -312,9 +317,9 @@ impl AppHandler {
             if is_minimized != rw.was_minimized {
                 if let Some(ref channel) = rail.channel {
                     let cmd = if is_minimized {
-                        rdp_ffi::consts::SC_MINIMIZE as u16
+                        rdp_ffi::windows_types::SystemCommand::Minimize as u16
                     } else {
-                        rdp_ffi::consts::SC_RESTORE as u16
+                        rdp_ffi::windows_types::SystemCommand::Restore as u16
                     };
                     channel.send_system_command(rail_id, cmd);
                 }
@@ -363,7 +368,7 @@ impl AppHandler {
 
         match event {
             WindowEvent::CloseRequested => {
-                rail_channel.send_system_command(rail_id, rdp_ffi::consts::SC_CLOSE as u16);
+                rail_channel.send_system_command(rail_id, rdp_ffi::windows_types::SystemCommand::Close as u16);
             }
             WindowEvent::Occluded(_) => {
                 // Occluded unsupported on Windows/Android/Wayland/Orbital.

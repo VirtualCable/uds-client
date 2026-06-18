@@ -12,3 +12,4 @@ target/
 /local_dlls
 *.log
 /profile.*
+/graphify*

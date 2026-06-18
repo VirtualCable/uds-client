@@ -1,4 +1,8 @@
-// Handshake constants
+// BSD 3-Clause License
+// Copyright (c) 2026, Virtual Cable S.L.
+// All rights reserved.
+// Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 pub const HANDSHAKE_V2_SIGNATURE: &[u8; 8] = b"\x5AMGB\xA5\x02\x00\x00";
 pub const HANDSHAKE_TIMEOUT_MS: u64 = 200;
 pub const MAX_HANDSHAKE_RETRIES: u8 = 3; // After this, we can block the IP for a while
