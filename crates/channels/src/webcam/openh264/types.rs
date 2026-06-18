@@ -233,7 +233,12 @@ impl EncoderConfig {
 // Safe encoder wrapper
 // ---------------------------------------------------------------------------
 
-// The underlying OpenH264 encoder is thread-safe.
+// `Send`  is sound: `Encoder` owns the underlying C encoder exclusively.
+// `Sync`  is sound: all mutation goes through `&mut self` (no interior
+// mutability), so a shared `&Encoder` cannot trigger data races. The only
+// `&self` method is `as_ptr()` which returns a raw pointer; concurrent
+// mutation through that pointer would require `unsafe` and is the caller's
+// responsibility.
 unsafe impl Send for Encoder {}
 unsafe impl Sync for Encoder {}
 
@@ -389,11 +394,15 @@ impl Encoder {
 
 impl Drop for Encoder {
     fn drop(&mut self) {
-        // SAFETY: The encoder pointer is valid and the vtable is accessible.
         unsafe {
-            (self.vtbl().uninitialize)(self.ptr.as_ptr());
+            let ptr = self.ptr.as_ptr();
+            // Only call uninitialize if the vtable looks valid (defensive check
+            // for misuse of the unsafe `from_raw` constructor).
+            if !(*ptr).vtbl.is_null() {
+                (self.vtbl().uninitialize)(ptr);
+            }
             if let Some(destroy) = DESTROY_ENCODER.get() {
-                destroy(self.ptr.as_ptr());
+                destroy(ptr);
             }
         }
     }

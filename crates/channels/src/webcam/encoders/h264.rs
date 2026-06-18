@@ -191,11 +191,16 @@ impl VideoEncoder for H264Encoder {
             .map_err(|e| format!("OpenH264 encode_frame failed: {e}"))?;
 
         unsafe {
+            // Safety: clamp FFI return values to prevent OOB on negative/bogus data.
+            let num_layers = (bs_info.i_layer_num.max(0) as usize).min(128);
+            let nal_cap = 1024;
+
             // Calculate total size from layers
             let mut total_size = 0;
-            for layer_idx in 0..bs_info.i_layer_num as usize {
+            for layer_idx in 0..num_layers {
                 let layer = &bs_info.s_layer_info[layer_idx];
-                for nal_idx in 0..layer.i_nal_count as usize {
+                let num_nals = (layer.i_nal_count.max(0) as usize).min(nal_cap);
+                for nal_idx in 0..num_nals {
                     if !layer.p_nal_length_in_byte.is_null() {
                         total_size += *layer.p_nal_length_in_byte.add(nal_idx) as usize;
                     }
@@ -208,10 +213,11 @@ impl VideoEncoder for H264Encoder {
 
             // Gather all layer bitstream buffers
             let mut encoded_data = Vec::with_capacity(total_size);
-            for layer_idx in 0..bs_info.i_layer_num as usize {
+            for layer_idx in 0..num_layers {
                 let layer = &bs_info.s_layer_info[layer_idx];
+                let num_nals = (layer.i_nal_count.max(0) as usize).min(nal_cap);
                 let mut layer_size = 0;
-                for nal_idx in 0..layer.i_nal_count as usize {
+                for nal_idx in 0..num_nals {
                     if !layer.p_nal_length_in_byte.is_null() {
                         let nal_len = *layer.p_nal_length_in_byte.add(nal_idx) as usize;
                         layer_size += nal_len;
