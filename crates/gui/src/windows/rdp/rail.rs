@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 
 use rdp_ffi::messaging::RdpMessage;
+use rdp_ffi::windows_types::{ExtendedWindowStyle, ShowWindowCmd};
 use shared::log;
 
 #[allow(dead_code)]
@@ -77,9 +78,9 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
             pos,
             size,
         } => {
-            if ext_style.is_some_and(|s| (s & 0x20) != 0) {
+            if ext_style.is_some_and(|s| s.contains(ExtendedWindowStyle::TRANSPARENT)) {
                 log::debug!(
-                    "Skipping RAIL window {} with style 0x20 (probably a menu)",
+                    "Skipping RAIL window {} with WS_EX_TRANSPARENT (probably a menu)",
                     window_id
                 );
                 return RdpActionResult::Continue;
@@ -101,10 +102,17 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
             }
 
             if exists {
-                let is_minimized =
-                    show_state.is_some_and(|s| s == 2 || s == 6 || s == 7 || s == 11);
+                let is_minimized = show_state.is_some_and(|s| {
+                    matches!(
+                        s,
+                        ShowWindowCmd::ShowMinimized
+                            | ShowWindowCmd::Minimize
+                            | ShowWindowCmd::ShowMinNoActive
+                            | ShowWindowCmd::ForceMinimize
+                    )
+                });
                 if let Some(s) = show_state {
-                    let hidden = s == 0 || (is_off && !is_minimized);
+                    let hidden = s == ShowWindowCmd::Hide || (is_off && !is_minimized);
                     // Track server-side minimized state so offscreen updates don't undo it
                     if let Some(rw) = rail.windows.get_mut(&window_id) {
                         rw.server_minimized = is_minimized;
@@ -113,7 +121,13 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                         .push(RailAction::SetVisible(window_id, !hidden));
                     if is_minimized {
                         rail.actions.push(RailAction::SetMinimized(window_id, true));
-                    } else if s == 1 || s == 3 || s == 5 || s == 9 {
+                    } else if matches!(
+                        s,
+                        ShowWindowCmd::ShowNormal
+                            | ShowWindowCmd::ShowMaximized
+                            | ShowWindowCmd::Show
+                            | ShowWindowCmd::Restore
+                    ) {
                         rail.actions
                             .push(RailAction::SetMinimized(window_id, false));
                     }
@@ -181,13 +195,20 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                         (w as f64 * sf / msf) as u32,
                         (h as f64 * sf / msf) as u32,
                     );
-                    let is_tool = ext_style.is_some_and(|s| (s & 0x80) != 0);
+                    let is_tool = ext_style.is_some_and(|s| s.contains(ExtendedWindowStyle::TOOL_WINDOW));
                     let has_owner = owner_id.is_some() && owner_id != Some(0);
                     let show_taskbar = taskbar_button.unwrap_or(false) || (!is_tool && !has_owner);
 
-                    let is_minimized =
-                        show_state.is_some_and(|s| s == 2 || s == 6 || s == 7 || s == 11);
-                    let hidden = show_state == Some(0) || (is_off && !is_minimized);
+                    let is_minimized = show_state.is_some_and(|s| {
+                        matches!(
+                            s,
+                            ShowWindowCmd::ShowMinimized
+                                | ShowWindowCmd::Minimize
+                                | ShowWindowCmd::ShowMinNoActive
+                                | ShowWindowCmd::ForceMinimize
+                        )
+                    });
+                    let hidden = show_state == Some(ShowWindowCmd::Hide) || (is_off && !is_minimized);
 
                     rail.actions.push(RailAction::Create(
                         window_id,
