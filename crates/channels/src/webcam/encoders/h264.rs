@@ -3,12 +3,13 @@
 // All rights reserved.
 
 use crate::webcam::encoders::VideoEncoder;
-use crate::webcam::openh264::{self, ISVCEncoder, SEncParamBase, SFrameBSInfo, SSourcePicture};
+use crate::webcam::openh264::{self, Encoder, EncoderConfig, SFrameBSInfo, SSourcePicture};
 use shared::log;
+use std::ffi::c_void;
 use std::ptr;
 
 pub struct H264Encoder {
-    encoder: *mut ISVCEncoder,
+    encoder: Option<Encoder>,
     width: u32,
     height: u32,
     fps: u32,
@@ -20,14 +21,14 @@ pub struct H264Encoder {
     sps_pps: Vec<u8>,
 }
 
-// Ensure the encoder can be safely moved across thread boundaries
+// The underlying openh264::Encoder already implements Send+Sync.
 unsafe impl Send for H264Encoder {}
 
 impl H264Encoder {
     pub fn new() -> Result<Self, String> {
         let encoder = openh264::create_encoder()?;
         Ok(H264Encoder {
-            encoder,
+            encoder: Some(encoder),
             width: 0,
             height: 0,
             fps: 0,
@@ -41,24 +42,14 @@ impl H264Encoder {
     }
 }
 
-impl Drop for H264Encoder {
-    fn drop(&mut self) {
-        if !self.encoder.is_null() {
-            unsafe {
-                let uninit_fn = (*(*self.encoder).vtbl).uninitialize;
-                let _ = uninit_fn(self.encoder);
-                openh264::destroy_encoder(self.encoder);
-            }
-            self.encoder = ptr::null_mut();
-        }
-    }
-}
+// No need for a custom Drop — `Encoder` handles uninitialize + destroy automatically.
 
 impl VideoEncoder for H264Encoder {
     fn init(&mut self, width: u32, height: u32, fps: u32, quality: u32) -> Result<(), String> {
-        if self.encoder.is_null() {
-            return Err("Encoder is not created".to_string());
-        }
+        let encoder = self
+            .encoder
+            .as_mut()
+            .ok_or_else(|| "Encoder is not created".to_string())?;
 
         self.width = width;
         self.height = height;
@@ -77,8 +68,7 @@ impl VideoEncoder for H264Encoder {
         self.u_plane = vec![128u8; uv_len];
         self.v_plane = vec![128u8; uv_len];
 
-        // Prepare configuration base parameters
-        // target bitrate calculation based on width * height * fps, scaled by quality (1-100)
+        // Prepare configuration using the safe EncoderConfig builder
         let q = if quality == 0 {
             80
         } else {
@@ -87,47 +77,27 @@ impl VideoEncoder for H264Encoder {
         let base_bitrate = (width * height * fps * 2 / 10) as f64;
         let target_bitrate = (base_bitrate * (q as f64 / 100.0)) as i32;
 
-        let params = SEncParamBase {
-            f_usage_type: 0, // CAMERA_VIDEO_REAL_TIME
-            i_pic_width: width as i32,
-            i_pic_height: height as i32,
-            i_target_bitrate: target_bitrate,
-            i_rc_mode: -1, // RC_OFF_MODE
-            f_max_frame_rate: fps as f32,
-        };
+        let config = EncoderConfig::new(width, height, fps as f32)
+            .with_bitrate(target_bitrate)
+            .with_rc_mode(-1); // RC_OFF_MODE
 
+        encoder
+            .initialize(&config)
+            .map_err(|e| format!("OpenH264 initialize failed: {e}"))?;
+
+        // SAFETY: The option values are correctly typed for each option ID.
         unsafe {
-            let init_fn = (*(*self.encoder).vtbl).initialize;
-            let ret = init_fn(self.encoder, &params);
-            if ret != 0 {
-                return Err(format!("OpenH264 initialize failed with error code: {ret}"));
-            }
-
-            let set_option_fn = (*(*self.encoder).vtbl).set_option;
-
             // ENCODER_OPTION_DATAFORMAT = 0, videoFormatI420 = 23
             let mut video_format = 23i32;
-            let _ret_format = set_option_fn(
-                self.encoder,
-                0,
-                &mut video_format as *mut i32 as *mut std::ffi::c_void,
-            );
+            let _ = encoder.set_option(0, &mut video_format as *mut i32 as *mut c_void);
 
             // ENCODER_OPTION_TRACE_LEVEL = 19
             let mut log_level = 2i32;
-            let _ret_level = set_option_fn(
-                self.encoder,
-                19,
-                &mut log_level as *mut i32 as *mut std::ffi::c_void,
-            );
+            let _ = encoder.set_option(19, &mut log_level as *mut i32 as *mut c_void);
 
             // ENCODER_OPTION_TRACE_CALLBACK = 20
             let mut callback: openh264::WelsTraceCallback = openh264_trace_callback;
-            let _ret_callback = set_option_fn(
-                self.encoder,
-                20,
-                &mut callback as *mut _ as *mut std::ffi::c_void,
-            );
+            let _ = encoder.set_option(20, &mut callback as *mut _ as *mut c_void);
         }
 
         log::info!(
@@ -140,9 +110,10 @@ impl VideoEncoder for H264Encoder {
     }
 
     fn encode(&mut self, rgb: &[u8]) -> Result<Vec<u8>, String> {
-        if self.encoder.is_null() {
-            return Err("Encoder is not initialized".to_string());
-        }
+        let encoder = self
+            .encoder
+            .as_mut()
+            .ok_or_else(|| "Encoder is not initialized".to_string())?;
 
         let width = self.width as usize;
         let height = self.height as usize;
@@ -207,20 +178,19 @@ impl VideoEncoder for H264Encoder {
             ui_time_stamp: 0,
         };
 
+        // Force an IDR (keyframe) at the start and periodically every (fps * 2) frames
+        let keyframe_interval = (self.fps * 2).max(1) as u64;
+        if !self.has_sent_idr || self.frame_index.is_multiple_of(keyframe_interval) {
+            let _ = encoder
+                .force_intra_frame()
+                .map_err(|e| format!("OpenH264 force_intra_frame failed: {e}"));
+        }
+
+        encoder
+            .encode_frame(&src_pic, &mut bs_info)
+            .map_err(|e| format!("OpenH264 encode_frame failed: {e}"))?;
+
         unsafe {
-            // Force an IDR (keyframe) at the start and periodically every (fps * 2) frames
-            let keyframe_interval = (self.fps * 2).max(1) as u64;
-            if !self.has_sent_idr || self.frame_index.is_multiple_of(keyframe_interval) {
-                let force_intra_fn = (*(*self.encoder).vtbl).force_intra_frame;
-                let _ = force_intra_fn(self.encoder, true);
-            }
-
-            let encode_fn = (*(*self.encoder).vtbl).encode_frame;
-            let ret = encode_fn(self.encoder, &src_pic, &mut bs_info);
-            if ret != 0 {
-                return Err(format!("OpenH264 encode_frame failed with code: {ret}"));
-            }
-
             // Calculate total size from layers
             let mut total_size = 0;
             for layer_idx in 0..bs_info.i_layer_num as usize {
