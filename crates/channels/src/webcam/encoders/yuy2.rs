@@ -1,4 +1,5 @@
 use super::VideoEncoder;
+use anyhow::Result;
 
 pub struct Yuy2Encoder {
     width: u32,
@@ -21,13 +22,13 @@ impl Default for Yuy2Encoder {
 }
 
 impl VideoEncoder for Yuy2Encoder {
-    fn init(&mut self, width: u32, height: u32, _fps: u32, _quality: u32) -> Result<(), String> {
+    fn init(&mut self, width: u32, height: u32, _fps: u32, _quality: u32) -> Result<()> {
         self.width = width;
         self.height = height;
         Ok(())
     }
 
-    fn encode(&mut self, rgb: &[u8]) -> Result<Vec<u8>, String> {
+    fn encode(&mut self, rgb: &[u8]) -> Result<Vec<u8>> {
         let width = self.width;
         let height = self.height;
         let num_pixels = (width * height) as usize;

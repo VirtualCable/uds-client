@@ -4,6 +4,7 @@
 
 use crate::webcam::encoders::VideoEncoder;
 use crate::webcam::openh264::{self, Encoder, EncoderConfig, SFrameBSInfo, SSourcePicture};
+use anyhow::{Context, Result, bail};
 use shared::log;
 use std::ffi::c_void;
 use std::ptr;
@@ -25,7 +26,7 @@ pub struct H264Encoder {
 unsafe impl Send for H264Encoder {}
 
 impl H264Encoder {
-    pub fn new() -> Result<Self, String> {
+    pub fn new() -> Result<Self> {
         let encoder = openh264::create_encoder()?;
         Ok(H264Encoder {
             encoder: Some(encoder),
@@ -45,11 +46,8 @@ impl H264Encoder {
 // No need for a custom Drop — `Encoder` handles uninitialize + destroy automatically.
 
 impl VideoEncoder for H264Encoder {
-    fn init(&mut self, width: u32, height: u32, fps: u32, quality: u32) -> Result<(), String> {
-        let encoder = self
-            .encoder
-            .as_mut()
-            .ok_or_else(|| "Encoder is not created".to_string())?;
+    fn init(&mut self, width: u32, height: u32, fps: u32, quality: u32) -> Result<()> {
+        let encoder = self.encoder.as_mut().context("Encoder is not created")?;
 
         self.width = width;
         self.height = height;
@@ -83,7 +81,7 @@ impl VideoEncoder for H264Encoder {
 
         encoder
             .initialize(&config)
-            .map_err(|e| format!("OpenH264 initialize failed: {e}"))?;
+            .context("OpenH264 initialize failed")?;
 
         // SAFETY: The option values are correctly typed for each option ID.
         unsafe {
@@ -109,17 +107,17 @@ impl VideoEncoder for H264Encoder {
         Ok(())
     }
 
-    fn encode(&mut self, rgb: &[u8]) -> Result<Vec<u8>, String> {
+    fn encode(&mut self, rgb: &[u8]) -> Result<Vec<u8>> {
         let encoder = self
             .encoder
             .as_mut()
-            .ok_or_else(|| "Encoder is not initialized".to_string())?;
+            .context("Encoder is not initialized")?;
 
         let width = self.width as usize;
         let height = self.height as usize;
 
         if rgb.len() < width * height * 3 {
-            return Err("RGB buffer is too small for the configured dimensions".to_string());
+            bail!("RGB buffer is too small for the configured dimensions");
         }
 
         // Perform fast, cache-friendly integer-based RGB24 to YUV420P (I420) conversion.
@@ -183,12 +181,12 @@ impl VideoEncoder for H264Encoder {
         if !self.has_sent_idr || self.frame_index.is_multiple_of(keyframe_interval) {
             let _ = encoder
                 .force_intra_frame()
-                .map_err(|e| format!("OpenH264 force_intra_frame failed: {e}"));
+                .context("OpenH264 force_intra_frame failed");
         }
 
         encoder
             .encode_frame(&src_pic, &mut bs_info)
-            .map_err(|e| format!("OpenH264 encode_frame failed: {e}"))?;
+            .context("OpenH264 encode_frame failed")?;
 
         unsafe {
             // Safety: clamp FFI return values to prevent OOB on negative/bogus data.

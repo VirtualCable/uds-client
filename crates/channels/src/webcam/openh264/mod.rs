@@ -4,6 +4,7 @@
 
 pub mod types;
 
+use anyhow::{Result, anyhow};
 use shared::log;
 use std::path::PathBuf;
 use std::sync::Once;
@@ -45,7 +46,7 @@ fn get_executable_dir() -> Option<PathBuf> {
         .and_then(|p| p.parent().map(|p| p.to_path_buf()))
 }
 
-fn init_openh264_library() -> Result<(), String> {
+fn init_openh264_library() -> Result<()> {
     let mut possible_paths = Vec::new();
 
     if let Some(exe_dir) = get_executable_dir() {
@@ -120,7 +121,7 @@ fn init_openh264_library() -> Result<(), String> {
         if let Some(lib) = loaded {
             lib
         } else {
-            return Err(format!(
+            return Err(anyhow!(
                 "Could not find or load OpenH264 library in path or system: {:?}",
                 last_err
             ));
@@ -131,10 +132,10 @@ fn init_openh264_library() -> Result<(), String> {
     unsafe {
         let create_fn: libloading::Symbol<WelsCreateSVCEncoderFn> = lib
             .get(b"WelsCreateSVCEncoder")
-            .map_err(|e| format!("Failed to find symbol WelsCreateSVCEncoder: {e}"))?;
+            .map_err(|e| anyhow!("Failed to find symbol WelsCreateSVCEncoder: {e}"))?;
         let destroy_fn: libloading::Symbol<WelsDestroySVCEncoderFn> = lib
             .get(b"WelsDestroySVCEncoder")
-            .map_err(|e| format!("Failed to find symbol WelsDestroySVCEncoder: {e}"))?;
+            .map_err(|e| anyhow!("Failed to find symbol WelsDestroySVCEncoder: {e}"))?;
 
         CREATE_ENCODER_FN = Some(*create_fn);
         set_destroy_fn(*destroy_fn);
@@ -144,9 +145,9 @@ fn init_openh264_library() -> Result<(), String> {
     Ok(())
 }
 
-pub fn create_encoder() -> Result<Encoder, String> {
+pub fn create_encoder() -> Result<Encoder> {
     if !h264_available() {
-        return Err("OpenH264 library is not available".to_string());
+        return Err(anyhow!("OpenH264 library is not available"));
     }
 
     unsafe {
@@ -154,11 +155,11 @@ pub fn create_encoder() -> Result<Encoder, String> {
             let mut encoder: *mut ISVCEncoder = std::ptr::null_mut();
             let res = create_fn(&mut encoder);
             if res != 0 || encoder.is_null() {
-                return Err(format!("WelsCreateSVCEncoder failed with code: {res}"));
+                return Err(anyhow!("WelsCreateSVCEncoder failed with code: {res}"));
             }
             Ok(Encoder::from_raw(encoder))
         } else {
-            Err("WelsCreateSVCEncoder function pointer is missing".to_string())
+            Err(anyhow!("WelsCreateSVCEncoder function pointer is missing"))
         }
     }
 }

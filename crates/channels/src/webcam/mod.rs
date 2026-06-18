@@ -1,3 +1,4 @@
+use anyhow::{Context, Result};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -118,14 +119,13 @@ fn select_camera_index() -> nokhwa::utils::CameraIndex {
     nokhwa::utils::CameraIndex::Index(0)
 }
 
-fn init_real_camera(width: u32, height: u32, fps: u32) -> Result<nokhwa::Camera, String> {
+fn init_real_camera(width: u32, height: u32, fps: u32) -> Result<nokhwa::Camera> {
     let index = select_camera_index();
 
     let requested_none = nokhwa::utils::RequestedFormat::new::<nokhwa::pixel_format::RgbFormat>(
         nokhwa::utils::RequestedFormatType::None,
     );
-    let mut cam = nokhwa::Camera::new(index, requested_none)
-        .map_err(|e| format!("Failed to create Camera: {e}"))?;
+    let mut cam = nokhwa::Camera::new(index, requested_none).context("Failed to create Camera")?;
 
     if let Ok(formats) = cam.compatible_camera_formats() {
         log::debug!("Webcam: All compatible camera formats: {:?}", formats);
@@ -133,7 +133,7 @@ fn init_real_camera(width: u32, height: u32, fps: u32) -> Result<nokhwa::Camera,
             let res_diff = (f.width() as i32 - width as i32).unsigned_abs()
                 + (f.height() as i32 - height as i32).unsigned_abs();
             let fps_diff = (f.frame_rate() as i32 - fps as i32).unsigned_abs();
-            (res_diff, fps_diff)
+            (res_diff, fps_diff)  // Best match prioritizes resolution closeness, then fps closeness
         });
 
         if let Some(&closest_format) = best_format {
@@ -146,8 +146,7 @@ fn init_real_camera(width: u32, height: u32, fps: u32) -> Result<nokhwa::Camera,
         }
     }
 
-    cam.open_stream()
-        .map_err(|e| format!("Failed to open Camera stream: {e}"))?;
+    cam.open_stream().context("Failed to open Camera stream")?;
 
     Ok(cam)
 }
