@@ -1,9 +1,6 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
-//
-// See LICENSE file for full license text.
-
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
 pub mod input;

@@ -1,6 +1,7 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
+// Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
 use crate::webcam::encoders::VideoEncoder;
 use crate::webcam::openh264::{self, Encoder, EncoderConfig, SFrameBSInfo, SSourcePicture};

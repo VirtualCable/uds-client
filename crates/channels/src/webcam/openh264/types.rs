@@ -1,11 +1,7 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
-
-//! OpenH264 C API type definitions and safe encoder wrapper.
-//!
-//! This module contains the raw FFI type definitions for the OpenH264 encoder library,
-//! as well as a safe Rust wrapper (`Encoder`) that encapsulates `unsafe` operations.
+// Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
 use std::ffi::c_void;
 use std::marker::PhantomData;
