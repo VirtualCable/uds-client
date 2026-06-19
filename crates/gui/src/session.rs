@@ -146,37 +146,37 @@ impl AppHandler {
                 #[cfg(feature = "gui-tester")]
                 TestingLaunchAction::ConnectRdp | TestingLaunchAction::ConnectRail => {
                     let is_rail = matches!(action, TestingLaunchAction::ConnectRail);
-                    let settings = rdp_ffi::settings::RdpSettings {
+                    let settings = rdp::settings::RdpSettings {
                         server: "172.27.247.161".to_string(),
                         user: "user".to_string(),
                         password: "temporal".to_string(),
-                        screen_size: rdp_ffi::geom::ScreenSize::Fixed(800, 600),
-                        redirections: rdp_ffi::settings::RdpRedirections {
+                        screen_size: rdp::geom::ScreenSize::Fixed(800, 600),
+                        redirections: rdp::settings::RdpRedirections {
                             clipboard: true,
                             audio: true,
                             mic: true,
                             printing: false,
                             drives: vec!["all".to_string()],
-                            webcam: Some(rdp_ffi::settings::WebcamSettings {
+                            webcam: Some(rdp::settings::WebcamSettings {
                                 enabled: true,
                                 quality: 80,
                                 fps: 15,
-                                ..rdp_ffi::settings::WebcamSettings::default()
+                                ..rdp::settings::WebcamSettings::default()
                             }),
                             sound_latency_threshold: None,
                         },
                         best_experience: true,
-                        options: rdp_ffi::settings::RdpOptions {
+                        options: rdp::settings::RdpOptions {
                             use_local_scaler: true,
                             ..Default::default()
                         },
                         rail: if is_rail {
-                            Some(rdp_ffi::settings::RailSettings {
+                            Some(rdp::settings::RailSettings {
                                 app: "c:\\windows\\system32\\calc.exe".to_string(),
                                 args: None,
                                 working_dir: None,
                                 title: Some("Windows Calculator".to_string()),
-                                server_info: Some(rdp_ffi::settings::ServerInfo {
+                                server_info: Some(rdp::settings::ServerInfo {
                                     id: "test-uds-rail".to_string(),
                                     token: "test-token".to_string(),
                                 }),

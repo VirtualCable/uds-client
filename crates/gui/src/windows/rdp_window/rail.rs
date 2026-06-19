@@ -5,8 +5,8 @@
 
 use std::collections::HashMap;
 
-use rdp_ffi::messaging::RdpMessage;
-use rdp_ffi::windows_types::{ExtendedWindowStyle, ShowWindowCmd};
+use rdp::messaging::RdpMessage;
+use rdp::windows_types::{ExtendedWindowStyle, ShowWindowCmd};
 use shared::log;
 
 #[allow(dead_code)]
@@ -17,7 +17,7 @@ pub struct RailWindow {
     pub rgba_data: Option<Vec<u8>>,
     pub width: u32,
     pub height: u32,
-    pub rect: rdp_ffi::geom::Rect,
+    pub rect: rdp::geom::Rect,
     pub title: String,
     pub show_in_taskbar: bool,
     pub has_decorations: bool,
@@ -36,9 +36,9 @@ pub struct RailState {
 
 /// Pending RAIL action to be executed by the event loop
 pub enum RailAction {
-    Create(u32, String, rdp_ffi::geom::Rect, bool, bool, bool, bool),
+    Create(u32, String, rdp::geom::Rect, bool, bool, bool, bool),
     Delete(u32),
-    UpdatePosition(u32, rdp_ffi::geom::Rect),
+    UpdatePosition(u32, rdp::geom::Rect),
     SetVisible(u32, bool),
     SetMinimized(u32, bool),
 }
@@ -153,7 +153,7 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                         .windows
                         .get(&window_id)
                         .map(|rw| rw.rect)
-                        .unwrap_or_else(|| rdp_ffi::geom::Rect::new(0, 0, 0, 0));
+                        .unwrap_or_else(|| rdp::geom::Rect::new(0, 0, 0, 0));
                     let mut rect = default_rect;
                     if !rail.windows.contains_key(&window_id) {
                         for action in &rail.actions {
@@ -181,7 +181,7 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                         Some((_, h)) => (h as f64 * sf / msf) as u32,
                         None => rect.h,
                     };
-                    let new_rect = rdp_ffi::geom::Rect::new(x, y, w, h);
+                    let new_rect = rdp::geom::Rect::new(x, y, w, h);
                     rail.actions
                         .push(RailAction::UpdatePosition(window_id, new_rect));
                 }
@@ -189,7 +189,7 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                 let (w, h) = size.unwrap_or((0, 0));
                 if w > 0 && h > 0 {
                     let (x, y) = pos.unwrap_or((0, 0));
-                    let rect = rdp_ffi::geom::Rect::new(
+                    let rect = rdp::geom::Rect::new(
                         x as i32,
                         y as i32,
                         (w as f64 * sf / msf) as u32,

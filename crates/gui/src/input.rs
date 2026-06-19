@@ -13,7 +13,7 @@ use shared::log;
 
 use super::{AppHandler, RawKey};
 use crate::monitor;
-use crate::windows::rdp::RdpMode;
+use crate::windows::rdp_window::RdpMode;
 
 impl AppHandler {
     pub(crate) fn handle_keyboard(&mut self, el: &ActiveEventLoop, event: &WindowEvent) -> bool {
@@ -169,14 +169,14 @@ impl AppHandler {
                 let y = ((position.y * gdi_h as f64) / phys_h as f64)
                     .round()
                     .clamp(0.0, (gdi_h - 1) as f64) as u16;
-                let _ = s.command_tx.send(rdp_ffi::messaging::RdpCommand::Input(
-                    rdp_ffi::messaging::InputEvent::Mouse {
-                        flags: rdp_ffi::sys::PTR_FLAGS_MOVE as u16,
+                let _ = s.command_tx.send(rdp::messaging::RdpCommand::Input(
+                    rdp::messaging::InputEvent::Mouse {
+                        flags: rdp::sys::PTR_FLAGS_MOVE as u16,
                         x,
                         y,
                     },
                 ));
-                rdp_ffi::Rdp::set_command_event(&s.command_event);
+                rdp::Rdp::set_command_event(&s.command_event);
                 // Pinbar
                 if let RdpMode::Desktop {
                     ref mut pinbar,
@@ -230,22 +230,22 @@ impl AppHandler {
                         .round()
                         .clamp(0.0, (gdi_h - 1) as f64) as u16;
                     let flags = match *button {
-                        winit::event::MouseButton::Left => rdp_ffi::sys::PTR_FLAGS_BUTTON1,
-                        winit::event::MouseButton::Right => rdp_ffi::sys::PTR_FLAGS_BUTTON2,
-                        winit::event::MouseButton::Middle => rdp_ffi::sys::PTR_FLAGS_BUTTON3,
+                        winit::event::MouseButton::Left => rdp::sys::PTR_FLAGS_BUTTON1,
+                        winit::event::MouseButton::Right => rdp::sys::PTR_FLAGS_BUTTON2,
+                        winit::event::MouseButton::Middle => rdp::sys::PTR_FLAGS_BUTTON3,
                         _ => 0,
                     } as u16;
                     if flags != 0 {
                         let f = flags
                             | if btn.is_pressed() {
-                                rdp_ffi::sys::PTR_FLAGS_DOWN as u16
+                                rdp::sys::PTR_FLAGS_DOWN as u16
                             } else {
                                 0
                             };
-                        let _ = s.command_tx.send(rdp_ffi::messaging::RdpCommand::Input(
-                            rdp_ffi::messaging::InputEvent::Mouse { flags: f, x, y },
+                        let _ = s.command_tx.send(rdp::messaging::RdpCommand::Input(
+                            rdp::messaging::InputEvent::Mouse { flags: f, x, y },
                         ));
-                        rdp_ffi::Rdp::set_command_event(&s.command_event);
+                        rdp::Rdp::set_command_event(&s.command_event);
                     }
                 }
             }
@@ -255,29 +255,29 @@ impl AppHandler {
                     winit::event::MouseScrollDelta::PixelDelta(pos) => pos.y as i32,
                 };
                 let mut wd = (dy as f32 * 120.0) as i32;
-                let flags = (rdp_ffi::sys::PTR_FLAGS_WHEEL as u16)
+                let flags = (rdp::sys::PTR_FLAGS_WHEEL as u16)
                     | if wd < 0 {
                         wd = -wd;
-                        rdp_ffi::sys::PTR_FLAGS_WHEEL_NEGATIVE as u16
+                        rdp::sys::PTR_FLAGS_WHEEL_NEGATIVE as u16
                     } else {
                         0
                     };
                 while wd > 0 {
                     let step: u16 = if wd > 0xFF { 0xFF } else { (wd & 0xFF) as u16 };
                     wd -= step as i32;
-                    let cflags = if flags & (rdp_ffi::sys::PTR_FLAGS_WHEEL_NEGATIVE as u16) != 0 {
+                    let cflags = if flags & (rdp::sys::PTR_FLAGS_WHEEL_NEGATIVE as u16) != 0 {
                         flags | (0x100 - step)
                     } else {
                         flags | step
                     };
-                    let _ = s.command_tx.send(rdp_ffi::messaging::RdpCommand::Input(
-                        rdp_ffi::messaging::InputEvent::Mouse {
+                    let _ = s.command_tx.send(rdp::messaging::RdpCommand::Input(
+                        rdp::messaging::InputEvent::Mouse {
                             flags: cflags,
                             x: 0,
                             y: 0,
                         },
                     ));
-                    rdp_ffi::Rdp::set_command_event(&s.command_event);
+                    rdp::Rdp::set_command_event(&s.command_event);
                 }
             }
             _ => {}
@@ -303,7 +303,7 @@ impl AppHandler {
         {
             // Force position every frame to prevent Windows cascading offset.
             // Only for on-screen windows — off-screen coords are for minimized/offscreen.
-            const OFFSCREEN: i32 = rdp_ffi::consts::OFFSCREEN_THRESHOLD;
+            const OFFSCREEN: i32 = rdp::consts::OFFSCREEN_THRESHOLD;
             if rw.rect.x > OFFSCREEN && rw.rect.y > OFFSCREEN {
                 let sf = state.coords_scale.max(1.0);
                 let (px, py) = monitor::logic_2_phys_pos((rw.rect.x, rw.rect.y), sf);
@@ -317,9 +317,9 @@ impl AppHandler {
             if is_minimized != rw.was_minimized {
                 if let Some(ref channel) = rail.channel {
                     let cmd = if is_minimized {
-                        rdp_ffi::windows_types::SystemCommand::Minimize as u16
+                        rdp::windows_types::SystemCommand::Minimize as u16
                     } else {
-                        rdp_ffi::windows_types::SystemCommand::Restore as u16
+                        rdp::windows_types::SystemCommand::Restore as u16
                     };
                     channel.send_system_command(rail_id, cmd);
                 }
@@ -368,7 +368,7 @@ impl AppHandler {
 
         match event {
             WindowEvent::CloseRequested => {
-                rail_channel.send_system_command(rail_id, rdp_ffi::windows_types::SystemCommand::Close as u16);
+                rail_channel.send_system_command(rail_id, rdp::windows_types::SystemCommand::Close as u16);
             }
             WindowEvent::Occluded(_) => {
                 // Occluded unsupported on Windows/Android/Wayland/Orbital.
@@ -406,14 +406,14 @@ impl AppHandler {
                         rw.rect.w,
                         rw.rect.h,
                     );
-                    let _ = cmd_tx.send(rdp_ffi::messaging::RdpCommand::Input(
-                        rdp_ffi::messaging::InputEvent::Mouse {
-                            flags: rdp_ffi::sys::PTR_FLAGS_MOVE as u16,
+                    let _ = cmd_tx.send(rdp::messaging::RdpCommand::Input(
+                        rdp::messaging::InputEvent::Mouse {
+                            flags: rdp::sys::PTR_FLAGS_MOVE as u16,
                             x: gx,
                             y: gy,
                         },
                     ));
-                    rdp_ffi::Rdp::set_command_event(&cmd_ev);
+                    rdp::Rdp::set_command_event(&cmd_ev);
                 }
             }
             WindowEvent::CursorLeft { .. } => {
@@ -443,14 +443,14 @@ impl AppHandler {
                     && let Some(rw) = rail.windows.get(&rail_id)
                 {
                     let bm = match button {
-                        winit::event::MouseButton::Left => rdp_ffi::sys::PTR_FLAGS_BUTTON1,
-                        winit::event::MouseButton::Right => rdp_ffi::sys::PTR_FLAGS_BUTTON2,
-                        winit::event::MouseButton::Middle => rdp_ffi::sys::PTR_FLAGS_BUTTON3,
+                        winit::event::MouseButton::Left => rdp::sys::PTR_FLAGS_BUTTON1,
+                        winit::event::MouseButton::Right => rdp::sys::PTR_FLAGS_BUTTON2,
+                        winit::event::MouseButton::Middle => rdp::sys::PTR_FLAGS_BUTTON3,
                         _ => return,
                     } as u16;
                     let f = bm
                         | if btn.is_pressed() {
-                            rdp_ffi::sys::PTR_FLAGS_DOWN as u16
+                            rdp::sys::PTR_FLAGS_DOWN as u16
                         } else {
                             0
                         };
@@ -475,14 +475,14 @@ impl AppHandler {
                         rw.rect.w,
                         rw.rect.h
                     );
-                    let _ = cmd_tx.send(rdp_ffi::messaging::RdpCommand::Input(
-                        rdp_ffi::messaging::InputEvent::Mouse {
+                    let _ = cmd_tx.send(rdp::messaging::RdpCommand::Input(
+                        rdp::messaging::InputEvent::Mouse {
                             flags: f,
                             x: gx,
                             y: gy,
                         },
                     ));
-                    rdp_ffi::Rdp::set_command_event(&cmd_ev);
+                    rdp::Rdp::set_command_event(&cmd_ev);
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {
@@ -491,29 +491,29 @@ impl AppHandler {
                     winit::event::MouseScrollDelta::PixelDelta(pos) => pos.y as i32,
                 };
                 let mut wd = (dy as f32 * 120.0) as i32;
-                let flags = (rdp_ffi::sys::PTR_FLAGS_WHEEL as u16)
+                let flags = (rdp::sys::PTR_FLAGS_WHEEL as u16)
                     | if wd < 0 {
                         wd = -wd;
-                        rdp_ffi::sys::PTR_FLAGS_WHEEL_NEGATIVE as u16
+                        rdp::sys::PTR_FLAGS_WHEEL_NEGATIVE as u16
                     } else {
                         0
                     };
                 while wd > 0 {
                     let step: u16 = if wd > 0xFF { 0xFF } else { (wd & 0xFF) as u16 };
                     wd -= step as i32;
-                    let cflags = if flags & (rdp_ffi::sys::PTR_FLAGS_WHEEL_NEGATIVE as u16) != 0 {
+                    let cflags = if flags & (rdp::sys::PTR_FLAGS_WHEEL_NEGATIVE as u16) != 0 {
                         flags | (0x100 - step)
                     } else {
                         flags | step
                     };
-                    let _ = cmd_tx.send(rdp_ffi::messaging::RdpCommand::Input(
-                        rdp_ffi::messaging::InputEvent::Mouse {
+                    let _ = cmd_tx.send(rdp::messaging::RdpCommand::Input(
+                        rdp::messaging::InputEvent::Mouse {
                             flags: cflags,
                             x: 0,
                             y: 0,
                         },
                     ));
-                    rdp_ffi::Rdp::set_command_event(&cmd_ev);
+                    rdp::Rdp::set_command_event(&cmd_ev);
                 }
             }
             _ => {}

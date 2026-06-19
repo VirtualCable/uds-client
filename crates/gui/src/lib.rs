@@ -3,7 +3,7 @@
 // All rights reserved.
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
-extern crate rdp as rdp_ffi;
+extern crate rdp;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -36,7 +36,7 @@ use types::{AppState, GuiMessage, ReturnCode};
 use windows::about::AboutState;
 use windows::popup::PopupState;
 use windows::progress::{ProgressPhase, ProgressState};
-use windows::rdp::{RdpMode, RdpState};
+use windows::rdp_window::{RdpMode, RdpState};
 use windows::testing_launcher_window::{TestingLauncherInner, TestingLauncherState};
 
 #[derive(Debug)]
