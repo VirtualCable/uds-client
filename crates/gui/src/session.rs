@@ -4,7 +4,6 @@
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
 use shared::log;
-use std::sync::Arc;
 use winit::event_loop::ActiveEventLoop;
 
 use crate::AppHandler;
@@ -72,7 +71,6 @@ impl AppHandler {
                     }
                 }
                 GuiMessage::ConnectRdp(settings) => {
-                    self.close_testing_launcher();
                     if let Err(e) = self.open_rdp(el, *settings) {
                         log::error!("Failed to enter RDP: {e}");
                         self.stop.trigger();
@@ -83,124 +81,7 @@ impl AppHandler {
             }
         }
 
-        // Launcher test actions
-        if let Some(ref mut launcher) = self.testing_launcher
-            && let Some(action) = launcher.inner.take_request()
-        {
-            use crate::windows::testing_launcher_window::TestingLaunchAction;
-            match action {
-                TestingLaunchAction::ShowProgress => {
-                    let _ = self.open_progress(el);
-                }
-                TestingLaunchAction::ShowAbout => {
-                    if let Ok(a) = crate::windows::about::AboutState::new(el) {
-                        let wid = a.window().id();
-                        self.register_window(wid, WindowKind::About);
-                        a.window().set_visible(true);
-                        a.window().request_redraw();
-                        self.about = Some(a);
-                    }
-                }
-                TestingLaunchAction::ShowWarning => {
-                    if let Ok(p) = PopupState::new(
-                        el,
-                        PopupKind::Warning("This is a test warning message.".into()),
-                    ) {
-                        let wid = p.window.id();
-                        self.register_window(wid, WindowKind::Popup);
-                        p.window.set_visible(true);
-                        p.window.request_redraw();
-                        self.popup = Some(p);
-                    }
-                }
-                TestingLaunchAction::ShowError => {
-                    if let Ok(p) = PopupState::new(
-                        el,
-                        PopupKind::Error("This is a test error message.".into()),
-                    ) {
-                        let wid = p.window.id();
-                        self.register_window(wid, WindowKind::Popup);
-                        p.window.set_visible(true);
-                        p.window.request_redraw();
-                        self.popup = Some(p);
-                    }
-                }
-                TestingLaunchAction::ShowYesNo => {
-                    let (rtx, _) = tokio::sync::oneshot::channel::<bool>();
-                    if let Ok(p) = PopupState::new(
-                        el,
-                        PopupKind::YesNo {
-                            message:
-                                "This is a test confirmation message. Do you want to continue?"
-                                    .into(),
-                            response: Arc::new(std::sync::RwLock::new(Some(rtx))),
-                        },
-                    ) {
-                        let wid = p.window.id();
-                        self.register_window(wid, WindowKind::Popup);
-                        p.window.set_visible(true);
-                        p.window.request_redraw();
-                        self.popup = Some(p);
-                    }
-                }
-                #[cfg(feature = "gui-tester")]
-                TestingLaunchAction::ConnectRdp | TestingLaunchAction::ConnectRail => {
-                    let is_rail = matches!(action, TestingLaunchAction::ConnectRail);
-                    let settings = rdp::settings::RdpSettings {
-                        server: "172.27.247.161".to_string(),
-                        user: "user".to_string(),
-                        password: "temporal".to_string(),
-                        screen_size: rdp::geom::ScreenSize::Fixed(800, 600),
-                        redirections: rdp::settings::RdpRedirections {
-                            clipboard: true,
-                            audio: true,
-                            mic: true,
-                            printing: false,
-                            drives: vec!["all".to_string()],
-                            webcam: Some(rdp::settings::WebcamSettings {
-                                enabled: true,
-                                quality: 80,
-                                fps: 15,
-                                ..rdp::settings::WebcamSettings::default()
-                            }),
-                            sound_latency_threshold: None,
-                        },
-                        best_experience: true,
-                        options: rdp::settings::RdpOptions {
-                            use_local_scaler: true,
-                            ..Default::default()
-                        },
-                        rail: if is_rail {
-                            Some(rdp::settings::RailSettings {
-                                app: "c:\\windows\\system32\\calc.exe".to_string(),
-                                args: None,
-                                working_dir: None,
-                                title: Some("Windows Calculator".to_string()),
-                                server_info: Some(rdp::settings::ServerInfo {
-                                    id: "test-uds-rail".to_string(),
-                                    token: "test-token".to_string(),
-                                }),
-                                ..Default::default()
-                            })
-                        } else {
-                            None
-                        },
-                        ..Default::default()
-                    };
-                    self.close_testing_launcher();
-                    if let Err(e) = self.open_rdp(el, settings) {
-                        log::error!("Failed to enter RDP: {e}");
-                        self.stop.trigger();
-                        el.exit();
-                    }
-                }
-                #[cfg(not(feature = "gui-tester"))]
-                TestingLaunchAction::ConnectRdp | TestingLaunchAction::ConnectRail => {
-                    log::warn!(
-                        "RDP Connect/RAIL test actions are disabled without 'gui-tester' feature"
-                    );
-                }
-            }
-        }
+        #[cfg(feature = "gui-tester")]
+        self.process_testing_launcher_actions(el);
     }
 }

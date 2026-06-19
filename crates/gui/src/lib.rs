@@ -37,7 +37,7 @@ use windows::about::AboutState;
 use windows::popup::PopupState;
 use windows::progress::{ProgressPhase, ProgressState};
 use windows::rdp_window::{RdpMode, RdpState};
-use windows::testing_launcher_window::{TestingLauncherInner, TestingLauncherState};
+use windows::testing_launcher_window::TestingLauncherState;
 
 #[derive(Debug)]
 pub struct RawKey {
@@ -160,8 +160,10 @@ impl ApplicationHandler for AppHandler {
             self.first_resume = false;
             match self.initial_state.clone() {
                 AppState::Test => {
-                    let inner = TestingLauncherInner::new_test();
-                    let _ = self.open_testing_launcher(el, inner);
+                    #[cfg(feature = "gui-tester")]
+                    {
+                        let _ = self.open_testing_launcher(el);
+                    }
                 }
                 AppState::Progress => {
                     let _ = self.open_progress(el);
