@@ -317,9 +317,9 @@ impl AppHandler {
             if is_minimized != rw.was_minimized {
                 if let Some(ref channel) = rail.channel {
                     let cmd = if is_minimized {
-                        rdp::windows_types::SystemCommand::Minimize as u16
+                        rdp::windows_types::SystemCommand::Minimize
                     } else {
-                        rdp::windows_types::SystemCommand::Restore as u16
+                        rdp::windows_types::SystemCommand::Restore
                     };
                     channel.send_system_command(rail_id, cmd);
                 }
@@ -368,7 +368,7 @@ impl AppHandler {
 
         match event {
             WindowEvent::CloseRequested => {
-                rail_channel.send_system_command(rail_id, rdp::windows_types::SystemCommand::Close as u16);
+                rail_channel.send_system_command(rail_id, rdp::windows_types::SystemCommand::Close);
             }
             WindowEvent::Occluded(_) => {
                 // Occluded unsupported on Windows/Android/Wayland/Orbital.

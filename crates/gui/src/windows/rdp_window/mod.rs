@@ -119,8 +119,7 @@ impl RdpState {
             clipboard: Some(Arc::new(channels::clipboard::ClipboardHandle::new())),
         };
 
-        let (rdp_instance, command_tx) =
-            rdp::Rdp::new(settings, tx, use_rgba, None, integrations);
+        let (rdp_instance, command_tx) = rdp::Rdp::new(settings, tx, use_rgba, None, integrations);
         let command_event = rdp_instance.get_command_event();
 
         let mut rdp = Box::pin(rdp_instance);

@@ -195,7 +195,8 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                         (w as f64 * sf / msf) as u32,
                         (h as f64 * sf / msf) as u32,
                     );
-                    let is_tool = ext_style.is_some_and(|s| s.contains(ExtendedWindowStyle::TOOL_WINDOW));
+                    let is_tool =
+                        ext_style.is_some_and(|s| s.contains(ExtendedWindowStyle::TOOL_WINDOW));
                     let has_owner = owner_id.is_some() && owner_id != Some(0);
                     let show_taskbar = taskbar_button.unwrap_or(false) || (!is_tool && !has_owner);
 
@@ -208,7 +209,8 @@ pub fn handle_rail_message(state: &mut RdpState, message: RdpMessage) -> RdpActi
                                 | ShowWindowCmd::ForceMinimize
                         )
                     });
-                    let hidden = show_state == Some(ShowWindowCmd::Hide) || (is_off && !is_minimized);
+                    let hidden =
+                        show_state == Some(ShowWindowCmd::Hide) || (is_off && !is_minimized);
 
                     rail.actions.push(RailAction::Create(
                         window_id,
