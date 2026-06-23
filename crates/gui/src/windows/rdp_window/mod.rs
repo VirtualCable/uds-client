@@ -117,6 +117,7 @@ impl RdpState {
             audio_input: Some(Arc::new(channels::audio::input::MicHandle::new())),
             webcam: Some(Arc::new(channels::webcam::WebcamHandle::new())),
             clipboard: Some(Arc::new(channels::clipboard::ClipboardHandle::new())),
+            smartcard: Some(Arc::new(channels::smartcard::SmartcardHandle::new())),
         };
 
         let (rdp_instance, command_tx) = rdp::Rdp::new(settings, tx, use_rgba, None, integrations);
