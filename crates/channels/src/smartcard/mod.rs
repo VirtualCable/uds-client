@@ -13,12 +13,14 @@
 //! added in a future iteration.
 
 mod dummy;
+mod emulated;
 
 use std::time::Duration;
 
 use rdp::integrations::smartcard::*;
 
 use dummy::DummyBackend;
+use emulated::EmulatedBackend;
 
 // ---------------------------------------------------------------------------
 // Internal Backend Trait
@@ -91,13 +93,28 @@ pub struct SmartcardHandle {
 }
 
 impl SmartcardHandle {
-    /// Create a new handle with the dummy backend.
-    /// Always has one virtual card ready in "Virtual Smartcard Reader 0".
+    /// Create a new handle, selecting the backend based on environment variables.
+    ///
+    /// - If `UDS_SMARTCARD_EMULATED=1` and cert/key paths are set, uses emulated backend
+    /// - Otherwise, uses the dummy backend (always available)
     pub fn new() -> Self {
-        let backend = DummyBackend::new();
-        SmartcardHandle {
-            backend: Box::new(backend),
-        }
+        let backend: Box<dyn SmartcardBackend> = if std::env::var("UDS_SMARTCARD_EMULATED")
+            .as_deref()
+            == Ok("1")
+        {
+            match EmulatedBackend::try_from_env() {
+                Some(emulated) => Box::new(emulated),
+                None => {
+                    log::warn!(
+                        "UDS_SMARTCARD_EMULATED=1 but failed to load cert/key, falling back to dummy"
+                    );
+                    Box::new(DummyBackend::new())
+                }
+            }
+        } else {
+            Box::new(DummyBackend::new())
+        };
+        SmartcardHandle { backend }
     }
 }
 
@@ -139,7 +156,8 @@ impl SmartcardIntegration for SmartcardHandle {
         share_mode: u32,
         preferred_protocols: u32,
     ) -> Result<ConnectResult, u32> {
-        self.backend.connect(ctx, reader, share_mode, preferred_protocols)
+        self.backend
+            .connect(ctx, reader, share_mode, preferred_protocols)
     }
 
     fn disconnect(&self, handle: &ScardHandle, disposition: u32) -> Result<(), u32> {

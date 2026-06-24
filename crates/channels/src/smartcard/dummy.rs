@@ -38,7 +38,8 @@ impl DummyBackend {
             cards: RwLock::new(vec![DummyCard {
                 reader: "Virtual Smartcard Reader 0".to_string(),
                 atr: vec![
-                    0x3B, 0x95, 0x15, 0x40, 0x00, 0x68, 0x04, 0x01, 0x02, 0x03,
+                    0x3B, 0xF7, 0x18, 0x00, 0x00, 0x80, 0x31, 0xFE, 0x45, 0x73, 0x66, 0x74, 0x65,
+                    0x2D, 0x6E, 0x66, 0xC4,
                 ],
                 handle: None,
             }]),
@@ -216,6 +217,7 @@ impl SmartcardBackend for DummyBackend {
 
                 ReaderStateOut {
                     reader_name: rs.reader_name.clone(),
+                    current_state: actual_state,
                     event_state,
                     atr: cards
                         .iter()

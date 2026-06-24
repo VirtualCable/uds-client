@@ -16,3 +16,14 @@ nokhwa = { workspace = true }
 turbojpeg = { workspace = true }
 libloading = "0.8"
 libc = { workspace = true }
+
+# Smartcard emulation
+rsa = "0.9"
+sha1 = "0.10"
+sha2 = "0.10"
+flate2 = "1.0"
+num-bigint = "0.4"
+num-traits = "0.2"
+pem = "3.0"
+rand = { workspace = true }
+log = "0.4"
