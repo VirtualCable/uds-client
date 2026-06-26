@@ -1,9 +1,21 @@
 #!/bin/sh
 
+
 echo "Installing UDSClient and UDSRDP"
+
+. /etc/lsb-release
 
 # unlocks so we can write on TC
 fsunlock
+
+if [ "$DISTRIB_RELEASE" = "9.0.0" ]; then
+    echo "Updating Template_UDS.xml to use freerdp instead of freerdp2"
+    sed -i 's/freerdp2/freerdp/g' Template_UDS.xml
+    echo "Installing libfuse2t64_2.9.9-8.1build1_amd64.deb"
+    dpkg -i libfuse2t64_2.9.9-8.1build1_amd64.deb
+    echo "Updating udsrdp to use FREERDP=freerdp instead of freerdp2"
+    sed -i 's/FREERDP=freerdp2/FREERDP=freerdp/g' udsrdp
+fi
 
 # TC hast /bin as a symlink to /usr/bin, so we can copy the client there
 
