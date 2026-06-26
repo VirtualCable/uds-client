@@ -1,9 +1,8 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
-
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
-// Monitor geometry, queried from winit at startup via RdpAppProxy::resumed.
+
 use std::sync::{LazyLock, OnceLock};
 
 use winit::{event_loop::ActiveEventLoop, monitor::MonitorHandle};

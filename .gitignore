@@ -12,3 +12,6 @@ target/
 /local_dlls
 *.log
 /profile.*
+/graphify*
+AGENTS.md
+.opencode

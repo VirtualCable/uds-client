@@ -1,17 +1,14 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
+// Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
-use anyhow::Result;
 use std::sync::Arc;
 use wgpu_text::glyph_brush::OwnedSection;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
-use winit::window::Window;
 
 use crate::AppHandler;
-use crate::WindowKind;
-use crate::logo;
 use crate::monitor;
 use crate::wgpu_render::{OverlayParams, WgpuRenderer};
 
@@ -199,11 +196,9 @@ pub fn paint_testing_launcher(state: &mut TestingLauncherState) {
 }
 
 impl AppHandler {
-    pub(crate) fn open_testing_launcher(
-        &mut self,
-        el: &ActiveEventLoop,
-        inner: TestingLauncherInner,
-    ) -> Result<()> {
+    #[cfg(feature = "gui-tester")]
+    pub(crate) fn open_testing_launcher(&mut self, el: &ActiveEventLoop) -> anyhow::Result<()> {
+        let inner = TestingLauncherInner::new_test();
         let (dw, dh) = crate::monitor::size(0).unwrap_or((1920, 1080));
         let ww = 400.0;
         let wh = 300.0;
@@ -213,11 +208,11 @@ impl AppHandler {
 
         let window = Arc::new(
             el.create_window(
-                Window::default_attributes()
+                winit::window::Window::default_attributes()
                     .with_visible(false)
                     .with_title("UDS Launcher")
                     .with_inner_size(winit::dpi::LogicalSize::new(ww, wh))
-                    .with_window_icon(Some(logo::load_icon()))
+                    .with_window_icon(Some(crate::logo::load_icon()))
                     .with_resizable(false)
                     .with_position(winit::dpi::PhysicalPosition::new(px as i32, py as i32)),
             )?,
@@ -236,7 +231,7 @@ impl AppHandler {
             inner,
             ..Default::default()
         });
-        self.register_window(wid, WindowKind::TestingLauncher);
+        self.register_window(wid, crate::WindowKind::TestingLauncher);
         Ok(())
     }
 
@@ -286,6 +281,126 @@ impl AppHandler {
                 }
             }
             _ => {}
+        }
+    }
+
+    #[cfg(feature = "gui-tester")]
+    pub(crate) fn process_testing_launcher_actions(&mut self, el: &ActiveEventLoop) {
+        use crate::WindowKind;
+        use crate::windows::popup::{PopupKind, PopupState};
+        use shared::log;
+        use std::sync::RwLock;
+        use tokio::sync::oneshot;
+
+        if let Some(ref mut launcher) = self.testing_launcher
+            && let Some(action) = launcher.inner.take_request()
+        {
+            match action {
+                TestingLaunchAction::ShowProgress => {
+                    let _ = self.open_progress(el);
+                }
+                TestingLaunchAction::ShowAbout => {
+                    if let Ok(a) = crate::windows::about::AboutState::new(el) {
+                        let wid = a.window().id();
+                        self.register_window(wid, WindowKind::About);
+                        a.window().set_visible(true);
+                        a.window().request_redraw();
+                        self.about = Some(a);
+                    }
+                }
+                TestingLaunchAction::ShowWarning => {
+                    if let Ok(p) = PopupState::new(
+                        el,
+                        PopupKind::Warning("This is a test warning message.".into()),
+                    ) {
+                        let wid = p.window.id();
+                        self.register_window(wid, WindowKind::Popup);
+                        p.window.set_visible(true);
+                        p.window.request_redraw();
+                        self.popup = Some(p);
+                    }
+                }
+                TestingLaunchAction::ShowError => {
+                    if let Ok(p) = PopupState::new(
+                        el,
+                        PopupKind::Error("This is a test error message.".into()),
+                    ) {
+                        let wid = p.window.id();
+                        self.register_window(wid, WindowKind::Popup);
+                        p.window.set_visible(true);
+                        p.window.request_redraw();
+                        self.popup = Some(p);
+                    }
+                }
+                TestingLaunchAction::ShowYesNo => {
+                    let (rtx, _) = oneshot::channel::<bool>();
+                    if let Ok(p) = PopupState::new(
+                        el,
+                        PopupKind::YesNo {
+                            message:
+                                "This is a test confirmation message. Do you want to continue?"
+                                    .into(),
+                            response: Arc::new(RwLock::new(Some(rtx))),
+                        },
+                    ) {
+                        let wid = p.window.id();
+                        self.register_window(wid, WindowKind::Popup);
+                        p.window.set_visible(true);
+                        p.window.request_redraw();
+                        self.popup = Some(p);
+                    }
+                }
+                TestingLaunchAction::ConnectRdp | TestingLaunchAction::ConnectRail => {
+                    let is_rail = matches!(action, TestingLaunchAction::ConnectRail);
+                    let settings = rdp::settings::RdpSettings {
+                        server: "172.27.247.161".to_string(),
+                        user: "user".to_string(),
+                        password: "temporal".to_string(),
+                        screen_size: rdp::geom::ScreenSize::Fixed(800, 600),
+                        redirections: rdp::settings::RdpRedirections {
+                            clipboard: true,
+                            audio: true,
+                            mic: true,
+                            printing: false,
+                            drives: vec!["all".to_string()],
+                            webcam: Some(rdp::settings::WebcamSettings {
+                                enabled: true,
+                                quality: 80,
+                                fps: 15,
+                                ..rdp::settings::WebcamSettings::default()
+                            }),
+                            sound_latency_threshold: None,
+                        },
+                        best_experience: true,
+                        options: rdp::settings::RdpOptions {
+                            use_local_scaler: true,
+                            ..Default::default()
+                        },
+                        rail: if is_rail {
+                            Some(rdp::settings::RailSettings {
+                                app: "c:\\windows\\system32\\calc.exe".to_string(),
+                                args: None,
+                                working_dir: None,
+                                title: Some("Windows Calculator".to_string()),
+                                server_info: Some(rdp::settings::ServerInfo {
+                                    id: "test-uds-rail".to_string(),
+                                    token: "test-token".to_string(),
+                                }),
+                                ..Default::default()
+                            })
+                        } else {
+                            None
+                        },
+                        ..Default::default()
+                    };
+                    self.close_testing_launcher();
+                    if let Err(e) = self.open_rdp(el, settings) {
+                        log::error!("Failed to enter RDP: {e}");
+                        self.stop.trigger();
+                        el.exit();
+                    }
+                }
+            }
         }
     }
 }

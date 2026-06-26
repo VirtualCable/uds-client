@@ -1,3 +1,8 @@
+// BSD 3-Clause License
+// Copyright (c) 2026, Virtual Cable S.L.
+// All rights reserved.
+// Authors: Adolfo Gómez, dkmaster at dkmon dot com
+
 use anyhow::Result;
 use shared::log;
 
@@ -5,25 +10,25 @@ use super::RdpMode;
 use super::RdpState;
 use crate::monitor;
 
-fn rect_contains(outer: &rdp_ffi::geom::Rect, inner: &rdp_ffi::geom::Rect) -> bool {
+fn rect_contains(outer: &rdp::geom::Rect, inner: &rdp::geom::Rect) -> bool {
     inner.x >= outer.x
         && inner.y >= outer.y
         && (inner.x + inner.w as i32) <= (outer.x + outer.w as i32)
         && (inner.y + inner.h as i32) <= (outer.y + outer.h as i32)
 }
 
-fn rect_intersects(r1: &rdp_ffi::geom::Rect, r2: &rdp_ffi::geom::Rect) -> bool {
+fn rect_intersects(r1: &rdp::geom::Rect, r2: &rdp::geom::Rect) -> bool {
     r1.x < r2.x + r2.w as i32
         && r1.x + r1.w as i32 > r2.x
         && r1.y < r2.y + r2.h as i32
         && r1.y + r1.h as i32 > r2.y
 }
 
-fn rect_area(r: &rdp_ffi::geom::Rect) -> u32 {
+fn rect_area(r: &rdp::geom::Rect) -> u32 {
     r.w * r.h
 }
 
-fn merge_rects(mut rects: Vec<rdp_ffi::geom::Rect>) -> Vec<rdp_ffi::geom::Rect> {
+fn merge_rects(mut rects: Vec<rdp::geom::Rect>) -> Vec<rdp::geom::Rect> {
     if rects.len() <= 1 {
         return rects;
     }
@@ -268,7 +273,7 @@ impl RdpState {
         self.pendings.resize = true;
 
         if let Some(disp) = self.channels.write().unwrap().disp() {
-            disp.send_monitor_layout(rdp_ffi::geom::Rect::new(0, 0, rdp_w, rdp_h), 0, 100, 100);
+            disp.send_monitor_layout(rdp::geom::Rect::new(0, 0, rdp_w, rdp_h), 0, 100, 100);
         }
     }
 

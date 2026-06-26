@@ -1,7 +1,6 @@
 // BSD 3-Clause License
-// Copyright (c) 2025, Virtual Cable S.L.
+// Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
-
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
 mod cursor;
@@ -20,8 +19,8 @@ use std::sync::{Arc, RwLock, atomic::AtomicBool};
 
 use anyhow::Result;
 use flume::{Receiver, bounded};
-use rdp_ffi::messaging::RdpMessage;
-use rdp_ffi::settings::RdpSettings;
+use rdp::messaging::RdpMessage;
+use rdp::settings::RdpSettings;
 use shared::log;
 
 use crate::RawKey;
@@ -39,12 +38,12 @@ pub struct Pendings {
     pub resize: bool,
     pub pixels: HashMap<u32, (u32, u32, Vec<u8>)>,
     pub icons: HashMap<u32, (Vec<u8>, u32, u32)>,
-    pub rects: Vec<rdp_ffi::geom::Rect>,
+    pub rects: Vec<rdp::geom::Rect>,
 }
 
 pub struct Rail {
     pub state: RailState,
-    pub channel: Option<rdp_ffi::channels::rail::RailChannel>,
+    pub channel: Option<rdp::channels::rail::RailChannel>,
     pub actions: Vec<RailAction>,
     pub windows: HashMap<u32, RailWindow>,
     pub control: Option<crate::draw::ui::rail_control::RailControl>,
@@ -65,11 +64,11 @@ pub enum RdpMode {
 pub struct RdpState {
     pub window: RdpWindow,
     pub update_rx: Receiver<RdpMessage>,
-    pub gdi: *mut rdp_ffi::sys::rdpGdi,
+    pub gdi: *mut rdp::sys::rdpGdi,
     pub gdi_lock: Arc<RwLock<()>>,
-    pub channels: Arc<RwLock<rdp_ffi::channels::RdpChannels>>,
-    pub command_tx: rdp_ffi::messaging::CommandSender,
-    pub command_event: rdp_ffi::utils::SafeHandle,
+    pub channels: Arc<RwLock<rdp::channels::RdpChannels>>,
+    pub command_tx: rdp::messaging::CommandSender,
+    pub command_event: rdp::utils::SafeHandle,
     pub coords_scale: f64,
     pub desktop_size: (u32, u32),
     pub keys_rx: Receiver<RawKey>,
@@ -113,15 +112,14 @@ impl RdpState {
         let scale_factor = settings.options.desktop_scale;
         let rail_title = settings.rail.as_ref().and_then(|r| r.title.clone());
 
-        let integrations = rdp_ffi::integrations::RdpIntegrations {
+        let integrations = rdp::integrations::RdpIntegrations {
             audio_output: Some(Arc::new(channels::audio::output::AudioHandle::new())),
             audio_input: Some(Arc::new(channels::audio::input::MicHandle::new())),
             webcam: Some(Arc::new(channels::webcam::WebcamHandle::new())),
             clipboard: Some(Arc::new(channels::clipboard::ClipboardHandle::new())),
         };
 
-        let (rdp_instance, command_tx) =
-            rdp_ffi::Rdp::new(settings, tx, use_rgba, None, integrations);
+        let (rdp_instance, command_tx) = rdp::Rdp::new(settings, tx, use_rgba, None, integrations);
         let command_event = rdp_instance.get_command_event();
 
         let mut rdp = Box::pin(rdp_instance);
@@ -257,7 +255,7 @@ impl crate::AppHandler {
     pub(crate) fn open_rdp(
         &mut self,
         el: &ActiveEventLoop,
-        mut settings: rdp_ffi::settings::RdpSettings,
+        mut settings: rdp::settings::RdpSettings,
     ) -> Result<()> {
         macro_rules! tr {
             ($msg:expr) => {
@@ -274,12 +272,12 @@ impl crate::AppHandler {
         let local_scale = if use_local_scaler { monitor_scale } else { 1.0 };
 
         let (rdp_w, rdp_h) = match (settings.screen_size, is_rail) {
-            (rdp_ffi::geom::ScreenSize::Full, _) | (_, true) => {
+            (rdp::geom::ScreenSize::Full, _) | (_, true) => {
                 let (lw, lh) =
                     crate::monitor::phys_2_logic((desktop_w as i32, desktop_h as i32), local_scale);
                 (lw as u32, lh as u32)
             }
-            (rdp_ffi::geom::ScreenSize::Fixed(w, h), _) => (w, h),
+            (rdp::geom::ScreenSize::Fixed(w, h), _) => (w, h),
         };
         let coords_scale = if use_local_scaler {
             settings.options.desktop_scale = 1.0;
@@ -290,7 +288,7 @@ impl crate::AppHandler {
         };
         let desktop_size = (rdp_w, rdp_h);
         let is_fullscreen = settings.screen_size.is_fullscreen() && !is_rail;
-        let (window_logical_w, window_logical_h) = if let rdp_ffi::geom::ScreenSize::Fixed(w, h) =
+        let (window_logical_w, window_logical_h) = if let rdp::geom::ScreenSize::Fixed(w, h) =
             settings.screen_size
         {
             (w as f64, h as f64)
@@ -304,7 +302,7 @@ impl crate::AppHandler {
         );
 
         if is_rail {
-            settings.screen_size = rdp_ffi::geom::ScreenSize::Fixed(rdp_w, rdp_h);
+            settings.screen_size = rdp::geom::ScreenSize::Fixed(rdp_w, rdp_h);
             let window = Arc::new(
                 el.create_window(
                     winit::window::Window::default_attributes()
@@ -343,17 +341,17 @@ impl crate::AppHandler {
                 let cmd_tx = state.command_tx.clone();
                 let cmd_ev = state.command_event;
                 self.rail_ipc = crate::ipc::bind(&srv.id, &srv.token, move |msg| {
-                    let _ = cmd_tx.send(rdp_ffi::messaging::RdpCommand::LaunchRailApp {
+                    let _ = cmd_tx.send(rdp::messaging::RdpCommand::LaunchRailApp {
                         app: msg.app.clone(),
                         args: msg.args.clone(),
                         dir: msg.working_dir.clone(),
                     });
-                    rdp_ffi::Rdp::set_command_event(&cmd_ev);
+                    rdp::Rdp::set_command_event(&cmd_ev);
                 })
                 .ok();
             }
         } else {
-            settings.screen_size = rdp_ffi::geom::ScreenSize::Fixed(rdp_w, rdp_h);
+            settings.screen_size = rdp::geom::ScreenSize::Fixed(rdp_w, rdp_h);
             let window = Arc::new(
                 el.create_window(
                     winit::window::Window::default_attributes()
@@ -630,23 +628,23 @@ impl crate::AppHandler {
         }
         while let Ok(raw_key) = state.keys_rx.try_recv() {
             if let Some(sc) = crate::keymap::RdpScanCode::get_from_key(Some(&raw_key.keycode)) {
-                let _ = state.command_tx.send(rdp_ffi::messaging::RdpCommand::Input(
-                    rdp_ffi::messaging::InputEvent::Keyboard {
+                let _ = state.command_tx.send(rdp::messaging::RdpCommand::Input(
+                    rdp::messaging::InputEvent::Keyboard {
                         scancode: sc as u16,
                         pressed: raw_key.pressed,
                         repeat: raw_key.repeat,
                     },
                 ));
                 if sc == crate::keymap::RdpScanCode::RMenu && !raw_key.pressed {
-                    let _ = state.command_tx.send(rdp_ffi::messaging::RdpCommand::Input(
-                        rdp_ffi::messaging::InputEvent::Keyboard {
+                    let _ = state.command_tx.send(rdp::messaging::RdpCommand::Input(
+                        rdp::messaging::InputEvent::Keyboard {
                             scancode: crate::keymap::RdpScanCode::LControl as u16,
                             pressed: false,
                             repeat: false,
                         },
                     ));
                 }
-                rdp_ffi::Rdp::set_command_event(&state.command_event);
+                rdp::Rdp::set_command_event(&state.command_event);
             }
         }
         if let RdpMode::Desktop { ref mut fps, .. } = state.mode {
