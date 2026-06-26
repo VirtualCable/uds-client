@@ -1,49 +1,50 @@
 #!/bin/sh
 
-# Common part
+
+echo "Installing UDSClient and UDSRDP"
+
+. /etc/lsb-release
 
 # unlocks so we can write on TC
 fsunlock
 
-cp UDSClient /bin/udsclient
-chmod 755 /bin/udsclient
+if [ "$DISTRIB_RELEASE" = "9.0.0" ]; then
+    echo "Updating Template_UDS.xml to use freerdp instead of freerdp2"
+    sed -i 's/freerdp2/freerdp/g' Template_UDS.xml
+    echo "Installing libfuse2t64_2.9.9-8.1build1_amd64.deb"
+    dpkg -i libfuse2t64_2.9.9-8.1build1_amd64.deb
+    echo "Updating udsrdp to use FREERDP=freerdp instead of freerdp2"
+    sed -i 's/FREERDP=freerdp2/FREERDP=freerdp/g' udsrdp
+fi
+
+# TC hast /bin as a symlink to /usr/bin, so we can copy the client there
+
+cp UDSClient /usr/bin/udsclient
+chmod 755 /usr/bin/udsclient
 # RDP Script for UDSClient. Launchs udsclient using the "Template_UDS" profile
 
-# Get the distribution release number
-. /etc/lsb-release
+cp udsrdp /usr/bin
+chmod 755 /usr/bin/udsrdp
 
-# If DISTRIB_RELEASE is 8 or later, use udsrdp, else uds udsrpdp-compat
-if [[ "$(printf '%s\n' "$DISTRIB_RELEASE" "8" | sort -V | head -n1)" != "$DISTRIB_RELEASE" ]]; then
-    cp udsrdp /usr/bin
-    chmod 755 /usr/bin/udsrdp
-else
-    cp udsrdp-compat /usr/bin/udsrdp
-    chmod 755 /usr/bin/udsrdp
+# Crate if not exists and copy template for UDS connections
+if [ ! -d /usr/share/uds ]; then
+    mkdir /usr/share/uds
 fi
 
-INSTALLED=0
-# Installation for 7.1.x version
-grep -q "7.1" /etc/issue
-if [ $? -eq 0 ]; then
-    echo "Installing for thinpro version 7.1"
-    # Allow UDS apps without asking
-    cp firefox7.1/syspref.js /etc/firefox
-    # Copy handlers.json for firefox
-    mkdir -p /lib/UDSClient/firefox/ > /dev/null 2>&1
-    cp firefox7.1/handlers.json /lib/UDSClient/firefox/
-    # and runner
-    cp firefox7.1/45-uds /etc/hptc-firefox-mgr/prestart
-else
-    echo "Installing for thinpro version 7.2 or later"
-    # Copy handlers for firefox
-    mkdir -p /lib/UDSClient/firefox/ > /dev/null 2>&1
-    # Copy handlers.json for firefox
-    cp firefox/handlers.json /lib/UDSClient/firefox/
-    cp firefox/45-uds /etc/hptc-firefox-mgr/prestart
-    # copy uds handler for firefox
-    cp firefox/uds /usr/share/hptc-firefox-mgr/handlers/uds
-    chmod 755 /usr/share/hptc-firefox-mgr/handlers/uds
-fi
+cp Template_UDS.xml /usr/share/uds/Template_UDS.xml
+chmod 644 /usr/share/uds/Template_UDS.xml
+
+mclient import /usr/share/uds/Template_UDS.xml
+mclient commit
+
+# Copy handlers for firefox
+mkdir -p /lib/UDSClient/firefox/ > /dev/null 2>&1
+# Copy handlers.json for firefox
+cp firefox/handlers.json /lib/UDSClient/firefox/
+cp firefox/45-uds /etc/hptc-firefox-mgr/prestart
+# copy uds handler for firefox
+cp firefox/uds /usr/share/hptc-firefox-mgr/handlers/uds
+chmod 755 /usr/share/hptc-firefox-mgr/handlers/uds
 
 # Common part
 fslock
