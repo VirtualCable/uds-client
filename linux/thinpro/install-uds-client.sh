@@ -1,5 +1,4 @@
-#!/bin/sh
-
+#!/bin/bash
 
 echo "Installing UDSClient and UDSRDP"
 
@@ -8,7 +7,7 @@ echo "Installing UDSClient and UDSRDP"
 # unlocks so we can write on TC
 fsunlock
 
-if [ "$DISTRIB_RELEASE" = "9.0.0" ]; then
+if [ "${DISTRIB_RELEASE:0:1}" = "9" ]; then
     echo "Updating Template_UDS.xml to use freerdp instead of freerdp2"
     sed -i 's/freerdp2/freerdp/g' Template_UDS.xml
     echo "Installing libfuse2t64_2.9.9-8.1build1_amd64.deb"
