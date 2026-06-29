@@ -6,18 +6,18 @@
 //! Emulated smartcard backend module.
 //!
 //! Sub-modules:
-//! - `consts`: GIDS constants (AID, EF/DO IDs, status words, etc.)
+//! - `consts`: eUDS constants (AID, INS, status words, ATR, etc.)
 //! - `helpers`: TLV, APDU, DER parsing, MGF1 helpers
-//! - `types`: VirtualFs, SessionState, GidsEngine structs
-//! - `engine`: GIDS APDU processing engine
+//! - `euds_types`: PinMode, SessionState
+//! - `euds_engine`: eUDS APDU processing engine
 //! - `tests`: Unit tests
 
 pub mod consts;
-mod engine;
+mod euds_engine;
 mod helpers;
 #[cfg(test)]
 mod tests;
-mod types;
+mod euds_types;
 
 use std::sync::Mutex;
 use std::time::Duration;
@@ -26,13 +26,19 @@ use rsa::RsaPrivateKey;
 
 use rdp::integrations::smartcard::*;
 
-use self::engine::GidsEngine;
+use self::consts::*;
+use self::euds_engine::EudsEngine;
+use self::euds_types::PinMode;
 use super::SmartcardBackend;
 
-/// Emulated smartcard backend using GIDS protocol with a local certificate.
-#[derive(Debug)]
 pub(crate) struct EmulatedBackend {
-    engine: Mutex<GidsEngine>,
+    engine: Mutex<EudsEngine>,
+}
+
+impl std::fmt::Debug for EmulatedBackend {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EmulatedBackend").finish()
+    }
 }
 
 impl EmulatedBackend {
@@ -43,8 +49,18 @@ impl EmulatedBackend {
             .into_contents();
         let private_key =
             RsaPrivateKey::from_pkcs8_pem(key_pem).map_err(|e| format!("key PEM: {}", e))?;
+        let pin_mode = if key_pem.contains("ENCRYPTED") {
+            PinMode::Required
+        } else {
+            PinMode::NotRequired
+        };
         Ok(EmulatedBackend {
-            engine: Mutex::new(GidsEngine::new(cert_der, private_key, pin.to_string())),
+            engine: Mutex::new(EudsEngine::new(
+                cert_der,
+                private_key,
+                pin.to_string(),
+                pin_mode,
+            )),
         })
     }
 
@@ -53,11 +69,13 @@ impl EmulatedBackend {
         use rsa::pkcs8::DecodePrivateKey;
         let private_key =
             RsaPrivateKey::from_pkcs8_der(key_pkcs8_der).map_err(|e| format!("key DER: {}", e))?;
+        let pin_mode = PinMode::NotRequired;
         Ok(EmulatedBackend {
-            engine: Mutex::new(GidsEngine::new(
+            engine: Mutex::new(EudsEngine::new(
                 cert_der.to_vec(),
                 private_key,
                 pin.to_string(),
+                pin_mode,
             )),
         })
     }
@@ -81,15 +99,12 @@ impl EmulatedBackend {
     }
 }
 
-const READER_NAME: &str = "Emulated Smartcard Reader";
-
 impl SmartcardBackend for EmulatedBackend {
     fn establish_context(&self, _scope: u32) -> Result<ScardContext, u32> {
         Ok(ScardContext::new())
     }
 
     fn release_context(&self, _ctx: &ScardContext) -> Result<(), u32> {
-        // Do NOT reset session — card state is shared across contexts
         Ok(())
     }
 
@@ -98,7 +113,7 @@ impl SmartcardBackend for EmulatedBackend {
     }
 
     fn list_readers(&self, _ctx: &ScardContext, _: Option<&[String]>) -> Result<Vec<String>, u32> {
-        Ok(vec![READER_NAME.to_string()])
+        Ok(vec![EUDS_READER_NAME.to_string()])
     }
 
     fn connect(
@@ -108,22 +123,21 @@ impl SmartcardBackend for EmulatedBackend {
         _: u32,
         _: u32,
     ) -> Result<ConnectResult, u32> {
-        if reader != READER_NAME {
+        if reader != EUDS_READER_NAME {
             return Err(SCARD_E_UNKNOWN_READER);
         }
-        // Do NOT reset session — Windows uses multiple concurrent connections
-        // and resetting wipes the GIDS SELECT AID state from another connection.
         Ok(ConnectResult {
-            handle: ScardHandle::new(SCARD_PROTOCOL_T0),
-            active_protocol: SCARD_PROTOCOL_T0,
+            handle: ScardHandle::new(SCARD_PROTOCOL_T1),
+            active_protocol: SCARD_PROTOCOL_T1,
         })
     }
 
     fn disconnect(&self, _handle: &ScardHandle, _disposition: u32) -> Result<(), u32> {
         Ok(())
     }
+
     fn reconnect(&self, _: &ScardHandle, _: u32, _: u32, _: u32) -> Result<u32, u32> {
-        Ok(SCARD_PROTOCOL_T0)
+        Ok(SCARD_PROTOCOL_T1)
     }
 
     fn transmit(
@@ -139,19 +153,37 @@ impl SmartcardBackend for EmulatedBackend {
         })
     }
 
-    fn control(&self, _: &ScardHandle, _: u32, _: &[u8]) -> Result<Vec<u8>, u32> {
-        Ok(vec![])
+    fn control(&self, _: &ScardHandle, control_code: u32, _: &[u8]) -> Result<Vec<u8>, u32> {
+        const FEATURE_GET_TLV_PROPERTIES: u8 = 0x12;
+        const CM_IOCTL_GET_FEATURE_REQUEST: u32 = 0x0031_3520;
+        const CLASS2_IOCTL_MAGIC: u32 = 0x0033_0000;
+        const IOCTL_FEATURE_GET_TLV_PROPERTIES: u32 =
+            0x4200_0000 + (FEATURE_GET_TLV_PROPERTIES as u32) + CLASS2_IOCTL_MAGIC;
+
+        if control_code == CM_IOCTL_GET_FEATURE_REQUEST {
+            let mut response = Vec::with_capacity(6);
+            response.push(FEATURE_GET_TLV_PROPERTIES);
+            response.push(4);
+            response.extend_from_slice(&IOCTL_FEATURE_GET_TLV_PROPERTIES.to_be_bytes());
+            Ok(response)
+        } else if control_code == IOCTL_FEATURE_GET_TLV_PROPERTIES {
+            let mut response = Vec::with_capacity(6);
+            response.push(0x0A);
+            response.push(4);
+            let max_apdu: u32 = 0x0001_0000;
+            response.extend_from_slice(&max_apdu.to_be_bytes());
+            Ok(response)
+        } else {
+            Ok(vec![])
+        }
     }
 
     fn status(&self, _: &ScardHandle) -> Result<ScardStatus, u32> {
         Ok(ScardStatus {
-            reader_names: vec![READER_NAME.to_string()],
+            reader_names: vec![EUDS_READER_NAME.to_string()],
             state: SCARD_STATE_PRESENT,
-            protocol: SCARD_PROTOCOL_T0,
-            atr: vec![
-                0x3B, 0xF7, 0x18, 0x00, 0x00, 0x80, 0x31, 0xFE, 0x45, 0x73, 0x66, 0x74, 0x65, 0x2D,
-                0x6E, 0x66, 0xC4,
-            ],
+            protocol: SCARD_PROTOCOL_T1,
+            atr: EUDS_ATR.to_vec(),
         })
     }
 
@@ -174,10 +206,7 @@ impl SmartcardBackend for EmulatedBackend {
                     } else {
                         actual_state
                     },
-                    atr: vec![
-                        0x3B, 0xF7, 0x18, 0x00, 0x00, 0x80, 0x31, 0xFE, 0x45, 0x73, 0x66, 0x74,
-                        0x65, 0x2D, 0x6E, 0x66, 0xC4,
-                    ],
+                    atr: EUDS_ATR.to_vec(),
                 }
             })
             .collect();
@@ -197,15 +226,19 @@ impl SmartcardBackend for EmulatedBackend {
     fn begin_transaction(&self, _: &ScardHandle) -> Result<(), u32> {
         Ok(())
     }
+
     fn end_transaction(&self, _: &ScardHandle, _: u32) -> Result<(), u32> {
         Ok(())
     }
+
     fn get_attrib(&self, _: &ScardHandle, _: u32) -> Result<Vec<u8>, u32> {
         Ok(vec![0x00])
     }
+
     fn set_attrib(&self, _: &ScardHandle, _: u32, _: &[u8]) -> Result<(), u32> {
         Ok(())
     }
+
     fn is_available(&self) -> bool {
         true
     }

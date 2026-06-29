@@ -134,7 +134,9 @@ impl RdpSettings {
                 audio: redirections.audio.unwrap_or(defs.redirections.audio),
                 mic: redirections.mic.unwrap_or(defs.redirections.mic),
                 printing: redirections.printing.unwrap_or(defs.redirections.printing),
-                smartcard: redirections.smartcard.unwrap_or(defs.redirections.smartcard),
+                smartcard: redirections
+                    .smartcard
+                    .unwrap_or(defs.redirections.smartcard),
                 drives: redirections
                     .drives
                     .clone()

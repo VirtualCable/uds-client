@@ -3,112 +3,50 @@
 // All rights reserved.
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
-//! GIDS constants — EF/DO IDs, CRT types, algoId bits, status words, etc.
+//! eUDS constants — APDU instructions, status words, ATR, AID.
 
-/// Microsoft GIDS AID (11 bytes)
-pub const GIDS_AID: [u8; 11] = [
-    0xA0, 0x00, 0x00, 0x03, 0x97, 0x42, 0x54, 0x46, 0x59, 0x02, 0x01,
-];
+// ============================================================================
+// eUDS Custom APDU Protocol Constants
+// ============================================================================
 
-// EF IDs
-pub const EFID_MASTER: u16 = 0xA000;
-pub const EFID_COMMON: u16 = 0xA010;
-pub const EFID_CARDID: u16 = 0xA012;
-pub const EFID_CURRENT_DF: u16 = 0x3FFF;
-pub const ISO_FID_MF: u16 = 0x3F00;
+// APDU Instructions
+pub const EUDS_INS_SELECT: u8 = 0xA4;     // Standard SELECT (CLA=0x00)
+pub const EUDS_INS_VERIFY: u8 = 0xB1;     // Proprietary: VERIFY PIN
+pub const EUDS_INS_GET_CERT: u8 = 0xB4;   // Proprietary: GET CERTIFICATE
+pub const EUDS_INS_GET_PUBKEY: u8 = 0x46;  // Proprietary: GET PUBLIC KEY
+pub const EUDS_INS_GET_RESPONSE: u8 = 0xC0; // GET RESPONSE (chaining)
+pub const EUDS_INS_SIGN: u8 = 0xB2;       // Proprietary: SIGN DATA
+pub const EUDS_INS_DECRYPT: u8 = 0xB3;     // Proprietary: DECRYPT DATA
 
-// DO IDs
-pub const DO_FILESYSTEM_TABLE: u16 = 0xDF1F;
-pub const DO_KEYMAP: u16 = 0xDF20;
-pub const DO_CARDID: u16 = 0xDF20;
-pub const DO_CARDAPPS: u16 = 0xDF21;
-pub const DO_CARDCF: u16 = 0xDF22;
-pub const DO_CMAPFILE: u16 = 0xDF23;
-pub const DO_KXC00: u16 = 0xDF24;
+// SIGN/DECRYPT P1/P2
+pub const EUDS_SIGN_P1: u8 = 0x9E;
+pub const EUDS_SIGN_P2: u8 = 0x9A;
+pub const EUDS_DEC_P1: u8 = 0x80;
+pub const EUDS_DEC_P2: u8 = 0x86;
 
-// Key references
-pub const DEFAULT_KEY_REF: u8 = 0x81;
-pub const KEY_TYPE_KEYEXCHANGE: u8 = 0x9A;
+// eUDS Custom AID (9 bytes)
+pub const EUDS_AID: &[u8] = b"eUDS-Card"; // 65 75 44 53 2D 43 61 72 64
 
-// CRT types (MSE)
-pub const CRT_SIGN: u8 = 0xB6;
-pub const CRT_CONF: u8 = 0xB8;
-
-// AlgoId RSA key sizes
-pub const ALGID_RSA_1024: u8 = 0x06;
-pub const ALGID_RSA_2048: u8 = 0x07;
-pub const ALGID_RSA_3072: u8 = 0x08;
-pub const ALGID_RSA_4096: u8 = 0x09;
-
-// AlgoId padding bits
-pub const ALGID_PAD_PKCS1: u8 = 0x40;
-pub const ALGID_PAD_OAEP: u8 = 0x80;
-
-// PIN
-pub const MAX_PIN_SIZE: usize = 127;
-pub const DEFAULT_PIN_RETRIES: u8 = 3;
-
-// Fixed contents
-pub const CARDCF_CONTENT: [u8; 6] = [0x00, 0x00, 0x01, 0x00, 0x04, 0x00];
-pub const CARDAPPS_CONTENT: [u8; 8] = [0x6D, 0x73, 0x63, 0x70, 0x00, 0x00, 0x00, 0x00];
-
-// FCI/FCP templates
-pub const GIDS_FCI: [u8; 20] = [
-    0x61, 0x12, 0x4F, 0x0B, 0xA0, 0x00, 0x00, 0x03, 0x97, 0x42, 0x54, 0x46, 0x59, 0x02, 0x01, 0x73,
-    0x03, 0x40, 0x01, 0xC0,
-];
-pub const GIDS_FCP: [u8; 10] = [0x62, 0x08, 0x82, 0x01, 0x38, 0x8C, 0x03, 0x03, 0x30, 0x30];
-
-// ISO 7816 status words
+// Status Words
 pub const SW_SUCCESS: u16 = 0x9000;
-pub const SW_MORE_DATA: u16 = 0x6100;
-pub const SW_VERIFY_FAILED: u16 = 0x63C0;
+pub const SW_MORE_DATA_BASE: u16 = 0x6100; // 61 XX
 pub const SW_WRONG_LC: u16 = 0x6700;
-pub const SW_COMMAND_NOT_ALLOWED: u16 = 0x6900;
-pub const SW_SECURITY_NOT_SATISFIED: u16 = 0x6982;
+pub const SW_COMMAND_NOT_ALLOWED: u16 = 0x6986;
+pub const SW_SECURITY_STATUS_NOT_SATISFIED: u16 = 0x6982;
 pub const SW_AUTH_METHOD_BLOCKED: u16 = 0x6983;
-pub const SW_INVALID_COMMAND_DATA: u16 = 0x6A80;
+pub const SW_VERIFY_FAILED_BASE: u16 = 0x63C0; // 63 CX
 pub const SW_FILE_NOT_FOUND: u16 = 0x6A82;
 pub const SW_INVALID_P1P2: u16 = 0x6A86;
-pub const SW_REF_DATA_NOT_FOUND: u16 = 0x6A88;
+pub const SW_INVALID_COMMAND_DATA: u16 = 0x6A80;
 
-/// DigestInfo prefixes for PSO SIGN hash identification.
-/// Currently unused — the full DigestInfo is signed as-is with PKCS#1 v1.5.
-#[allow(dead_code)]
-pub const DIGEST_INFO_PREFIXES: &[(&[u8], &str)] = &[
-    (
-        &[
-            0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2B, 0x0E, 0x03, 0x02, 0x1A, 0x05, 0x00, 0x04,
-            0x14,
-        ],
-        "SHA-1",
-    ),
-    (
-        &[
-            0x30, 0x2D, 0x30, 0x0D, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02,
-            0x04, 0x05, 0x00, 0x04, 0x1C,
-        ],
-        "SHA-224",
-    ),
-    (
-        &[
-            0x30, 0x31, 0x30, 0x0D, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02,
-            0x01, 0x05, 0x00, 0x04, 0x20,
-        ],
-        "SHA-256",
-    ),
-    (
-        &[
-            0x30, 0x41, 0x30, 0x0D, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02,
-            0x02, 0x05, 0x00, 0x04, 0x30,
-        ],
-        "SHA-384",
-    ),
-    (
-        &[
-            0x30, 0x51, 0x30, 0x0D, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02,
-            0x03, 0x05, 0x00, 0x04, 0x40,
-        ],
-        "SHA-512",
-    ),
+// eUDS ATR (ISO 7816-3, T=1 protocol)
+// TS=3B, T0=89 (Y1=8, K=9), TD1=01 (T=1), H="eUDS-Card", TCK=96
+pub const EUDS_ATR: &[u8] = &[
+    0x3B, 0x89, 0x01, 0x45, 0x55, 0x44, 0x53, 0x2D, 0x43, 0x61, 0x72, 0x64, 0x96
 ];
+
+// Reader name
+pub const EUDS_READER_NAME: &str = "eUDS Virtual Smartcard Reader";
+
+// PIN
+pub const DEFAULT_PIN_RETRIES: u8 = 3;

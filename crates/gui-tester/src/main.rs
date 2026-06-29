@@ -12,6 +12,15 @@ fn main() {
     let fake_catalog = gettext::Catalog::empty(); // Empty catalog for now
     log::setup_logging("debug", log::LogType::Test);
     rdp::wlog::setup_freerdp_logger(rdp::wlog::WLogLevel::Info);
+    // Enable TRACE for smartcard-specific tags
+    rdp::wlog::set_wlog_level(
+        Some("com.freerdp.channels.smartcard.vgids"),
+        rdp::wlog::WLogLevel::Trace,
+    );
+    rdp::wlog::set_wlog_level(
+        Some("com.freerdp.utils.smartcard.ops"),
+        rdp::wlog::WLogLevel::Trace,
+    );
 
     let (_messages_tx, messages_rx): (
         Sender<gui::types::GuiMessage>,

@@ -37,10 +37,7 @@ impl DummyBackend {
         DummyBackend {
             cards: RwLock::new(vec![DummyCard {
                 reader: "Virtual Smartcard Reader 0".to_string(),
-                atr: vec![
-                    0x3B, 0xF7, 0x18, 0x00, 0x00, 0x80, 0x31, 0xFE, 0x45, 0x73, 0x66, 0x74, 0x65,
-                    0x2D, 0x6E, 0x66, 0xC4,
-                ],
+                atr: vec![0x3B, 0x08, 0x00, 0x00, 0x12, 0x34, 0x56, 0x78, 0x90, 0x00],
                 handle: None,
             }]),
             contexts: RwLock::new(HashMap::new()),
