@@ -309,60 +309,61 @@ def copy_freerdp_lib(
     dst_lib_dir: Path,
 ) -> None:
     """
-    Copy a FreeRDP library preserving its full versioned structure:
-    - base symlink (e.g., libfreerdp3.dylib)
-    - intermediate symlink (e.g., libfreerdp3.0.dylib)
-    - real file (e.g., libfreerdp3.0.0.dylib)
+    Copy a FreeRDP library preserving its versioned symlink chain, e.g.:
+      libfreerdp3.dylib -> libfreerdp3.3.dylib -> libfreerdp3.3.20.1.dylib (real)
 
-    The real file is stripped using `strip -x` to reduce size.
-    Symlinks are recreated inside the destination directory.
+    The chain depth is NOT assumed: Homebrew layouts differ between Intel and
+    Apple Silicon (2 vs 3 levels), so a fixed base->intermediate->real assumption
+    produced a self-referential symlink (libfreerdp3.dylib -> libfreerdp3.dylib)
+    on Intel, which later made `otool -L` fail. We walk the chain from the base
+    name down to the real file, copy+strip the real file, then recreate every
+    symlink. Self-referential/cyclic links are skipped.
     """
 
-    # Base symlink (e.g., libfreerdp3.dylib)
     base = src_lib_dir / lib_name
     if not base.exists():
         raise FileNotFoundError(f"Library not found: {base}")
-    if not base.is_symlink():
-        raise RuntimeError(f"{base} is not a symlink; unexpected library structure")
 
-    # Get intermediate symlink (e.g., libfreerdp3.0.dylib)
-    intermediate_name = base.readlink()
-    intermediate = src_lib_dir / intermediate_name
-    if not intermediate.is_symlink():
-        raise RuntimeError(f"{intermediate} is not a symlink; unexpected library structure")
+    # Walk the symlink chain, collecting (link_name -> target_name) pairs until
+    # the real file is reached. `seen` guards against cycles / self-links.
+    chain: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    current = base
+    while current.is_symlink():
+        if current.name in seen:
+            break  # cycle guard
+        seen.add(current.name)
+        # Homebrew symlinks are relative to the lib dir; keep only the leaf name.
+        target_name = Path(os.fspath(current.readlink())).name
+        if target_name == current.name:
+            break  # self-link, stop here
+        chain.append((current.name, target_name))
+        current = src_lib_dir / target_name
 
-    # Resolve real file (e.g., libfreerdp3.0.0.dylib)
-    real_name = intermediate.readlink()
-    real = src_lib_dir / real_name
+    real = current
     if not real.is_file():
         raise RuntimeError(f"{real} is not a file; unexpected library structure")
 
     dst_lib_dir.mkdir(parents=True, exist_ok=True)
 
-    # Copy real file
+    # Copy + strip the real file to reduce size
     real_dst = dst_lib_dir / real.name
     shutil.copy2(real, real_dst)
-
-    # Strip real file to reduce size
     try:
         subprocess.run(["strip", "-x", str(real_dst)], check=True)
         print(f">> Stripped: {real_dst}")
     except Exception as exc:
         print(f">> WARN: strip failed for {real_dst}: {exc}")
 
-    # Recreate intermediate symlink
-    intermediate_dst = dst_lib_dir / intermediate.name
-    if intermediate_dst.exists():
-        intermediate_dst.unlink()
-    intermediate_dst.symlink_to(real_dst.name)
-    print(f">> Symlink {intermediate_dst} -> {real_dst.name}")
-
-    # Recreate base symlink
-    base_dst = dst_lib_dir / base.name
-    if base_dst.exists():
-        base_dst.unlink()
-    base_dst.symlink_to(intermediate_dst.name)
-    print(f">> Symlink {base_dst} -> {intermediate_dst.name}")
+    # Recreate every symlink in the chain
+    for link_name, target_name in chain:
+        if link_name == target_name:
+            continue  # never create a self-referential symlink
+        link_dst = dst_lib_dir / link_name
+        if link_dst.is_symlink() or link_dst.exists():
+            link_dst.unlink()
+        link_dst.symlink_to(target_name)
+        print(f">> Symlink {link_dst} -> {target_name}")
 
 
 def fail(msg: str) -> typing.NoReturn:
