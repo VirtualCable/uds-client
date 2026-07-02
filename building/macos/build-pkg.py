@@ -386,6 +386,7 @@ def validate_bundle_dependencies(app_dir: Path) -> bool:
     """
     Validate that all binaries and dylibs inside the app bundle only depend on:
       - @rpath/...
+      - @executable_path/...
       - /usr/lib/...
       - /System/Library/...
     Returns True if everything is valid, False otherwise.
@@ -395,6 +396,9 @@ def validate_bundle_dependencies(app_dir: Path) -> bool:
 
     valid_prefixes = (
         "@rpath/",
+        # Executables (non-dylib) get their deps rewritten to @executable_path/../Frameworks
+        # by fix_install_names; that is a valid, self-contained bundle path.
+        "@executable_path/",
         "/usr/lib/",
         "/System/Library/",
     )
