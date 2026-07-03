@@ -1,0 +1,81 @@
+<Profile>
+ <ProfileSettings>
+  <Name>HP-Profile-2026-04-22</Name>
+  <RegistryRoot>root/ConnectionType/freerdp2/connections/{af80614f-ef8f-4c3c-bf55-7597e226467d}</RegistryRoot>
+  <Target>
+   <Hardware>t530</Hardware>
+   <ImageId>T8X81022</ImageId>
+   <Version>8.1.0</Version>
+   <Config>standard</Config>
+  </Target>
+ </ProfileSettings>
+ <ProfileRegistry>
+  <NodeDir name="{af80614f-ef8f-4c3c-bf55-7597e226467d}">
+   <NodeDir name="authorizations">
+    <NodeDir name="user">
+     <NodeKey name="edit">
+      <NodeParam name="value">0</NodeParam>
+      <NodeParam name="type">bool</NodeParam>
+     </NodeKey>
+     <NodeKey name="execution">
+      <NodeParam name="value">0</NodeParam>
+      <NodeParam name="type">bool</NodeParam>
+     </NodeKey>
+    </NodeDir>
+   </NodeDir>
+   <NodeKey name="label">
+    <NodeParam name="value">Template_UDS</NodeParam>
+    <NodeParam name="type">string</NodeParam>
+   </NodeKey>
+   <NodeKey name="credentialsType">
+    <NodeParam name="value">password</NodeParam>
+    <NodeParam name="type">string</NodeParam>
+   </NodeKey>
+   <NodeKey name="rdpEncryption">
+    <NodeParam name="value">1</NodeParam>
+    <NodeParam name="type">bool</NodeParam>
+   </NodeKey>
+   <NodeKey name="clipboardExtension">
+    <NodeParam name="value">1</NodeParam>
+    <NodeParam name="type">bool</NodeParam>
+   </NodeKey>
+   <NodeKey name="certificatePolicy">
+    <NodeParam name="value">ignore</NodeParam>
+    <NodeParam name="type">string</NodeParam>
+   </NodeKey>
+   <NodeKey name="portMapping">
+    <NodeParam name="value">1</NodeParam>
+    <NodeParam name="type">number</NodeParam>
+   </NodeKey>
+   <NodeKey name="localPartitionRedirection">
+    <NodeParam name="value">1</NodeParam>
+    <NodeParam name="type">number</NodeParam>
+   </NodeKey>
+   <NodeKey name="hasDesktopIcon">
+    <NodeParam name="value">0</NodeParam>
+    <NodeParam name="type">bool</NodeParam>
+   </NodeKey>
+   <NodeKey name="address">
+    <NodeParam name="value"/>
+    <NodeParam name="type">string</NodeParam>
+   </NodeKey>
+   <NodeKey name="username">
+    <NodeParam name="value"/>
+    <NodeParam name="type">string</NodeParam>
+   </NodeKey>
+   <NodeKey name="password">
+    <NodeParam name="value"/>
+    <NodeParam name="type">encrypted</NodeParam>
+   </NodeKey>
+   <NodeKey name="domain">
+    <NodeParam name="value"/>
+    <NodeParam name="type">string</NodeParam>
+   </NodeKey>
+   <NodeKey name="iconPosition">
+    <NodeParam name="value"/>
+    <NodeParam name="type">string</NodeParam>
+   </NodeKey>
+  </NodeDir>
+ </ProfileRegistry>
+ <ProfileFiles/>
+</Profile>
