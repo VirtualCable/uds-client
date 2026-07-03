@@ -152,7 +152,9 @@ impl AppHandler {
         match event {
             WindowEvent::CloseRequested => return false,
             WindowEvent::Resized(_) => {
-                s.request_screen_resize();
+                if !s.window.window.is_minimized().unwrap_or(false) {
+                    s.request_screen_resize();
+                }
             }
             WindowEvent::CursorMoved { position, .. } => {
                 self.last_pointer = Some(*position);
