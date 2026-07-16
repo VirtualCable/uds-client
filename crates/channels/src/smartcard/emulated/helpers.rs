@@ -38,7 +38,7 @@ pub fn extract_apdu_data(apdu: &[u8]) -> (&[u8], Option<u16>) {
         let lc = b4 as usize;
         if 5 + lc <= len {
             let data = &apdu[5..5 + lc];
-            let le = if 5 + lc + 1 <= len {
+            let le = if 5 + lc < len {
                 let v = apdu[5 + lc] as u16;
                 Some(if v == 0 { 256 } else { v })
             } else {

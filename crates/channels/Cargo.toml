@@ -27,3 +27,4 @@ num-traits = "0.2"
 pem = "3.0"
 rand = { workspace = true }
 log = "0.4"
+pcsc = { workspace = true }

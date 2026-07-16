@@ -11,6 +11,7 @@ shared = { path = "../shared" }
 connection = { path = "../connection" }
 gui = { path = "../gui" }
 crypt = { path = "../crypt" }
+channels = { path = "../channels" }
 
 # JavaScript engine
 boa_engine.workspace = true

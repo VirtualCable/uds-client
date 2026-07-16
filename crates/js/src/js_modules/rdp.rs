@@ -64,6 +64,7 @@ struct JsRdpOptions {
     pub use_nla: Option<bool>,
     pub use_local_scaler: Option<bool>,
     pub use_tunnel: Option<bool>,
+    pub smartcard_emulated: Option<bool>,
 }
 
 #[derive(Debug, TryFromJs, Zeroize, ZeroizeOnDrop)]
@@ -235,7 +236,14 @@ fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
         }
     }
 
-    send_message(GuiMessage::ConnectRdp(Box::new(settings)));
+    let emulated = rdp_settings
+        .options
+        .as_ref()
+        .and_then(|o| o.smartcard_emulated)
+        .unwrap_or(false);
+    let sc_options = channels::smartcard::SmartcardOptions { emulated };
+
+    send_message(GuiMessage::ConnectRdp(Box::new(settings), sc_options));
     // Launcher needs to know that RDP client is running
     // so it doesn't close the GUI immediately
     connection::tasks::mark_internal_rdp_as_running();
@@ -325,7 +333,7 @@ mod tests {
         // Verify that a GuiMessage::ConnectRdp was sent
         match messages_rx.try_recv() {
             Ok(gui_msg) => match gui_msg {
-                GuiMessage::ConnectRdp(settings) => {
+                GuiMessage::ConnectRdp(settings, _sc_options) => {
                     assert_eq!(settings.server, "localhost");
                     assert_eq!(settings.port, 3389);
                     assert_eq!(settings.user, "testuser");
@@ -380,7 +388,7 @@ mod tests {
 
         match messages_rx.try_recv() {
             Ok(gui_msg) => match gui_msg {
-                GuiMessage::ConnectRdp(settings) => {
+                GuiMessage::ConnectRdp(settings, _sc_options) => {
                     assert_eq!(settings.server, "localhost");
                     assert_eq!(settings.port, 3389);
                     assert_eq!(settings.user, "");

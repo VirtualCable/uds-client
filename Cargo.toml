@@ -160,6 +160,9 @@ objc2 = "0.6"
 objc2-foundation = "0.3"
 objc2-app-kit = "0.3"
 
+# PC/SC integration
+pcsc = "2.8"
+
 rdp = { git = "https://github.com/VirtualCable/freerdp-integration.git", package = "rdp", branch = "master" }
 freerdp-sys = { git = "https://github.com/VirtualCable/freerdp-integration.git", package = "freerdp-sys", branch = "master" }
 

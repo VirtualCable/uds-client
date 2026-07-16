@@ -14,13 +14,23 @@
 
 mod dummy;
 mod emulated;
+mod native;
 
 use std::time::Duration;
+use std::sync::OnceLock;
 
 use rdp::integrations::smartcard::*;
 
 use dummy::DummyBackend;
 use emulated::EmulatedBackend;
+use native::NativeBackend;
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SmartcardOptions {
+    pub emulated: bool,
+}
+
+pub static SMARTCARD_OPTIONS: OnceLock<SmartcardOptions> = OnceLock::new();
 
 // ---------------------------------------------------------------------------
 // Internal Backend Trait
@@ -98,21 +108,28 @@ impl SmartcardHandle {
     /// - If `UDS_SMARTCARD_EMULATED=1` and cert/key paths are set, uses emulated backend
     /// - Otherwise, uses the dummy backend (always available)
     pub fn new() -> Self {
-        let backend: Box<dyn SmartcardBackend> = if std::env::var("UDS_SMARTCARD_EMULATED")
-            .as_deref()
-            == Ok("1")
-        {
+        let options = SMARTCARD_OPTIONS.get().copied().unwrap_or_default();
+        let is_emulated = options.emulated
+            || std::env::var("UDS_SMARTCARD_EMULATED").as_deref() == Ok("1");
+
+        let backend: Box<dyn SmartcardBackend> = if is_emulated {
             match EmulatedBackend::try_from_env() {
                 Some(emulated) => Box::new(emulated),
                 None => {
                     log::warn!(
-                        "UDS_SMARTCARD_EMULATED=1 but failed to load cert/key, falling back to dummy"
+                        "Smartcard emulated requested but failed to load cert/key, falling back to dummy"
                     );
                     Box::new(DummyBackend::new())
                 }
             }
         } else {
-            Box::new(DummyBackend::new())
+            let native = NativeBackend::new();
+            if native.is_available() {
+                Box::new(native)
+            } else {
+                log::warn!("Native PC/SC backend is not available, falling back to dummy");
+                Box::new(DummyBackend::new())
+            }
         };
         SmartcardHandle { backend }
     }
