@@ -14,10 +14,10 @@
 
 pub mod consts;
 mod euds_engine;
+mod euds_types;
 mod helpers;
 #[cfg(test)]
 mod tests;
-mod euds_types;
 
 use std::sync::Mutex;
 use std::time::Duration;

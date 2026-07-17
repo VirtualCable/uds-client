@@ -2,12 +2,15 @@
 // Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+use std::sync::OnceLock;
 
 use anyhow::Result;
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose};
-use reqwest::{Client, ClientBuilder};
-use std::sync::OnceLock;
+use reqwest::{
+    Client, ClientBuilder,
+    header::{CONTENT_TYPE, HeaderMap, HeaderValue, USER_AGENT},
+};
 
 use crypt::{
     consts::{PRIVATE_KEY_SIZE, PUBLIC_KEY_SIZE},
@@ -91,7 +94,6 @@ impl UdsBrokerApi {
     }
 
     fn headers(&self) -> reqwest::header::HeaderMap {
-        use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderValue, USER_AGENT};
         let mut headers = HeaderMap::new();
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
         headers.insert(

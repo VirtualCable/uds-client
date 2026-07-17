@@ -85,7 +85,9 @@ impl SmartcardBackend for NativeBackend {
         let protos = u32_to_protocols(preferred_protocols);
 
         let reader_c = std::ffi::CString::new(reader).map_err(|_| SCARD_E_INVALID_PARAMETER)?;
-        let card = pcsc_ctx.connect(&reader_c, share, protos).map_err(pcsc_error_to_u32)?;
+        let card = pcsc_ctx
+            .connect(&reader_c, share, protos)
+            .map_err(pcsc_error_to_u32)?;
 
         let mut r_buf = [0u8; 256];
         let mut a_buf = [0u8; 36];
@@ -108,7 +110,8 @@ impl SmartcardBackend for NativeBackend {
         let disp = u32_to_disposition(disposition)?;
         let mut cards = self.registry.cards.write().unwrap();
         if let Some((card, _)) = cards.remove(&handle.raw()) {
-            card.disconnect(disp).map_err(|(_, err)| pcsc_error_to_u32(err))?;
+            card.disconnect(disp)
+                .map_err(|(_, err)| pcsc_error_to_u32(err))?;
             Ok(())
         } else {
             Err(SCARD_E_INVALID_HANDLE)
@@ -129,7 +132,8 @@ impl SmartcardBackend for NativeBackend {
         let mut cards = self.registry.cards.write().unwrap();
         let (card, _) = cards.get_mut(&handle.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
 
-        card.reconnect(share, protos, init).map_err(pcsc_error_to_u32)?;
+        card.reconnect(share, protos, init)
+            .map_err(pcsc_error_to_u32)?;
 
         let mut r_buf = [0u8; 256];
         let mut a_buf = [0u8; 36];
@@ -150,7 +154,9 @@ impl SmartcardBackend for NativeBackend {
         let (card, _) = cards.get(&handle.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
 
         let mut recv_buf = vec![0u8; SCARD_TRANSMIT_MAX];
-        let resp_slice = card.transmit(data, &mut recv_buf).map_err(pcsc_error_to_u32)?;
+        let resp_slice = card
+            .transmit(data, &mut recv_buf)
+            .map_err(pcsc_error_to_u32)?;
 
         Ok(TransmitResult {
             recv_pci: None,
@@ -168,7 +174,9 @@ impl SmartcardBackend for NativeBackend {
         let (card, _) = cards.get(&handle.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
 
         let mut out_buf = vec![0u8; 4096];
-        let resp_slice = card.control(control_code, in_data, &mut out_buf).map_err(pcsc_error_to_u32)?;
+        let resp_slice = card
+            .control(control_code, in_data, &mut out_buf)
+            .map_err(pcsc_error_to_u32)?;
 
         Ok(resp_slice.to_vec())
     }
@@ -179,7 +187,9 @@ impl SmartcardBackend for NativeBackend {
 
         let mut r_buf = [0u8; 256];
         let mut a_buf = [0u8; 36];
-        let status = card.status2(&mut r_buf, &mut a_buf).map_err(pcsc_error_to_u32)?;
+        let status = card
+            .status2(&mut r_buf, &mut a_buf)
+            .map_err(pcsc_error_to_u32)?;
 
         Ok(ScardStatus {
             reader_names: vec![reader_name.clone()],
@@ -197,7 +207,8 @@ impl SmartcardBackend for NativeBackend {
     ) -> Result<Vec<ReaderStateOut>, u32> {
         let mut pcsc_states = Vec::new();
         for rs in reader_states {
-            let cstr = std::ffi::CString::new(rs.reader_name.as_str()).map_err(|_| SCARD_E_INVALID_PARAMETER)?;
+            let cstr = std::ffi::CString::new(rs.reader_name.as_str())
+                .map_err(|_| SCARD_E_INVALID_PARAMETER)?;
             let current_state = u32_to_state(rs.current_state);
             pcsc_states.push(pcsc::ReaderState::new(cstr, current_state));
         }
@@ -205,7 +216,9 @@ impl SmartcardBackend for NativeBackend {
         let contexts = self.registry.contexts.read().unwrap();
         let pcsc_ctx = contexts.get(&ctx.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
 
-        pcsc_ctx.get_status_change(timeout, &mut pcsc_states).map_err(pcsc_error_to_u32)?;
+        pcsc_ctx
+            .get_status_change(timeout, &mut pcsc_states)
+            .map_err(pcsc_error_to_u32)?;
 
         let mut results = Vec::new();
         for (i, rs) in reader_states.iter().enumerate() {
@@ -236,7 +249,9 @@ impl SmartcardBackend for NativeBackend {
         let (card, _) = cards.get(&handle.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
 
         let mut buf = vec![0u8; 1024];
-        let slice = card.get_attribute(attribute, &mut buf).map_err(pcsc_error_to_u32)?;
+        let slice = card
+            .get_attribute(attribute, &mut buf)
+            .map_err(pcsc_error_to_u32)?;
         Ok(slice.to_vec())
     }
 
@@ -244,7 +259,8 @@ impl SmartcardBackend for NativeBackend {
         let attribute = u32_to_attribute(attr_id)?;
         let cards = self.registry.cards.read().unwrap();
         let (card, _) = cards.get(&handle.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
-        card.set_attribute(attribute, data).map_err(pcsc_error_to_u32)?;
+        card.set_attribute(attribute, data)
+            .map_err(pcsc_error_to_u32)?;
         Ok(())
     }
 

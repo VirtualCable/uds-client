@@ -16,8 +16,8 @@ mod dummy;
 mod emulated;
 mod native;
 
-use std::time::Duration;
 use std::sync::OnceLock;
+use std::time::Duration;
 
 use rdp::integrations::smartcard::*;
 
@@ -109,8 +109,8 @@ impl SmartcardHandle {
     /// - Otherwise, uses the dummy backend (always available)
     pub fn new() -> Self {
         let options = SMARTCARD_OPTIONS.get().copied().unwrap_or_default();
-        let is_emulated = options.emulated
-            || std::env::var("UDS_SMARTCARD_EMULATED").as_deref() == Ok("1");
+        let is_emulated =
+            options.emulated || std::env::var("UDS_SMARTCARD_EMULATED").as_deref() == Ok("1");
 
         let backend: Box<dyn SmartcardBackend> = if is_emulated {
             match EmulatedBackend::try_from_env() {

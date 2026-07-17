@@ -3,8 +3,8 @@
 // All rights reserved.
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
-use rdp::integrations::smartcard::consts::*;
 use pcsc::ffi;
+use rdp::integrations::smartcard::consts::*;
 
 /// Map pcsc::Error to standard PC/SC u32 error codes
 pub(crate) fn pcsc_error_to_u32(err: pcsc::Error) -> u32 {
@@ -59,8 +59,6 @@ pub(crate) fn u32_to_protocols(proto: u32) -> pcsc::Protocols {
         p
     }
 }
-
-
 
 pub(crate) fn protocol_to_u32(proto: pcsc::Protocol) -> u32 {
     match proto {

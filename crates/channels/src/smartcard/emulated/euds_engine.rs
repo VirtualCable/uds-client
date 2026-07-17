@@ -35,7 +35,12 @@ impl std::fmt::Debug for EudsEngine {
 }
 
 impl EudsEngine {
-    pub fn new(cert_der: Vec<u8>, private_key: RsaPrivateKey, pin: String, pin_mode: PinMode) -> Self {
+    pub fn new(
+        cert_der: Vec<u8>,
+        private_key: RsaPrivateKey,
+        pin: String,
+        pin_mode: PinMode,
+    ) -> Self {
         let pkcs1_der = private_key
             .to_pkcs1_der()
             .expect("failed to serialize RSA key to PKCS#1 DER");

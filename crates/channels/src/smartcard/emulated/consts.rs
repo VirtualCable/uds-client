@@ -10,13 +10,13 @@
 // ============================================================================
 
 // APDU Instructions
-pub const EUDS_INS_SELECT: u8 = 0xA4;     // Standard SELECT (CLA=0x00)
-pub const EUDS_INS_VERIFY: u8 = 0xB1;     // Proprietary: VERIFY PIN
-pub const EUDS_INS_GET_CERT: u8 = 0xB4;   // Proprietary: GET CERTIFICATE
-pub const EUDS_INS_GET_PUBKEY: u8 = 0x46;  // Proprietary: GET PUBLIC KEY
+pub const EUDS_INS_SELECT: u8 = 0xA4; // Standard SELECT (CLA=0x00)
+pub const EUDS_INS_VERIFY: u8 = 0xB1; // Proprietary: VERIFY PIN
+pub const EUDS_INS_GET_CERT: u8 = 0xB4; // Proprietary: GET CERTIFICATE
+pub const EUDS_INS_GET_PUBKEY: u8 = 0x46; // Proprietary: GET PUBLIC KEY
 pub const EUDS_INS_GET_RESPONSE: u8 = 0xC0; // GET RESPONSE (chaining)
-pub const EUDS_INS_SIGN: u8 = 0xB2;       // Proprietary: SIGN DATA
-pub const EUDS_INS_DECRYPT: u8 = 0xB3;     // Proprietary: DECRYPT DATA
+pub const EUDS_INS_SIGN: u8 = 0xB2; // Proprietary: SIGN DATA
+pub const EUDS_INS_DECRYPT: u8 = 0xB3; // Proprietary: DECRYPT DATA
 
 // SIGN/DECRYPT P1/P2
 pub const EUDS_SIGN_P1: u8 = 0x9E;
@@ -42,7 +42,7 @@ pub const SW_INVALID_COMMAND_DATA: u16 = 0x6A80;
 // eUDS ATR (ISO 7816-3, T=1 protocol)
 // TS=3B, T0=89 (Y1=8, K=9), TD1=01 (T=1), H="eUDS-Card", TCK=96
 pub const EUDS_ATR: &[u8] = &[
-    0x3B, 0x89, 0x01, 0x45, 0x55, 0x44, 0x53, 0x2D, 0x43, 0x61, 0x72, 0x64, 0x96
+    0x3B, 0x89, 0x01, 0x45, 0x55, 0x44, 0x53, 0x2D, 0x43, 0x61, 0x72, 0x64, 0x96,
 ];
 
 // Reader name
