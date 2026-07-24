@@ -285,6 +285,9 @@ impl WgpuRenderer {
         if w == 0 || h == 0 {
             return;
         }
+        if self.config.width == w && self.config.height == h {
+            return;
+        }
         self.config.width = w;
         self.config.height = h;
         self.surface.configure(&g.device, &self.config);
