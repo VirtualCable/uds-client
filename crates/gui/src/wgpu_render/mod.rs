@@ -180,7 +180,8 @@ impl WgpuRenderer {
 
         let gdi = gdi::GdiRenderer::new(&g.device, g.format);
         let overlay = OverlayRenderer::new(&g.device, g.format);
-        let text = TextRenderer::new(&g.device, &g.queue, g.format, crate::draw::INTER_FONT_DATA);
+        let mut text = TextRenderer::new(&g.device, &g.queue, g.format, crate::draw::INTER_FONT_DATA);
+        text.resize(size.width, size.height, &g.queue);
 
         Ok(WgpuRenderer {
             _window: window,
@@ -285,6 +286,9 @@ impl WgpuRenderer {
         let w = w.min(g.max_texture_size);
         let h = h.min(g.max_texture_size);
         if w == 0 || h == 0 {
+            return;
+        }
+        if self.config.width == w && self.config.height == h {
             return;
         }
         self.config.width = w;
