@@ -243,7 +243,10 @@ impl ApplicationHandler for AboutHandler<'_> {
         // Without this, SCALE_FACTOR defaults to 1.0 and text is tiny on high-DPI.
         crate::monitor::populate(el);
         match AboutState::new(el) {
-            Ok(s) => *self.state = Some(s),
+            Ok(s) => {
+                s.window.set_visible(true);
+                *self.state = Some(s);
+            }
             Err(e) => {
                 log::error!("{e}");
                 el.exit();

@@ -88,7 +88,7 @@ fn gpu_from_window(window: &winit::window::Window) -> &'static GpuCtx {
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
             compatible_surface: Some(&surface),
-            force_fallback_adapter: false,
+            force_fallback_adapter: true,
         }))
         .expect("No suitable GPU adapter");
 
