@@ -178,7 +178,8 @@ impl WgpuRenderer {
 
         let gdi = gdi::GdiRenderer::new(&g.device, g.format);
         let overlay = OverlayRenderer::new(&g.device, g.format);
-        let text = TextRenderer::new(&g.device, &g.queue, g.format, crate::draw::INTER_FONT_DATA);
+        let mut text = TextRenderer::new(&g.device, &g.queue, g.format, crate::draw::INTER_FONT_DATA);
+        text.resize(size.width, size.height, &g.queue);
 
         Ok(WgpuRenderer {
             _window: window,
