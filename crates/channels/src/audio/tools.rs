@@ -37,22 +37,16 @@ impl<I: Iterator<Item = f32>> Iterator for ResamplerIterator<I> {
         let ratio = self.input_rate / self.output_rate;
 
         if self.buffer.len() < 2 {
-            if let Some(sample) = self.inner.next() {
-                self.buffer.push(sample);
-            } else {
-                return None;
-            }
+            let sample = self.inner.next()?;
+            self.buffer.push(sample);
         }
 
         let i = self.pos.floor() as usize;
         let frac = self.pos - i as f32;
 
         while i + 1 >= self.buffer.len() {
-            if let Some(sample) = self.inner.next() {
-                self.buffer.push(sample);
-            } else {
-                return None;
-            }
+            let sample = self.inner.next()?;
+            self.buffer.push(sample);
         }
 
         let s0 = self.buffer[i];

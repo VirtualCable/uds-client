@@ -74,7 +74,7 @@ impl From<reqwest::Error> for Error {
                 || msg.contains("x509")
                 || msg.contains("handshake")
             {
-                error_text = format!("TLS: {}", &cur_str);
+                error_text = format!("TLS: {}", cur_str);
                 break;
             }
 
