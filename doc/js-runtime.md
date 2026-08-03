@@ -7,7 +7,7 @@ This document describes the JavaScript modules and functions available in the ru
 | Module  | Description                                                                                      | Functions |
 | ------- | ------------------------------------------------------------------------------------------------ | --------- |
 | Utils   | Utility functions for environment variables, registry (Windows), encryption, and network testing | 8         |
-| File    | File operations, temporary files, and directory access                                           | 9         |
+| File    | File operations, temporary files, and directory access                                           | 11        |
 | Logger  | Logging functions at different levels                                                            | 5         |
 | Process | Executable finding, process launching, and management                                            | 8         |
 | Tasks   | Task management, cleanup files, and tunnel connections                                           | 4         |
@@ -186,6 +186,38 @@ Gets the user's home directory path.
 
 **Returns:** string - The home directory path.
 
+### listFolder
+
+Lists the names of entries inside a folder.
+
+**Parameters:**
+- `path` (string): Folder path to list.
+
+**Returns:** string[] - Array of file and directory names.
+
+### chdir
+
+Changes the current working directory of the process to the given path.
+
+**Parameters:**
+- `path` (string): The directory to switch to.
+
+**Returns:** boolean - True if the change succeeded.
+
+**Throws:** Error if the path does not exist or is not accessible.
+
+> Note: This mutates the process working directory for the lifetime of the
+> launcher; subsequent calls to `File.getCwd` and any relative path in other
+> runtime functions will use the new directory.
+
+### getCwd
+
+Returns the current working directory of the process.
+
+**Parameters:** None
+
+**Returns:** string - The absolute path to the current working directory.
+
 ### Examples
 
 ```javascript
@@ -206,15 +238,11 @@ const tempDir = File.getTempDirectory();
 
 // List folder entries
 const entries = File.listFolder(tempDir);
+
+// Inspect / change working directory
+const cwd = File.getCwd();
+const ok = File.chdir(tempDir);
 ```
-
-### listFolder
-
-Lists the names of entries inside a folder.
-
-- `path` (string): Folder path to list.
-
-Returns: `string[]` - array of file and directory names.
 
 ## Logger Module
 
