@@ -20,6 +20,8 @@ declare module "runtime" {
     function getTempDirectory(): string;
     function getHomeDirectory(): string;
     function listFolder(path: string): string[];
+    function chdir(path: string): boolean;
+    function getCwd(): string;
   }
 
   export namespace Logger {
