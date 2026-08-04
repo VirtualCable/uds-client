@@ -99,6 +99,7 @@ impl SmartcardBackend for NativeBackend {
         let handle = ScardHandle::new(active_proto);
         let mut cards = self.registry.cards.write().unwrap();
         cards.insert(handle.raw(), (card, reader.to_string()));
+        self.registry.ctx_cards.write().unwrap().insert(ctx.raw(), handle.raw());
 
         Ok(ConnectResult {
             handle,
@@ -276,9 +277,23 @@ impl SmartcardBackend for NativeBackend {
         Ok(())
     }
 
-    fn get_container_info(&self, handle: &ScardHandle, _container_index: u8) -> Result<Vec<u8>, u32> {
+    fn get_container_info(&self, ctx: &ScardContext, _container_index: u8) -> Result<Vec<u8>, u32> {
+        let handle_id = self
+            .registry
+            .ctx_cards
+            .read()
+            .unwrap()
+            .get(&ctx.raw())
+            .copied()
+            .ok_or(SCARD_E_INVALID_HANDLE)?;
         let cards = self.registry.cards.read().unwrap();
-        let (card, _) = cards.get(&handle.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
+        log::debug!(
+            "smartcard native: get_container_info ctx=0x{:X} handle=0x{:X} cards={}",
+            ctx.raw(),
+            handle_id,
+            cards.len()
+        );
+        let (card, _) = cards.get(&handle_id).ok_or(SCARD_E_INVALID_HANDLE)?;
 
         // GET DATA 7F49 (public key) — same APDU msclmd issues.
         let apdu = [
@@ -286,9 +301,118 @@ impl SmartcardBackend for NativeBackend {
             0x00,
         ];
         let mut buf = vec![0u8; 1024];
-        let resp = card.transmit(&apdu, &mut buf).map_err(pcsc_error_to_u32)?;
-        let modulus = extract_modulus(resp).ok_or(SCARD_E_UNSUPPORTED_FEATURE)?;
-        Ok(build_container_info(modulus))
+        let mut full = match card.transmit(&apdu, &mut buf) {
+            Ok(r) => r.to_vec(),
+            Err(e) => {
+                log::debug!("smartcard native: get_container_info 7F49 transmit error: {:?}", e);
+                return Err(pcsc_error_to_u32(e));
+            }
+        };
+
+        // GET RESPONSE chaining (61 XX) — the pubkey DO exceeds the card's Le-limited
+        // first chunk, so the rest must be fetched explicitly.
+        loop {
+            let len = full.len();
+            if len < 2 {
+                break;
+            }
+            let (sw1, sw2) = (full[len - 2], full[len - 1]);
+            if sw1 != 0x61 {
+                break;
+            }
+            let remaining = sw2 as usize;
+            full.truncate(len - 2);
+            let get_resp = [0x00, 0xC0, 0x00, 0x00, if remaining == 0 { 0x00 } else { sw2 }];
+            match card.transmit(&get_resp, &mut buf) {
+                Ok(r) => full.extend_from_slice(r),
+                Err(e) => {
+                    log::debug!("smartcard native: get_container_info GET RESPONSE error: {:?}", e);
+                    return Err(pcsc_error_to_u32(e));
+                }
+            }
+        }
+
+        let tail: String = full
+            .iter()
+            .rev()
+            .take(4)
+            .rev()
+            .map(|b| format!("{:02X}", b))
+            .collect::<Vec<_>>()
+            .join(" ");
+        log::debug!(
+            "smartcard native: get_container_info 7F49 full response ({} bytes) tail=[{}]",
+            full.len(),
+            tail
+        );
+        let modulus = match extract_modulus(&full) {
+            Some(m) => m.to_vec(),
+            None => {
+                log::debug!("smartcard native: get_container_info modulus not found in response");
+                return Err(SCARD_E_UNSUPPORTED_FEATURE);
+            }
+        };
+        Ok(build_container_info(&modulus))
+    }
+
+    fn get_certificate(&self, ctx: &ScardContext) -> Result<Vec<u8>, u32> {
+        let handle_id = self
+            .registry
+            .ctx_cards
+            .read()
+            .unwrap()
+            .get(&ctx.raw())
+            .copied()
+            .ok_or(SCARD_E_INVALID_HANDLE)?;
+        let cards = self.registry.cards.read().unwrap();
+        let (card, _) = cards.get(&handle_id).ok_or(SCARD_E_INVALID_HANDLE)?;
+
+        // GET DATA DF24 (certificate file) — same APDU msclmd issues.
+        let apdu = [0x00, 0xCB, 0xA0, 0x10, 0x04, 0x5C, 0x02, 0xDF, 0x24, 0x00];
+        let mut buf = vec![0u8; 4096];
+        let mut full = match card.transmit(&apdu, &mut buf) {
+            Ok(r) => r.to_vec(),
+            Err(e) => {
+                log::debug!("smartcard native: get_certificate DF24 transmit error: {:?}", e);
+                return Err(pcsc_error_to_u32(e));
+            }
+        };
+
+        // GET RESPONSE chaining (61 XX)
+        loop {
+            let len = full.len();
+            if len < 2 {
+                break;
+            }
+            let (sw1, sw2) = (full[len - 2], full[len - 1]);
+            if sw1 != 0x61 {
+                break;
+            }
+            let remaining = sw2 as usize;
+            full.truncate(len - 2);
+            let get_resp = [0x00, 0xC0, 0x00, 0x00, if remaining == 0 { 0x00 } else { sw2 }];
+            match card.transmit(&get_resp, &mut buf) {
+                Ok(r) => full.extend_from_slice(r),
+                Err(e) => {
+                    log::debug!("smartcard native: get_certificate GET RESPONSE error: {:?}", e);
+                    return Err(pcsc_error_to_u32(e));
+                }
+            }
+        }
+
+        let content = match strip_do(&full) {
+            Some(c) => c.to_vec(),
+            None => {
+                log::debug!("smartcard native: get_certificate could not parse DF24 DO");
+                return Err(SCARD_E_UNSUPPORTED_FEATURE);
+            }
+        };
+        log::debug!(
+            "smartcard native: get_certificate content {} bytes (resp {} bytes)",
+            content.len(),
+            full.len()
+        );
+        Ok(build_general_file_value(&content))
     }
 
     fn is_available(&self) -> bool {

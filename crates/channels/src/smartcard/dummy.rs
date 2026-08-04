@@ -251,7 +251,11 @@ impl SmartcardBackend for DummyBackend {
         Ok(())
     }
 
-    fn get_container_info(&self, _: &ScardHandle, _: u8) -> Result<Vec<u8>, u32> {
+    fn get_container_info(&self, _: &ScardContext, _: u8) -> Result<Vec<u8>, u32> {
+        Err(SCARD_E_UNSUPPORTED_FEATURE)
+    }
+
+    fn get_certificate(&self, _: &ScardContext) -> Result<Vec<u8>, u32> {
         Err(SCARD_E_UNSUPPORTED_FEATURE)
     }
 

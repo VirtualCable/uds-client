@@ -55,6 +55,37 @@ pub(crate) fn build_container_info(modulus: &[u8]) -> Vec<u8> {
     out
 }
 
+/// Build a `Cached_GeneralFile/...` value (16-byte CSP header + data).
+pub(crate) fn build_general_file_value(data: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(16 + data.len());
+    out.extend_from_slice(&[0x00, 0x00, 0x01, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+    out.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    out.extend_from_slice(data);
+    out
+}
+
+/// Strip the DO wrapper from a GET DATA response (`tag` + BER length) and the trailing SW.
+/// Handles `82 xx xx` (2-byte) BER lengths.
+pub(crate) fn strip_do(response: &[u8]) -> Option<&[u8]> {
+    if response.len() < 4 {
+        return None;
+    }
+    let (header, len) = match response[2] {
+        0x81 => (3, response[3] as usize),
+        0x82 if response.len() >= 5 => (4, (response[3] as usize) << 8 | response[4] as usize),
+        l if l < 0x80 => (3, l as usize),
+        _ => return None,
+    };
+    let start = header;
+    let end = start + len;
+    let full_end = response.len() - 2; // strip SW1SW2
+    if full_end >= end {
+        Some(&response[start..end])
+    } else {
+        None
+    }
+}
+
 /// Map pcsc::Error to standard PC/SC u32 error codes
 pub(crate) fn pcsc_error_to_u32(err: pcsc::Error) -> u32 {
     match err {

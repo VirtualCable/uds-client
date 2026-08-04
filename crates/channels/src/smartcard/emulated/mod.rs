@@ -242,8 +242,13 @@ impl SmartcardBackend for EmulatedBackend {
         Ok(())
     }
 
-    fn get_container_info(&self, _: &ScardHandle, _: u8) -> Result<Vec<u8>, u32> {
+    fn get_container_info(&self, _: &ScardContext, _: u8) -> Result<Vec<u8>, u32> {
         // TODO: build from the emulated engine's RSA public key (same format as native).
+        Err(SCARD_E_UNSUPPORTED_FEATURE)
+    }
+
+    fn get_certificate(&self, _: &ScardContext) -> Result<Vec<u8>, u32> {
+        // TODO: serve the emulated card's certificate in the same format as native.
         Err(SCARD_E_UNSUPPORTED_FEATURE)
     }
 
