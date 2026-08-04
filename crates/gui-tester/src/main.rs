@@ -13,14 +13,16 @@ fn main() {
     log::setup_logging("debug", log::LogType::Test);
     rdp::wlog::setup_freerdp_logger(rdp::wlog::WLogLevel::Info);
     // Enable TRACE for smartcard-specific tags
-    rdp::wlog::set_wlog_level(
-        Some("com.freerdp.channels.smartcard.vgids"),
-        rdp::wlog::WLogLevel::Trace,
-    );
-    rdp::wlog::set_wlog_level(
-        Some("com.freerdp.utils.smartcard.ops"),
-        rdp::wlog::WLogLevel::Trace,
-    );
+    for tag in [
+        "com.freerdp.channels.smartcard.vgids",
+        "com.freerdp.channels.smartcard",
+        "com.freerdp.utils.smartcard",
+        "com.freerdp.utils.smartcard.ops",
+        "com.freerdp.utils.smartcard.call",
+        "com.freerdp.scard.pack",
+    ] {
+        rdp::wlog::set_wlog_level(Some(tag), rdp::wlog::WLogLevel::Trace);
+    }
 
     let (_messages_tx, messages_rx): (
         Sender<gui::types::GuiMessage>,

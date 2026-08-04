@@ -192,7 +192,7 @@ impl SmartcardBackend for EmulatedBackend {
         _: &ScardContext,
         timeout: Duration,
         readers: &[ReaderStateIn],
-    ) -> Result<Vec<ReaderStateOut>, u32> {
+    ) -> Result<(Vec<ReaderStateOut>, u32), u32> {
         let results: Vec<ReaderStateOut> = readers
             .iter()
             .map(|rs| {
@@ -215,12 +215,15 @@ impl SmartcardBackend for EmulatedBackend {
             .iter()
             .any(|r| r.event_state & SCARD_STATE_CHANGED != 0);
 
-        if !any_changed {
+        let return_code = if any_changed {
+            SCARD_S_SUCCESS
+        } else {
             let sleep_time = timeout.min(Duration::from_millis(50));
             std::thread::sleep(sleep_time);
-        }
+            SCARD_E_TIMEOUT
+        };
 
-        Ok(results)
+        Ok((results, return_code))
     }
 
     fn begin_transaction(&self, _: &ScardHandle) -> Result<(), u32> {

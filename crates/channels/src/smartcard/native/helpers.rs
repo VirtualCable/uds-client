@@ -79,7 +79,11 @@ pub(crate) fn u32_to_disposition(disp: u32) -> Result<pcsc::Disposition, u32> {
 }
 
 pub(crate) fn u32_to_state(bits: u32) -> pcsc::State {
-    pcsc::State::from_bits_truncate(bits)
+    // Preserve all raw bits. `from_bits_truncate` would drop unknown flags such
+    // as 0x0001_0000 that the RDPSC protocol uses for the `\\?PnP?\Notification`
+    // pseudo-reader; dropping them makes SCardGetStatusChange report a spurious
+    // CHANGED state every poll, which breaks the remote reader monitoring loop.
+    unsafe { pcsc::State::from_bits_unchecked(bits) }
 }
 
 pub(crate) fn state_to_u32(state: pcsc::State) -> u32 {

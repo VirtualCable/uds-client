@@ -188,11 +188,12 @@ impl SmartcardBackend for DummyBackend {
         _ctx: &ScardContext,
         _timeout: Duration,
         reader_states: &[ReaderStateIn],
-    ) -> Result<Vec<ReaderStateOut>, u32> {
+    ) -> Result<(Vec<ReaderStateOut>, u32), u32> {
         let cards = self.cards.read().unwrap();
         let mut seen = self.seen_readers.write().unwrap();
 
-        Ok(reader_states
+        let mut any_changed = false;
+        let results = reader_states
             .iter()
             .map(|rs| {
                 let present = cards.iter().any(|c| c.reader == rs.reader_name);
@@ -209,6 +210,7 @@ impl SmartcardBackend for DummyBackend {
                 let mut event_state = actual_state;
                 if is_new || ((rs.current_state & !SCARD_STATE_CHANGED) != actual_state) {
                     event_state |= SCARD_STATE_CHANGED;
+                    any_changed = true;
                     seen.insert(rs.reader_name.clone());
                 }
 
@@ -223,7 +225,14 @@ impl SmartcardBackend for DummyBackend {
                         .unwrap_or_default(),
                 }
             })
-            .collect())
+            .collect();
+
+        let return_code = if any_changed {
+            SCARD_S_SUCCESS
+        } else {
+            SCARD_E_TIMEOUT
+        };
+        Ok((results, return_code))
     }
 
     fn begin_transaction(&self, _handle: &ScardHandle) -> Result<(), u32> {

@@ -80,7 +80,7 @@ trait SmartcardBackend: Send + Sync + std::fmt::Debug {
         ctx: &ScardContext,
         timeout: Duration,
         reader_states: &[ReaderStateIn],
-    ) -> Result<Vec<ReaderStateOut>, u32>;
+    ) -> Result<(Vec<ReaderStateOut>, u32), u32>;
     fn begin_transaction(&self, handle: &ScardHandle) -> Result<(), u32>;
     fn end_transaction(&self, handle: &ScardHandle, disposition: u32) -> Result<(), u32>;
     fn get_attrib(&self, handle: &ScardHandle, attr_id: u32) -> Result<Vec<u8>, u32>;
@@ -219,7 +219,7 @@ impl SmartcardIntegration for SmartcardHandle {
         ctx: &ScardContext,
         timeout: Duration,
         reader_states: &[ReaderStateIn],
-    ) -> Result<Vec<ReaderStateOut>, u32> {
+    ) -> Result<(Vec<ReaderStateOut>, u32), u32> {
         self.backend.get_status_change(ctx, timeout, reader_states)
     }
 

@@ -204,7 +204,7 @@ impl SmartcardBackend for NativeBackend {
         ctx: &ScardContext,
         timeout: Duration,
         reader_states: &[ReaderStateIn],
-    ) -> Result<Vec<ReaderStateOut>, u32> {
+    ) -> Result<(Vec<ReaderStateOut>, u32), u32> {
         let mut pcsc_states = Vec::new();
         for rs in reader_states {
             let cstr = std::ffi::CString::new(rs.reader_name.as_str())
@@ -216,21 +216,33 @@ impl SmartcardBackend for NativeBackend {
         let contexts = self.registry.contexts.read().unwrap();
         let pcsc_ctx = contexts.get(&ctx.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
 
-        pcsc_ctx
-            .get_status_change(timeout, &mut pcsc_states)
-            .map_err(pcsc_error_to_u32)?;
+        // Mimic the FreeRDP reference channel: never block the IRP thread for more
+        // than a small step (100ms). The caller re-polls on SCARD_E_TIMEOUT.
+        let step = timeout.min(Duration::from_millis(100));
+        let gsc_result = pcsc_ctx.get_status_change(step, &mut pcsc_states);
 
         let mut results = Vec::new();
         for (i, rs) in reader_states.iter().enumerate() {
             let out_state = &pcsc_states[i];
+            // Read the raw SCARD_READERSTATE: the pcsc crate's event_state()
+            // uses State::from_bits_truncate which drops the 0x0001_0000 bit
+            // that Windows sets in reader states (e.g. for \\?PnP?\Notification).
+            // The native FreeRDP channel passes these bits through verbatim, and
+            // the remote SCardSvr expects them.
+            let raw: &pcsc::ffi::SCARD_READERSTATE = unsafe { std::mem::transmute(out_state) };
             results.push(ReaderStateOut {
                 reader_name: rs.reader_name.clone(),
                 current_state: rs.current_state,
-                event_state: state_to_u32(out_state.event_state()),
-                atr: out_state.atr().to_vec(),
+                event_state: raw.dwEventState,
+                atr: raw.rgbAtr[..raw.cbAtr as usize].to_vec(),
             });
         }
-        Ok(results)
+
+        match gsc_result {
+            Ok(()) => Ok((results, SCARD_S_SUCCESS)),
+            Err(pcsc::Error::Timeout) => Ok((results, SCARD_E_TIMEOUT)),
+            Err(e) => Err(pcsc_error_to_u32(e)),
+        }
     }
 
     fn begin_transaction(&self, _handle: &ScardHandle) -> Result<(), u32> {
