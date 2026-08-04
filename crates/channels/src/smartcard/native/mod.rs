@@ -352,6 +352,8 @@ impl SmartcardBackend for NativeBackend {
                 return Err(SCARD_E_UNSUPPORTED_FEATURE);
             }
         };
+        let mod_hex: String = modulus.iter().take(8).map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" ");
+        log::debug!("smartcard native: get_container_info modulus head=[{}] len={}", mod_hex, modulus.len());
         Ok(build_container_info(&modulus))
     }
 
