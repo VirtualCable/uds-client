@@ -362,6 +362,7 @@ impl AppHandler {
                             audio: true,
                             mic: true,
                             printing: false,
+                            smartcard: true,
                             drives: vec!["all".to_string()],
                             webcam: Some(rdp::settings::WebcamSettings {
                                 enabled: true,
