@@ -6,6 +6,55 @@
 use pcsc::ffi;
 use rdp::integrations::smartcard::consts::*;
 
+/// Extract the RSA modulus (256 bytes) from a GIDS `7F 49` public-key response.
+///
+/// Expected layout: `7F 49 82 01 09 81 82 01 00 [256-byte modulus] 02 03 01 00 01 [SW]`.
+/// The `81 82 01 00` pattern (modulus tag + 256-byte length) is searched in the data.
+pub(crate) fn extract_modulus(response: &[u8]) -> Option<&[u8]> {
+    response
+        .windows(4)
+        .position(|w| w == [0x81, 0x82, 0x01, 0x00])
+        .and_then(|pos| {
+            let start = pos + 4;
+            let end = start + 256;
+            if response.len() >= end {
+                Some(&response[start..end])
+            } else {
+                None
+            }
+        })
+}
+
+/// Build the `Cached_ContainerInfo_XX` value in the Windows OS-cache format:
+/// 16-byte CSP header + CONTAINER_INFO + RSA PUBLICKEYBLOB.
+pub(crate) fn build_container_info(modulus: &[u8]) -> Vec<u8> {
+    const BLOB_HEADER: [u8; 20] = [
+        0x06, 0x02, 0x00, 0x00, // bType=PRIVATEKEYBLOB? (0x06) + aiKeyAlg CALG_RSA_KEYX
+        0x00, 0xA4, 0x00, 0x00, //
+        0x52, 0x53, 0x41, 0x31, // "RSA1"
+        0x00, 0x08, 0x00, 0x00, // 2048 bits
+        0x01, 0x00, 0x01, 0x00, // exponent 65537
+    ];
+
+    let container_info_len = 4 * 4; // version + reserved + cbSig + cbKeyEx
+    let blob_len = BLOB_HEADER.len() + modulus.len(); // 20 + 256 = 276
+    let data_len = (container_info_len + blob_len) as u32; // 16 + 276 = 292
+
+    let mut out = Vec::with_capacity(16 + container_info_len + blob_len);
+    // CSP cache header
+    out.extend_from_slice(&[0x00, 0x00, 0x01, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+    out.extend_from_slice(&data_len.to_le_bytes());
+    // CONTAINER_INFO
+    out.extend_from_slice(&0u32.to_le_bytes()); // dwVersion
+    out.extend_from_slice(&0u32.to_le_bytes()); // dwReserved
+    out.extend_from_slice(&0u32.to_le_bytes()); // cbSigPublicKey = 0
+    out.extend_from_slice(&(blob_len as u32).to_le_bytes()); // cbKeyExPublicKey = 276
+    // PUBLICKEYBLOB
+    out.extend_from_slice(&BLOB_HEADER);
+    out.extend_from_slice(modulus);
+    out
+}
+
 /// Map pcsc::Error to standard PC/SC u32 error codes
 pub(crate) fn pcsc_error_to_u32(err: pcsc::Error) -> u32 {
     match err {

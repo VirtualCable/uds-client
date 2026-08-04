@@ -85,6 +85,7 @@ trait SmartcardBackend: Send + Sync + std::fmt::Debug {
     fn end_transaction(&self, handle: &ScardHandle, disposition: u32) -> Result<(), u32>;
     fn get_attrib(&self, handle: &ScardHandle, attr_id: u32) -> Result<Vec<u8>, u32>;
     fn set_attrib(&self, handle: &ScardHandle, attr_id: u32, data: &[u8]) -> Result<(), u32>;
+    fn get_container_info(&self, handle: &ScardHandle, container_index: u8) -> Result<Vec<u8>, u32>;
     fn is_available(&self) -> bool;
 }
 
@@ -237,6 +238,10 @@ impl SmartcardIntegration for SmartcardHandle {
 
     fn set_attrib(&self, handle: &ScardHandle, attr_id: u32, data: &[u8]) -> Result<(), u32> {
         self.backend.set_attrib(handle, attr_id, data)
+    }
+
+    fn get_container_info(&self, handle: &ScardHandle, container_index: u8) -> Result<Vec<u8>, u32> {
+        self.backend.get_container_info(handle, container_index)
     }
 
     fn is_available(&self) -> bool {

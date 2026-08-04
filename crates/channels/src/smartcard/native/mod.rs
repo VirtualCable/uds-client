@@ -276,6 +276,21 @@ impl SmartcardBackend for NativeBackend {
         Ok(())
     }
 
+    fn get_container_info(&self, handle: &ScardHandle, _container_index: u8) -> Result<Vec<u8>, u32> {
+        let cards = self.registry.cards.read().unwrap();
+        let (card, _) = cards.get(&handle.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
+
+        // GET DATA 7F49 (public key) — same APDU msclmd issues.
+        let apdu = [
+            0x00, 0xCB, 0x3F, 0xFF, 0x0A, 0x70, 0x08, 0x84, 0x01, 0x81, 0xA5, 0x03, 0x7F, 0x49, 0x80,
+            0x00,
+        ];
+        let mut buf = vec![0u8; 1024];
+        let resp = card.transmit(&apdu, &mut buf).map_err(pcsc_error_to_u32)?;
+        let modulus = extract_modulus(resp).ok_or(SCARD_E_UNSUPPORTED_FEATURE)?;
+        Ok(build_container_info(modulus))
+    }
+
     fn is_available(&self) -> bool {
         pcsc::Context::establish(pcsc::Scope::System).is_ok()
     }
