@@ -47,42 +47,45 @@ impl std::fmt::Debug for EmulatedBackend {
 }
 
 impl EmulatedBackend {
-    pub fn from_pem(cert_pem: &str, key_pem: &str, pin: &str) -> Result<Self, String> {
-        use rsa::pkcs8::DecodePrivateKey;
+    pub fn from_pem(cert_pem: &str, key_pem: &str) -> Result<Self, String> {
         let cert_der = pem::parse(cert_pem)
             .map_err(|e| format!("cert PEM: {}", e))?
             .into_contents();
-        let private_key =
-            RsaPrivateKey::from_pkcs8_pem(key_pem).map_err(|e| format!("key PEM: {}", e))?;
         Ok(EmulatedBackend {
-            engine: Mutex::new(GidsEngine::new(cert_der, private_key, pin.to_string())),
+            engine: Mutex::new(GidsEngine::new(cert_der, key_pem.to_string())?),
         })
     }
 
     #[allow(dead_code)]
-    pub fn from_der(cert_der: &[u8], key_pkcs8_der: &[u8], pin: &str) -> Result<Self, String> {
-        use rsa::pkcs8::DecodePrivateKey;
+    pub fn from_der(cert_der: &[u8], key_pkcs8_der: &[u8]) -> Result<Self, String> {
+        use rsa::pkcs8::{DecodePrivateKey, EncodePrivateKey, LineEnding};
+        // DER path: the key must be unencrypted (no PEM password to decrypt on VERIFY).
         let private_key =
             RsaPrivateKey::from_pkcs8_der(key_pkcs8_der).map_err(|e| format!("key DER: {}", e))?;
+        let key_pem = private_key
+            .to_pkcs8_pem(LineEnding::LF)
+            .map_err(|e| format!("key PEM: {}", e))?
+            .to_string();
         Ok(EmulatedBackend {
-            engine: Mutex::new(GidsEngine::new(cert_der.to_vec(), private_key, pin.to_string())),
+            engine: Mutex::new(GidsEngine::new(cert_der.to_vec(), key_pem.into())?),
         })
     }
 
-    /// Load the emulated card from `UDS_SMARTCARD_KEYS="cert.pem;key.pem;pin"`.
+    /// Load the emulated card from `UDS_SMARTCARD_KEYS="cert.pem;key.pem"`.
     /// The certificate is needed so msclmd can serve it (GET DATA DF24) and match
-    /// the container key; the private key drives signing (PSO); the pin gates it.
+    /// the container key; the private key drives signing. If the key is encrypted,
+    /// its password acts as the card PIN (asked by msclmd only when signing).
     pub fn try_from_env() -> Option<Self> {
         let spec = std::env::var("UDS_SMARTCARD_KEYS").ok()?;
         let mut parts = spec.split(';');
-        let (cert_path, key_path, pin) = (parts.next()?, parts.next()?, parts.next().unwrap_or(""));
+        let (cert_path, key_path) = (parts.next()?, parts.next()?);
         if cert_path.is_empty() || key_path.is_empty() {
-            log::error!("UDS_SMARTCARD_KEYS must be \"cert.pem;key.pem;pin\"");
+            log::error!("UDS_SMARTCARD_KEYS must be \"cert.pem;key.pem\"");
             return None;
         }
         let cert_pem = std::fs::read_to_string(cert_path).ok()?;
         let key_pem = std::fs::read_to_string(key_path).ok()?;
-        match Self::from_pem(&cert_pem, &key_pem, pin) {
+        match Self::from_pem(&cert_pem, &key_pem) {
             Ok(b) => {
                 log::info!("Emulated smartcard loaded: cert={}, key={}", cert_path, key_path);
                 Some(b)

@@ -12,8 +12,12 @@
 //! DF20, DF22, DF23, 7F49, DF24), VERIFY, MSE SET and PSO (RSA PKCS#1 v1.5 sign).
 //!
 //! The public key (`7F 49`), certificate (`DF 24`), card id and container GUID are
-//! derived from the loaded certificate + private key. Signing is gated by a VERIFY'd
-//! PIN (like the reference card).
+//! derived from the loaded certificate + private key.
+//!
+//! PIN handling mirrors a real smartcard: the certificate (public) is served without
+//! any PIN. Signing is gated by a VERIFY. The "PIN" is the private key's password
+//! when the key is encrypted: VERIFY succeeds only if the entered PIN decrypts the
+//! key. If the key has no password, no PIN is required at all.
 
 use std::io::Write;
 use std::sync::LazyLock;
@@ -22,6 +26,7 @@ use flate2::Compression;
 use flate2::write::ZlibEncoder;
 use num_bigint::BigUint;
 use rsa::pkcs1::EncodeRsaPrivateKey;
+use rsa::pkcs8::DecodePrivateKey;
 use rsa::RsaPrivateKey;
 
 use super::helpers::*;
@@ -63,6 +68,7 @@ const SW_AUTH_METHOD_BLOCKED: u16 = 0x6983;
 const SW_VERIFY_FAILED: u16 = 0x63C0;
 const SW_FILE_NOT_FOUND: u16 = 0x6A88;
 const SW_INVALID_P1P2: u16 = 0x6A86;
+const SW_F_INTERNAL_ERROR: u16 = 0x6581;
 
 /// SELECT GIDS AID (P2=00) response: FCI with the AID (Application Template).
 const SELECT_FCI: &[u8] = &[
@@ -117,16 +123,31 @@ static CARDAPPS: LazyLock<Vec<u8>> = LazyLock::new(|| bytes_from_hex(CARDAPPS_HE
 // GIDS engine
 // ============================================================================
 
+/// How the "PIN" gates the private key:
+/// - `None`: the private key has no password -> signing needs no PIN.
+/// - `KeyPassword`: the private key is encrypted; the PIN IS its password. VERIFY
+///   succeeds only if the entered PIN actually decrypts the key.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum PinMode {
+    None,
+    KeyPassword,
+}
+
 pub struct GidsEngine {
     /// `Cached_GeneralFile/mscp/kxcXX` content: `01 00` + uncompressed cert length
     /// (2 bytes LITTLE-ENDIAN) + zlib-compressed certificate DER. The BaseCSP
     /// expects this compressed format (the reference card stores it this way).
     cert_content: Vec<u8>,
+    pin_mode: PinMode,
+    /// Encrypted PKCS#8 PEM of the private key, kept to decrypt on VERIFY. `None`
+    /// when the key is not encrypted.
+    key_pem: Option<String>,
     n: BigUint,
     e: BigUint,
-    d: BigUint,
+    /// Private exponent; `None` until the encrypted key is decrypted by a correct
+    /// VERIFY (always `Some` when `pin_mode == PinMode::None`).
+    d: Option<BigUint>,
     key_size: usize,
-    pin: String,
     pin_verified: bool,
     pin_retries: u8,
     chaining: Option<Vec<u8>>,
@@ -136,6 +157,7 @@ impl std::fmt::Debug for GidsEngine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("GidsEngine")
             .field("key_size", &self.key_size)
+            .field("pin_mode", &self.pin_mode)
             .field("pin_verified", &self.pin_verified)
             .finish()
     }
@@ -144,20 +166,13 @@ impl std::fmt::Debug for GidsEngine {
 const DEFAULT_PIN_RETRIES: u8 = 3;
 
 impl GidsEngine {
-    pub fn new(cert_der: Vec<u8>, private_key: RsaPrivateKey, pin: String) -> Self {
-        let pkcs1 = private_key
-            .to_pkcs1_der()
-            .expect("failed to serialize RSA key to PKCS#1 DER");
-        let (n, e, d) = parse_rsa_pkcs1_components(pkcs1.as_bytes())
-            .expect("failed to parse RSA PKCS#1 components (n, e, d)");
-        let key_size = (n.bits() as usize).div_ceil(8);
-
+    pub fn new(cert_der: Vec<u8>, key_pem: String) -> Result<Self, String> {
         // Compress the certificate the same way the reference card stores it:
         // `01 00` + uncompressed length (2 bytes LITTLE-ENDIAN) + zlib(flate)
         // compressed DER. The reference card: `01 00 FC 03` = len 0x03FC (1020).
         let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
-        encoder.write_all(&cert_der).expect("compress cert");
-        let compressed = encoder.finish().expect("finish zlib");
+        encoder.write_all(&cert_der).map_err(|e| format!("compress cert: {e}"))?;
+        let compressed = encoder.finish().map_err(|e| format!("zlib finish: {e}"))?;
         let mut cert_content = Vec::with_capacity(4 + compressed.len());
         cert_content.extend_from_slice(&[0x01, 0x00]);
         cert_content.extend_from_slice(&(cert_der.len() as u16).to_le_bytes());
@@ -168,17 +183,49 @@ impl GidsEngine {
         // treats it), so an arbitrary value could make the card look like a
         // different/unknown type. The ATR + AID + cardid together reproduce the
         // reference GIDS card; only the crypto material (7F49, DF24, sign) differs.
-        GidsEngine {
+
+        // Try the private key WITHOUT a password (unencrypted). If that fails the
+        // key is encrypted and its password will act as the card PIN.
+        if let Ok(key) = RsaPrivateKey::from_pkcs8_pem(&key_pem) {
+            let pkcs1 = key
+                .to_pkcs1_der()
+                .map_err(|e| format!("serialize key: {e}"))?;
+            let (n, e, d) = parse_rsa_pkcs1_components(pkcs1.as_bytes())
+                .ok_or_else(|| "parse key components".to_string())?;
+            let key_size = (n.bits() as usize).div_ceil(8);
+            return Ok(GidsEngine {
+                cert_content,
+                pin_mode: PinMode::None,
+                key_pem: None,
+                n,
+                e,
+                d: Some(d),
+                key_size,
+                pin_verified: true,
+                pin_retries: DEFAULT_PIN_RETRIES,
+                chaining: None,
+            });
+        }
+
+        // Encrypted key: the public part must come from the certificate (it is
+        // served without PIN in the 7F49 during discovery).
+        let (n, e) = extract_rsa_public_from_cert(&cert_der)?;
+        let key_size = (n.bits() as usize).div_ceil(8);
+        log::info!(
+            "GIDS: private key is encrypted; PIN = key password (verified by decrypting the key)"
+        );
+        Ok(GidsEngine {
             cert_content,
+            pin_mode: PinMode::KeyPassword,
+            key_pem: Some(key_pem),
             n,
             e,
-            d,
+            d: None,
             key_size,
-            pin,
             pin_verified: false,
             pin_retries: DEFAULT_PIN_RETRIES,
             chaining: None,
-        }
+        })
     }
 
     /// Process a raw APDU and return the raw response (data + SW1SW2).
@@ -301,6 +348,10 @@ impl GidsEngine {
 
     // ---------------------------------------------------------------------
     // VERIFY (INS=0x20)
+    //
+    // The PIN is the private key's password when the key is encrypted: VERIFY
+    // succeeds only if the entered PIN actually decrypts the key. If the key has
+    // no password, any VERIFY succeeds (the card needs no PIN).
     // ---------------------------------------------------------------------
     fn verify(&mut self, p1: u8, p2: u8, data: &[u8]) -> Vec<u8> {
         if p1 != 0x00 {
@@ -311,14 +362,40 @@ impl GidsEngine {
                 if self.pin_retries == 0 {
                     return make_status(SW_AUTH_METHOD_BLOCKED);
                 }
-                if constant_time_eq(data, self.pin.as_bytes()) {
-                    self.pin_verified = true;
-                    self.pin_retries = DEFAULT_PIN_RETRIES;
-                    make_status(SW_SUCCESS)
-                } else {
-                    self.pin_verified = false;
-                    self.pin_retries -= 1;
-                    make_status(SW_VERIFY_FAILED | self.pin_retries as u16)
+                match self.pin_mode {
+                    PinMode::None => {
+                        self.pin_verified = true;
+                        make_status(SW_SUCCESS)
+                    }
+                    PinMode::KeyPassword => {
+                        let pem = self.key_pem.as_ref().unwrap();
+                        let pin = String::from_utf8_lossy(data);
+                        match RsaPrivateKey::from_pkcs8_encrypted_pem(pem, pin.as_bytes()) {
+                            Ok(key) => {
+                                let pkcs1 = match key.to_pkcs1_der() {
+                                    Ok(p) => p,
+                                    Err(_) => return make_status(SW_F_INTERNAL_ERROR),
+                                };
+                                match parse_rsa_pkcs1_components(pkcs1.as_bytes()) {
+                                    Some((_, _, d)) => {
+                                        self.d = Some(d);
+                                        self.pin_verified = true;
+                                        self.pin_retries = DEFAULT_PIN_RETRIES;
+                                        make_status(SW_SUCCESS)
+                                    }
+                                    None => {
+                                        self.pin_verified = false;
+                                        make_status(SW_F_INTERNAL_ERROR)
+                                    }
+                                }
+                            }
+                            Err(_) => {
+                                self.pin_verified = false;
+                                self.pin_retries -= 1;
+                                make_status(SW_VERIFY_FAILED | self.pin_retries as u16)
+                            }
+                        }
+                    }
                 }
             }
             // Second PIN slot (unused on the reference card; msclmd probes it).
@@ -347,7 +424,11 @@ impl GidsEngine {
         if !self.pin_verified {
             return make_status(SW_SECURITY_STATUS_NOT_SATISFIED);
         }
-        match self.rsa_pkcs1_sign(data) {
+        let d = match self.d.as_ref() {
+            Some(d) => d,
+            None => return make_status(SW_SECURITY_STATUS_NOT_SATISFIED),
+        };
+        match self.rsa_pkcs1_sign(d, data) {
             Ok(sig) => make_response(&sig, SW_SUCCESS),
             Err(_) => make_status(SW_COMMAND_NOT_ALLOWED),
         }
@@ -416,9 +497,9 @@ impl GidsEngine {
     // ---------------------------------------------------------------------
     // RSA
     // ---------------------------------------------------------------------
-    fn rsa_raw(&self, value: &[u8]) -> Vec<u8> {
+    fn rsa_raw(&self, d: &BigUint, value: &[u8]) -> Vec<u8> {
         let v = BigUint::from_bytes_be(value);
-        let result = v.modpow(&self.d, &self.n);
+        let result = v.modpow(d, &self.n);
         let mut bytes = result.to_bytes_be();
         if bytes.len() < self.key_size {
             let mut padded = vec![0u8; self.key_size - bytes.len()];
@@ -428,7 +509,7 @@ impl GidsEngine {
         bytes
     }
 
-    fn rsa_pkcs1_sign(&self, data: &[u8]) -> Result<Vec<u8>, String> {
+    fn rsa_pkcs1_sign(&self, d: &BigUint, data: &[u8]) -> Result<Vec<u8>, String> {
         if data.len() + 11 > self.key_size {
             return Err("Data too large".to_string());
         }
@@ -439,8 +520,111 @@ impl GidsEngine {
         em[2..2 + ps_len].fill(0xFF);
         em[2 + ps_len] = 0x00;
         em[3 + ps_len..].copy_from_slice(data);
-        Ok(self.rsa_raw(&em))
+        Ok(self.rsa_raw(d, &em))
     }
+}
+
+/// Extract the RSA public key (n, e) from an X.509 certificate DER. Used when the
+/// private key is encrypted: the public part must be served (7F49) before any PIN.
+fn extract_rsa_public_from_cert(cert_der: &[u8]) -> Result<(BigUint, BigUint), String> {
+    const RSA_OID: &[u8] = &[0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x01];
+
+    // Walk the DER: certificate SEQUENCE -> tbsCertificate SEQUENCE, then scan its
+    // top-level children (any TLV) for the subjectPublicKeyInfo SEQUENCE (the one
+    // containing the rsaEncryption OID).
+    let cert_seq = der_sequence(cert_der, 0).ok_or("cert: not a SEQUENCE")?;
+    let tbs = der_sequence(cert_der, cert_seq.0).ok_or("cert: no tbsCertificate")?;
+
+    let mut pos = tbs.0;
+    while pos < tbs.1 {
+        let tag = *cert_der.get(pos).ok_or("cert: truncated")?;
+        let (len, len_size) = read_ber_len(&cert_der[pos + 1..]).ok_or("cert: bad length")?;
+        let content_start = pos + 1 + len_size;
+        let content_end = content_start + len;
+        if content_end > tbs.1 {
+            break;
+        }
+        if tag == 0x30
+            && cert_der[content_start..content_end]
+                .windows(RSA_OID.len())
+                .any(|w| w == RSA_OID)
+        {
+            return parse_spki_rsa_public(&cert_der[content_start..content_end])
+                .ok_or_else(|| "cert: no RSA key in SPKI".to_string());
+        }
+        pos = content_end;
+    }
+    Err("cert: no RSA public key found".to_string())
+}
+
+/// Parse the subjectPublicKeyInfo content: algorithm SEQUENCE + BIT STRING
+/// containing the RSAPublicKey DER (SEQUENCE of INTEGER n, INTEGER e).
+fn parse_spki_rsa_public(spki: &[u8]) -> Option<(BigUint, BigUint)> {
+    let (_, alg_end) = der_sequence(spki, 0)?;
+    let bit_string = &spki[alg_end..];
+    if bit_string.first() != Some(&0x03) {
+        return None;
+    }
+    let (len, len_size) = read_ber_len(&bit_string[1..])?;
+    let content = bit_string.get(1 + len_size..1 + len_size + len)?;
+    parse_rsa_public_components(&content[1..]) // skip the unused-bits byte
+}
+
+/// Parse `SEQUENCE { INTEGER n, INTEGER e }` (PKCS#1 RSAPublicKey).
+fn parse_rsa_public_components(der: &[u8]) -> Option<(BigUint, BigUint)> {
+    let (start, _) = der_sequence(der, 0)?;
+    let (n, n_after) = der_integer(der, start)?;
+    let (e, _) = der_integer(der, start + n_after)?;
+    Some((n, e))
+}
+
+fn der_integer(data: &[u8], offset: usize) -> Option<(BigUint, usize)> {
+    if data.get(offset) != Some(&0x02) {
+        return None;
+    }
+    let (len, len_size) = read_ber_len(&data[offset + 1..])?;
+    let start = offset + 1 + len_size;
+    let end = start + len;
+    if end > data.len() {
+        return None;
+    }
+    let value = if data[start] == 0 {
+        BigUint::from_bytes_be(&data[start + 1..end])
+    } else {
+        BigUint::from_bytes_be(&data[start..end])
+    };
+    Some((value, end - offset))
+}
+
+/// Return the (content_start, content_end) of a DER SEQUENCE at `offset`.
+fn der_sequence(data: &[u8], offset: usize) -> Option<(usize, usize)> {
+    if data.get(offset) != Some(&0x30) {
+        return None;
+    }
+    let (len, len_size) = read_ber_len(&data[offset + 1..])?;
+    let start = offset + 1 + len_size;
+    let end = start + len;
+    if end > data.len() {
+        return None;
+    }
+    Some((start, end))
+}
+
+/// Read a BER length (short or long form) returning (value, bytes_consumed).
+fn read_ber_len(data: &[u8]) -> Option<(usize, usize)> {
+    let first = *data.first()?;
+    if first < 0x80 {
+        return Some((first as usize, 1));
+    }
+    let num_bytes = (first & 0x7F) as usize;
+    if num_bytes == 0 || num_bytes > 4 || data.len() < 1 + num_bytes {
+        return None;
+    }
+    let mut len = 0usize;
+    for i in 0..num_bytes {
+        len = (len << 8) | data[1 + i] as usize;
+    }
+    Some((len, 1 + num_bytes))
 }
 
 /// Find a known GIDS 2-byte tag inside a GET DATA APDU data field.
