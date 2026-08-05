@@ -4,6 +4,11 @@
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
 //! eUDS constants — APDU instructions, status words, ATR, AID.
+//!
+//! Legacy custom-protocol constants, kept for the eUDS project. The GIDS emulation
+//! uses its own constants in `gids_engine`.
+
+#![allow(dead_code)]
 
 // ============================================================================
 // eUDS Custom APDU Protocol Constants

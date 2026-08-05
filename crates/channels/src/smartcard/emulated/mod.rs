@@ -5,16 +5,23 @@
 
 //! Emulated smartcard backend module.
 //!
+//! Emulates a GIDS card so the Windows GIDS minidriver (msclmd) can drive it over
+//! the RDP smartcard redirect exactly like with the physical reference card.
+//!
 //! Sub-modules:
-//! - `consts`: eUDS constants (AID, INS, status words, ATR, etc.)
-//! - `helpers`: TLV, APDU, DER parsing, MGF1 helpers
-//! - `euds_types`: PinMode, SessionState
-//! - `euds_engine`: eUDS APDU processing engine
-//! - `tests`: Unit tests
+//! - `gids_engine`: the GIDS APDU engine (SELECT, GET DATA, VERIFY, MSE SET, PSO)
+//! - `helpers`: TLV, APDU, DER parsing helpers (shared)
+//! - `consts`/`euds_engine`/`euds_types`: legacy eUDS custom protocol (kept for
+//!   reuse in another project; not used by this backend)
 
 pub mod consts;
+#[allow(dead_code)]
 mod euds_engine;
+#[allow(dead_code)]
 mod euds_types;
+mod gids_engine;
+#[cfg(test)]
+mod gids_tests;
 mod helpers;
 #[cfg(test)]
 mod tests;
@@ -26,13 +33,11 @@ use rsa::RsaPrivateKey;
 
 use rdp::integrations::smartcard::*;
 
-use self::consts::*;
-use self::euds_engine::EudsEngine;
-use self::euds_types::PinMode;
+use self::gids_engine::{GIDS_ATR, GIDS_READER_NAME, GidsEngine};
 use super::SmartcardBackend;
 
 pub(crate) struct EmulatedBackend {
-    engine: Mutex<EudsEngine>,
+    engine: Mutex<GidsEngine>,
 }
 
 impl std::fmt::Debug for EmulatedBackend {
@@ -49,18 +54,8 @@ impl EmulatedBackend {
             .into_contents();
         let private_key =
             RsaPrivateKey::from_pkcs8_pem(key_pem).map_err(|e| format!("key PEM: {}", e))?;
-        let pin_mode = if key_pem.contains("ENCRYPTED") {
-            PinMode::Required
-        } else {
-            PinMode::NotRequired
-        };
         Ok(EmulatedBackend {
-            engine: Mutex::new(EudsEngine::new(
-                cert_der,
-                private_key,
-                pin.to_string(),
-                pin_mode,
-            )),
+            engine: Mutex::new(GidsEngine::new(cert_der, private_key, pin.to_string())),
         })
     }
 
@@ -69,26 +64,27 @@ impl EmulatedBackend {
         use rsa::pkcs8::DecodePrivateKey;
         let private_key =
             RsaPrivateKey::from_pkcs8_der(key_pkcs8_der).map_err(|e| format!("key DER: {}", e))?;
-        let pin_mode = PinMode::NotRequired;
         Ok(EmulatedBackend {
-            engine: Mutex::new(EudsEngine::new(
-                cert_der.to_vec(),
-                private_key,
-                pin.to_string(),
-                pin_mode,
-            )),
+            engine: Mutex::new(GidsEngine::new(cert_der.to_vec(), private_key, pin.to_string())),
         })
     }
 
+    /// Load the emulated card from `UDS_SMARTCARD_KEYS="cert.pem;key.pem;pin"`.
+    /// The certificate is needed so msclmd can serve it (GET DATA DF24) and match
+    /// the container key; the private key drives signing (PSO); the pin gates it.
     pub fn try_from_env() -> Option<Self> {
-        let cert = std::env::var("UDS_SMARTCARD_CERT_PEM").ok()?;
-        let key = std::env::var("UDS_SMARTCARD_KEY_PEM").ok()?;
-        let pin = std::env::var("UDS_SMARTCARD_PIN").unwrap_or_default();
-        let cert_pem = std::fs::read_to_string(&cert).ok()?;
-        let key_pem = std::fs::read_to_string(&key).ok()?;
-        match Self::from_pem(&cert_pem, &key_pem, &pin) {
+        let spec = std::env::var("UDS_SMARTCARD_KEYS").ok()?;
+        let mut parts = spec.split(';');
+        let (cert_path, key_path, pin) = (parts.next()?, parts.next()?, parts.next().unwrap_or(""));
+        if cert_path.is_empty() || key_path.is_empty() {
+            log::error!("UDS_SMARTCARD_KEYS must be \"cert.pem;key.pem;pin\"");
+            return None;
+        }
+        let cert_pem = std::fs::read_to_string(cert_path).ok()?;
+        let key_pem = std::fs::read_to_string(key_path).ok()?;
+        match Self::from_pem(&cert_pem, &key_pem, pin) {
             Ok(b) => {
-                log::info!("Emulated smartcard loaded: cert={}, key={}", cert, key);
+                log::info!("Emulated smartcard loaded: cert={}, key={}", cert_path, key_path);
                 Some(b)
             }
             Err(e) => {
@@ -113,7 +109,7 @@ impl SmartcardBackend for EmulatedBackend {
     }
 
     fn list_readers(&self, _ctx: &ScardContext, _: Option<&[String]>) -> Result<Vec<String>, u32> {
-        Ok(vec![EUDS_READER_NAME.to_string()])
+        Ok(vec![GIDS_READER_NAME.to_string()])
     }
 
     fn connect(
@@ -123,7 +119,7 @@ impl SmartcardBackend for EmulatedBackend {
         _: u32,
         _: u32,
     ) -> Result<ConnectResult, u32> {
-        if reader != EUDS_READER_NAME {
+        if reader != GIDS_READER_NAME {
             return Err(SCARD_E_UNKNOWN_READER);
         }
         Ok(ConnectResult {
@@ -180,10 +176,10 @@ impl SmartcardBackend for EmulatedBackend {
 
     fn status(&self, _: &ScardHandle) -> Result<ScardStatus, u32> {
         Ok(ScardStatus {
-            reader_names: vec![EUDS_READER_NAME.to_string()],
+            reader_names: vec![GIDS_READER_NAME.to_string()],
             state: SCARD_STATE_PRESENT,
             protocol: SCARD_PROTOCOL_T1,
-            atr: EUDS_ATR.to_vec(),
+            atr: GIDS_ATR.to_vec(),
         })
     }
 
@@ -206,7 +202,7 @@ impl SmartcardBackend for EmulatedBackend {
                     } else {
                         actual_state
                     },
-                    atr: EUDS_ATR.to_vec(),
+                    atr: GIDS_ATR.to_vec(),
                 }
             })
             .collect();
@@ -243,12 +239,15 @@ impl SmartcardBackend for EmulatedBackend {
     }
 
     fn get_container_info(&self, _: &ScardContext, _: u8) -> Result<Vec<u8>, u32> {
-        // TODO: build from the emulated engine's RSA public key (same format as native).
+        // The GIDS engine serves the container public key (7F 49) over TRANSMIT and
+        // msclmd builds ContainerInfo_XX itself (same flow as the physical card), so
+        // this stays as a MISS.
         Err(SCARD_E_UNSUPPORTED_FEATURE)
     }
 
     fn get_certificate(&self, _: &ScardContext) -> Result<Vec<u8>, u32> {
-        // TODO: serve the emulated card's certificate in the same format as native.
+        // The GIDS engine serves the certificate (DF 24) over TRANSMIT; msclmd caches
+        // it as kxc00 itself.
         Err(SCARD_E_UNSUPPORTED_FEATURE)
     }
 
