@@ -67,6 +67,8 @@ declare module "runtime" {
         use_nla?: boolean;
         use_local_scaler?: boolean;
         use_tunnel?: boolean;
+        /** Emulated smartcard spec: file:<path> | pem:<cert>,<key> | userdefined: */
+        smartcard_emulated?: string;
       };
       screen_width?: number;
       screen_height?: number;

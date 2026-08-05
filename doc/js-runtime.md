@@ -491,6 +491,11 @@ Starts an RDP connection with the specified settings.
     - `use_nla` (boolean, optional): Whether to use Network Level Authentication (default: false).
     - `use_local_scaler` (boolean, optional): If true (default), the local client handles all DPI scaling and the server renders at 100% DPI, reducing bandwidth. If false, the server handles scaling at the native monitor DPI.
     - `use_tunnel` (boolean, optional): If true, overrides the ServerHostname setting with the original connection hostname during redirection.
+    - `smartcard_emulated` (string, optional): If provided and valid, enables an emulated smartcard instead of (or in addition to) a physical one. Accepted specs:
+      - `file:<path>` — a local PEM file (may contain cert + key blocks).
+      - `pem:<cert_pem>,<key_pem>` — the certificate and key as PEM strings.
+      - `userdefined:` — reserved (future; browser certificate as smartcard in the HTML5 client).
+      If the value is invalid, a warning is logged and the session continues **without smartcard**.
   - `screen_width` (number, optional): The screen width (0 for full screen). If not provided, a default fixed size of 1024x768 is used.
   - `screen_height` (number, optional): The screen height (0 for full screen). If not provided, a default fixed size of 1024x768 is used.
   - `best_experience` (boolean, optional): Whether to enable best experience optimizations (default: true).
