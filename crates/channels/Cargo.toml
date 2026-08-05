@@ -6,7 +6,6 @@ edition = "2024"
 [dependencies]
 shared = { path = "../shared" }
 rdp.workspace = true
-freerdp-sys.workspace = true
 
 cpal = { workspace = true }
 flume = { workspace = true }

@@ -277,195 +277,29 @@ impl SmartcardBackend for NativeBackend {
         Ok(())
     }
 
-    fn get_container_info(&self, ctx: &ScardContext, _container_index: u8) -> Result<Vec<u8>, u32> {
+    fn get_container_info(&self, _ctx: &ScardContext, _container_index: u8) -> Result<Vec<u8>, u32> {
         // ---------------------------------------------------------------------
-        // FINDING (why the container pubkey must come from the OS cache):
+        // FINDING (2026-08-05): intentionally returns Err so the addin reports a
+        // READ_CACHE MISS and msclmd reads the container public key from the card
+        // itself via TRANSMIT (GET DATA 7F49 + GET RESPONSE, chunked, ≤258 bytes
+        // per response, NO PIN required) and WRITE_CACHEs it. Fully autonomous —
+        // no OS-cache dependency. See docs/smartcard-connect-phase-discovery.md.
         //
-        // 1) msclmd's receive buffer over the RDPSC wire is FIXED at 258 bytes and
-        //    it does NOT retry when a response is larger. The container public-key
-        //    DO served for the *keyexchange* key is a single >258-byte response,
-        //    so it can never reach msclmd through the redirect.
+        // CRITICAL byte-order detail (for the emulator): the card returns the RSA
+        // modulus big-endian (`7F 49 ... 82 E2 17 BF ...`), but `ContainerInfo_00`
+        // stores it LITTLE-ENDIAN (`4D 11 9C 3F ...` is the byte-reversed modulus).
+        // `extract_modulus` yields the big-endian bytes; reverse them before feeding
+        // `build_container_info`.
         //
-        // 2) The card requires PIN authorization to SELECT the keyexchange key
-        //    (MSE SET `00 22 41 B8 ... 87` returns SW `69 82` = Security status not
-        //    satisfied). msclmd WOULD prompt for the PIN during container access
-        //    (normal flow), but since (1) blocks the read anyway, serving the key
-        //    from the OS cache avoids the PIN requirement entirely.
-        //
-        // The native FreeRDP channel "works" because it uses the Windows OS card
-        // cache (SCardReadCacheW): `Cached_ContainerInfo_00` holds the keyexchange
-        // public key (modulus 0x4D11...) from a previous (PIN-authorized) session.
-        //
-        // IMPORTANT: GET DATA `7F 49` WITHOUT selecting the keyexchange key returns
-        // the *certificate* (signature) key (modulus 0x82E2...). Using that for
-        // ContainerInfo_00 makes certutil's "prueba de coincidencia" FAIL.
-        //
-        // TODO (self-contained / emulated card): for a card we control, expose the
-        // keyexchange key read without the PIN gate, or implement the PIN flow so
-        // the container key can be read directly and the OS-cache dependency
-        // removed.
+        // Reference blob (what msclmd writes, 308 bytes): 12-byte CSP header
+        // `00 00 01 00 05 00 00 00 00 00 00 00` + data length (292), a
+        // CONTAINER_INFO (dwVersion/dwReserved/cbSigPublicKey = 0, cbKeyExPublicKey
+        // = 276) and a PUBLICKEYBLOB (bType 0x06, aiKeyAlg CALG_RSA_KEYX
+        // 0x0000A400, "RSA1", 2048 bits, exponent 0x010001, little-endian modulus).
+        // `build_container_info` currently does NOT reverse the modulus and uses a
+        // different CSP header byte (0x02 vs 0x05) — fix both when implementing.
         // ---------------------------------------------------------------------
-
-        // Locate the connected card for this context.
-        let handle_id = self
-            .registry
-            .ctx_cards
-            .read()
-            .unwrap()
-            .get(&ctx.raw())
-            .copied()
-            .ok_or(SCARD_E_INVALID_HANDLE)?;
-        let cards = self.registry.cards.read().unwrap();
-        let (card, _) = cards.get(&handle_id).ok_or(SCARD_E_INVALID_HANDLE)?;
-
-        // Read the card identifier (GET DATA DF20 at EF_CARDID A012) — required as
-        // the key for SCardReadCacheW. This is the same value msclmd reads during
-        // the discovery phase.
-        let mut cardid = [0u8; 16];
-        {
-            let apdu = [0x00, 0xCB, 0xA0, 0x12, 0x04, 0x5C, 0x02, 0xDF, 0x20, 0x00];
-            let mut buf = vec![0u8; 64];
-            match card.transmit(&apdu, &mut buf) {
-                Ok(r) if r.len() >= 3 + 16 && r[2] == 0x10 => {
-                    cardid.copy_from_slice(&r[3..3 + 16]);
-                }
-                _ => {
-                    log::debug!("smartcard native: get_container_info could not read cardid");
-                    return Err(SCARD_E_UNSUPPORTED_FEATURE);
-                }
-            }
-        }
-
-        // DIAGNOSTIC (light try): always attempt the autonomous keyexchange-key
-        // read (MSE SET 0x87 + GET DATA 7F49) and log its modulus, so we can check
-        // whether it yields 0x4D11 (keyexchange) or 0x82E2 (cert/signature) without
-        // breaking the working OS-cache path.
-        {
-            let mut dbuf = vec![0u8; 1024];
-            let mse = [0x00, 0x22, 0x41, 0xB8, 0x06, 0x80, 0x01, 0x87, 0x84, 0x01, 0x81];
-            let mse_r = card.transmit(&mse, &mut dbuf).map(|r| r.to_vec());
-            let pk_r = card
-                .transmit(&[0x00, 0xCB, 0x3F, 0xFF, 0x0A, 0x70, 0x08, 0x84, 0x01, 0x81, 0xA5, 0x03, 0x7F, 0x49, 0x80, 0x00], &mut dbuf)
-                .map(|r| r.to_vec());
-            match (mse_r, pk_r) {
-                (Ok(mse), Ok(pk)) => {
-                    let head = extract_modulus(&pk)
-                        .map(|m| m.iter().take(8).map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" "));
-                    log::debug!(
-                        "smartcard native: [DIAG] MSE SET 0x87 -> [{}] 7F49 modulus head={:?}",
-                        mse.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" "),
-                        head
-                    );
-                }
-                (mse, pk) => log::debug!("smartcard native: [DIAG] err mse={:?} pk={:?}", mse.err(), pk.err()),
-            }
-        }
-
-        // Try the Windows OS cache first (what the native channel uses).
-        let mut h_context: freerdp_sys::SCARDCONTEXT = 0;
-        const SCARD_SCOPE_SYSTEM: u32 = 2;
-        let est = unsafe {
-            freerdp_sys::SCardEstablishContext(
-                SCARD_SCOPE_SYSTEM,
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                &mut h_context,
-            )
-        };
-        if est == 0 {
-            let mut buf = vec![0u8; 1024];
-            let mut cb = buf.len() as u32;
-            let name = "Cached_ContainerInfo_00\0";
-            let name_w: Vec<u16> = name.encode_utf16().collect();
-            let ret = unsafe {
-                freerdp_sys::SCardReadCacheW(
-                    h_context,
-                    cardid.as_mut_ptr() as *mut _,
-                    1,
-                    name_w.as_ptr() as *mut _,
-                    buf.as_mut_ptr(),
-                    &mut cb,
-                )
-            };
-            unsafe {
-                freerdp_sys::SCardReleaseContext(h_context);
-            }
-            if ret == 0 {
-                buf.truncate(cb as usize);
-                log::debug!("smartcard native: get_container_info OS-cache HIT ({} bytes)", buf.len());
-                return Ok(buf);
-            }
-            log::debug!("smartcard native: get_container_info OS-cache miss (rc=0x{:X})", ret);
-        }
-
-        // Fallback: generate from the card. First try selecting the KEYEXCHANGE
-        // key via MSE SET (the native does this: `00 22 41 B8 ... 87`), then read
-        // the public key. If MSE SET selects the keyexchange key, GET DATA 7F49
-        // should return its modulus (0x4D11...) instead of the certificate
-        // (signature) key (0x82E2...). EXPERIMENTAL — this is the autonomous path.
-        let mut buf = vec![0u8; 1024];
-        let mse_set = [0x00, 0x22, 0x41, 0xB8, 0x06, 0x80, 0x01, 0x87, 0x84, 0x01, 0x81];
-        match card.transmit(&mse_set, &mut buf) {
-            Ok(r) => log::debug!(
-                "smartcard native: MSE SET key=0x87 -> [{}]",
-                r.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" ")
-            ),
-            Err(e) => log::debug!("smartcard native: MSE SET error: {:?}", e),
-        }
-        let mut full = match card.transmit(&[0x00, 0xCB, 0x3F, 0xFF, 0x0A, 0x70, 0x08, 0x84, 0x01, 0x81, 0xA5, 0x03, 0x7F, 0x49, 0x80, 0x00], &mut buf) {
-            Ok(r) => r.to_vec(),
-            Err(e) => {
-                log::debug!("smartcard native: get_container_info 7F49 transmit error: {:?}", e);
-                return Err(pcsc_error_to_u32(e));
-            }
-        };
-
-        // GET RESPONSE chaining (61 XX) — the pubkey DO exceeds the card's Le-limited
-        // first chunk, so the rest must be fetched explicitly.
-        loop {
-            let len = full.len();
-            if len < 2 {
-                break;
-            }
-            let (sw1, sw2) = (full[len - 2], full[len - 1]);
-            if sw1 != 0x61 {
-                break;
-            }
-            let remaining = sw2 as usize;
-            full.truncate(len - 2);
-            let get_resp = [0x00, 0xC0, 0x00, 0x00, if remaining == 0 { 0x00 } else { sw2 }];
-            match card.transmit(&get_resp, &mut buf) {
-                Ok(r) => full.extend_from_slice(r),
-                Err(e) => {
-                    log::debug!("smartcard native: get_container_info GET RESPONSE error: {:?}", e);
-                    return Err(pcsc_error_to_u32(e));
-                }
-            }
-        }
-
-        let tail: String = full
-            .iter()
-            .rev()
-            .take(4)
-            .rev()
-            .map(|b| format!("{:02X}", b))
-            .collect::<Vec<_>>()
-            .join(" ");
-        log::debug!(
-            "smartcard native: get_container_info 7F49 full response ({} bytes) tail=[{}]",
-            full.len(),
-            tail
-        );
-        let modulus = match extract_modulus(&full) {
-            Some(m) => m.to_vec(),
-            None => {
-                log::debug!("smartcard native: get_container_info modulus not found in response");
-                return Err(SCARD_E_UNSUPPORTED_FEATURE);
-            }
-        };
-        let mod_hex: String = modulus.iter().take(8).map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" ");
-        log::debug!("smartcard native: get_container_info modulus head=[{}] len={}", mod_hex, modulus.len());
-        Ok(build_container_info(&modulus))
+        Err(SCARD_E_UNSUPPORTED_FEATURE)
     }
 
     fn get_certificate(&self, ctx: &ScardContext) -> Result<Vec<u8>, u32> {
