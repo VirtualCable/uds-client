@@ -281,25 +281,29 @@ impl SmartcardBackend for NativeBackend {
         // ---------------------------------------------------------------------
         // FINDING (why the container pubkey must come from the OS cache):
         //
-        // msclmd's receive buffer over the RDPSC wire is FIXED at 258 bytes and it
-        // does NOT retry when a response is larger. The container public-key DO
-        // that the card serves for the *keyexchange* key is a single >258-byte
-        // response, so it can never reach msclmd through the redirect.
+        // 1) msclmd's receive buffer over the RDPSC wire is FIXED at 258 bytes and
+        //    it does NOT retry when a response is larger. The container public-key
+        //    DO served for the *keyexchange* key is a single >258-byte response,
+        //    so it can never reach msclmd through the redirect.
+        //
+        // 2) The card requires PIN authorization to SELECT the keyexchange key
+        //    (MSE SET `00 22 41 B8 ... 87` returns SW `69 82` = Security status not
+        //    satisfied). msclmd WOULD prompt for the PIN during container access
+        //    (normal flow), but since (1) blocks the read anyway, serving the key
+        //    from the OS cache avoids the PIN requirement entirely.
         //
         // The native FreeRDP channel "works" because it uses the Windows OS card
-        // cache (SCardReadCacheW): the cache entry `Cached_ContainerInfo_00`
-        // already holds the container's keyexchange public key (modulus 0x4D11...)
-        // from previous sessions. msclmd reads it from the cache, not the card.
+        // cache (SCardReadCacheW): `Cached_ContainerInfo_00` holds the keyexchange
+        // public key (modulus 0x4D11...) from a previous (PIN-authorized) session.
         //
-        // IMPORTANT: GET DATA `7F 49` on this card returns the *certificate*
-        // (signature) key (modulus 0x82E2...), NOT the container keyexchange key.
-        // Using it for ContainerInfo_00 makes certutil's "prueba de coincidencia"
-        // FAIL (container key != certificate key). The keyexchange key must be
-        // served, and the OS cache is currently the only reliable source.
+        // IMPORTANT: GET DATA `7F 49` WITHOUT selecting the keyexchange key returns
+        // the *certificate* (signature) key (modulus 0x82E2...). Using that for
+        // ContainerInfo_00 makes certutil's "prueba de coincidencia" FAIL.
         //
-        // TODO (self-contained): read the keyexchange key from the card (the native
-        // selects it with MSE SET 00 22 41 B8 ... 87 and reads via PSO), instead of
-        // depending on the OS cache being pre-populated.
+        // TODO (self-contained / emulated card): for a card we control, expose the
+        // keyexchange key read without the PIN gate, or implement the PIN flow so
+        // the container key can be read directly and the OS-cache dependency
+        // removed.
         // ---------------------------------------------------------------------
 
         // Locate the connected card for this context.
@@ -329,6 +333,31 @@ impl SmartcardBackend for NativeBackend {
                     log::debug!("smartcard native: get_container_info could not read cardid");
                     return Err(SCARD_E_UNSUPPORTED_FEATURE);
                 }
+            }
+        }
+
+        // DIAGNOSTIC (light try): always attempt the autonomous keyexchange-key
+        // read (MSE SET 0x87 + GET DATA 7F49) and log its modulus, so we can check
+        // whether it yields 0x4D11 (keyexchange) or 0x82E2 (cert/signature) without
+        // breaking the working OS-cache path.
+        {
+            let mut dbuf = vec![0u8; 1024];
+            let mse = [0x00, 0x22, 0x41, 0xB8, 0x06, 0x80, 0x01, 0x87, 0x84, 0x01, 0x81];
+            let mse_r = card.transmit(&mse, &mut dbuf).map(|r| r.to_vec());
+            let pk_r = card
+                .transmit(&[0x00, 0xCB, 0x3F, 0xFF, 0x0A, 0x70, 0x08, 0x84, 0x01, 0x81, 0xA5, 0x03, 0x7F, 0x49, 0x80, 0x00], &mut dbuf)
+                .map(|r| r.to_vec());
+            match (mse_r, pk_r) {
+                (Ok(mse), Ok(pk)) => {
+                    let head = extract_modulus(&pk)
+                        .map(|m| m.iter().take(8).map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" "));
+                    log::debug!(
+                        "smartcard native: [DIAG] MSE SET 0x87 -> [{}] 7F49 modulus head={:?}",
+                        mse.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" "),
+                        head
+                    );
+                }
+                (mse, pk) => log::debug!("smartcard native: [DIAG] err mse={:?} pk={:?}", mse.err(), pk.err()),
             }
         }
 
@@ -369,10 +398,20 @@ impl SmartcardBackend for NativeBackend {
             log::debug!("smartcard native: get_container_info OS-cache miss (rc=0x{:X})", ret);
         }
 
-        // Fallback: generate from the card's 7F49 DO. NOTE: this yields the
-        // *signature/certificate* key (0x82E2), which does NOT match the container
-        // keyexchange key — certutil's key match will fail. Kept as a last resort.
+        // Fallback: generate from the card. First try selecting the KEYEXCHANGE
+        // key via MSE SET (the native does this: `00 22 41 B8 ... 87`), then read
+        // the public key. If MSE SET selects the keyexchange key, GET DATA 7F49
+        // should return its modulus (0x4D11...) instead of the certificate
+        // (signature) key (0x82E2...). EXPERIMENTAL — this is the autonomous path.
         let mut buf = vec![0u8; 1024];
+        let mse_set = [0x00, 0x22, 0x41, 0xB8, 0x06, 0x80, 0x01, 0x87, 0x84, 0x01, 0x81];
+        match card.transmit(&mse_set, &mut buf) {
+            Ok(r) => log::debug!(
+                "smartcard native: MSE SET key=0x87 -> [{}]",
+                r.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" ")
+            ),
+            Err(e) => log::debug!("smartcard native: MSE SET error: {:?}", e),
+        }
         let mut full = match card.transmit(&[0x00, 0xCB, 0x3F, 0xFF, 0x0A, 0x70, 0x08, 0x84, 0x01, 0x81, 0xA5, 0x03, 0x7F, 0x49, 0x80, 0x00], &mut buf) {
             Ok(r) => r.to_vec(),
             Err(e) => {
