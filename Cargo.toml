@@ -166,7 +166,7 @@ pcsc = "2.8"
 rdp = { git = "https://github.com/VirtualCable/freerdp-integration.git", package = "rdp", branch = "master" }
 freerdp-sys = { git = "https://github.com/VirtualCable/freerdp-integration.git", package = "freerdp-sys", branch = "master" }
 
-# Local development overrides (commented on master; active on smartcard for local work).
-[patch."https://github.com/VirtualCable/freerdp-integration.git"]
-rdp = { path = "../freerdp-integration/rdp" }
-freerdp-sys = { path = "../freerdp-integration/freerdp-sys" }
+# Local development overrides (uncomment to use the local freerdp-integration checkout).
+# [patch."https://github.com/VirtualCable/freerdp-integration.git"]
+# rdp = { path = "../freerdp-integration/rdp" }
+# freerdp-sys = { path = "../freerdp-integration/freerdp-sys" }
