@@ -278,6 +278,45 @@ impl SmartcardBackend for NativeBackend {
     }
 
     fn get_container_info(&self, ctx: &ScardContext, _container_index: u8) -> Result<Vec<u8>, u32> {
+        // TEST: replicate the native channel — serve the client OS cache value for
+        // Cached_ContainerInfo_00 if present (this is what the native uses).
+        let mut h_context: freerdp_sys::SCARDCONTEXT = 0;
+        const SCARD_SCOPE_SYSTEM: u32 = 2;
+        let est = unsafe {
+            freerdp_sys::SCardEstablishContext(
+                SCARD_SCOPE_SYSTEM,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                &mut h_context,
+            )
+        };
+        if est == 0 {
+            let mut buf = vec![0u8; 1024];
+            let mut cb = buf.len() as u32;
+            let name = "Cached_ContainerInfo_00\0";
+            let name_w: Vec<u16> = name.encode_utf16().collect();
+            // TEST: cardid from the test card (2F B6 08 59 09 A5 BA 95 EE 5D 78 F7 86 B6 0B C8)
+            let mut cardid = [0x2Fu8, 0xB6, 0x08, 0x59, 0x09, 0xA5, 0xBA, 0x95, 0xEE, 0x5D, 0x78, 0xF7, 0x86, 0xB6, 0x0B, 0xC8];
+            let ret = unsafe {
+                freerdp_sys::SCardReadCacheW(
+                    h_context,
+                    cardid.as_mut_ptr() as *mut _,
+                    1,
+                    name_w.as_ptr() as *mut _,
+                    buf.as_mut_ptr(),
+                    &mut cb,
+                )
+            };
+            unsafe {
+                freerdp_sys::SCardReleaseContext(h_context);
+            }
+            if ret == 0 {
+                buf.truncate(cb as usize);
+                log::debug!("smartcard native: get_container_info OS-cache HIT ({} bytes)", buf.len());
+                return Ok(buf);
+            }
+            log::debug!("smartcard native: get_container_info OS-cache miss (rc=0x{:X})", ret);
+        }
         let handle_id = self
             .registry
             .ctx_cards
