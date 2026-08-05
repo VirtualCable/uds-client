@@ -482,7 +482,10 @@ mod tests {
         s.server = "h".into();
         s.options = Some(JsRdpOptions {
             use_local_scaler: Some(false),
-            ..Default::default()
+            verify_cert: None,
+            use_nla: None,
+            use_tunnel: None,
+            smartcard_emulated: None,
         });
         assert!(!s.to_core_settings().options.use_local_scaler);
     }
