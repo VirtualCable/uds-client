@@ -278,8 +278,61 @@ impl SmartcardBackend for NativeBackend {
     }
 
     fn get_container_info(&self, ctx: &ScardContext, _container_index: u8) -> Result<Vec<u8>, u32> {
-        // TEST: replicate the native channel — serve the client OS cache value for
-        // Cached_ContainerInfo_00 if present (this is what the native uses).
+        // ---------------------------------------------------------------------
+        // FINDING (why the container pubkey must come from the OS cache):
+        //
+        // msclmd's receive buffer over the RDPSC wire is FIXED at 258 bytes and it
+        // does NOT retry when a response is larger. The container public-key DO
+        // that the card serves for the *keyexchange* key is a single >258-byte
+        // response, so it can never reach msclmd through the redirect.
+        //
+        // The native FreeRDP channel "works" because it uses the Windows OS card
+        // cache (SCardReadCacheW): the cache entry `Cached_ContainerInfo_00`
+        // already holds the container's keyexchange public key (modulus 0x4D11...)
+        // from previous sessions. msclmd reads it from the cache, not the card.
+        //
+        // IMPORTANT: GET DATA `7F 49` on this card returns the *certificate*
+        // (signature) key (modulus 0x82E2...), NOT the container keyexchange key.
+        // Using it for ContainerInfo_00 makes certutil's "prueba de coincidencia"
+        // FAIL (container key != certificate key). The keyexchange key must be
+        // served, and the OS cache is currently the only reliable source.
+        //
+        // TODO (self-contained): read the keyexchange key from the card (the native
+        // selects it with MSE SET 00 22 41 B8 ... 87 and reads via PSO), instead of
+        // depending on the OS cache being pre-populated.
+        // ---------------------------------------------------------------------
+
+        // Locate the connected card for this context.
+        let handle_id = self
+            .registry
+            .ctx_cards
+            .read()
+            .unwrap()
+            .get(&ctx.raw())
+            .copied()
+            .ok_or(SCARD_E_INVALID_HANDLE)?;
+        let cards = self.registry.cards.read().unwrap();
+        let (card, _) = cards.get(&handle_id).ok_or(SCARD_E_INVALID_HANDLE)?;
+
+        // Read the card identifier (GET DATA DF20 at EF_CARDID A012) — required as
+        // the key for SCardReadCacheW. This is the same value msclmd reads during
+        // the discovery phase.
+        let mut cardid = [0u8; 16];
+        {
+            let apdu = [0x00, 0xCB, 0xA0, 0x12, 0x04, 0x5C, 0x02, 0xDF, 0x20, 0x00];
+            let mut buf = vec![0u8; 64];
+            match card.transmit(&apdu, &mut buf) {
+                Ok(r) if r.len() >= 3 + 16 && r[2] == 0x10 => {
+                    cardid.copy_from_slice(&r[3..3 + 16]);
+                }
+                _ => {
+                    log::debug!("smartcard native: get_container_info could not read cardid");
+                    return Err(SCARD_E_UNSUPPORTED_FEATURE);
+                }
+            }
+        }
+
+        // Try the Windows OS cache first (what the native channel uses).
         let mut h_context: freerdp_sys::SCARDCONTEXT = 0;
         const SCARD_SCOPE_SYSTEM: u32 = 2;
         let est = unsafe {
@@ -295,8 +348,6 @@ impl SmartcardBackend for NativeBackend {
             let mut cb = buf.len() as u32;
             let name = "Cached_ContainerInfo_00\0";
             let name_w: Vec<u16> = name.encode_utf16().collect();
-            // TEST: cardid from the test card (2F B6 08 59 09 A5 BA 95 EE 5D 78 F7 86 B6 0B C8)
-            let mut cardid = [0x2Fu8, 0xB6, 0x08, 0x59, 0x09, 0xA5, 0xBA, 0x95, 0xEE, 0x5D, 0x78, 0xF7, 0x86, 0xB6, 0x0B, 0xC8];
             let ret = unsafe {
                 freerdp_sys::SCardReadCacheW(
                     h_context,
@@ -317,30 +368,12 @@ impl SmartcardBackend for NativeBackend {
             }
             log::debug!("smartcard native: get_container_info OS-cache miss (rc=0x{:X})", ret);
         }
-        let handle_id = self
-            .registry
-            .ctx_cards
-            .read()
-            .unwrap()
-            .get(&ctx.raw())
-            .copied()
-            .ok_or(SCARD_E_INVALID_HANDLE)?;
-        let cards = self.registry.cards.read().unwrap();
-        log::debug!(
-            "smartcard native: get_container_info ctx=0x{:X} handle=0x{:X} cards={}",
-            ctx.raw(),
-            handle_id,
-            cards.len()
-        );
-        let (card, _) = cards.get(&handle_id).ok_or(SCARD_E_INVALID_HANDLE)?;
 
-        // GET DATA 7F49 (public key) — same APDU msclmd issues.
-        let apdu = [
-            0x00, 0xCB, 0x3F, 0xFF, 0x0A, 0x70, 0x08, 0x84, 0x01, 0x81, 0xA5, 0x03, 0x7F, 0x49, 0x80,
-            0x00,
-        ];
+        // Fallback: generate from the card's 7F49 DO. NOTE: this yields the
+        // *signature/certificate* key (0x82E2), which does NOT match the container
+        // keyexchange key — certutil's key match will fail. Kept as a last resort.
         let mut buf = vec![0u8; 1024];
-        let mut full = match card.transmit(&apdu, &mut buf) {
+        let mut full = match card.transmit(&[0x00, 0xCB, 0x3F, 0xFF, 0x0A, 0x70, 0x08, 0x84, 0x01, 0x81, 0xA5, 0x03, 0x7F, 0x49, 0x80, 0x00], &mut buf) {
             Ok(r) => r.to_vec(),
             Err(e) => {
                 log::debug!("smartcard native: get_container_info 7F49 transmit error: {:?}", e);
