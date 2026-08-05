@@ -75,6 +75,7 @@ declare module "runtime" {
       microphone_redirection?: boolean;
       printer_redirection?: boolean;
       drives_to_redirect?: string[];
+      smartcard_redirection?: boolean;
       webcam?: {
         enabled: boolean;
         quality?: number;

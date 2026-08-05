@@ -500,6 +500,7 @@ Starts an RDP connection with the specified settings.
     - `mic` (boolean, optional): Whether to enable microphone redirection (default: false).
     - `printing` (boolean, optional): Whether to enable printer redirection (default: false).
     - `drives` (array of strings, optional): List of drive letters to redirect. Valid special values include `"all"` (all drives).
+    - `smartcard` (boolean, optional): Whether to enable smartcard redirection (default: false).
     - `sound_latency_threshold` (number, optional): Threshold in ms for sound latency (default: 400).
     - `webcam` (object, optional): Webcam redirection settings. If provided, configures camera settings:
       - `enabled` (boolean): Whether to enable webcam redirection (required if `webcam` is provided).
