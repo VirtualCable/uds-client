@@ -5,7 +5,7 @@
 
 use anyhow::Result;
 
-use aes_gcm::{AeadInPlace, Aes256Gcm, Nonce, aead::KeyInit};
+use aes_gcm::{AeadInOut, Aes256Gcm, Nonce, Tag, aead::KeyInit};
 
 use shared::log;
 
@@ -71,9 +71,10 @@ impl Crypt {
         buffer.set_seq(seq);
         buffer.set_length(data_with_channel_length + consts::TAG_LENGTH)?; // Write header with seq and length of encrypted data
 
-        let mut nonce = [0; 12];
-        nonce[..8].copy_from_slice(&seq.to_be_bytes());
-        let aad = &seq.to_be_bytes();
+        let mut nonce_arr = [0u8; 12];
+        nonce_arr[..8].copy_from_slice(&seq.to_be_bytes());
+        let nonce = Nonce::from(nonce_arr);
+        let aad = seq.to_be_bytes();
 
         // Get pointer to data part of the buffer, where encryption will happen
         let data = buffer.data_with_channel_mut();
@@ -89,14 +90,14 @@ impl Crypt {
 
         let tag = self
             .cipher
-            .encrypt_in_place_detached(
-                Nonce::from_slice(&nonce),
-                aad,
-                &mut data[..data_with_channel_length],
+            .encrypt_inout_detached(
+                &nonce,
+                &aad,
+                (&mut data[..data_with_channel_length]).into(),
             )
             .map_err(|e| anyhow::anyhow!("encryption failure: {:?}", e))?;
         data[data_with_channel_length..data_with_channel_length + consts::TAG_LENGTH]
-            .copy_from_slice(&tag);
+            .copy_from_slice(tag.as_slice());
 
         // Returns the FULL length of the encrypted packet (header + data + channel + tag)
         Ok(data_with_channel_length + consts::TAG_LENGTH)
@@ -128,16 +129,25 @@ impl Crypt {
         let len = length - consts::TAG_LENGTH;
         let chan_data_buffer = buffer.data_with_channel_mut();
 
-        let mut nonce = [0; 12];
-        nonce[..8].copy_from_slice(&seq.to_be_bytes());
-        let aad = &seq.to_be_bytes();
+        let mut nonce_arr = [0u8; 12];
+        nonce_arr[..8].copy_from_slice(&seq.to_be_bytes());
+        let nonce = Nonce::from(nonce_arr);
+        let aad = seq.to_be_bytes();
 
-        // Split ciphertext and tag
+        // Split ciphertext and tag. `Tag` is parameterised by the tag size (not by
+        // the cipher); its default `U16` matches the tag size of `Aes256Gcm`.
         let (ciphertext, rest) = chan_data_buffer.split_at_mut(len);
-        let tag = &rest[..16];
+        let tag: &Tag = (&rest[..consts::TAG_LENGTH])
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("invalid tag length"))?;
 
         self.cipher
-            .decrypt_in_place_detached(Nonce::from_slice(&nonce), aad, ciphertext, tag.into())
+            .decrypt_inout_detached(
+                &nonce,
+                &aad,
+                ciphertext.into(),
+                tag,
+            )
             .map_err(|e| anyhow::anyhow!("decryption failure: {:?}", e))?;
 
         self.seq = seq + 1; // Update to last used seq + 1, so no replays are possible

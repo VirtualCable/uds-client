@@ -5,8 +5,6 @@
 
 use anyhow::Result;
 
-use sha2::digest::typenum;
-
 use aes_gcm::{
     Aes256Gcm, Nonce,
     aead::{Aead, KeyInit},
@@ -69,9 +67,9 @@ impl BrokerTicket {
         let material = derive_tunnel_material(&shared_secret, &ticket_id.as_bytes().try_into()?)?;
 
         let cipher = Aes256Gcm::new(material.key_payload.as_ref().into());
-        let nonce: &Nonce<typenum::U12> = Nonce::from_slice(material.nonce_payload.as_ref());
+        let nonce = Nonce::try_from(material.nonce_payload.as_ref())?;
         let plaintext = cipher
-            .decrypt(nonce, data.as_ref())
+            .decrypt(&nonce, data.as_ref())
             .map_err(|_| anyhow::format_err!("AES-256-GCM decryption failed"))?;
         let mut json_value: serde_json::Value = serde_json::from_slice(&plaintext)
             .map_err(|_| anyhow::format_err!("Failed to parse JSON from decrypted data"))?;

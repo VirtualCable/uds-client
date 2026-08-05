@@ -89,6 +89,7 @@ fn gpu_from_window(window: &winit::window::Window) -> &'static GpuCtx {
             power_preference: wgpu::PowerPreference::HighPerformance,
             compatible_surface: Some(&surface),
             force_fallback_adapter: false,
+            apply_limit_buckets: false,
         }))
         .expect("No suitable GPU adapter");
 
@@ -173,6 +174,7 @@ impl WgpuRenderer {
             alpha_mode,
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
+            color_space: wgpu::SurfaceColorSpace::Auto,
         };
         surface.configure(&g.device, &config);
 
@@ -276,7 +278,7 @@ impl WgpuRenderer {
         }
         g.queue.submit(std::iter::once(enc.finish()));
         self._window.pre_present_notify();
-        output.present();
+        g.queue.present(output);
     }
 
     pub fn reconfigure(&mut self, w: u32, h: u32) {

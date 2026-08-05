@@ -15,3 +15,5 @@ target/
 /graphify*
 AGENTS.md
 .opencode
+/testing_data
+/.agents

@@ -200,3 +200,36 @@ async fn test_send_logs() {
         .await;
     assert!(response.is_ok(), "Send logs failed: {:?}", response);
 }
+
+#[tokio::test]
+async fn test_request_rdp_sign() {
+    log::setup_logging("debug", log::LogType::Test);
+    let (mut server, api) = setup_server_and_api().await;
+    let (privk, pubk) = get_keypair().unwrap();
+    let api = api.with_keys(privk, pubk);
+
+    let ticket_id = TICKET_ID;
+    let rdp_string = "some_unique_rdp_string_to_sign";
+    let expected_signed_rdp = "SIGNED_RDP_STRING_FOR_TESTING_XYZ123";
+
+    let result = types::BrokerResponse::<String> {
+        result: Some(expected_signed_rdp.to_string()),
+        error: None,
+    };
+
+    let _m = server
+        .mock(
+            "PUT",
+            mockito::Matcher::Regex(format!(r"/{}/rdp_sign", TICKET_ID)),
+        )
+        .match_header("content-type", "application/json")
+        .with_body(serde_json::to_string(&result).unwrap())
+        .with_status(200)
+        .create_async()
+        .await;
+
+    let response = api.request_rdp_sign(ticket_id, rdp_string).await;
+    assert!(response.is_ok(), "Request RDP sign failed: {:?}", response);
+    let signed_rdp = response.unwrap();
+    assert_eq!(signed_rdp, expected_signed_rdp);
+}

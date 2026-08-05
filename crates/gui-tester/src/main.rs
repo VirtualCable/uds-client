@@ -12,6 +12,7 @@ fn main() {
     let fake_catalog = gettext::Catalog::empty(); // Empty catalog for now
     log::setup_logging("debug", log::LogType::Test);
     rdp::wlog::setup_freerdp_logger(rdp::wlog::WLogLevel::Info);
+    // Enable TRACE for smartcard-specific tags
     for tag in [
         "com.freerdp.channels.smartcard.vgids",
         "com.freerdp.channels.smartcard",

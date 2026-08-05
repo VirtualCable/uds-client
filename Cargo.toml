@@ -54,7 +54,7 @@ rustls-native-certs = "0.8"
 
 # async & async TLS
 tokio-rustls = "0.26"
-tokio = { version = "1.52", features = [
+tokio = { version = "1.53", features = [
     "net",
     "io-util",
     "rt",
@@ -82,16 +82,16 @@ base64 = "0.22"
 bzip2 = "0.6"
 
 # i18n
-gettext = "0.4.0"
-rust-embed = "8.11"
+gettext = "0.4"
+rust-embed = "8.12"
 sys-locale = "0.3"
 
 # Graphics/UI
 image = { version = "0.25", features = ["png"] }
 winit = { version = "0.30" }
-wgpu = "29"
-pollster = "0.4"
-wgpu_text = "29"
+wgpu = "30"
+pollster = "1.0"
+wgpu_text = "30"
 bytemuck = { version = "1", features = ["derive"] }
 tiny-skia = "0.12"
 
@@ -103,19 +103,19 @@ nokhwa = { version = "0.10", default-features = false, features = ["input-native
 turbojpeg = "1.4"
 
 # For opening links
-open = "5.3"
+open = "5.4"
 
 # Post-quantum cryptography
-libcrux-ml-dsa = "0.0.9"
-libcrux-ml-kem = "0.0.9"
+libcrux-ml-dsa = "0.0.10"
+libcrux-ml-kem = "0.0.10"
 
 # key derivation
 hkdf = "0.13"
 sha2 = "0.11"
-aes-gcm = "0.10"
+aes-gcm = "0.11"
 
 # regex
-regex = "1.12"
+regex = "1.13"
 
 # JavaScript engine
 boa_engine = { version = "0.21" }
@@ -160,9 +160,12 @@ objc2 = "0.6"
 objc2-foundation = "0.3"
 objc2-app-kit = "0.3"
 
+# PC/SC integration
+pcsc = "2.8"
+
 rdp = { git = "https://github.com/VirtualCable/freerdp-integration.git", package = "rdp", branch = "master" }
 freerdp-sys = { git = "https://github.com/VirtualCable/freerdp-integration.git", package = "freerdp-sys", branch = "master" }
 
-# [patch."https://github.com/VirtualCable/freerdp-integration.git"]
-# rdp = { path = "../freerdp-integration/rdp" }
-# freerdp-sys = { path = "../freerdp-integration/freerdp-sys" }
+[patch."https://github.com/VirtualCable/freerdp-integration.git"]
+rdp = { path = "../freerdp-integration/rdp" }
+freerdp-sys = { path = "../freerdp-integration/freerdp-sys" }
