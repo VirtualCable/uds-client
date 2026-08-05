@@ -71,6 +71,33 @@ impl EmulatedBackend {
         })
     }
 
+    /// Load the emulated card from an `emulated_certs` spec:
+    /// - `file:<path>`  → a local PEM file (may contain cert + key blocks)
+    /// - `pem:<cert_pem>,<key_pem>` → the certificate and key as PEM strings
+    /// - `userdefined:` → reserved (not implemented yet)
+    pub fn from_spec(spec: &str) -> Option<Self> {
+        let (cert_pem, key_pem) = if let Some(path) = spec.strip_prefix("file:") {
+            let content = std::fs::read_to_string(path).ok()?;
+            extract_cert_and_key(&content)?
+        } else if let Some(rest) = spec.strip_prefix("pem:") {
+            let (cert, key) = rest.split_once(',')?;
+            (cert.to_string(), key.to_string())
+        } else {
+            log::error!(
+                "emulated_certs: unsupported spec prefix (expected file: or pem:) — got: {}",
+                spec
+            );
+            return None;
+        };
+        match Self::from_pem(&cert_pem, &key_pem) {
+            Ok(b) => Some(b),
+            Err(e) => {
+                log::error!("Failed to load emulated smartcard: {}", e);
+                None
+            }
+        }
+    }
+
     /// Load the emulated card from `UDS_SMARTCARD_KEYS="cert.pem;key.pem"`.
     /// The certificate is needed so msclmd can serve it (GET DATA DF24) and match
     /// the container key; the private key drives signing. If the key is encrypted,
@@ -257,4 +284,21 @@ impl SmartcardBackend for EmulatedBackend {
     fn is_available(&self) -> bool {
         true
     }
+}
+
+/// Extract the CERTIFICATE and PRIVATE KEY PEM blocks from a PEM bundle.
+fn extract_cert_and_key(content: &str) -> Option<(String, String)> {
+    let blocks = pem::parse_many(content).ok()?;
+    let mut cert_pem = None;
+    let mut key_pem = None;
+    for b in blocks {
+        match b.tag() {
+            "CERTIFICATE" => cert_pem = Some(b.to_string()),
+            "PRIVATE KEY" | "ENCRYPTED PRIVATE KEY" | "RSA PRIVATE KEY" => {
+                key_pem = Some(b.to_string());
+            }
+            _ => {}
+        }
+    }
+    Some((cert_pem?, key_pem?))
 }

@@ -64,7 +64,9 @@ struct JsRdpOptions {
     pub use_nla: Option<bool>,
     pub use_local_scaler: Option<bool>,
     pub use_tunnel: Option<bool>,
-    pub smartcard_emulated: Option<bool>,
+    /// Emulated card spec (`file:...` / `pem:...` / `userdefined:`). If present
+    /// and valid, the emulated smartcard is active; if invalid, no smartcard.
+    pub smartcard_emulated: Option<String>,
 }
 
 #[derive(Debug, TryFromJs, Zeroize, ZeroizeOnDrop)]
@@ -236,12 +238,12 @@ fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
         }
     }
 
-    let emulated = rdp_settings
-        .options
-        .as_ref()
-        .and_then(|o| o.smartcard_emulated)
-        .unwrap_or(false);
-    let sc_options = channels::smartcard::SmartcardOptions { emulated };
+    let sc_options = channels::smartcard::SmartcardOptions {
+        emulated: rdp_settings
+            .options
+            .as_ref()
+            .and_then(|o| o.smartcard_emulated.clone()),
+    };
 
     send_message(GuiMessage::ConnectRdp(Box::new(settings), sc_options));
     // Launcher needs to know that RDP client is running

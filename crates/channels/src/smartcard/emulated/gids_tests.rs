@@ -345,6 +345,25 @@ mod tests {
     }
 
     #[test]
+    fn from_spec_pem_parses() {
+        let mut rng = rsa::rand_core::OsRng;
+        let key = rsa::RsaPrivateKey::new(&mut rng, 2048).unwrap();
+        let key_pem = key.to_pkcs8_pem(LineEnding::LF).unwrap().to_string();
+        let cert_pem = pem::Pem::new("CERTIFICATE", vec![0x30, 0x82, 0x01, 0x00]).to_string();
+        let backend = crate::smartcard::emulated::EmulatedBackend::from_spec(&format!(
+            "pem:{},{}",
+            cert_pem, key_pem
+        ));
+        assert!(backend.is_some());
+    }
+
+    #[test]
+    fn from_spec_unsupported_prefix_is_none() {
+        let backend = crate::smartcard::emulated::EmulatedBackend::from_spec("userdefined:whatever");
+        assert!(backend.is_none());
+    }
+
+    #[test]
     fn unknown_apdu_returns_6986() {
         let (mut engine, _, _, _) = make_engine();
         let resp = engine.process_apdu(&[0x00, 0xCA, 0x00, 0x00, 0x00]);
