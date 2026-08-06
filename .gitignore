@@ -16,4 +16,4 @@ target/
 AGENTS.md
 .opencode
 /testing_data
-/.agents
+/.agents*.log

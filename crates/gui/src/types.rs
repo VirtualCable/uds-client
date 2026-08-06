@@ -16,10 +16,7 @@ pub enum GuiMessage {
     ShowYesNo(String, Arc<RwLock<Option<oneshot::Sender<bool>>>>),
     ShowProgress,
     Progress(u8, String),
-    ConnectRdp(
-        Box<rdp::settings::RdpSettings>,
-        channels::smartcard::SmartcardOptions,
-    ),
+    ConnectRdp(Box<rdp::settings::RdpSettings>),
     CloseProgress,
 }
 
