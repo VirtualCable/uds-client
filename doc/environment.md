@@ -69,6 +69,29 @@ The counterpart set of variables controls the logging behavior for unit/integrat
 
 ---
 
+## 💳 Smartcard (emulated)
+
+These variables drive the **emulated GIDS smartcard** used for RDP smartcard redirection
+(mostly for tests and specific environments; the HTML5 client will use the
+`smartcard_emulated` option instead).
+
+### `UDS_SMARTCARD_EMULATED`
+* **Description**: If set to `1`, enables the emulated smartcard backend instead of the
+  native PC/SC one. Requires `UDS_SMARTCARD_KEYS` to be set too.
+* **Values**: `1`.
+* **Example**: `UDS_SMARTCARD_EMULATED=1`.
+
+### `UDS_SMARTCARD_KEYS`
+* **Description**: Certificate + private key for the emulated card, as two PEM file paths
+  separated by `;` (only used when `UDS_SMARTCARD_EMULATED=1`).
+* **Format**: `cert.pem;key.pem`.
+* **Key formats**: RSA PKCS#8 PEM, unencrypted or **encrypted**. If the key is encrypted,
+  its password acts as the card **PIN** (asked by msclmd only when a private-key operation
+  is needed; the certificate itself is shown without any PIN).
+* **Example**: `UDS_SMARTCARD_KEYS=C:\certs\card.crt;C:\certs\card.key`.
+
+---
+
 ## 🛠️ Debugging and Development
 
 ### `UDS_DEBUG_ARGS`
