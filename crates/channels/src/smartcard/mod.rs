@@ -14,12 +14,25 @@
 mod emulated;
 mod native;
 
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use rdp::integrations::smartcard::*;
 
 use emulated::EmulatedBackend;
 use native::NativeBackend;
+
+#[derive(Debug, Default, Clone)]
+pub struct SmartcardOptions {
+    /// Emulated card spec. If `Some`, the emulated backend is active:
+    /// - `file:<path>`  → a local PEM file (may contain cert + key blocks)
+    /// - `pem:<cert_pem>,<key_pem>` → the certificate and key as PEM strings
+    /// - `userdefined:` → reserved (future)
+    /// An invalid value warns and continues WITHOUT smartcard.
+    pub emulated: Option<String>,
+}
+
+pub static SMARTCARD_OPTIONS: OnceLock<SmartcardOptions> = OnceLock::new();
 
 // ---------------------------------------------------------------------------
 // Internal Backend Trait
@@ -98,12 +111,14 @@ impl SmartcardHandle {
     /// real smartcard to redirect (emulated spec invalid / no PC/SC available).
     ///
     /// Priority:
-    /// 1. `emulated` spec (from the RDP settings) → emulated backend, or
+    /// 1. `SmartcardOptions::emulated` spec (if present) → emulated backend, or
     ///    `None` (with a warning) if the spec is invalid.
     /// 2. `UDS_SMARTCARD_EMULATED=1` + `UDS_SMARTCARD_KEYS` (dev helper).
     /// 3. Native PC/SC backend (physical card), if available.
-    pub fn new(emulated: Option<String>) -> Option<Self> {
-        if let Some(spec) = emulated.as_deref() {
+    pub fn new() -> Option<Self> {
+        let options = SMARTCARD_OPTIONS.get().cloned().unwrap_or_default();
+
+        if let Some(spec) = options.emulated.as_deref() {
             return EmulatedBackend::from_spec(spec).map(|b| SmartcardHandle {
                 backend: Box::new(b),
             });

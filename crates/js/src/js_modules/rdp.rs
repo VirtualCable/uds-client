@@ -47,20 +47,12 @@ struct WebcamSettings {
 }
 
 #[derive(Debug, Default, TryFromJs, Zeroize, ZeroizeOnDrop, Clone)]
-struct SmartcardSettings {
-    pub enabled: Option<bool>,
-    /// Emulated card spec (`file:...` / `pem:...` / `userdefined:`). If present
-    /// and valid, the emulated smartcard is active; if invalid, no smartcard.
-    pub emulated: Option<String>,
-}
-
-#[derive(Debug, Default, TryFromJs, Zeroize, ZeroizeOnDrop, Clone)]
 struct RdpRedirections {
     pub clipboard: Option<bool>,
     pub audio: Option<bool>,
     pub mic: Option<bool>,
     pub printing: Option<bool>,
-    pub smartcard: Option<SmartcardSettings>,
+    pub smartcard: Option<bool>,
     pub drives: Option<Vec<String>>,
     pub webcam: Option<WebcamSettings>,
     pub sound_latency_threshold: Option<u16>,
@@ -72,6 +64,9 @@ struct JsRdpOptions {
     pub use_nla: Option<bool>,
     pub use_local_scaler: Option<bool>,
     pub use_tunnel: Option<bool>,
+    /// Emulated card spec (`file:...` / `pem:...` / `userdefined:`). If present
+    /// and valid, the emulated smartcard is active; if invalid, no smartcard.
+    pub smartcard_emulated: Option<String>,
 }
 
 #[derive(Debug, TryFromJs, Zeroize, ZeroizeOnDrop)]
@@ -142,17 +137,9 @@ impl RdpSettings {
                 audio: redirections.audio.unwrap_or(defs.redirections.audio),
                 mic: redirections.mic.unwrap_or(defs.redirections.mic),
                 printing: redirections.printing.unwrap_or(defs.redirections.printing),
-                smartcard: settings::SmartcardSettings {
-                    enabled: redirections
-                        .smartcard
-                        .as_ref()
-                        .and_then(|s| s.enabled)
-                        .unwrap_or(defs.redirections.smartcard.enabled),
-                    emulated: redirections
-                        .smartcard
-                        .as_ref()
-                        .and_then(|s| s.emulated.clone()),
-                },
+                smartcard: redirections
+                    .smartcard
+                    .unwrap_or(defs.redirections.smartcard),
                 drives: redirections
                     .drives
                     .clone()
@@ -251,7 +238,14 @@ fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
         }
     }
 
-    send_message(GuiMessage::ConnectRdp(Box::new(settings)));
+    let sc_options = channels::smartcard::SmartcardOptions {
+        emulated: rdp_settings
+            .options
+            .as_ref()
+            .and_then(|o| o.smartcard_emulated.clone()),
+    };
+
+    send_message(GuiMessage::ConnectRdp(Box::new(settings), sc_options));
     // Launcher needs to know that RDP client is running
     // so it doesn't close the GUI immediately
     connection::tasks::mark_internal_rdp_as_running();
@@ -341,7 +335,7 @@ mod tests {
         // Verify that a GuiMessage::ConnectRdp was sent
         match messages_rx.try_recv() {
             Ok(gui_msg) => match gui_msg {
-                GuiMessage::ConnectRdp(settings) => {
+                GuiMessage::ConnectRdp(settings, _sc_options) => {
                     assert_eq!(settings.server, "localhost");
                     assert_eq!(settings.port, 3389);
                     assert_eq!(settings.user, "testuser");
@@ -396,7 +390,7 @@ mod tests {
 
         match messages_rx.try_recv() {
             Ok(gui_msg) => match gui_msg {
-                GuiMessage::ConnectRdp(settings) => {
+                GuiMessage::ConnectRdp(settings, _sc_options) => {
                     assert_eq!(settings.server, "localhost");
                     assert_eq!(settings.port, 3389);
                     assert_eq!(settings.user, "");
@@ -420,44 +414,6 @@ mod tests {
             Err(e) => {
                 panic!("Expected a GuiMessage but none was sent: {}", e);
             }
-        }
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    #[serial_test::serial(js_modules)]
-    async fn test_smartcard_settings_mapping() -> Result<()> {
-        log::setup_logging("debug", log::LogType::Test);
-        let (messages_tx, messages_rx): (
-            Sender<gui::types::GuiMessage>,
-            Receiver<gui::types::GuiMessage>,
-        ) = bounded(32);
-
-        crate::gui::set_sender(messages_tx);
-
-        let mut ctx = create_context(None)?;
-        register(&mut ctx)?;
-        let script = r#"
-            let rdpSettings = {
-                server: "localhost",
-                redirections: {
-                    smartcard: {
-                        enabled: true,
-                        emulated: "pem:cert;key"
-                    }
-                }
-            };
-            RDP.start(rdpSettings);
-        "#;
-        _ = exec_script(&mut ctx, script).await;
-
-        match messages_rx.try_recv() {
-            Ok(GuiMessage::ConnectRdp(settings)) => {
-                assert!(settings.redirections.smartcard.enabled);
-                assert_eq!(settings.redirections.smartcard.emulated.as_deref(), Some("pem:cert;key"));
-            }
-            _ => panic!("Expected GuiMessage::ConnectRdp"),
         }
 
         Ok(())
@@ -529,6 +485,7 @@ mod tests {
             verify_cert: None,
             use_nla: None,
             use_tunnel: None,
+            smartcard_emulated: None,
         });
         assert!(!s.to_core_settings().options.use_local_scaler);
     }

@@ -491,6 +491,12 @@ Starts an RDP connection with the specified settings.
     - `use_nla` (boolean, optional): Whether to use Network Level Authentication (default: false).
     - `use_local_scaler` (boolean, optional): If true (default), the local client handles all DPI scaling and the server renders at 100% DPI, reducing bandwidth. If false, the server handles scaling at the native monitor DPI.
     - `use_tunnel` (boolean, optional): If true, overrides the ServerHostname setting with the original connection hostname during redirection.
+    - `smartcard_emulated` (string, optional): If provided and valid, enables an emulated smartcard instead of (or in addition to) a physical one. Accepted specs:
+      - `file:<path>` — path to a local PEM file containing the certificate (`CERTIFICATE` block) and the private key (`PRIVATE KEY` / `ENCRYPTED PRIVATE KEY` / `RSA PRIVATE KEY` blocks). Blocks may be in the same file.
+      - `pem:<cert_pem>,<key_pem>` — the certificate and the private key directly as PEM strings (comma-separated; PEM has no commas, so this is unambiguous).
+      - `userdefined:` — reserved (future; use a browser certificate as a smartcard in the HTML5 client).
+      Supported key formats: RSA, PKCS#8 PEM (unencrypted or **encrypted**). If the key is encrypted, its password acts as the **PIN** (asked only when a private-key operation is needed — the certificate itself is shown without any PIN). If the key has no password, no PIN is requested at all.
+      If the value is invalid, a warning is logged and the session continues **without smartcard**.
   - `screen_width` (number, optional): The screen width (0 for full screen). If not provided, a default fixed size of 1024x768 is used.
   - `screen_height` (number, optional): The screen height (0 for full screen). If not provided, a default fixed size of 1024x768 is used.
   - `best_experience` (boolean, optional): Whether to enable best experience optimizations (default: true).
@@ -500,13 +506,7 @@ Starts an RDP connection with the specified settings.
     - `mic` (boolean, optional): Whether to enable microphone redirection (default: false).
     - `printing` (boolean, optional): Whether to enable printer redirection (default: false).
     - `drives` (array of strings, optional): List of drive letters to redirect. Valid special values include `"all"` (all drives).
-    - `smartcard` (object, optional): Smartcard redirection settings.
-      - `enabled` (boolean, optional): Whether to enable smartcard redirection (default: false).
-      - `emulated` (string, optional): Emulated card spec. If provided and valid, the emulated smartcard is active instead of a physical one. Accepted specs:
-        - `file:<path>` — path to a local PEM file containing the certificate (`CERTIFICATE` block) and the private key (`PRIVATE KEY` / `ENCRYPTED PRIVATE KEY` / `RSA PRIVATE KEY` blocks). Blocks may be in the same file.
-        - `pem:<cert_pem>,<key_pem>` — the certificate and the private key directly as PEM strings (comma-separated; PEM has no commas, so this is unambiguous).
-        - `userdefined:` — reserved (future; use a browser certificate as a smartcard in the HTML5 client).
-        Supported key formats: RSA, PKCS#8 PEM (unencrypted or **encrypted**). If the key is encrypted, its password acts as the **PIN** (asked only when a private-key operation is needed — the certificate itself is shown without any PIN). If the key has no password, no PIN is requested at all. If the value is invalid, a warning is logged and the session continues **without smartcard**.
+    - `smartcard` (boolean, optional): Whether to enable smartcard redirection (default: false).
     - `sound_latency_threshold` (number, optional): Threshold in ms for sound latency (default: 400).
     - `webcam` (object, optional): Webcam redirection settings. If provided, configures camera settings:
       - `enabled` (boolean): Whether to enable webcam redirection (required if `webcam` is provided).
