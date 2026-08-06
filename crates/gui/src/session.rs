@@ -70,8 +70,7 @@ impl AppHandler {
                         p.window.request_redraw();
                     }
                 }
-                GuiMessage::ConnectRdp(settings, sc_options) => {
-                    let _ = channels::smartcard::SMARTCARD_OPTIONS.set(sc_options);
+                GuiMessage::ConnectRdp(settings) => {
                     if let Err(e) = self.open_rdp(el, *settings) {
                         log::error!("Failed to enter RDP: {e}");
                         self.stop.trigger();

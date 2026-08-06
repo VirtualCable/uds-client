@@ -1859,7 +1859,7 @@ dependencies = [
 [[package]]
 name = "freerdp-sys"
 version = "5.0.0"
-source = "git+https://github.com/VirtualCable/freerdp-integration.git?branch=master#10e4015ca0898b662f2e4a13d5ac72a1ea0ee0e3"
+source = "git+https://github.com/VirtualCable/freerdp-integration.git?branch=master#adb166dff8341f3e4a12c074b11b2c92419d236f"
 dependencies = [
  "bindgen 0.72.1",
  "cc",
@@ -4863,7 +4863,7 @@ dependencies = [
 [[package]]
 name = "rdp"
 version = "5.0.0"
-source = "git+https://github.com/VirtualCable/freerdp-integration.git?branch=master#10e4015ca0898b662f2e4a13d5ac72a1ea0ee0e3"
+source = "git+https://github.com/VirtualCable/freerdp-integration.git?branch=master#adb166dff8341f3e4a12c074b11b2c92419d236f"
 dependencies = [
  "anyhow",
  "bitflags 2.13.1",

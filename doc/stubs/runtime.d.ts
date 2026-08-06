@@ -67,8 +67,6 @@ declare module "runtime" {
         use_nla?: boolean;
         use_local_scaler?: boolean;
         use_tunnel?: boolean;
-        /** Emulated smartcard spec: file:<path> | pem:<cert>,<key> | userdefined: */
-        smartcard_emulated?: string;
       };
       screen_width?: number;
       screen_height?: number;
@@ -77,7 +75,11 @@ declare module "runtime" {
       microphone_redirection?: boolean;
       printer_redirection?: boolean;
       drives_to_redirect?: string[];
-      smartcard_redirection?: boolean;
+      smartcard?: {
+        enabled?: boolean;
+        /** Emulated card spec: file:<path> | pem:<cert>,<key> | userdefined: */
+        emulated?: string;
+      };
       webcam?: {
         enabled: boolean;
         quality?: number;
