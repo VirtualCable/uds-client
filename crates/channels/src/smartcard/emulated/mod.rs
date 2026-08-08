@@ -269,9 +269,12 @@ impl SmartcardBackend for EmulatedBackend {
     }
 
     fn get_container_info(&self, _: &ScardContext, _: u8) -> Result<Vec<u8>, u32> {
-        // The GIDS engine serves the container public key (7F 49) over TRANSMIT and
-        // msclmd builds ContainerInfo_XX itself (same flow as the physical card), so
-        // this stays as a MISS.
+        // MISS (as the physical card): msclmd builds ContainerInfo_XX itself from the
+        // card's `7F 49` over TRANSMIT (RSA works). For ECDSA this discovery is
+        // BLOCKED: msclmd's GIDS parser only builds RSA containers (it ignores the
+        // ECC `86` point tag) and the correct ECC container blob is unknown — needs
+        // a real GIDS-ECDSA card to capture the reference. See
+        // docs/smartcard-connect-phase-discovery.md → "Soporte ECDSA".
         Err(SCARD_E_UNSUPPORTED_FEATURE)
     }
 

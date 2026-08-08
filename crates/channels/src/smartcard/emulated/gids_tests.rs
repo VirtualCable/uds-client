@@ -99,6 +99,67 @@ mod tests {
         der_seq(&tbs)
     }
 
+    // Curve OIDs (id-ecPublicKey params) for the EC test certificates.
+    const EC_P256_OID: &[u8] = &[0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07];
+    const EC_P384_OID: &[u8] = &[0x2B, 0x81, 0x04, 0x00, 0x22];
+    const EC_P521_OID: &[u8] = &[0x2B, 0x81, 0x04, 0x00, 0x23];
+
+    fn der_oid(oid: &[u8]) -> Vec<u8> {
+        let mut v = vec![0x06, oid.len() as u8];
+        v.extend_from_slice(oid);
+        v
+    }
+
+    /// Minimal X.509 certificate with an EC subjectPublicKeyInfo: algorithm
+    /// `id-ecPublicKey` + curve OID, BIT STRING = uncompressed point `04||X||Y`.
+    fn build_min_ec_cert_der(point: &[u8], curve_oid: &[u8]) -> Vec<u8> {
+        let ec_oid: [u8; 7] = [0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x02, 0x01];
+        let alg = der_seq(&[der_oid(&ec_oid), der_oid(curve_oid)].concat());
+        let mut bit_string = vec![0x03];
+        bit_string.extend_from_slice(&der_len(point.len() + 1));
+        bit_string.push(0x00);
+        bit_string.extend_from_slice(point);
+        let spki = der_seq(&[alg, bit_string].concat());
+        let version = vec![0xA0, 0x03, 0x02, 0x01, 0x02];
+        let serial = der_int(&BigUint::from(0x1122_3344u64));
+        let tbs = der_seq(&[version, serial, spki].concat());
+        der_seq(&tbs)
+    }
+
+    /// Assert the engine serves the EC public key in the `7F49` DO (tag 86, point)
+    /// and that PSO produces a DER `SEQUENCE { r, s }` verifiable off-card.
+    fn assert_ec_engine(engine: &mut GidsEngine, curve_oid: &[u8], hash: &[u8], der: &[u8]) {
+        use p256::ecdsa::signature::hazmat::PrehashVerifier;
+
+        let resp = engine.process_apdu(&get_data_7f49());
+        assert_eq!(status(&resp), 0x9000); // EC point fits a single response
+        let do_bytes = data(&resp);
+        assert_eq!(&do_bytes[..2], &[0x7F, 0x49]);
+        assert_eq!(do_bytes[3], 0x86);
+        assert_eq!(&do_bytes[5..], der);
+
+        let resp = engine.process_apdu(&pso_sign_hash_apdu(hash));
+        assert_eq!(status(&resp), 0x9000);
+        // The response must be a DER SEQUENCE; parse and verify with each curve.
+        match curve_oid {
+            o if o == EC_P256_OID => {
+                let sig = p256::ecdsa::Signature::from_der(data(&resp)).unwrap();
+                let vk = p256::ecdsa::VerifyingKey::from_sec1_bytes(der).unwrap();
+                vk.verify_prehash(hash, &sig).unwrap();
+            }
+            o if o == EC_P384_OID => {
+                let sig = p384::ecdsa::Signature::from_der(data(&resp)).unwrap();
+                let vk = p384::ecdsa::VerifyingKey::from_sec1_bytes(der).unwrap();
+                vk.verify_prehash(hash, &sig).unwrap();
+            }
+            _ => {
+                let sig = p521::ecdsa::Signature::from_der(data(&resp)).unwrap();
+                let vk = p521::ecdsa::VerifyingKey::from_sec1_bytes(der).unwrap();
+                vk.verify_prehash(hash, &sig).unwrap();
+            }
+        }
+    }
+
     /// Read a full file through the engine (GET DATA + GET RESPONSE chaining).
     fn read_file(engine: &mut GidsEngine, p1: u8, p2: u8, tag: &[u8; 2]) -> Vec<u8> {
         let mut out = Vec::new();
@@ -161,6 +222,13 @@ mod tests {
         ];
         let mut apdu = vec![0x00, 0x2A, 0x9E, 0x9A, digest_info.len() as u8];
         apdu.extend_from_slice(&digest_info);
+        apdu
+    }
+
+    /// PSO signing a raw precomputed hash (ECDSA path).
+    fn pso_sign_hash_apdu(hash: &[u8]) -> Vec<u8> {
+        let mut apdu = vec![0x00, 0x2A, 0x9E, 0x9A, hash.len() as u8];
+        apdu.extend_from_slice(hash);
         apdu
     }
 
@@ -379,5 +447,107 @@ mod tests {
         let (data, le) = extract_apdu_data(&apdu);
         assert!(data.windows(2).any(|w| w == [0x7F, 0x49]));
         assert_eq!(le, Some(256));
+    }
+
+    // ---------------------------------------------------------------------
+    // ECDSA
+    // ---------------------------------------------------------------------
+
+    #[test]
+    fn ecdsa_p256_sign_and_pubkey() {
+        use p256::pkcs8::EncodePrivateKey;
+        let mut rng = p256::elliptic_curve::rand_core::OsRng;
+        let sk = p256::ecdsa::SigningKey::random(&mut rng);
+        let point = p256::ecdsa::VerifyingKey::from(&sk).to_encoded_point(false).as_bytes().to_vec();
+        let key_pem = sk.to_pkcs8_pem(LineEnding::LF).unwrap().to_string();
+        let cert = build_min_ec_cert_der(&point, EC_P256_OID);
+        let mut engine = GidsEngine::new(cert, key_pem).unwrap();
+        assert_ec_engine(&mut engine, EC_P256_OID, &[0xAB; 32], &point);
+    }
+
+    #[test]
+    fn ecdsa_p384_sign_and_pubkey() {
+        use p384::pkcs8::EncodePrivateKey;
+        let mut rng = p384::elliptic_curve::rand_core::OsRng;
+        let sk = p384::ecdsa::SigningKey::random(&mut rng);
+        let point = p384::ecdsa::VerifyingKey::from(&sk).to_encoded_point(false).as_bytes().to_vec();
+        let key_pem = sk.to_pkcs8_pem(LineEnding::LF).unwrap().to_string();
+        let cert = build_min_ec_cert_der(&point, EC_P384_OID);
+        let mut engine = GidsEngine::new(cert, key_pem).unwrap();
+        assert_ec_engine(&mut engine, EC_P384_OID, &[0xCD; 48], &point);
+    }
+
+    #[test]
+    fn ecdsa_p521_sign_and_pubkey() {
+        use p521::pkcs8::EncodePrivateKey;
+        let mut rng = p521::elliptic_curve::rand_core::OsRng;
+        let secret = p521::SecretKey::random(&mut rng);
+        let sk = p521::ecdsa::SigningKey::from_bytes(&secret.to_bytes()).unwrap();
+        let point = p521::ecdsa::VerifyingKey::from(&sk).to_encoded_point(false).as_bytes().to_vec();
+        let key_pem = secret.to_pkcs8_pem(LineEnding::LF).unwrap().to_string();
+        let cert = build_min_ec_cert_der(&point, EC_P521_OID);
+        let mut engine = GidsEngine::new(cert, key_pem).unwrap();
+        assert_ec_engine(&mut engine, EC_P521_OID, &[0xEF; 64], &point);
+    }
+
+    #[test]
+    fn ecdsa_p256_encrypted_requires_pin() {
+        use p256::pkcs8::EncodePrivateKey;
+        use p256::ecdsa::signature::hazmat::PrehashVerifier;
+        let mut rng = p256::elliptic_curve::rand_core::OsRng;
+        let sk = p256::ecdsa::SigningKey::random(&mut rng);
+        let point = p256::ecdsa::VerifyingKey::from(&sk).to_encoded_point(false).as_bytes().to_vec();
+        let key_pem = sk
+            .to_pkcs8_encrypted_pem(&mut rng, "p4ss", LineEnding::LF)
+            .unwrap()
+            .to_string();
+        let cert = build_min_ec_cert_der(&point, EC_P256_OID);
+        let mut engine = GidsEngine::new(cert, key_pem).unwrap();
+
+        // Wrong PIN -> 63 CX; signing gated -> 6982.
+        let resp = engine.process_apdu(&verify_apdu("wrong"));
+        assert_eq!(status(&resp) >> 8, 0x63);
+        let resp = engine.process_apdu(&pso_sign_hash_apdu(&[0xAB; 32]));
+        assert_eq!(status(&resp), 0x6982);
+
+        // Correct PIN -> 9000, then the signature verifies.
+        let resp = engine.process_apdu(&verify_apdu("p4ss"));
+        assert_eq!(status(&resp), 0x9000);
+        let resp = engine.process_apdu(&pso_sign_hash_apdu(&[0xAB; 32]));
+        assert_eq!(status(&resp), 0x9000);
+        let sig = p256::ecdsa::Signature::from_der(data(&resp)).unwrap();
+        let vk = p256::ecdsa::VerifyingKey::from_sec1_bytes(&point).unwrap();
+        vk.verify_prehash(&[0xAB; 32], &sig).unwrap();
+    }
+
+    #[test]
+    fn ecdsa_p521_encrypted_requires_pin() {
+        use p521::pkcs8::EncodePrivateKey;
+        use p521::ecdsa::signature::hazmat::PrehashVerifier;
+        let mut rng = p521::elliptic_curve::rand_core::OsRng;
+        let secret = p521::SecretKey::random(&mut rng);
+        let sk = p521::ecdsa::SigningKey::from_bytes(&secret.to_bytes()).unwrap();
+        let point = p521::ecdsa::VerifyingKey::from(&sk).to_encoded_point(false).as_bytes().to_vec();
+        let key_pem = secret
+            .to_pkcs8_encrypted_pem(&mut rng, "p4ss", LineEnding::LF)
+            .unwrap()
+            .to_string();
+        let cert = build_min_ec_cert_der(&point, EC_P521_OID);
+        let mut engine = GidsEngine::new(cert, key_pem).unwrap();
+
+        // Wrong PIN -> 63 CX; signing gated -> 6982.
+        let resp = engine.process_apdu(&verify_apdu("wrong"));
+        assert_eq!(status(&resp) >> 8, 0x63);
+        let resp = engine.process_apdu(&pso_sign_hash_apdu(&[0xEF; 64]));
+        assert_eq!(status(&resp), 0x6982);
+
+        // Correct PIN -> 9000, then the signature verifies (PBES2 manual decrypt).
+        let resp = engine.process_apdu(&verify_apdu("p4ss"));
+        assert_eq!(status(&resp), 0x9000);
+        let resp = engine.process_apdu(&pso_sign_hash_apdu(&[0xEF; 64]));
+        assert_eq!(status(&resp), 0x9000);
+        let sig = p521::ecdsa::Signature::from_der(data(&resp)).unwrap();
+        let vk = p521::ecdsa::VerifyingKey::from_sec1_bytes(&point).unwrap();
+        vk.verify_prehash(&[0xEF; 64], &sig).unwrap();
     }
 }

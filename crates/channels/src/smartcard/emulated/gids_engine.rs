@@ -9,10 +9,13 @@
 //! — the Windows GIDS minidriver — drives when the reference card is used. The APDU
 //! flow and responses replicate the reference card captured during testing (see
 //! `docs/smartcard-connect-phase-discovery.md`): SELECT, GET DATA (2F01, 7F73, DF1F,
-//! DF20, DF22, DF23, 7F49, DF24), VERIFY, MSE SET and PSO (RSA PKCS#1 v1.5 sign).
+//! DF20, DF22, DF23, 7F49, DF24), VERIFY, MSE SET and PSO.
 //!
-//! The public key (`7F 49`), certificate (`DF 24`), card id and container GUID are
-//! derived from the loaded certificate + private key.
+//! The key type is detected on load: **RSA** (PKCS#1 v1.5 sign, `7F49` = modulus +
+//! exponent) or **ECDSA** P-256/P-384/P-521 (`7F49` = `86` uncompressed point, PSO
+//! returns the GIDS-spec `SEQUENCE { r, s }` DER signature over the precomputed
+//! hash). The public key (`7F 49`), certificate (`DF 24`), card id and container GUID
+//! are derived from the loaded certificate + private key.
 //!
 //! PIN handling mirrors a real smartcard: the certificate (public) is served without
 //! any PIN. Signing is gated by a VERIFY. The "PIN" is the private key's password
@@ -25,6 +28,9 @@ use std::sync::LazyLock;
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
 use num_bigint::BigUint;
+use p256::ecdsa::SigningKey as P256SigningKey;
+use p384::ecdsa::SigningKey as P384SigningKey;
+use p521::ecdsa::SigningKey as P521SigningKey;
 use rsa::pkcs1::EncodeRsaPrivateKey;
 use rsa::pkcs8::DecodePrivateKey;
 use rsa::RsaPrivateKey;
@@ -133,6 +139,105 @@ enum PinMode {
     KeyPassword,
 }
 
+/// ECC curve supported by the emulator (GIDS mech refs `0C`/`0D`/`0E`).
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum EcCurve {
+    P256,
+    P384,
+    P521,
+}
+
+/// ECDSA signing key (private), curve-erased over the supported curves.
+enum EcSigningKey {
+    P256(P256SigningKey),
+    P384(P384SigningKey),
+    P521(P521SigningKey),
+}
+
+impl EcSigningKey {
+    fn curve(&self) -> EcCurve {
+        match self {
+            EcSigningKey::P256(_) => EcCurve::P256,
+            EcSigningKey::P384(_) => EcCurve::P384,
+            EcSigningKey::P521(_) => EcCurve::P521,
+        }
+    }
+
+    /// Uncompressed public point `04 || X || Y` derived from the private key.
+    fn public_point(&self) -> Vec<u8> {
+        match self {
+            EcSigningKey::P256(k) => {
+                p256::ecdsa::VerifyingKey::from(k).to_encoded_point(false).as_bytes().to_vec()
+            }
+            EcSigningKey::P384(k) => {
+                p384::ecdsa::VerifyingKey::from(k).to_encoded_point(false).as_bytes().to_vec()
+            }
+            EcSigningKey::P521(k) => {
+                p521::ecdsa::VerifyingKey::from(k).to_encoded_point(false).as_bytes().to_vec()
+            }
+        }
+    }
+
+    /// ECDSA signature over a precomputed hash, returned as the GIDS-spec
+    /// `EC Signature ::= SEQUENCE { r INTEGER, s INTEGER }` (DER).
+    fn sign(&self, hash: &[u8]) -> Result<Vec<u8>, String> {
+        use p256::ecdsa::signature::hazmat::PrehashSigner;
+        match self {
+            EcSigningKey::P256(k) => {
+                let sig: p256::ecdsa::Signature = k.sign_prehash(hash).map_err(|e| e.to_string())?;
+                Ok(sig.to_der().as_bytes().to_vec())
+            }
+            EcSigningKey::P384(k) => {
+                let sig: p384::ecdsa::Signature = k.sign_prehash(hash).map_err(|e| e.to_string())?;
+                Ok(sig.to_der().as_bytes().to_vec())
+            }
+            EcSigningKey::P521(k) => {
+                let sig: p521::ecdsa::Signature = k.sign_prehash(hash).map_err(|e| e.to_string())?;
+                Ok(sig.to_der().as_bytes().to_vec())
+            }
+        }
+    }
+}
+
+/// Key material held by the engine, erased over RSA / ECDSA.
+enum KeyType {
+    Rsa {
+        n: BigUint,
+        e: BigUint,
+        /// Private exponent; `None` until an encrypted key is decrypted by VERIFY.
+        d: Option<BigUint>,
+        key_size: usize,
+    },
+    Ec {
+        curve: EcCurve,
+        /// Uncompressed public point `04 || X || Y` (from the key, or the SPKI when
+        /// the key is encrypted).
+        point: Vec<u8>,
+        /// Private signing key; `None` until an encrypted key is decrypted by VERIFY.
+        key: Option<EcSigningKey>,
+    },
+}
+
+impl KeyType {
+    fn name(&self) -> &'static str {
+        match self {
+            KeyType::Rsa { .. } => "RSA",
+            KeyType::Ec { curve, .. } => match curve {
+                EcCurve::P256 => "ECDSA P-256",
+                EcCurve::P384 => "ECDSA P-384",
+                EcCurve::P521 => "ECDSA P-521",
+            },
+        }
+    }
+}
+
+/// Public key extracted from an X.509 certificate SPKI (used when the private key
+/// is encrypted: the public part must be served without PIN during discovery).
+enum SpkiPublic {
+    Rsa { n: BigUint, e: BigUint },
+    Ec { curve: EcCurve, point: Vec<u8> },
+}
+
 pub struct GidsEngine {
     /// `Cached_GeneralFile/mscp/kxcXX` content: `01 00` + uncompressed cert length
     /// (2 bytes LITTLE-ENDIAN) + zlib-compressed certificate DER. The BaseCSP
@@ -142,12 +247,9 @@ pub struct GidsEngine {
     /// Encrypted PKCS#8 PEM of the private key, kept to decrypt on VERIFY. `None`
     /// when the key is not encrypted.
     key_pem: Option<String>,
-    n: BigUint,
-    e: BigUint,
-    /// Private exponent; `None` until the encrypted key is decrypted by a correct
-    /// VERIFY (always `Some` when `pin_mode == PinMode::None`).
-    d: Option<BigUint>,
-    key_size: usize,
+    /// Key material (RSA or ECDSA). The private part is `None` until a correct
+    /// VERIFY decrypts an encrypted key (always present when `pin_mode == None`).
+    key: KeyType,
     pin_verified: bool,
     pin_retries: u8,
     chaining: Option<Vec<u8>>,
@@ -156,7 +258,7 @@ pub struct GidsEngine {
 impl std::fmt::Debug for GidsEngine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("GidsEngine")
-            .field("key_size", &self.key_size)
+            .field("key_type", &self.key.name())
             .field("pin_mode", &self.pin_mode)
             .field("pin_verified", &self.pin_verified)
             .finish()
@@ -184,8 +286,9 @@ impl GidsEngine {
         // different/unknown type. The ATR + AID + cardid together reproduce the
         // reference GIDS card; only the crypto material (7F49, DF24, sign) differs.
 
-        // Try the private key WITHOUT a password (unencrypted). If that fails the
-        // key is encrypted and its password will act as the card PIN.
+        // Try the private key WITHOUT a password (unencrypted): RSA first, then the
+        // ECDSA curves. If all fail the key is encrypted and its password will act
+        // as the card PIN (public part then comes from the certificate).
         if let Ok(key) = RsaPrivateKey::from_pkcs8_pem(&key_pem) {
             let pkcs1 = key
                 .to_pkcs1_der()
@@ -197,10 +300,21 @@ impl GidsEngine {
                 cert_content,
                 pin_mode: PinMode::None,
                 key_pem: None,
-                n,
-                e,
-                d: Some(d),
-                key_size,
+                key: KeyType::Rsa { n, e, d: Some(d), key_size },
+                pin_verified: true,
+                pin_retries: DEFAULT_PIN_RETRIES,
+                chaining: None,
+            });
+        }
+
+        if let Some(signing_key) = parse_ec_signing_key_pem(&key_pem) {
+            let curve = signing_key.curve();
+            let point = signing_key.public_point();
+            return Ok(GidsEngine {
+                cert_content,
+                pin_mode: PinMode::None,
+                key_pem: None,
+                key: KeyType::Ec { curve, point, key: Some(signing_key) },
                 pin_verified: true,
                 pin_retries: DEFAULT_PIN_RETRIES,
                 chaining: None,
@@ -209,8 +323,13 @@ impl GidsEngine {
 
         // Encrypted key: the public part must come from the certificate (it is
         // served without PIN in the 7F49 during discovery).
-        let (n, e) = extract_rsa_public_from_cert(&cert_der)?;
-        let key_size = (n.bits() as usize).div_ceil(8);
+        let key = match extract_spki_public(&cert_der)? {
+            SpkiPublic::Rsa { n, e } => {
+                let key_size = (n.bits() as usize).div_ceil(8);
+                KeyType::Rsa { n, e, d: None, key_size }
+            }
+            SpkiPublic::Ec { curve, point } => KeyType::Ec { curve, point, key: None },
+        };
         log::info!(
             "GIDS: private key is encrypted; PIN = key password (verified by decrypting the key)"
         );
@@ -218,10 +337,7 @@ impl GidsEngine {
             cert_content,
             pin_mode: PinMode::KeyPassword,
             key_pem: Some(key_pem),
-            n,
-            e,
-            d: None,
-            key_size,
+            key,
             pin_verified: false,
             pin_retries: DEFAULT_PIN_RETRIES,
             chaining: None,
@@ -302,12 +418,18 @@ impl GidsEngine {
             }
             (0xDF, 0x22) => make_response(CARD_CONFIG, SW_SUCCESS),
             (0xDF, 0x23) => {
+                // CONTAINERMAPRECORD: GUID + flags (VALID|DEFAULT) + wSigKeySizeBits +
+                // wKeyExchangeKeySizeBits (little-endian). The key size must match the
+                // actual key: msclmd rejects the container when the 7F49 key does not
+                // match the size declared here (2048 for the RSA reference card).
+                let key_bits = self.container_key_size_bits();
                 let mut resp = Vec::with_capacity(89);
                 resp.extend_from_slice(&[0xDF, 0x23, 0x56]);
                 for unit in REFERENCE_GUID.encode_utf16() {
                     resp.extend_from_slice(&unit.to_le_bytes());
                 }
-                resp.extend_from_slice(&[0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x08]);
+                resp.extend_from_slice(&[0x00, 0x00, 0x03, 0x00, 0x00, 0x00]);
+                resp.extend_from_slice(&key_bits.to_le_bytes());
                 make_response(&resp, SW_SUCCESS)
             }
             (0xDF, 0x24) => {
@@ -368,32 +490,46 @@ impl GidsEngine {
                         make_status(SW_SUCCESS)
                     }
                     PinMode::KeyPassword => {
-                        let pem = self.key_pem.as_ref().unwrap();
+                        let pem = self.key_pem.clone().unwrap();
                         let pin = String::from_utf8_lossy(data);
-                        match RsaPrivateKey::from_pkcs8_encrypted_pem(pem, pin.as_bytes()) {
-                            Ok(key) => {
-                                let pkcs1 = match key.to_pkcs1_der() {
-                                    Ok(p) => p,
-                                    Err(_) => return make_status(SW_F_INTERNAL_ERROR),
-                                };
-                                match parse_rsa_pkcs1_components(pkcs1.as_bytes()) {
-                                    Some((_, _, d)) => {
-                                        self.d = Some(d);
-                                        self.pin_verified = true;
-                                        self.pin_retries = DEFAULT_PIN_RETRIES;
-                                        make_status(SW_SUCCESS)
-                                    }
-                                    None => {
-                                        self.pin_verified = false;
-                                        make_status(SW_F_INTERNAL_ERROR)
+                        let ok = match &mut self.key {
+                            KeyType::Rsa { d, .. } => match RsaPrivateKey::from_pkcs8_encrypted_pem(
+                                &pem,
+                                pin.as_bytes(),
+                            ) {
+                                Ok(key) => {
+                                    let pkcs1 = match key.to_pkcs1_der() {
+                                        Ok(p) => p,
+                                        Err(_) => return make_status(SW_F_INTERNAL_ERROR),
+                                    };
+                                    match parse_rsa_pkcs1_components(pkcs1.as_bytes()) {
+                                        Some((_, _, priv_d)) => {
+                                            *d = Some(priv_d);
+                                            true
+                                        }
+                                        None => false,
                                     }
                                 }
+                                Err(_) => false,
+                            },
+                            KeyType::Ec { curve, key, .. } => {
+                                match decrypt_ec_signing_key_pem(*curve, &pem, pin.as_bytes()) {
+                                    Some(k) => {
+                                        *key = Some(k);
+                                        true
+                                    }
+                                    None => false,
+                                }
                             }
-                            Err(_) => {
-                                self.pin_verified = false;
-                                self.pin_retries -= 1;
-                                make_status(SW_VERIFY_FAILED | self.pin_retries as u16)
-                            }
+                        };
+                        if ok {
+                            self.pin_verified = true;
+                            self.pin_retries = DEFAULT_PIN_RETRIES;
+                            make_status(SW_SUCCESS)
+                        } else {
+                            self.pin_verified = false;
+                            self.pin_retries -= 1;
+                            make_status(SW_VERIFY_FAILED | self.pin_retries as u16)
                         }
                     }
                 }
@@ -413,6 +549,11 @@ impl GidsEngine {
 
     // ---------------------------------------------------------------------
     // PSO: COMPUTE DIGITAL SIGNATURE (INS=0x2A, P1=0x9E)
+    //
+    // RSA: PKCS#1 v1.5 over the supplied DigestInfo; response is the raw
+    //      256/384/512-byte signature.
+    // ECDSA: signs the supplied precomputed hash; response is the GIDS-spec
+    //       `EC Signature ::= SEQUENCE { r INTEGER, s INTEGER }` (DER).
     // ---------------------------------------------------------------------
     fn pso_sign(&self, p1: u8, p2: u8, data: &[u8]) -> Vec<u8> {
         if p1 != 0x9E {
@@ -424,13 +565,27 @@ impl GidsEngine {
         if !self.pin_verified {
             return make_status(SW_SECURITY_STATUS_NOT_SATISFIED);
         }
-        let d = match self.d.as_ref() {
-            Some(d) => d,
-            None => return make_status(SW_SECURITY_STATUS_NOT_SATISFIED),
-        };
-        match self.rsa_pkcs1_sign(d, data) {
-            Ok(sig) => make_response(&sig, SW_SUCCESS),
-            Err(_) => make_status(SW_COMMAND_NOT_ALLOWED),
+        match &self.key {
+            KeyType::Rsa { n, d, key_size, .. } => {
+                let d = match d {
+                    Some(d) => d,
+                    None => return make_status(SW_SECURITY_STATUS_NOT_SATISFIED),
+                };
+                match Self::rsa_pkcs1_sign(n, d, *key_size, data) {
+                    Ok(sig) => make_response(&sig, SW_SUCCESS),
+                    Err(_) => make_status(SW_COMMAND_NOT_ALLOWED),
+                }
+            }
+            KeyType::Ec { key, .. } => {
+                let key = match key {
+                    Some(k) => k,
+                    None => return make_status(SW_SECURITY_STATUS_NOT_SATISFIED),
+                };
+                match key.sign(data) {
+                    Ok(sig) => make_response(&sig, SW_SUCCESS),
+                    Err(_) => make_status(SW_COMMAND_NOT_ALLOWED),
+                }
+            }
         }
     }
 
@@ -471,67 +626,195 @@ impl GidsEngine {
     // Data builders
     // ---------------------------------------------------------------------
 
-    /// The `7F 49` public-key DO (big-endian modulus + exponent).
-    fn pubkey_do(&self) -> Vec<u8> {
-        let mut modulus = self.n.to_bytes_be();
-        if modulus.len() < self.key_size {
-            let mut padded = vec![0u8; self.key_size - modulus.len()];
-            padded.extend_from_slice(&modulus);
-            modulus = padded;
+    /// Container key size in bits, declared in the `cmapfile` (DF23). Must match
+    /// the actual key type: 2048 for the RSA reference card, the curve size for
+    /// ECDSA (256/384/521).
+    fn container_key_size_bits(&self) -> u16 {
+        match &self.key {
+            KeyType::Rsa { key_size, .. } => (key_size * 8) as u16,
+            KeyType::Ec { curve, .. } => match curve {
+                EcCurve::P256 => 256,
+                EcCurve::P384 => 384,
+                EcCurve::P521 => 521,
+            },
         }
-        let exp = self.e.to_bytes_be();
+    }
 
-        let mut content = Vec::with_capacity(4 + modulus.len() + 2 + exp.len());
-        content.extend_from_slice(&[0x81, 0x82, 0x01, 0x00]); // modulus tag + 256-byte length
-        content.extend_from_slice(&modulus);
-        content.push(0x82); // exponent tag
-        content.push(exp.len() as u8);
-        content.extend_from_slice(&exp);
+    /// The `7F 49` public-key DO.
+    /// RSA: `81` modulus + `82` exponent (big-endian).
+    /// ECDSA: `86` = uncompressed point `04 || X || Y`.
+    fn pubkey_do(&self) -> Vec<u8> {
+        match &self.key {
+            KeyType::Rsa { n, e, key_size, .. } => {
+                let mut modulus = n.to_bytes_be();
+                if modulus.len() < *key_size {
+                    let mut padded = vec![0u8; key_size - modulus.len()];
+                    padded.extend_from_slice(&modulus);
+                    modulus = padded;
+                }
+                let exp = e.to_bytes_be();
 
-        let mut do_ = Vec::with_capacity(5 + content.len());
-        do_.extend_from_slice(&[0x7F, 0x49, 0x82, 0x01, 0x09]); // 265-byte content
-        do_.extend_from_slice(&content);
-        do_
+                let mut content = Vec::with_capacity(4 + modulus.len() + 2 + exp.len());
+                content.extend_from_slice(&[0x81, 0x82, 0x01, 0x00]); // modulus tag + length
+                content.extend_from_slice(&modulus);
+                content.push(0x82); // exponent tag
+                content.push(exp.len() as u8);
+                content.extend_from_slice(&exp);
+
+                let mut do_ = Vec::with_capacity(5 + content.len());
+                do_.extend_from_slice(&[0x7F, 0x49, 0x82, 0x01, 0x09]); // 265-byte content
+                do_.extend_from_slice(&content);
+                do_
+            }
+            KeyType::Ec { point, .. } => {
+                // content = 86 <point_len> <point>; point fits a single-byte length.
+                let mut content = Vec::with_capacity(2 + point.len());
+                content.push(0x86);
+                content.push(point.len() as u8);
+                content.extend_from_slice(point);
+
+                // DO = 7F 49 <len> <content> (content <= 138 -> single-byte length).
+                let mut do_ = Vec::with_capacity(3 + content.len());
+                do_.extend_from_slice(&[0x7F, 0x49]);
+                do_.push(content.len() as u8);
+                do_.extend_from_slice(&content);
+                do_
+            }
+        }
     }
 
     // ---------------------------------------------------------------------
     // RSA
     // ---------------------------------------------------------------------
-    fn rsa_raw(&self, d: &BigUint, value: &[u8]) -> Vec<u8> {
+    fn rsa_raw(n: &BigUint, d: &BigUint, key_size: usize, value: &[u8]) -> Vec<u8> {
         let v = BigUint::from_bytes_be(value);
-        let result = v.modpow(d, &self.n);
+        let result = v.modpow(d, n);
         let mut bytes = result.to_bytes_be();
-        if bytes.len() < self.key_size {
-            let mut padded = vec![0u8; self.key_size - bytes.len()];
+        if bytes.len() < key_size {
+            let mut padded = vec![0u8; key_size - bytes.len()];
             padded.extend_from_slice(&bytes);
             bytes = padded;
         }
         bytes
     }
 
-    fn rsa_pkcs1_sign(&self, d: &BigUint, data: &[u8]) -> Result<Vec<u8>, String> {
-        if data.len() + 11 > self.key_size {
+    fn rsa_pkcs1_sign(
+        n: &BigUint,
+        d: &BigUint,
+        key_size: usize,
+        data: &[u8],
+    ) -> Result<Vec<u8>, String> {
+        if data.len() + 11 > key_size {
             return Err("Data too large".to_string());
         }
-        let mut em = vec![0u8; self.key_size];
+        let mut em = vec![0u8; key_size];
         em[0] = 0x00;
         em[1] = 0x01;
-        let ps_len = self.key_size - data.len() - 3;
+        let ps_len = key_size - data.len() - 3;
         em[2..2 + ps_len].fill(0xFF);
         em[2 + ps_len] = 0x00;
         em[3 + ps_len..].copy_from_slice(data);
-        Ok(self.rsa_raw(d, &em))
+        Ok(Self::rsa_raw(n, d, key_size, &em))
     }
 }
 
-/// Extract the RSA public key (n, e) from an X.509 certificate DER. Used when the
-/// private key is encrypted: the public part must be served (7F49) before any PIN.
-fn extract_rsa_public_from_cert(cert_der: &[u8]) -> Result<(BigUint, BigUint), String> {
+/// Parse an unencrypted PKCS#8 PEM private key as an ECDSA signing key, trying
+/// the supported curves in order. Returns `None` when the key is not an EC key
+/// (RSA) or is encrypted.
+fn parse_ec_signing_key_pem(pem: &str) -> Option<EcSigningKey> {
+    if let Ok(k) = P256SigningKey::from_pkcs8_pem(pem) {
+        return Some(EcSigningKey::P256(k));
+    }
+    if let Ok(k) = P384SigningKey::from_pkcs8_pem(pem) {
+        return Some(EcSigningKey::P384(k));
+    }
+    // P-521: the p521 0.13 wrapper lacks a working DecodePrivateKey impl, so the
+    // PKCS#8 is parsed manually and the scalar handed to `from_slice`.
+    let scalar = parse_pkcs8_ec_private_scalar(pem)?;
+    P521SigningKey::from_slice(&scalar).ok().map(EcSigningKey::P521)
+}
+
+/// Decrypt an encrypted PKCS#8 PEM EC key with the given password (the card PIN)
+/// on the known curve.
+fn decrypt_ec_signing_key_pem(curve: EcCurve, pem: &str, password: &[u8]) -> Option<EcSigningKey> {
+    match curve {
+        EcCurve::P256 => P256SigningKey::from_pkcs8_encrypted_pem(pem, password)
+            .ok()
+            .map(EcSigningKey::P256),
+        EcCurve::P384 => P384SigningKey::from_pkcs8_encrypted_pem(pem, password)
+            .ok()
+            .map(EcSigningKey::P384),
+        EcCurve::P521 => {
+            // P-521: same manual path; the PKCS#8 is decrypted via pkcs8's PBES2
+            // support and the resulting ECPrivateKey parsed by hand.
+            let (_, doc) = pkcs8::SecretDocument::from_pem(pem).ok()?;
+            let epki = pkcs8::EncryptedPrivateKeyInfo::try_from(doc.as_bytes()).ok()?;
+            let decrypted = epki.decrypt(password).ok()?;
+            let scalar = parse_pkcs8_ec_private_scalar_der(decrypted.as_bytes())?;
+            P521SigningKey::from_slice(&scalar).ok().map(EcSigningKey::P521)
+        }
+    }
+}
+
+/// Parse the EC private scalar from an unencrypted PKCS#8 PEM.
+fn parse_pkcs8_ec_private_scalar(pem: &str) -> Option<Vec<u8>> {
+    let der = pem::parse(pem).ok()?.into_contents();
+    parse_pkcs8_ec_private_scalar_der(&der)
+}
+
+/// Parse the EC private scalar from a PKCS#8 DER `privateKey` OCTET STRING
+/// (i.e. the ECPrivateKey DER).
+fn parse_pkcs8_ec_private_scalar_der(der: &[u8]) -> Option<Vec<u8>> {
+    let (pki_start, pki_end) = der_sequence(der, 0)?;
+    // version INTEGER
+    let (_, after) = der_integer(der, pki_start)?;
+    // AlgorithmIdentifier SEQUENCE
+    let (_, alg_end) = der_sequence(der, pki_start + after)?;
+    // privateKey OCTET STRING containing the ECPrivateKey DER
+    let pos = alg_end;
+    if der.get(pos) != Some(&0x04) {
+        return None;
+    }
+    let (len, len_size) = read_ber_len(&der[pos + 1..])?;
+    let ec_start = pos + 1 + len_size;
+    let ec_end = ec_start + len;
+    if ec_end > pki_end {
+        return None;
+    }
+    parse_ec_private_scalar(&der[ec_start..ec_end])
+}
+
+/// Parse the ECPrivateKey DER (`SEQUENCE { INTEGER version, OCTET STRING
+/// privateKey, ... }`) and return the private scalar bytes.
+fn parse_ec_private_scalar(der: &[u8]) -> Option<Vec<u8>> {
+    let (start, end) = der_sequence(der, 0)?;
+    // version INTEGER
+    let (_, after) = der_integer(der, start)?;
+    // privateKey OCTET STRING
+    let pos = start + after;
+    if der.get(pos) != Some(&0x04) {
+        return None;
+    }
+    let (len, len_size) = read_ber_len(&der[pos + 1..])?;
+    let s_start = pos + 1 + len_size;
+    let s_end = s_start + len;
+    if s_end > end || s_end > der.len() {
+        return None;
+    }
+    Some(der[s_start..s_end].to_vec())
+}
+
+/// Extract the public key from an X.509 certificate DER: walks the certificate
+/// to the subjectPublicKeyInfo SEQUENCE and parses the algorithm + key.
+/// Used when the private key is encrypted: the public part must be served (7F49)
+/// before any PIN.
+fn extract_spki_public(cert_der: &[u8]) -> Result<SpkiPublic, String> {
     const RSA_OID: &[u8] = &[0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x01];
+    const EC_OID: &[u8] = &[0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x02, 0x01];
 
     // Walk the DER: certificate SEQUENCE -> tbsCertificate SEQUENCE, then scan its
     // top-level children (any TLV) for the subjectPublicKeyInfo SEQUENCE (the one
-    // containing the rsaEncryption OID).
+    // containing the rsaEncryption or ecPublicKey OID).
     let cert_seq = der_sequence(cert_der, 0).ok_or("cert: not a SEQUENCE")?;
     let tbs = der_sequence(cert_der, cert_seq.0).ok_or("cert: no tbsCertificate")?;
 
@@ -544,17 +827,22 @@ fn extract_rsa_public_from_cert(cert_der: &[u8]) -> Result<(BigUint, BigUint), S
         if content_end > tbs.1 {
             break;
         }
-        if tag == 0x30
-            && cert_der[content_start..content_end]
-                .windows(RSA_OID.len())
-                .any(|w| w == RSA_OID)
-        {
-            return parse_spki_rsa_public(&cert_der[content_start..content_end])
-                .ok_or_else(|| "cert: no RSA key in SPKI".to_string());
+        if tag == 0x30 {
+            let spki = &cert_der[content_start..content_end];
+            if spki.windows(RSA_OID.len()).any(|w| w == RSA_OID) {
+                return parse_spki_rsa_public(spki)
+                    .map(|(n, e)| SpkiPublic::Rsa { n, e })
+                    .ok_or_else(|| "cert: no RSA key in SPKI".to_string());
+            }
+            if spki.windows(EC_OID.len()).any(|w| w == EC_OID) {
+                return parse_spki_ec_public(spki)
+                    .map(|(curve, point)| SpkiPublic::Ec { curve, point })
+                    .ok_or_else(|| "cert: no EC key in SPKI".to_string());
+            }
         }
         pos = content_end;
     }
-    Err("cert: no RSA public key found".to_string())
+    Err("cert: no supported public key found".to_string())
 }
 
 /// Parse the subjectPublicKeyInfo content: algorithm SEQUENCE + BIT STRING
@@ -568,6 +856,29 @@ fn parse_spki_rsa_public(spki: &[u8]) -> Option<(BigUint, BigUint)> {
     let (len, len_size) = read_ber_len(&bit_string[1..])?;
     let content = bit_string.get(1 + len_size..1 + len_size + len)?;
     parse_rsa_public_components(&content[1..]) // skip the unused-bits byte
+}
+
+/// Parse the subjectPublicKeyInfo content for an EC key: the BIT STRING contains
+/// the uncompressed point `04 || X || Y`; the curve is derived from its length.
+fn parse_spki_ec_public(spki: &[u8]) -> Option<(EcCurve, Vec<u8>)> {
+    let (_, alg_end) = der_sequence(spki, 0)?;
+    let bit_string = &spki[alg_end..];
+    if bit_string.first() != Some(&0x03) {
+        return None;
+    }
+    let (len, len_size) = read_ber_len(&bit_string[1..])?;
+    let content = bit_string.get(1 + len_size..1 + len_size + len)?;
+    let point = &content[1..]; // skip the unused-bits byte
+    if point.first() != Some(&0x04) {
+        return None;
+    }
+    let curve = match point.len() {
+        65 => EcCurve::P256,
+        97 => EcCurve::P384,
+        133 => EcCurve::P521,
+        _ => return None,
+    };
+    Some((curve, point.to_vec()))
 }
 
 /// Parse `SEQUENCE { INTEGER n, INTEGER e }` (PKCS#1 RSAPublicKey).
