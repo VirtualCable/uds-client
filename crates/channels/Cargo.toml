@@ -19,6 +19,10 @@ libc = { workspace = true }
 
 # Smartcard emulation
 rsa = { version = "0.9", features = ["pkcs5"] }
+pkcs8 = { version = "0.10", features = ["pem", "encryption"] }
+p256 = { version = "0.13", features = ["ecdsa", "pkcs8", "pem"] }
+p384 = { version = "0.13", features = ["ecdsa", "pkcs8", "pem"] }
+p521 = { version = "0.13", features = ["ecdsa", "pkcs8", "pem"] }
 sha1 = "0.10"
 sha2 = "0.10"
 flate2 = "1.0"
