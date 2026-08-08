@@ -481,6 +481,19 @@ impl GidsEngine {
         }
         match p2 {
             0x80 => {
+                // Empty VERIFY (Lc=0) is a STATUS QUERY (msclmd sends `00 20 00 80`
+                // before showing the PIN dialog): report the remaining attempts
+                // WITHOUT decrementing. Treating it as a failed attempt blocked the
+                // card after a few probes (observed with certutil on 2026-08-09).
+                if data.is_empty() {
+                    return if self.pin_verified {
+                        make_status(SW_SUCCESS)
+                    } else if self.pin_retries == 0 {
+                        make_status(SW_AUTH_METHOD_BLOCKED)
+                    } else {
+                        make_status(SW_VERIFY_FAILED | self.pin_retries as u16)
+                    };
+                }
                 if self.pin_retries == 0 {
                     return make_status(SW_AUTH_METHOD_BLOCKED);
                 }

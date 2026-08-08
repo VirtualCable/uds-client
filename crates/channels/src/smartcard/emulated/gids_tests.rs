@@ -389,6 +389,38 @@ mod tests {
     }
 
     #[test]
+    fn empty_verify_is_status_query_and_does_not_decrement() {
+        // msclmd sends `00 20 00 80` (Lc=0) as a PIN-status query before showing
+        // the PIN dialog. It must report the remaining attempts WITHOUT consuming
+        // one (a bug here blocked the card after a few probes).
+        let mut engine = make_encrypted_engine("p4ss");
+        let query = [0x00, 0x20, 0x00, 0x80];
+
+        // Repeated queries keep reporting 3 attempts (no decrement).
+        for _ in 0..5 {
+            let resp = engine.process_apdu(&query);
+            assert_eq!(status(&resp), 0x63C3);
+        }
+
+        // A real wrong PIN then consumes one attempt.
+        let resp = engine.process_apdu(&verify_apdu("wrong"));
+        assert_eq!(status(&resp), 0x63C2);
+
+        // Queries keep reporting the current counter.
+        let resp = engine.process_apdu(&query);
+        assert_eq!(status(&resp), 0x63C2);
+
+        // Exhaust the attempts -> blocked.
+        engine.process_apdu(&verify_apdu("wrong"));
+        engine.process_apdu(&verify_apdu("wrong"));
+        let resp = engine.process_apdu(&verify_apdu("wrong"));
+        assert_eq!(status(&resp), 0x6983);
+        // And the query reports blocked too.
+        let resp = engine.process_apdu(&query);
+        assert_eq!(status(&resp), 0x6983);
+    }
+
+    #[test]
     fn mse_set_ok() {
         let (mut engine, _, _, _) = make_engine();
         let mse = [0x00, 0x22, 0x41, 0xB6, 0x06, 0x80, 0x01, 0x57, 0x84, 0x01, 0x81];
