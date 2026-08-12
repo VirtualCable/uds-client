@@ -251,6 +251,12 @@ impl SmartcardBackend for NativeBackend {
         }
     }
 
+    fn cancel(&self, ctx: &ScardContext) -> Result<(), u32> {
+        let contexts = self.registry.contexts.read().unwrap();
+        let pcsc_ctx = contexts.get(&ctx.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
+        pcsc_ctx.cancel().map_err(pcsc_error_to_u32)
+    }
+
     fn begin_transaction(&self, _handle: &ScardHandle) -> Result<(), u32> {
         // Transactions are serialized by the device thread and do not require locks at the local PC/SC layer.
         Ok(())

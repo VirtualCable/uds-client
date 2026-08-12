@@ -257,6 +257,10 @@ impl SmartcardBackend for EmulatedBackend {
         Ok((results, return_code))
     }
 
+    fn cancel(&self, _: &ScardContext) -> Result<(), u32> {
+        Ok(())
+    }
+
     fn begin_transaction(&self, _: &ScardHandle) -> Result<(), u32> {
         Ok(())
     }

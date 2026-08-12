@@ -71,6 +71,7 @@ trait SmartcardBackend: Send + Sync + std::fmt::Debug {
         timeout: Duration,
         reader_states: &[ReaderStateIn],
     ) -> Result<(Vec<ReaderStateOut>, u32), u32>;
+    fn cancel(&self, ctx: &ScardContext) -> Result<(), u32>;
     fn begin_transaction(&self, handle: &ScardHandle) -> Result<(), u32>;
     fn end_transaction(&self, handle: &ScardHandle, disposition: DWORD) -> Result<(), u32>;
     fn get_attrib(&self, handle: &ScardHandle, attr_id: DWORD) -> Result<Vec<u8>, u32>;
@@ -210,6 +211,10 @@ impl SmartcardIntegration for SmartcardHandle {
         reader_states: &[ReaderStateIn],
     ) -> Result<(Vec<ReaderStateOut>, u32), u32> {
         self.backend.get_status_change(ctx, timeout, reader_states)
+    }
+
+    fn cancel(&self, ctx: &ScardContext) -> Result<(), u32> {
+        self.backend.cancel(ctx)
     }
 
     fn begin_transaction(&self, handle: &ScardHandle) -> Result<(), u32> {
