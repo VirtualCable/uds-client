@@ -455,7 +455,10 @@ mod tests {
         match messages_rx.try_recv() {
             Ok(GuiMessage::ConnectRdp(settings)) => {
                 assert!(settings.redirections.smartcard.enabled);
-                assert_eq!(settings.redirections.smartcard.emulated.as_deref(), Some("pem:cert;key"));
+                assert_eq!(
+                    settings.redirections.smartcard.emulated.as_deref(),
+                    Some("pem:cert;key")
+                );
             }
             _ => panic!("Expected GuiMessage::ConnectRdp"),
         }

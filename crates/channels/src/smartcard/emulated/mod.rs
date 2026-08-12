@@ -31,6 +31,7 @@ use std::time::Duration;
 
 use rsa::RsaPrivateKey;
 
+use pcsc::ffi::DWORD;
 use rdp::integrations::smartcard::*;
 
 use self::gids_engine::{GIDS_ATR, GIDS_READER_NAME, GidsEngine};
@@ -67,7 +68,7 @@ impl EmulatedBackend {
             .map_err(|e| format!("key PEM: {}", e))?
             .to_string();
         Ok(EmulatedBackend {
-            engine: Mutex::new(GidsEngine::new(cert_der.to_vec(), key_pem.into())?),
+            engine: Mutex::new(GidsEngine::new(cert_der.to_vec(), key_pem)?),
         })
     }
 
@@ -114,7 +115,11 @@ impl EmulatedBackend {
         let key_pem = std::fs::read_to_string(key_path).ok()?;
         match Self::from_pem(&cert_pem, &key_pem) {
             Ok(b) => {
-                log::info!("Emulated smartcard loaded: cert={}, key={}", cert_path, key_path);
+                log::info!(
+                    "Emulated smartcard loaded: cert={}, key={}",
+                    cert_path,
+                    key_path
+                );
                 Some(b)
             }
             Err(e) => {
@@ -126,7 +131,7 @@ impl EmulatedBackend {
 }
 
 impl SmartcardBackend for EmulatedBackend {
-    fn establish_context(&self, _scope: u32) -> Result<ScardContext, u32> {
+    fn establish_context(&self, _scope: DWORD) -> Result<ScardContext, u32> {
         Ok(ScardContext::new())
     }
 
@@ -146,8 +151,8 @@ impl SmartcardBackend for EmulatedBackend {
         &self,
         _ctx: &ScardContext,
         reader: &str,
-        _: u32,
-        _: u32,
+        _: DWORD,
+        _: DWORD,
     ) -> Result<ConnectResult, u32> {
         if reader != GIDS_READER_NAME {
             return Err(SCARD_E_UNKNOWN_READER);
@@ -158,11 +163,11 @@ impl SmartcardBackend for EmulatedBackend {
         })
     }
 
-    fn disconnect(&self, _handle: &ScardHandle, _disposition: u32) -> Result<(), u32> {
+    fn disconnect(&self, _handle: &ScardHandle, _disposition: DWORD) -> Result<(), u32> {
         Ok(())
     }
 
-    fn reconnect(&self, _: &ScardHandle, _: u32, _: u32, _: u32) -> Result<u32, u32> {
+    fn reconnect(&self, _: &ScardHandle, _: DWORD, _: DWORD, _: DWORD) -> Result<u32, u32> {
         Ok(SCARD_PROTOCOL_T1)
     }
 
@@ -179,12 +184,12 @@ impl SmartcardBackend for EmulatedBackend {
         })
     }
 
-    fn control(&self, _: &ScardHandle, control_code: u32, _: &[u8]) -> Result<Vec<u8>, u32> {
+    fn control(&self, _: &ScardHandle, control_code: DWORD, _: &[u8]) -> Result<Vec<u8>, u32> {
         const FEATURE_GET_TLV_PROPERTIES: u8 = 0x12;
-        const CM_IOCTL_GET_FEATURE_REQUEST: u32 = 0x0031_3520;
-        const CLASS2_IOCTL_MAGIC: u32 = 0x0033_0000;
-        const IOCTL_FEATURE_GET_TLV_PROPERTIES: u32 =
-            0x4200_0000 + (FEATURE_GET_TLV_PROPERTIES as u32) + CLASS2_IOCTL_MAGIC;
+        const CM_IOCTL_GET_FEATURE_REQUEST: DWORD = 0x0031_3520;
+        const CLASS2_IOCTL_MAGIC: DWORD = 0x0033_0000;
+        const IOCTL_FEATURE_GET_TLV_PROPERTIES: DWORD =
+            0x4200_0000 + (FEATURE_GET_TLV_PROPERTIES as DWORD) + CLASS2_IOCTL_MAGIC;
 
         if control_code == CM_IOCTL_GET_FEATURE_REQUEST {
             let mut response = Vec::with_capacity(6);
@@ -256,15 +261,15 @@ impl SmartcardBackend for EmulatedBackend {
         Ok(())
     }
 
-    fn end_transaction(&self, _: &ScardHandle, _: u32) -> Result<(), u32> {
+    fn end_transaction(&self, _: &ScardHandle, _: DWORD) -> Result<(), u32> {
         Ok(())
     }
 
-    fn get_attrib(&self, _: &ScardHandle, _: u32) -> Result<Vec<u8>, u32> {
+    fn get_attrib(&self, _: &ScardHandle, _: DWORD) -> Result<Vec<u8>, u32> {
         Ok(vec![0x00])
     }
 
-    fn set_attrib(&self, _: &ScardHandle, _: u32, _: &[u8]) -> Result<(), u32> {
+    fn set_attrib(&self, _: &ScardHandle, _: DWORD, _: &[u8]) -> Result<(), u32> {
         Ok(())
     }
 

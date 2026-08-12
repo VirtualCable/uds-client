@@ -9,7 +9,9 @@ use rdp::integrations::smartcard::consts::*;
 /// Build a `Cached_GeneralFile/...` value (16-byte CSP header + data).
 pub(crate) fn build_general_file_value(data: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(16 + data.len());
-    out.extend_from_slice(&[0x00, 0x00, 0x01, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+    out.extend_from_slice(&[
+        0x00, 0x00, 0x01, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    ]);
     out.extend_from_slice(&(data.len() as u32).to_le_bytes());
     out.extend_from_slice(data);
     out
@@ -67,21 +69,21 @@ pub(crate) fn pcsc_error_to_u32(err: pcsc::Error) -> u32 {
     }
 }
 
-pub(crate) fn u32_to_share_mode(mode: u32) -> Result<pcsc::ShareMode, u32> {
+pub(crate) fn dword_to_share_mode(mode: DWORD) -> Result<pcsc::ShareMode, u32> {
     match mode {
-        SCARD_SHARE_EXCLUSIVE => Ok(pcsc::ShareMode::Exclusive),
-        SCARD_SHARE_SHARED => Ok(pcsc::ShareMode::Shared),
-        SCARD_SHARE_DIRECT => Ok(pcsc::ShareMode::Direct),
+        ffi::SCARD_SHARE_EXCLUSIVE => Ok(pcsc::ShareMode::Exclusive),
+        ffi::SCARD_SHARE_SHARED => Ok(pcsc::ShareMode::Shared),
+        ffi::SCARD_SHARE_DIRECT => Ok(pcsc::ShareMode::Direct),
         _ => Err(SCARD_E_INVALID_PARAMETER),
     }
 }
 
-pub(crate) fn u32_to_protocols(proto: u32) -> pcsc::Protocols {
+pub(crate) fn dword_to_protocols(proto: DWORD) -> pcsc::Protocols {
     let mut p = pcsc::Protocols::empty();
-    if proto & SCARD_PROTOCOL_T0 != 0 {
+    if proto & ffi::SCARD_PROTOCOL_T0 != 0 {
         p.insert(pcsc::Protocols::T0);
     }
-    if proto & SCARD_PROTOCOL_T1 != 0 {
+    if proto & ffi::SCARD_PROTOCOL_T1 != 0 {
         p.insert(pcsc::Protocols::T1);
     }
     if p.is_empty() {
@@ -99,17 +101,17 @@ pub(crate) fn protocol_to_u32(proto: pcsc::Protocol) -> u32 {
     }
 }
 
-pub(crate) fn u32_to_disposition(disp: u32) -> Result<pcsc::Disposition, u32> {
+pub(crate) fn dword_to_disposition(disp: DWORD) -> Result<pcsc::Disposition, u32> {
     match disp {
-        SCARD_LEAVE_CARD => Ok(pcsc::Disposition::LeaveCard),
-        SCARD_RESET_CARD => Ok(pcsc::Disposition::ResetCard),
-        SCARD_UNPOWER_CARD => Ok(pcsc::Disposition::UnpowerCard),
-        SCARD_EJECT_CARD => Ok(pcsc::Disposition::EjectCard),
+        ffi::SCARD_LEAVE_CARD => Ok(pcsc::Disposition::LeaveCard),
+        ffi::SCARD_RESET_CARD => Ok(pcsc::Disposition::ResetCard),
+        ffi::SCARD_UNPOWER_CARD => Ok(pcsc::Disposition::UnpowerCard),
+        ffi::SCARD_EJECT_CARD => Ok(pcsc::Disposition::EjectCard),
         _ => Err(SCARD_E_INVALID_PARAMETER),
     }
 }
 
-pub(crate) fn u32_to_state(bits: DWORD) -> pcsc::State {
+pub(crate) fn dword_to_state(bits: DWORD) -> pcsc::State {
     // Preserve all raw bits. `from_bits_truncate` would drop unknown flags such
     // as 0x0001_0000 that the RDPSC protocol uses for the `\\?PnP?\Notification`
     // pseudo-reader; dropping them makes SCardGetStatusChange report a spurious
@@ -134,9 +136,8 @@ pub(crate) fn pcsc_status_to_u32(status: pcsc::Status) -> u32 {
     state
 }
 
-pub(crate) fn u32_to_attribute(attr: u32) -> Result<pcsc::Attribute, u32> {
-    let dword_attr = attr as pcsc::ffi::DWORD;
-    match dword_attr {
+pub(crate) fn dword_to_attribute(attr: DWORD) -> Result<pcsc::Attribute, u32> {
+    match attr {
         ffi::SCARD_ATTR_VENDOR_NAME => Ok(pcsc::Attribute::VendorName),
         ffi::SCARD_ATTR_VENDOR_IFD_TYPE => Ok(pcsc::Attribute::VendorIfdType),
         ffi::SCARD_ATTR_VENDOR_IFD_VERSION => Ok(pcsc::Attribute::VendorIfdVersion),

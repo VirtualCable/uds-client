@@ -16,6 +16,7 @@ mod native;
 
 use std::time::Duration;
 
+use pcsc::ffi::DWORD;
 use rdp::integrations::smartcard::*;
 
 use emulated::EmulatedBackend;
@@ -28,7 +29,7 @@ use native::NativeBackend;
 /// Internal backend trait — decouples `SmartcardHandle` from the actual
 /// SCard implementation (dummy vs pcsc-lite).
 trait SmartcardBackend: Send + Sync + std::fmt::Debug {
-    fn establish_context(&self, scope: u32) -> Result<ScardContext, u32>;
+    fn establish_context(&self, scope: DWORD) -> Result<ScardContext, u32>;
     fn release_context(&self, ctx: &ScardContext) -> Result<(), u32>;
     fn is_valid_context(&self, ctx: &ScardContext) -> bool;
     fn list_readers(
@@ -40,16 +41,16 @@ trait SmartcardBackend: Send + Sync + std::fmt::Debug {
         &self,
         ctx: &ScardContext,
         reader: &str,
-        share_mode: u32,
-        preferred_protocols: u32,
+        share_mode: DWORD,
+        preferred_protocols: DWORD,
     ) -> Result<ConnectResult, u32>;
-    fn disconnect(&self, handle: &ScardHandle, disposition: u32) -> Result<(), u32>;
+    fn disconnect(&self, handle: &ScardHandle, disposition: DWORD) -> Result<(), u32>;
     fn reconnect(
         &self,
         handle: &ScardHandle,
-        share_mode: u32,
-        preferred_protocols: u32,
-        initialization: u32,
+        share_mode: DWORD,
+        preferred_protocols: DWORD,
+        initialization: DWORD,
     ) -> Result<u32, u32>;
     fn transmit(
         &self,
@@ -60,7 +61,7 @@ trait SmartcardBackend: Send + Sync + std::fmt::Debug {
     fn control(
         &self,
         handle: &ScardHandle,
-        control_code: u32,
+        control_code: DWORD,
         in_data: &[u8],
     ) -> Result<Vec<u8>, u32>;
     fn status(&self, handle: &ScardHandle) -> Result<ScardStatus, u32>;
@@ -71,9 +72,9 @@ trait SmartcardBackend: Send + Sync + std::fmt::Debug {
         reader_states: &[ReaderStateIn],
     ) -> Result<(Vec<ReaderStateOut>, u32), u32>;
     fn begin_transaction(&self, handle: &ScardHandle) -> Result<(), u32>;
-    fn end_transaction(&self, handle: &ScardHandle, disposition: u32) -> Result<(), u32>;
-    fn get_attrib(&self, handle: &ScardHandle, attr_id: u32) -> Result<Vec<u8>, u32>;
-    fn set_attrib(&self, handle: &ScardHandle, attr_id: u32, data: &[u8]) -> Result<(), u32>;
+    fn end_transaction(&self, handle: &ScardHandle, disposition: DWORD) -> Result<(), u32>;
+    fn get_attrib(&self, handle: &ScardHandle, attr_id: DWORD) -> Result<Vec<u8>, u32>;
+    fn set_attrib(&self, handle: &ScardHandle, attr_id: DWORD, data: &[u8]) -> Result<(), u32>;
     fn get_container_info(&self, ctx: &ScardContext, container_index: u8) -> Result<Vec<u8>, u32>;
     fn get_certificate(&self, ctx: &ScardContext) -> Result<Vec<u8>, u32>;
     fn is_available(&self) -> bool;
@@ -131,7 +132,7 @@ impl SmartcardHandle {
 
 impl SmartcardIntegration for SmartcardHandle {
     fn establish_context(&self, scope: u32) -> Result<ScardContext, u32> {
-        self.backend.establish_context(scope)
+        self.backend.establish_context(scope.into())
     }
 
     fn release_context(&self, ctx: &ScardContext) -> Result<(), u32> {
@@ -158,11 +159,11 @@ impl SmartcardIntegration for SmartcardHandle {
         preferred_protocols: u32,
     ) -> Result<ConnectResult, u32> {
         self.backend
-            .connect(ctx, reader, share_mode, preferred_protocols)
+            .connect(ctx, reader, share_mode.into(), preferred_protocols.into())
     }
 
     fn disconnect(&self, handle: &ScardHandle, disposition: u32) -> Result<(), u32> {
-        self.backend.disconnect(handle, disposition)
+        self.backend.disconnect(handle, disposition.into())
     }
 
     fn reconnect(
@@ -172,8 +173,12 @@ impl SmartcardIntegration for SmartcardHandle {
         preferred_protocols: u32,
         initialization: u32,
     ) -> Result<u32, u32> {
-        self.backend
-            .reconnect(handle, share_mode, preferred_protocols, initialization)
+        self.backend.reconnect(
+            handle,
+            share_mode.into(),
+            preferred_protocols.into(),
+            initialization.into(),
+        )
     }
 
     fn transmit(
@@ -191,7 +196,7 @@ impl SmartcardIntegration for SmartcardHandle {
         control_code: u32,
         in_data: &[u8],
     ) -> Result<Vec<u8>, u32> {
-        self.backend.control(handle, control_code, in_data)
+        self.backend.control(handle, control_code.into(), in_data)
     }
 
     fn status(&self, handle: &ScardHandle) -> Result<ScardStatus, u32> {
@@ -212,15 +217,15 @@ impl SmartcardIntegration for SmartcardHandle {
     }
 
     fn end_transaction(&self, handle: &ScardHandle, disposition: u32) -> Result<(), u32> {
-        self.backend.end_transaction(handle, disposition)
+        self.backend.end_transaction(handle, disposition.into())
     }
 
     fn get_attrib(&self, handle: &ScardHandle, attr_id: u32) -> Result<Vec<u8>, u32> {
-        self.backend.get_attrib(handle, attr_id)
+        self.backend.get_attrib(handle, attr_id.into())
     }
 
     fn set_attrib(&self, handle: &ScardHandle, attr_id: u32, data: &[u8]) -> Result<(), u32> {
-        self.backend.set_attrib(handle, attr_id, data)
+        self.backend.set_attrib(handle, attr_id.into(), data)
     }
 
     fn get_container_info(&self, ctx: &ScardContext, container_index: u8) -> Result<Vec<u8>, u32> {

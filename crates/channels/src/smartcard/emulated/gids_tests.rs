@@ -12,14 +12,20 @@ mod tests {
     use rsa::pkcs1::EncodeRsaPrivateKey;
     use rsa::pkcs8::{EncodePrivateKey, LineEnding};
 
-    use crate::smartcard::emulated::gids_engine::{REFERENCE_CARDID, REFERENCE_GUID, GIDS_AID, GidsEngine};
-    use crate::smartcard::emulated::helpers::{parse_apdu_header, extract_apdu_data, parse_rsa_pkcs1_components};
+    use crate::smartcard::emulated::gids_engine::{
+        GIDS_AID, GidsEngine, REFERENCE_CARDID, REFERENCE_GUID,
+    };
+    use crate::smartcard::emulated::helpers::{
+        extract_apdu_data, parse_apdu_header, parse_rsa_pkcs1_components,
+    };
 
     fn make_engine() -> (GidsEngine, BigUint, BigUint, BigUint) {
         let mut rng = rsa::rand_core::OsRng;
         let key = rsa::RsaPrivateKey::new(&mut rng, 2048).unwrap();
         let pkcs1 = key.to_pkcs1_der().unwrap();
-        let (n, e, d) = crate::smartcard::emulated::helpers::parse_rsa_pkcs1_components(pkcs1.as_bytes()).unwrap();
+        let (n, e, d) =
+            crate::smartcard::emulated::helpers::parse_rsa_pkcs1_components(pkcs1.as_bytes())
+                .unwrap();
         // Pseudo-random "certificate" so the zlib-compressed DF24 content stays large
         // (a repetitive cert would compress to a few bytes and skip 61 XX chaining).
         let mut x: u32 = 0x12345678;
@@ -70,7 +76,7 @@ mod tests {
         if b.first() == Some(&0) {
             b.remove(0);
         }
-        if b.first().map_or(true, |&x| x & 0x80 != 0) {
+        if b.first().is_none_or(|&x| x & 0x80 != 0) {
             b.insert(0, 0);
         }
         let mut v = vec![0x02];
@@ -181,16 +187,21 @@ mod tests {
         let (mut engine, _, _, _) = make_engine();
         let resp = engine.process_apdu(&apdu_select_gids(0x00));
         assert_eq!(status(&resp), 0x9000);
-        assert_eq!(data(&resp), &[
-            0x61, 0x12, 0x4F, 0x0B, 0xA0, 0x00, 0x00, 0x03, 0x97, 0x42, 0x54, 0x46, 0x59, 0x02,
-            0x01, 0x73, 0x03, 0x40, 0x01, 0xC0,
-        ]);
+        assert_eq!(
+            data(&resp),
+            &[
+                0x61, 0x12, 0x4F, 0x0B, 0xA0, 0x00, 0x00, 0x03, 0x97, 0x42, 0x54, 0x46, 0x59, 0x02,
+                0x01, 0x73, 0x03, 0x40, 0x01, 0xC0,
+            ]
+        );
     }
 
     #[test]
     fn select_unknown_aid_returns_6a82() {
         let (mut engine, _, _, _) = make_engine();
-        let resp = engine.process_apdu(&[0x00, 0xA4, 0x04, 0x00, 0x09, 0xA0, 0x00, 0x00, 0x03, 0x08, 0x00, 0x00, 0x10, 0x00]);
+        let resp = engine.process_apdu(&[
+            0x00, 0xA4, 0x04, 0x00, 0x09, 0xA0, 0x00, 0x00, 0x03, 0x08, 0x00, 0x00, 0x10, 0x00,
+        ]);
         assert_eq!(status(&resp), 0x6A82);
     }
 
@@ -213,7 +224,10 @@ mod tests {
 
         let resp = engine.process_apdu(&get_data_apdu(0xA0, 0x10, &[0xDF, 0x22]));
         assert_eq!(status(&resp), 0x9000);
-        assert_eq!(data(&resp), &[0xDF, 0x22, 0x06, 0x00, 0x00, 0x01, 0x00, 0x05, 0x00]);
+        assert_eq!(
+            data(&resp),
+            &[0xDF, 0x22, 0x06, 0x00, 0x00, 0x01, 0x00, 0x05, 0x00]
+        );
     }
 
     #[test]
@@ -223,7 +237,10 @@ mod tests {
         assert_eq!(status(&resp), 0x9000);
         let d = data(&resp);
         assert_eq!(&d[..3], &[0xDF, 0x23, 0x56]);
-        let guid_utf16: Vec<u8> = REFERENCE_GUID.encode_utf16().flat_map(|u| u.to_le_bytes()).collect();
+        let guid_utf16: Vec<u8> = REFERENCE_GUID
+            .encode_utf16()
+            .flat_map(|u| u.to_le_bytes())
+            .collect();
         assert_eq!(&d[3..3 + guid_utf16.len()], &guid_utf16);
     }
 
@@ -292,7 +309,13 @@ mod tests {
         let mut cert = Vec::new();
         dec.read_to_end(&mut cert).unwrap();
         assert_eq!(cert.len(), uncompressed_len);
-        assert_eq!(cert[0], (0x12345678_u32.wrapping_mul(1_103_515_245).wrapping_add(12_345) >> 16) as u8);
+        assert_eq!(
+            cert[0],
+            (0x12345678_u32
+                .wrapping_mul(1_103_515_245)
+                .wrapping_add(12_345)
+                >> 16) as u8
+        );
     }
 
     #[test]
@@ -323,7 +346,9 @@ mod tests {
     #[test]
     fn mse_set_ok() {
         let (mut engine, _, _, _) = make_engine();
-        let mse = [0x00, 0x22, 0x41, 0xB6, 0x06, 0x80, 0x01, 0x57, 0x84, 0x01, 0x81];
+        let mse = [
+            0x00, 0x22, 0x41, 0xB6, 0x06, 0x80, 0x01, 0x57, 0x84, 0x01, 0x81,
+        ];
         assert_eq!(status(&engine.process_apdu(&mse)), 0x9000);
     }
 
@@ -359,7 +384,8 @@ mod tests {
 
     #[test]
     fn from_spec_unsupported_prefix_is_none() {
-        let backend = crate::smartcard::emulated::EmulatedBackend::from_spec("userdefined:whatever");
+        let backend =
+            crate::smartcard::emulated::EmulatedBackend::from_spec("userdefined:whatever");
         assert!(backend.is_none());
     }
 

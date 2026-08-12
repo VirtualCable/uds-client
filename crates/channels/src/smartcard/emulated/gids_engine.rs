@@ -25,9 +25,9 @@ use std::sync::LazyLock;
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
 use num_bigint::BigUint;
+use rsa::RsaPrivateKey;
 use rsa::pkcs1::EncodeRsaPrivateKey;
 use rsa::pkcs8::DecodePrivateKey;
-use rsa::RsaPrivateKey;
 
 use super::helpers::*;
 
@@ -41,8 +41,8 @@ pub const GIDS_AID: &[u8] = &[0xA0, 0x00, 0x00, 0x03, 0x97, 0x42, 0x54, 0x46, 0x
 /// ATR that Windows maps to the GIDS minidriver (reuses the reference card ATR so
 /// the remote selects msclmd exactly like with the physical card).
 pub const GIDS_ATR: &[u8] = &[
-    0x3B, 0xF9, 0x13, 0x00, 0x00, 0x81, 0x31, 0xFE, 0x45, 0x4A, 0x43, 0x4F, 0x50, 0x32, 0x34,
-    0x32, 0x52, 0x33, 0xA2,
+    0x3B, 0xF9, 0x13, 0x00, 0x00, 0x81, 0x31, 0xFE, 0x45, 0x4A, 0x43, 0x4F, 0x50, 0x32, 0x34, 0x32,
+    0x52, 0x33, 0xA2,
 ];
 
 /// Reader name presented to the remote.
@@ -72,8 +72,8 @@ const SW_F_INTERNAL_ERROR: u16 = 0x6581;
 
 /// SELECT GIDS AID (P2=00) response: FCI with the AID (Application Template).
 const SELECT_FCI: &[u8] = &[
-    0x61, 0x12, 0x4F, 0x0B, 0xA0, 0x00, 0x00, 0x03, 0x97, 0x42, 0x54, 0x46, 0x59, 0x02, 0x01,
-    0x73, 0x03, 0x40, 0x01, 0xC0,
+    0x61, 0x12, 0x4F, 0x0B, 0xA0, 0x00, 0x00, 0x03, 0x97, 0x42, 0x54, 0x46, 0x59, 0x02, 0x01, 0x73,
+    0x03, 0x40, 0x01, 0xC0,
 ];
 
 /// SELECT GIDS AID with P2=04 response (warning-style FCI from the reference card).
@@ -81,14 +81,13 @@ const SELECT_FCI_P204: &[u8] = &[0x62, 0x08, 0x82, 0x01, 0x38, 0x8C, 0x03, 0x03,
 
 /// Applet identifying info (GET DATA 2F01) — "MySmartLogon".
 const APPLET_INFO: &[u8] = &[
-    0x43, 0x01, 0xF4, 0x47, 0x03, 0x08, 0x01, 0x80, 0x46, 0x0C, 0x4D, 0x79, 0x53, 0x6D, 0x61,
-    0x72, 0x74, 0x4C, 0x6F, 0x67, 0x6F, 0x6E,
+    0x43, 0x01, 0xF4, 0x47, 0x03, 0x08, 0x01, 0x80, 0x46, 0x0C, 0x4D, 0x79, 0x53, 0x6D, 0x61, 0x72,
+    0x74, 0x4C, 0x6F, 0x67, 0x6F, 0x6E,
 ];
 
 /// GET DATA DF20 at P1=A000 (card property / PIN info) from the reference card.
 const CARD_PIN_INFO: &[u8] = &[
-    0xDF, 0x20, 0x0D, 0x01, 0x01, 0x00, 0x00, 0x00, 0x07, 0x9A, 0x81, 0xB0, 0xFF, 0xFF, 0x00,
-    0x00,
+    0xDF, 0x20, 0x0D, 0x01, 0x01, 0x00, 0x00, 0x00, 0x07, 0x9A, 0x81, 0xB0, 0xFF, 0xFF, 0x00, 0x00,
 ];
 
 /// Card configuration (GET DATA DF22) from the reference card.
@@ -171,7 +170,9 @@ impl GidsEngine {
         // `01 00` + uncompressed length (2 bytes LITTLE-ENDIAN) + zlib(flate)
         // compressed DER. The reference card: `01 00 FC 03` = len 0x03FC (1020).
         let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
-        encoder.write_all(&cert_der).map_err(|e| format!("compress cert: {e}"))?;
+        encoder
+            .write_all(&cert_der)
+            .map_err(|e| format!("compress cert: {e}"))?;
         let compressed = encoder.finish().map_err(|e| format!("zlib finish: {e}"))?;
         let mut cert_content = Vec::with_capacity(4 + compressed.len());
         cert_content.extend_from_slice(&[0x01, 0x00]);
@@ -450,7 +451,11 @@ impl GidsEngine {
                     return make_response(&buf[..buf.len().min(chunk_size)], SW_SUCCESS);
                 }
                 self.chaining = Some(rest.to_vec());
-                let sw2 = if rest.len() > 0xFF { 0x00 } else { rest.len() as u8 };
+                let sw2 = if rest.len() > 0xFF {
+                    0x00
+                } else {
+                    rest.len() as u8
+                };
                 return make_response(&buf[..buf.len().min(chunk_size)], SW_MORE_DATA | sw2 as u16);
             }
             None => data,
@@ -463,7 +468,11 @@ impl GidsEngine {
         let chunk = &available[..chunk_size];
         let remaining = &available[chunk_size..];
         self.chaining = Some(remaining.to_vec());
-        let sw2 = if remaining.len() > 0xFF { 0x00 } else { remaining.len() as u8 };
+        let sw2 = if remaining.len() > 0xFF {
+            0x00
+        } else {
+            remaining.len() as u8
+        };
         make_response(chunk, SW_MORE_DATA | sw2 as u16)
     }
 
@@ -639,5 +648,7 @@ fn find_gids_tag(data: &[u8]) -> Option<(u8, u8)> {
         (0x7F, 0x49),
         (0x2F, 0x01),
     ];
-    TAGS.iter().copied().find(|&t| data.windows(2).any(|w| w == [t.0, t.1]))
+    TAGS.iter()
+        .copied()
+        .find(|&t| data.windows(2).any(|w| w == [t.0, t.1]))
 }

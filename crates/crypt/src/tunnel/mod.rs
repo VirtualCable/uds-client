@@ -90,11 +90,7 @@ impl Crypt {
 
         let tag = self
             .cipher
-            .encrypt_inout_detached(
-                &nonce,
-                &aad,
-                (&mut data[..data_with_channel_length]).into(),
-            )
+            .encrypt_inout_detached(&nonce, &aad, (&mut data[..data_with_channel_length]).into())
             .map_err(|e| anyhow::anyhow!("encryption failure: {:?}", e))?;
         data[data_with_channel_length..data_with_channel_length + consts::TAG_LENGTH]
             .copy_from_slice(tag.as_slice());
@@ -142,12 +138,7 @@ impl Crypt {
             .map_err(|_| anyhow::anyhow!("invalid tag length"))?;
 
         self.cipher
-            .decrypt_inout_detached(
-                &nonce,
-                &aad,
-                ciphertext.into(),
-                tag,
-            )
+            .decrypt_inout_detached(&nonce, &aad, ciphertext.into(), tag)
             .map_err(|e| anyhow::anyhow!("decryption failure: {:?}", e))?;
 
         self.seq = seq + 1; // Update to last used seq + 1, so no replays are possible
