@@ -166,6 +166,10 @@ const DEFAULT_PIN_RETRIES: u8 = 3;
 
 impl GidsEngine {
     pub fn new(cert_der: Vec<u8>, key_pem: String) -> Result<Self, String> {
+        if cert_der.len() > u16::MAX as usize {
+            return Err("certificate exceeds the GIDS length field".to_string());
+        }
+
         // Compress the certificate the same way the reference card stores it:
         // `01 00` + uncompressed length (2 bytes LITTLE-ENDIAN) + zlib(flate)
         // compressed DER. The reference card: `01 00 FC 03` = len 0x03FC (1020).

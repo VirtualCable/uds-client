@@ -91,11 +91,10 @@ pub fn make_status(status: u16) -> Vec<u8> {
 // ===========================================================================
 
 pub fn parse_rsa_pkcs1_components(der: &[u8]) -> Option<(BigUint, BigUint, BigUint)> {
-    let mut pos = 0;
-    if der[pos] != 0x30 {
+    let mut pos = 1;
+    if der.first().copied()? != 0x30 {
         return None;
     }
-    pos += 1;
     pos += read_der_length(&der[pos..])?.1;
     let (_, after) = read_integer(&der[pos..])?;
     pos += after;

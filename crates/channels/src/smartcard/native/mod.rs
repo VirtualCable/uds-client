@@ -15,6 +15,9 @@ use super::SmartcardBackend;
 use helpers::*;
 use types::NativeRegistry;
 
+const MAX_CERTIFICATE_SIZE: usize = 1024 * 1024;
+const MAX_GET_RESPONSE_ROUNDS: usize = 4096;
+
 #[derive(Debug)]
 pub(crate) struct NativeBackend {
     registry: NativeRegistry,
@@ -38,12 +41,7 @@ impl SmartcardBackend for NativeBackend {
     }
 
     fn release_context(&self, ctx: &ScardContext) -> Result<(), u32> {
-        let card_id = self
-            .registry
-            .ctx_cards
-            .write()
-            .unwrap()
-            .remove(&ctx.raw());
+        let card_id = self.registry.ctx_cards.write().unwrap().remove(&ctx.raw());
 
         if let Some(card_id) = card_id {
             if let Some((card, _)) = self.registry.cards.write().unwrap().remove(&card_id) {
@@ -258,11 +256,12 @@ impl SmartcardBackend for NativeBackend {
             // The native FreeRDP channel passes these bits through verbatim, and
             // the remote SCardSvr expects them.
             let raw: &pcsc::ffi::SCARD_READERSTATE = unsafe { std::mem::transmute(out_state) };
+            let atr_len = (raw.cbAtr as usize).min(raw.rgbAtr.len());
             results.push(ReaderStateOut {
                 reader_name: rs.reader_name.clone(),
                 current_state: rs.current_state,
                 event_state: raw.dwEventState as u32,
-                atr: raw.rgbAtr[..raw.cbAtr as usize].to_vec(),
+                atr: raw.rgbAtr[..atr_len].to_vec(),
             });
         }
 
@@ -366,7 +365,7 @@ impl SmartcardBackend for NativeBackend {
         };
 
         // GET RESPONSE chaining (61 XX)
-        loop {
+        for _ in 0..MAX_GET_RESPONSE_ROUNDS {
             let len = full.len();
             if len < 2 {
                 break;
@@ -385,7 +384,12 @@ impl SmartcardBackend for NativeBackend {
                 if remaining == 0 { 0x00 } else { sw2 },
             ];
             match card.transmit(&get_resp, &mut buf) {
-                Ok(r) => full.extend_from_slice(r),
+                Ok(r) => {
+                    if full.len().saturating_add(r.len()) > MAX_CERTIFICATE_SIZE {
+                        return Err(SCARD_E_INSUFFICIENT_BUFFER);
+                    }
+                    full.extend_from_slice(r);
+                }
                 Err(e) => {
                     log::debug!(
                         "smartcard native: get_certificate GET RESPONSE error: {:?}",
@@ -394,6 +398,10 @@ impl SmartcardBackend for NativeBackend {
                     return Err(pcsc_error_to_u32(e));
                 }
             }
+        }
+
+        if full.len() >= 2 && full[full.len() - 2] == 0x61 {
+            return Err(SCARD_E_UNSUPPORTED_FEATURE);
         }
 
         let content = match strip_do(&full) {
