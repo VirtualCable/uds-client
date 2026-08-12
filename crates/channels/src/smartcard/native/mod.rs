@@ -107,7 +107,11 @@ impl SmartcardBackend for NativeBackend {
         let mut a_buf = [0u8; 36];
         let active_proto = match card.status2(&mut r_buf, &mut a_buf) {
             Ok(status) => protocol_to_u32(status.protocol()),
-            Err(_) => SCARD_PROTOCOL_T1, // Default fallback
+            Err(err) => {
+                let code = pcsc_error_to_u32(err);
+                let _ = card.disconnect(pcsc::Disposition::LeaveCard);
+                return Err(code);
+            }
         };
 
         let handle = ScardHandle::new(active_proto);
@@ -161,10 +165,10 @@ impl SmartcardBackend for NativeBackend {
 
         let mut r_buf = [0u8; 256];
         let mut a_buf = [0u8; 36];
-        let new_proto = match card.status2(&mut r_buf, &mut a_buf) {
-            Ok(status) => protocol_to_u32(status.protocol()),
-            Err(_) => SCARD_PROTOCOL_T1,
-        };
+        let new_proto = card
+            .status2(&mut r_buf, &mut a_buf)
+            .map(|status| protocol_to_u32(status.protocol()))
+            .map_err(pcsc_error_to_u32)?;
         Ok(new_proto)
     }
 
