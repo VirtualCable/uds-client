@@ -38,6 +38,19 @@ impl SmartcardBackend for NativeBackend {
     }
 
     fn release_context(&self, ctx: &ScardContext) -> Result<(), u32> {
+        let card_id = self
+            .registry
+            .ctx_cards
+            .write()
+            .unwrap()
+            .remove(&ctx.raw());
+
+        if let Some(card_id) = card_id {
+            if let Some((card, _)) = self.registry.cards.write().unwrap().remove(&card_id) {
+                let _ = card.disconnect(pcsc::Disposition::LeaveCard);
+            }
+        }
+
         let mut contexts = self.registry.contexts.write().unwrap();
         contexts.remove(&ctx.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
         Ok(())
@@ -116,6 +129,11 @@ impl SmartcardBackend for NativeBackend {
         let disp = dword_to_disposition(disposition)?;
         let mut cards = self.registry.cards.write().unwrap();
         if let Some((card, _)) = cards.remove(&handle.raw()) {
+            self.registry
+                .ctx_cards
+                .write()
+                .unwrap()
+                .retain(|_, card_id| *card_id != handle.raw());
             card.disconnect(disp)
                 .map_err(|(_, err)| pcsc_error_to_u32(err))?;
             Ok(())
