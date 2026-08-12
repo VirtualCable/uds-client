@@ -3,7 +3,7 @@
 // All rights reserved.
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
-use pcsc::ffi;
+use pcsc::ffi::{self, DWORD};
 use rdp::integrations::smartcard::consts::*;
 
 /// Build a `Cached_GeneralFile/...` value (16-byte CSP header + data).
@@ -109,7 +109,7 @@ pub(crate) fn u32_to_disposition(disp: u32) -> Result<pcsc::Disposition, u32> {
     }
 }
 
-pub(crate) fn u32_to_state(bits: u32) -> pcsc::State {
+pub(crate) fn u32_to_state(bits: DWORD) -> pcsc::State {
     // Preserve all raw bits. `from_bits_truncate` would drop unknown flags such
     // as 0x0001_0000 that the RDPSC protocol uses for the `\\?PnP?\Notification`
     // pseudo-reader; dropping them makes SCardGetStatusChange report a spurious

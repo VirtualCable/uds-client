@@ -8,6 +8,7 @@ pub(crate) mod types;
 
 use std::time::Duration;
 
+use pcsc::ffi::DWORD;
 use rdp::integrations::smartcard::*;
 
 use super::SmartcardBackend;
@@ -168,7 +169,7 @@ impl SmartcardBackend for NativeBackend {
     fn control(
         &self,
         handle: &ScardHandle,
-        control_code: u32,
+        control_code: DWORD,
         in_data: &[u8],
     ) -> Result<Vec<u8>, u32> {
         let cards = self.registry.cards.read().unwrap();
