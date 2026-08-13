@@ -219,7 +219,7 @@ pub fn setup_logging(level: &str, log_type: LogType) {
                 .with_thread_ids(true)
                 .with_file(true)
                 .with_line_number(true)
-                .with_filter(EnvFilter::new("debug")),
+                .with_filter(EnvFilter::new(level)),
         );
 
         tracing_subscriber::registry()
