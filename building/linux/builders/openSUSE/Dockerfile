@@ -8,7 +8,7 @@ RUN zypper refresh && zypper install -y \
     pango-devel cairo-devel glib2-devel \
     alsa-devel libpulse-devel clang-devel libusb-1_0-devel \
     libavcodec-devel libavutil-devel libswscale-devel libavformat-devel libswresample-devel \
-    krb5-devel cups-devel fuse3-devel libjpeg8-devel \
+    krb5-devel cups-devel fuse3-devel pcsc-lite-devel libjpeg8-devel \
     libopenh264-devel \
     rpm-build rpmdevtools \
     && zypper clean -a

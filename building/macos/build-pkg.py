@@ -357,7 +357,12 @@ def copy_freerdp_lib(
     intermediate_dst.symlink_to(real_dst.name)
     print(f">> Symlink {intermediate_dst} -> {real_dst.name}")
 
-    # Recreate base symlink
+    # Recreate base symlink. Homebrew keeps the base link and the one inside the
+    # Cellar under the same basename, so recreating it here would overwrite the
+    # link just created and leave it pointing to itself.
+    if base.name == intermediate.name:
+        return
+
     base_dst = dst_lib_dir / base.name
     if base_dst.exists():
         base_dst.unlink()
@@ -394,6 +399,9 @@ def validate_bundle_dependencies(app_dir: Path) -> bool:
 
     valid_prefixes = (
         "@rpath/",
+        # fix_install_names rewrites the dependencies of the executables to this
+        # form, so it is as valid inside the bundle as @rpath is
+        "@executable_path/../Frameworks/",
         "/usr/lib/",
         "/System/Library/",
     )

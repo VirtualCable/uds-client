@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y \
   libcairo2-dev libasound2-dev libpulse-dev libclang-dev git \
   ninja-build cmake libturbojpeg0-dev libusb-1.0.0-dev \
   libavcodec-dev libavutil-dev libswscale-dev libavformat-dev libswresample-dev \
-  libopenh264-dev libkrb5-dev libcups2-dev libfuse3-dev \
+  libopenh264-dev libkrb5-dev libcups2-dev libfuse3-dev libpcsclite-dev \
   devscripts debhelper \
   && rm -rf /var/lib/apt/lists/*
 

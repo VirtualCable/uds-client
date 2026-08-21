@@ -6,7 +6,7 @@ RUN dnf install -y \
     libXft-devel libXext-devel libXinerama-devel libXcursor-devel libXfixes-devel \
     pango-devel cairo-devel glib2-devel \
     freerdp-devel alsa-lib-devel pulseaudio-libs-devel clang-devel \
-    ffmpeg-free-devel krb5-devel openh264-devel cups-devel fuse3-devel libusbx-devel \
+    ffmpeg-free-devel krb5-devel openh264-devel cups-devel fuse3-devel pcsc-lite-devel libusbx-devel \
     rpm-build rpmdevtools strip redhat-rpm-config \
     && dnf clean all
 
