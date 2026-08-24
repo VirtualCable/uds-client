@@ -19,6 +19,7 @@ AppDir:
       - libfreerdp3-3
       - libwinpr3-3
       - libfreerdp-client3-3
+      - libpcsclite1
     exclude: []
   after_runtime: |
     set -eu
