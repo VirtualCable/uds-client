@@ -30,10 +30,11 @@ pub struct AppData {
 
 impl AppData {
     pub fn verify_ssl(&self, hostname: &str) -> bool {
+        let hostname = hostname_without_port(hostname);
         !self
             .insecure_allowed_hosts
             .iter()
-            .any(|allowed_host| allowed_host.eq_ignore_ascii_case(hostname))
+            .any(|allowed_host| hostname_without_port(allowed_host).eq_ignore_ascii_case(hostname))
     }
 
     pub fn load() -> Self {
@@ -75,6 +76,18 @@ impl AppData {
     }
 }
 
+fn hostname_without_port(hostname: &str) -> &str {
+    if let Some(hostname) = hostname.strip_prefix('[') {
+        return hostname.split_once(']').map_or(hostname, |(host, _)| host);
+    }
+
+    if hostname.matches(':').count() == 1 {
+        return hostname.split_once(':').map_or(hostname, |(host, _)| host);
+    }
+
+    hostname
+}
+
 #[cfg(test)]
 mod tests {
     use super::AppData;
@@ -99,6 +112,16 @@ mod tests {
         };
 
         assert!(app_data.verify_ssl("sub.example.com"));
-        assert!(app_data.verify_ssl("example.com:443"));
+        assert!(!app_data.verify_ssl("example.com:443"));
+    }
+
+    #[test]
+    fn allowlist_compares_ipv6_hostname_without_port() {
+        let app_data = AppData {
+            insecure_allowed_hosts: vec!["2001:db8::1".to_string()],
+            ..Default::default()
+        };
+
+        assert!(!app_data.verify_ssl("[2001:DB8::1]:443"));
     }
 }
