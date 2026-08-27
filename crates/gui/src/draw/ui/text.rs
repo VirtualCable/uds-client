@@ -20,7 +20,7 @@ pub fn wrap(
 ) -> Vec<OwnedSection> {
     let mut sections = Vec::new();
     let mut cur_y = y;
-    for line in word_wrap(message, max_chars_per_line) {
+    for line in lines(message, max_chars_per_line) {
         sections.push(
             Section::default()
                 .add_text(Text::new(line).with_scale(font_scale).with_color(color))
@@ -30,6 +30,22 @@ pub fn wrap(
         cur_y += line_height;
     }
     sections
+}
+
+/// Split a message into the lines it will be drawn as: explicit line breaks are kept,
+/// and each of the resulting paragraphs is wrapped at word boundaries.
+pub fn lines(message: &str, max_chars_per_line: usize) -> Vec<&str> {
+    message
+        .split('\n')
+        .flat_map(|paragraph| {
+            let wrapped = word_wrap(paragraph.trim_end_matches('\r'), max_chars_per_line);
+            if wrapped.is_empty() {
+                vec![""]
+            } else {
+                wrapped
+            }
+        })
+        .collect()
 }
 
 pub(crate) fn word_wrap(text: &str, max_chars: usize) -> Vec<&str> {
@@ -67,7 +83,49 @@ pub(crate) fn word_wrap(text: &str, max_chars: usize) -> Vec<&str> {
 
 #[cfg(test)]
 mod tests {
-    use super::word_wrap;
+    use super::{lines, word_wrap};
+
+    #[test]
+    fn explicit_line_breaks_are_kept() {
+        assert_eq!(lines("uno\ndos\ntres", 40), vec!["uno", "dos", "tres"]);
+    }
+
+    #[test]
+    fn blank_lines_are_kept() {
+        assert_eq!(lines("uno\n\ndos", 40), vec!["uno", "", "dos"]);
+    }
+
+    #[test]
+    fn each_paragraph_is_wrapped_on_its_own() {
+        let wrapped = lines("hola mundo cruel\nadios", 10);
+
+        assert_eq!(wrapped.last(), Some(&"adios"));
+        assert!(wrapped.len() > 2, "the first paragraph should be wrapped");
+        for line in &wrapped {
+            assert!(
+                !line.contains('\n'),
+                "no line may carry a line break: {:?}",
+                line
+            );
+        }
+    }
+
+    #[test]
+    fn message_with_line_breaks_produces_one_line_per_break() {
+        // The approval popup message: every line must be its own entry, or they overlap
+        let message = "The server demo50.udsenterprise.com:5443\nmust be approved.\nOnly approve UDS servers you trust.\nDo you want to continue?";
+
+        let wrapped = lines(message, 46);
+
+        assert!(wrapped.len() >= 4);
+        assert_eq!(wrapped[0], "The server demo50.udsenterprise.com:5443");
+        assert_eq!(wrapped[1], "must be approved.");
+    }
+
+    #[test]
+    fn carriage_returns_are_not_drawn() {
+        assert_eq!(lines("uno\r\ndos", 40), vec!["uno", "dos"]);
+    }
 
     #[test]
     fn empty_string() {
