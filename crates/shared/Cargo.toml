@@ -27,6 +27,7 @@ rand.workspace = true
 # SSL/TLS
 rustls.workspace = true
 rustls-native-certs.workspace = true
+sha2.workspace = true
 
 # non blocking TLS streams
 tokio-rustls.workspace = true

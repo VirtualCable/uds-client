@@ -14,8 +14,12 @@ const APP_ORGANIZATION: &str = "openuds";
 const APP_APPLICATION: &str = "launcher";
 
 #[derive(Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct AppData {
     pub approved_hosts: Vec<String>,
+
+    // SHA-256 fingerprints of server certificates the user has explicitly trusted
+    pub trusted_certs: Vec<String>,
 
     // So we can override proxy and ssl settings if needed
     pub disable_proxy: Option<bool>,
@@ -63,5 +67,33 @@ impl AppData {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn data_saved_by_previous_versions_is_still_readable() {
+        let app_data: AppData =
+            serde_json::from_str(r#"{"approved_hosts": ["some.host.com"]}"#).unwrap();
+
+        assert_eq!(app_data.approved_hosts, vec!["some.host.com".to_string()]);
+        assert!(app_data.trusted_certs.is_empty());
+        assert_eq!(app_data.verify_ssl, None);
+    }
+
+    #[test]
+    fn trusted_certs_survive_a_save_load_round_trip() {
+        let app_data = AppData {
+            trusted_certs: vec!["AA:BB:CC".to_string()],
+            ..Default::default()
+        };
+
+        let restored: AppData =
+            serde_json::from_str(&serde_json::to_string(&app_data).unwrap()).unwrap();
+
+        assert_eq!(restored.trusted_certs, vec!["AA:BB:CC".to_string()]);
     }
 }

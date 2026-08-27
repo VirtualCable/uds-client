@@ -16,7 +16,7 @@ use crypt::{
     consts::{PRIVATE_KEY_SIZE, PUBLIC_KEY_SIZE},
     kem::generate_key_pair,
 };
-use shared::log;
+use shared::{log, tls};
 
 use crate::consts;
 
@@ -52,11 +52,17 @@ impl UdsBrokerApi {
         skip_proxy: bool,
     ) -> Self {
         log::debug!("Creating UDSBrokerApi for URL: {}", broker_url);
+        let tls_config = if verify_ssl {
+            tls::pinned::client_config()
+        } else {
+            std::sync::Arc::unwrap_or_clone(tls::noverify::client_config())
+        };
+
         let mut builder = ClientBuilder::new()
             .use_rustls_tls() // Use rustls for TLS
             .timeout(timeout.unwrap_or(std::time::Duration::from_secs(32))) // Long enough timeout
             .connection_verbose(cfg!(debug_assertions))
-            .danger_accept_invalid_certs(!verify_ssl);
+            .tls_backend_preconfigured(tls_config);
 
         if skip_proxy {
             builder = builder.no_proxy();

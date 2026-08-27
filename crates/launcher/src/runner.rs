@@ -9,9 +9,12 @@ use anyhow::Result;
 use flume::Sender;
 use tokio::sync::oneshot;
 
-use connection::{broker::api, consts, tasks};
+use connection::{
+    broker::api::{self, types},
+    consts, tasks,
+};
 use gui::types::GuiMessage;
-use shared::{appdata, log};
+use shared::{appdata, log, tls::pinned};
 
 async fn approve_host(
     tx: &Sender<GuiMessage>,
@@ -47,6 +50,51 @@ async fn approve_host(
     Ok(())
 }
 
+async fn approve_certificate(
+    tx: &Sender<GuiMessage>,
+    host: &str,
+    appdata: &mut appdata::AppData,
+    error: types::Error,
+) -> Result<()> {
+    let Some(fingerprint) = pinned::last_rejected() else {
+        return Err(error.into());
+    };
+
+    log::debug!("Asking user to approve certificate {}.", fingerprint);
+
+    let (reply_tx, reply_rx) = oneshot::channel();
+    tx.send(GuiMessage::ShowYesNo(
+        tr!(
+            "The certificate of {}\ncannot be verified.\n\nSHA-256 fingerprint:\n{}\n\nOnly trust certificates you have checked.\nDo you want to continue?",
+            host,
+            split_fingerprint(&fingerprint),
+        ),
+        Arc::new(RwLock::new(Some(reply_tx))),
+    ))
+    .ok();
+    let answer = reply_rx.await.unwrap_or(false);
+    if !answer {
+        log::info!("Certificate {} not approved by user.", fingerprint);
+        return Err(error.into());
+    }
+
+    pinned::trust(&fingerprint);
+    appdata.trusted_certs.push(fingerprint);
+    appdata.save();
+
+    Ok(())
+}
+
+fn split_fingerprint(fingerprint: &str) -> String {
+    fingerprint
+        .split(':')
+        .collect::<Vec<&str>>()
+        .chunks(16)
+        .map(|chunk| chunk.join(":"))
+        .collect::<Vec<String>>()
+        .join("\n")
+}
+
 pub async fn run(
     tx: Sender<GuiMessage>,
     stop: shared::system::trigger::Trigger,
@@ -55,6 +103,8 @@ pub async fn run(
     scrambler: &str,
 ) -> Result<()> {
     let mut appdata = appdata::AppData::load();
+
+    pinned::set_trusted(appdata.trusted_certs.clone());
 
     let api = api::new_api(
         host,
@@ -74,7 +124,14 @@ pub async fn run(
     approve_host(&tx, host, &mut appdata).await?;
 
     // Get version info
-    let version = api.get_version_info().await?;
+    let version = match api.get_version_info().await {
+        Ok(version) => version,
+        Err(e) if e.is_tls() => {
+            approve_certificate(&tx, host, &mut appdata, e).await?;
+            api.get_version_info().await?
+        }
+        Err(e) => return Err(e.into()),
+    };
 
     log::info!("Broker version: {:?}", version);
     // There is a lot of time (10 years maybe? :P) before we reach version 10, so just a simple check
@@ -165,4 +222,30 @@ pub async fn run(
     tasks::wait_all_and_cleanup(std::time::Duration::from_secs(4), stop).await;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fingerprint_is_split_in_two_lines() {
+        let fingerprint = (0..32)
+            .map(|i| format!("{:02X}", i))
+            .collect::<Vec<String>>()
+            .join(":");
+
+        let split = split_fingerprint(&fingerprint);
+        let lines: Vec<&str> = split.split('\n').collect();
+
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0].matches(':').count(), 15);
+        assert_eq!(lines[1].matches(':').count(), 15);
+        assert_eq!(lines.join(":"), fingerprint);
+    }
+
+    #[test]
+    fn short_fingerprint_stays_in_one_line() {
+        assert_eq!(split_fingerprint("AA:BB:CC"), "AA:BB:CC");
+    }
 }

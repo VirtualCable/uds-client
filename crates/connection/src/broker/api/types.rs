@@ -17,6 +17,8 @@ use serde_json::Value;
 use shared::log;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
+const TLS_ERROR_PREFIX: &str = "TLS: ";
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Error {
     pub message: String,
@@ -74,7 +76,7 @@ impl From<reqwest::Error> for Error {
                 || msg.contains("x509")
                 || msg.contains("handshake")
             {
-                error_text = format!("TLS: {}", cur_str);
+                error_text = format!("{}{}", TLS_ERROR_PREFIX, cur_str);
                 break;
             }
 
@@ -96,6 +98,10 @@ impl From<reqwest::Error> for Error {
 impl Error {
     pub fn is_retryable(&self) -> bool {
         self.is_retryable
+    }
+
+    pub fn is_tls(&self) -> bool {
+        self.message.starts_with(TLS_ERROR_PREFIX)
     }
 }
 

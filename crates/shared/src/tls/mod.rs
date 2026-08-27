@@ -9,6 +9,7 @@ use crate::log;
 
 pub mod ciphers;
 pub mod noverify;
+pub mod pinned;
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct CertificateInfo {

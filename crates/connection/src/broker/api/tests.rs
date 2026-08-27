@@ -233,3 +233,115 @@ async fn test_request_rdp_sign() {
     let signed_rdp = response.unwrap();
     assert_eq!(signed_rdp, expected_signed_rdp);
 }
+
+mod self_signed_server {
+    use super::*;
+
+    use std::sync::Arc;
+
+    use rcgen::generate_simple_self_signed;
+    use rustls::ServerConfig;
+    use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+    use serial_test::serial;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+    use tokio_rustls::TlsAcceptor;
+
+    use shared::tls::pinned;
+
+    const VERSION_RESPONSE: &str = r#"{"result":{"available_version":"5.0.0","required_version":"5.0.0","client_link":"https://example.com/client"}}"#;
+
+    // Serves a single request over TLS and returns the fingerprint of the certificate used
+    async fn start_server() -> (String, u16) {
+        shared::tls::init_tls(None);
+
+        let cert = generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
+        let cert_der = CertificateDer::from(cert.cert.der().to_vec());
+        let fingerprint = pinned::fingerprint(&cert_der);
+        let key_der = PrivateKeyDer::from(PrivatePkcs8KeyDer::from(
+            cert.signing_key.serialize_der(),
+        ));
+
+        let config = ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(vec![cert_der], key_der)
+            .unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        tokio::spawn(async move {
+            let acceptor = TlsAcceptor::from(Arc::new(config));
+            while let Ok((stream, _)) = listener.accept().await {
+                let acceptor = acceptor.clone();
+                tokio::spawn(async move {
+                    let Ok(mut stream) = acceptor.accept(stream).await else {
+                        return;
+                    };
+                    let mut buf = [0u8; 4096];
+                    if stream.read(&mut buf).await.unwrap_or(0) == 0 {
+                        return;
+                    }
+                    stream
+                        .write_all(
+                            format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                                VERSION_RESPONSE.len(),
+                                VERSION_RESPONSE
+                            )
+                            .as_bytes(),
+                        )
+                        .await
+                        .ok();
+                    stream.shutdown().await.ok();
+                });
+            }
+        });
+
+        (fingerprint, port)
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn untrusted_certificate_returns_a_tls_error() {
+        log::setup_logging("debug", log::LogType::Test);
+        let (_fingerprint, port) = start_server().await;
+        pinned::set_trusted([]);
+
+        let api = UdsBrokerApi::new(&format!("https://localhost:{}/", port), None, true, true);
+        let error = api.get_version_info().await.expect_err("should not connect");
+
+        assert!(error.is_tls(), "Unexpected error: {:?}", error);
+        assert!(
+            error.message.contains("UnknownIssuer"),
+            "Unexpected error: {:?}",
+            error
+        );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn trusted_fingerprint_connects() {
+        log::setup_logging("debug", log::LogType::Test);
+        let (fingerprint, port) = start_server().await;
+        pinned::set_trusted([fingerprint]);
+
+        let api = UdsBrokerApi::new(&format!("https://localhost:{}/", port), None, true, true);
+        let version = api.get_version_info().await.expect("should connect");
+
+        assert_eq!(version.required_version, "5.0.0");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn rejected_fingerprint_is_the_one_the_server_presented() {
+        log::setup_logging("debug", log::LogType::Test);
+        let (fingerprint, port) = start_server().await;
+        pinned::set_trusted([]);
+
+        let api = UdsBrokerApi::new(&format!("https://localhost:{}/", port), None, true, true);
+        api.get_version_info().await.expect_err("should not connect");
+
+        assert_eq!(pinned::last_rejected(), Some(fingerprint));
+    }
+}
