@@ -118,7 +118,7 @@ async fn start_tunel_fn(
         params.shared_secret,
     );
     let tunnel_info = params
-        .to_connect_info(appdata.verify_ssl)
+        .to_connect_info(Some(appdata.verify_ssl(&params.addr)))
         .map_err(|e| JsError::from_native(JsNativeError::error().with_message(e.to_string())))?;
 
     let port = connection::start_tunnel(tunnel_info)

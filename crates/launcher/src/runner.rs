@@ -59,7 +59,7 @@ pub async fn run(
     let api = api::new_api(
         host,
         None,
-        appdata.verify_ssl.unwrap_or(true),
+        appdata.verify_ssl(host),
         appdata.disable_proxy.unwrap_or(false),
     );
 

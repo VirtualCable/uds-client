@@ -17,9 +17,11 @@ const APP_APPLICATION: &str = "launcher";
 pub struct AppData {
     pub approved_hosts: Vec<String>,
 
-    // So we can override proxy and ssl settings if needed
+    #[serde(default)]
+    pub insecure_allowed_hosts: Vec<String>,
+
+    // So we can override proxy settings if needed
     pub disable_proxy: Option<bool>,
-    pub verify_ssl: Option<bool>,
     pub fps_limit: Option<u32>,
     // On mac, also allow override launcher path
     #[cfg(target_os = "macos")]
@@ -27,6 +29,13 @@ pub struct AppData {
 }
 
 impl AppData {
+    pub fn verify_ssl(&self, hostname: &str) -> bool {
+        !self
+            .insecure_allowed_hosts
+            .iter()
+            .any(|allowed_host| allowed_host.eq_ignore_ascii_case(hostname))
+    }
+
     pub fn load() -> Self {
         if let Some(proj_dirs) = ProjectDirs::from(APP_QUALIFIER, APP_ORGANIZATION, APP_APPLICATION)
         {
@@ -63,5 +72,33 @@ impl AppData {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AppData;
+
+    #[test]
+    fn verifies_ssl_for_hosts_not_in_allowlist() {
+        let app_data = AppData {
+            insecure_allowed_hosts: vec!["self-signed.example.com".to_string()],
+            ..Default::default()
+        };
+
+        assert!(!app_data.verify_ssl("self-signed.example.com"));
+        assert!(!app_data.verify_ssl("SELF-SIGNED.EXAMPLE.COM"));
+        assert!(app_data.verify_ssl("trusted.example.com"));
+    }
+
+    #[test]
+    fn allowlist_requires_exact_hostname_match() {
+        let app_data = AppData {
+            insecure_allowed_hosts: vec!["example.com".to_string()],
+            ..Default::default()
+        };
+
+        assert!(app_data.verify_ssl("sub.example.com"));
+        assert!(app_data.verify_ssl("example.com:443"));
     }
 }
