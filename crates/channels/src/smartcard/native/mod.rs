@@ -43,10 +43,10 @@ impl SmartcardBackend for NativeBackend {
     fn release_context(&self, ctx: &ScardContext) -> Result<(), u32> {
         let card_id = self.registry.ctx_cards.write().unwrap().remove(&ctx.raw());
 
-        if let Some(card_id) = card_id {
-            if let Some((card, _)) = self.registry.cards.write().unwrap().remove(&card_id) {
-                let _ = card.disconnect(pcsc::Disposition::LeaveCard);
-            }
+        if let Some(card_id) = card_id
+            && let Some((card, _)) = self.registry.cards.write().unwrap().remove(&card_id)
+        {
+            let _ = card.disconnect(pcsc::Disposition::LeaveCard);
         }
 
         let mut contexts = self.registry.contexts.write().unwrap();
