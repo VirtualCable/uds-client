@@ -15,5 +15,9 @@ target/
 /graphify*
 AGENTS.md
 .opencode
+opencode.jsonc
 /testing_data
 /.agents*.log
+# Added by code-review-graph
+.code-review-graph/
+
