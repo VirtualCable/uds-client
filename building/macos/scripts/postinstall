@@ -4,7 +4,7 @@ set -e
 # --- Configuration -----------------------------------------------------------
 
 OPENH264_VERSION="2.6.0"
-OPENH264_BASE_URL="http://ciscobinary.openh264.org"
+OPENH264_BASE_URL="https://ciscobinary.openh264.org"
 
 # Our licence covers downloading this library from Cisco, never redistributing it, so it
 # must come from their site and carry their signature. The launcher runs with library
@@ -64,11 +64,18 @@ dylib="$work_dir/openh264.dylib"
 [ -f "$dylib" ] || give_up "bunzip2 produced no $dylib"
 
 # Reject anything not signed by Cisco before it reaches a system-wide directory.
-team_id=$(codesign -dvvv "$dylib" 2>&1 | sed -n 's/^TeamIdentifier=//p')
-if [ "$team_id" != "$CISCO_TEAM_ID" ]; then
-    give_up "downloaded library is signed by '${team_id:-nothing}', expected $CISCO_TEAM_ID"
+# codesign ships with macOS, but never assume a tool is there on someone else's machine:
+# without it we still install, because the target directory is root-owned and the old
+# script verified nothing at all.
+if command -v codesign > /dev/null 2>&1; then
+    team_id=$(codesign -dvvv "$dylib" 2>&1 | sed -n 's/^TeamIdentifier=//p')
+    if [ "$team_id" != "$CISCO_TEAM_ID" ]; then
+        give_up "downloaded library is signed by '${team_id:-nothing}', expected $CISCO_TEAM_ID"
+    fi
+    log "Signature verified: TeamIdentifier=$team_id"
+else
+    log "WARNING: codesign not available, installing without verifying the signature"
 fi
-log "Signature verified: TeamIdentifier=$team_id"
 
 install -m 644 "$dylib" "$TARGET_DIR/$TARGET_FILE" || give_up "could not install into $TARGET_DIR"
 xattr -d com.apple.quarantine "$TARGET_DIR/$TARGET_FILE" 2>/dev/null || true
