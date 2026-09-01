@@ -47,39 +47,38 @@ fn get_executable_dir() -> Option<PathBuf> {
         .and_then(|p| p.parent().map(|p| p.to_path_buf()))
 }
 
-fn init_openh264_library() -> Result<()> {
-    let mut possible_paths = Vec::new();
+#[cfg(target_os = "windows")]
+const LIB_NAMES: &[&str] = &[
+    "openh264.dll",
+    "openh264-2.6.0-win64.dll",
+    "openh264-2.5.1-win64.dll",
+];
+// The installer stores the dylib under its soname, libopenh264.8.dylib, because that is
+// the name FreeRDP's load command asks for. Renaming it there breaks FreeRDP.
+#[cfg(target_os = "macos")]
+const LIB_NAMES: &[&str] = &["libopenh264.8.dylib", "libopenh264.dylib"];
+#[cfg(target_os = "linux")]
+const LIB_NAMES: &[&str] = &["libopenh264.so", "libopenh264.so.8", "libopenh264.so.7"];
 
+#[cfg(target_os = "macos")]
+const SYSTEM_DIRS: &[&str] = &["/Library/Application Support/UDSLauncher/openh264"];
+#[cfg(not(target_os = "macos"))]
+const SYSTEM_DIRS: &[&str] = &[];
+
+fn candidate_paths() -> Vec<PathBuf> {
+    let mut paths = Vec::new();
     if let Some(exe_dir) = get_executable_dir() {
-        #[cfg(target_os = "windows")]
-        {
-            possible_paths.push(exe_dir.join("openh264.dll"));
-            possible_paths.push(exe_dir.join("openh264-2.6.0-win64.dll"));
-            possible_paths.push(exe_dir.join("openh264-2.5.1-win64.dll"));
-        }
-        #[cfg(target_os = "macos")]
-        {
-            possible_paths.push(exe_dir.join("libopenh264.dylib"));
-        }
-        #[cfg(target_os = "linux")]
-        {
-            possible_paths.push(exe_dir.join("libopenh264.so"));
-        }
+        paths.extend(LIB_NAMES.iter().map(|name| exe_dir.join(name)));
     }
-
-    #[cfg(target_os = "macos")]
-    {
-        possible_paths.push(PathBuf::from(
-            "/Library/Application Support/UDSLauncher/openh264/libopenh264.dylib",
-        ));
+    for dir in SYSTEM_DIRS {
+        paths.extend(LIB_NAMES.iter().map(|name| PathBuf::from(dir).join(name)));
     }
+    paths
+}
 
-    #[cfg(target_os = "windows")]
-    let fallback_names = &["openh264.dll"];
-    #[cfg(target_os = "macos")]
-    let fallback_names = &["libopenh264.dylib"];
-    #[cfg(target_os = "linux")]
-    let fallback_names = &["libopenh264.so", "libopenh264.so.8", "libopenh264.so.7"];
+fn init_openh264_library() -> Result<()> {
+    let possible_paths = candidate_paths();
+    let fallback_names = LIB_NAMES;
 
     // Try specific paths first
     let mut loaded_lib = None;
@@ -169,6 +168,34 @@ pub fn create_encoder() -> Result<Encoder> {
 mod tests {
     use super::*;
     use crate::webcam::encoders::VideoEncoder;
+
+    fn candidate_file_names() -> Vec<String> {
+        candidate_paths()
+            .iter()
+            .filter_map(|p| p.file_name()?.to_str().map(str::to_owned))
+            .collect()
+    }
+
+    #[test]
+    fn candidate_paths_cover_every_library_name() {
+        let names = candidate_file_names();
+        for expected in LIB_NAMES {
+            assert!(
+                names.iter().any(|name| name == expected),
+                "{expected} is never searched for; found {names:?}"
+            );
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_searches_the_installed_soname() {
+        let installed = PathBuf::from(SYSTEM_DIRS[0]).join("libopenh264.8.dylib");
+        assert!(
+            candidate_paths().contains(&installed),
+            "the path the installer writes is never searched: {installed:?}"
+        );
+    }
 
     #[test]
     #[ignore]
