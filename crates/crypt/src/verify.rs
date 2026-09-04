@@ -8,7 +8,7 @@ use base64::engine::{Engine as _, general_purpose::STANDARD};
 
 use libcrux_ml_dsa::ml_dsa_65;
 
-// UDS Client ML-DSA Public Key
+// UDS Launcher ML-DSA Public Key
 static PUBLIC_KEY: &[u8] = include_bytes!("../public-key.bin");
 
 pub fn verify_signature(message: &[u8], signature_b64: &str) -> Result<()> {

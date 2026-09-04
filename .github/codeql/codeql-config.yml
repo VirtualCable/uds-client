@@ -1,4 +1,4 @@
-name: "Rust UDS Client Workspace Analysis"
+name: "Rust UDS Launcher Workspace Analysis"
 paths:
   - crates
 paths-ignore:
