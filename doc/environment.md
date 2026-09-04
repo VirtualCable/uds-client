@@ -1,6 +1,6 @@
-# UDS Client Environment Variables
+# UDS Launcher Environment Variables
 
-This document details the environment variables supported by the UDS client, classified by their functionality.
+This document details the environment variables supported by the UDS launcher, classified by their functionality.
 
 ---
 
