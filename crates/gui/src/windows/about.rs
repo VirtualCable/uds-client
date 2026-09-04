@@ -19,7 +19,7 @@ use crate::wgpu_render::{OverlayParams, WgpuRenderer};
 const ABOUT_LINES: &[&str] = &[
     "UDS Launcher",
     "Version: 5.0.0",
-    "UDS Client Launcher",
+    "UDS Connection Launcher",
     "",
     "Developed by Virtual Cable S.L.",
     "https://www.udsenterprise.com",
