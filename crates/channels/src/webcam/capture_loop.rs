@@ -13,19 +13,8 @@ use shared::log;
 use crate::webcam::encoders::{self, MjpegEncoder, RawEncoder, VideoEncoder, Yuy2Encoder};
 use crate::webcam::{
     StreamState, WEBCAM_QUALITY, WebcamCommand, WebcamFrame, WebcamMode,
-    calculate_scaled_dimensions, generate_mock_frame, init_real_camera, resize_rgb,
+    calculate_scaled_dimensions, effective_fps, generate_mock_frame, init_real_camera, resize_rgb,
 };
-
-/// The encoder timestamps and the keyframe interval are derived from this rate, and the
-/// RDP consumer plays the samples back at it: announcing more fps than the camera can
-/// deliver makes the remote video run fast and stutter.
-fn effective_fps(requested: u32, camera_rate: u32) -> u32 {
-    if camera_rate == 0 {
-        requested
-    } else {
-        requested.min(camera_rate)
-    }
-}
 
 fn next_deadline(previous: Instant, interval: Duration, now: Instant) -> Instant {
     (previous + interval).max(now)
@@ -341,14 +330,6 @@ impl CaptureLoop {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn fps_is_clamped_to_what_the_camera_delivers() {
-        assert_eq!(effective_fps(60, 30), 30);
-        assert_eq!(effective_fps(15, 30), 15);
-        assert_eq!(effective_fps(30, 30), 30);
-        assert_eq!(effective_fps(60, 0), 60);
-    }
 
     #[test]
     fn deadline_advances_by_one_interval_when_work_is_fast() {

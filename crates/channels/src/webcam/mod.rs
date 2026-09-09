@@ -33,6 +33,25 @@ pub static WEBCAM_MAX_WIDTH: AtomicU32 = AtomicU32::new(0);
 pub static WEBCAM_MAX_HEIGHT: AtomicU32 = AtomicU32::new(0);
 
 static CAMERA_DIMENSIONS: std::sync::OnceLock<Option<(u32, u32)>> = std::sync::OnceLock::new();
+static CAMERA_MAX_FPS: AtomicU32 = AtomicU32::new(0);
+
+/// The encoder timestamps, the keyframe interval and the frame rate advertised in the
+/// media type are all derived from this rate, and the RDP consumer expects samples at
+/// it: announcing more fps than the camera can deliver starves the remote video.
+pub(crate) fn effective_fps(requested: u32, camera_rate: u32) -> u32 {
+    if camera_rate == 0 {
+        requested
+    } else {
+        requested.min(camera_rate)
+    }
+}
+
+/// Highest frame rate the camera offers at the resolution reported by
+/// [`get_camera_dimensions`], or 0 when there is no camera to ask.
+pub fn get_camera_max_fps() -> u32 {
+    let _ = get_camera_dimensions();
+    CAMERA_MAX_FPS.load(Ordering::Relaxed)
+}
 
 pub fn get_camera_dimensions() -> Option<(u32, u32)> {
     *CAMERA_DIMENSIONS.get_or_init(|| {
@@ -63,10 +82,18 @@ pub fn get_camera_dimensions() -> Option<(u32, u32)> {
         {
             let best_format = formats.iter().max_by_key(|f| f.width() * f.height());
             if let Some(format) = best_format {
+                let max_fps = formats
+                    .iter()
+                    .filter(|f| f.width() == format.width() && f.height() == format.height())
+                    .map(|f| f.frame_rate())
+                    .max()
+                    .unwrap_or(0);
+                CAMERA_MAX_FPS.store(max_fps, Ordering::Relaxed);
                 log::info!(
-                    "Proactively detected camera dimensions: {}x{}",
+                    "Proactively detected camera dimensions: {}x{} @ up to {}fps",
                     format.width(),
-                    format.height()
+                    format.height(),
+                    max_fps
                 );
                 return Some((format.width(), format.height()));
             }
@@ -216,7 +243,7 @@ impl WebcamIntegration for WebcamHandle {
     }
 
     fn get_fps(&self) -> u32 {
-        WEBCAM_FPS.load(Ordering::Relaxed)
+        effective_fps(WEBCAM_FPS.load(Ordering::Relaxed), get_camera_max_fps())
     }
 
     fn set_mode(&self, mode: WebcamMode) {
@@ -434,6 +461,15 @@ mod tests {
         }
         assert!(ok);
         handle.close();
+    }
+
+    #[test]
+    fn fps_is_clamped_to_what_the_camera_delivers() {
+        assert_eq!(effective_fps(60, 30), 30);
+        assert_eq!(effective_fps(15, 30), 15);
+        assert_eq!(effective_fps(30, 30), 30);
+        // 0 means "no camera to ask": keep whatever was configured.
+        assert_eq!(effective_fps(60, 0), 60);
     }
 
     #[test]
