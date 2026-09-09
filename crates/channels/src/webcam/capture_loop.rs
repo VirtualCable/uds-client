@@ -5,7 +5,7 @@
 
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use flume::{Receiver, Sender};
 use shared::log;
@@ -15,6 +15,21 @@ use crate::webcam::{
     StreamState, WEBCAM_QUALITY, WebcamCommand, WebcamFrame, WebcamMode,
     calculate_scaled_dimensions, generate_mock_frame, init_real_camera, resize_rgb,
 };
+
+/// The encoder timestamps and the keyframe interval are derived from this rate, and the
+/// RDP consumer plays the samples back at it: announcing more fps than the camera can
+/// deliver makes the remote video run fast and stutter.
+fn effective_fps(requested: u32, camera_rate: u32) -> u32 {
+    if camera_rate == 0 {
+        requested
+    } else {
+        requested.min(camera_rate)
+    }
+}
+
+fn next_deadline(previous: Instant, interval: Duration, now: Instant) -> Instant {
+    (previous + interval).max(now)
+}
 
 /// Holds all channels and state shared with the [`WebcamHandle`](crate::webcam::WebcamHandle).
 pub(crate) struct CaptureLoop {
@@ -54,6 +69,7 @@ impl CaptureLoop {
             let mut bytes_count: u64 = 0;
             let mut last_report = std::time::Instant::now();
             let mut stream_start_time = std::time::Instant::now();
+            let mut next_frame_at = Instant::now();
             let mut encoder: Box<dyn VideoEncoder> = Box::new(RawEncoder);
             let mut current_mode: Option<WebcamMode> = None;
             let mut camera: Option<nokhwa::Camera> = None;
@@ -70,6 +86,7 @@ impl CaptureLoop {
                             bytes_count = 0;
                             last_report = std::time::Instant::now();
                             stream_start_time = std::time::Instant::now();
+                            next_frame_at = Instant::now();
                             state = Some(StreamState {
                                 width,
                                 height,
@@ -88,6 +105,15 @@ impl CaptureLoop {
                             } else {
                                 match init_real_camera(width, height, fps) {
                                     Ok(cam) => {
+                                        let real_fps = effective_fps(fps, cam.frame_rate());
+                                        if real_fps != fps {
+                                            log::info!(
+                                                "Webcam: {fps}fps requested, camera delivers {real_fps}fps; streaming at {real_fps}fps"
+                                            );
+                                            if let Some(ref mut s) = state {
+                                                s.fps = real_fps;
+                                            }
+                                        }
                                         camera = Some(cam);
                                         is_mock = false;
                                         log::debug!("Real camera initialized successfully");
@@ -109,6 +135,8 @@ impl CaptureLoop {
                             height,
                             fps,
                         } => {
+                            let fps =
+                                effective_fps(fps, camera.as_ref().map_or(0, |c| c.frame_rate()));
                             log::debug!("Webcam: SetFormat {width}x{height} @ {fps}fps");
                             current_mode = None;
                             let mut needs_restart = true;
@@ -135,6 +163,9 @@ impl CaptureLoop {
                                 }
                                 match init_real_camera(width, height, fps) {
                                     Ok(cam) => {
+                                        if let Some(ref mut s) = state {
+                                            s.fps = effective_fps(fps, cam.frame_rate());
+                                        }
                                         camera = Some(cam);
                                         is_mock = false;
                                     }
@@ -296,11 +327,42 @@ impl CaptureLoop {
                     }
 
                     let interval = Duration::from_secs_f64(1.0 / s.fps.max(1) as f64);
-                    thread::sleep(interval);
+                    let now = Instant::now();
+                    next_frame_at = next_deadline(next_frame_at, interval, now);
+                    thread::sleep(next_frame_at - now);
                 } else {
                     thread::sleep(Duration::from_millis(50));
                 }
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fps_is_clamped_to_what_the_camera_delivers() {
+        assert_eq!(effective_fps(60, 30), 30);
+        assert_eq!(effective_fps(15, 30), 15);
+        assert_eq!(effective_fps(30, 30), 30);
+        assert_eq!(effective_fps(60, 0), 60);
+    }
+
+    #[test]
+    fn deadline_advances_by_one_interval_when_work_is_fast() {
+        let interval = Duration::from_millis(33);
+        let previous = Instant::now();
+        let now = previous + Duration::from_millis(10);
+        assert_eq!(next_deadline(previous, interval, now), previous + interval);
+    }
+
+    #[test]
+    fn deadline_does_not_accumulate_debt_when_work_is_slow() {
+        let interval = Duration::from_millis(33);
+        let previous = Instant::now();
+        let now = previous + Duration::from_millis(500);
+        assert_eq!(next_deadline(previous, interval, now), now);
     }
 }
