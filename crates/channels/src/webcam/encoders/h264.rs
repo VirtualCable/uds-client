@@ -44,6 +44,22 @@ impl H264Encoder {
     }
 }
 
+/// OpenH264 runs with rate control off, so this target is nominal: the size of each
+/// frame follows the fixed QP and the scene, not this number. It is deliberately not
+/// scaled by fps — a higher frame rate means smaller deltas between frames, not
+/// proportionally more bits.
+fn nominal_bitrate(width: u32, height: u32, quality: u32) -> i32 {
+    let pixels = width * height;
+    let base = if pixels <= 640 * 480 {
+        1_500_000
+    } else if pixels <= 1280 * 720 {
+        2_500_000
+    } else {
+        4_000_000
+    };
+    (base as f64 * (quality as f64 / 100.0)) as i32
+}
+
 // No need for a custom Drop — `Encoder` handles uninitialize + destroy automatically.
 
 impl VideoEncoder for H264Encoder {
@@ -73,11 +89,8 @@ impl VideoEncoder for H264Encoder {
         } else {
             quality.clamp(1, 100)
         };
-        let base_bitrate = (width * height * fps * 2 / 10) as f64;
-        let target_bitrate = (base_bitrate * (q as f64 / 100.0)) as i32;
-
         let config = EncoderConfig::new(width, height, fps as f32)
-            .with_bitrate(target_bitrate)
+            .with_bitrate(nominal_bitrate(width, height, q))
             .with_rc_mode(-1); // RC_OFF_MODE
 
         encoder
@@ -344,6 +357,14 @@ unsafe extern "C" fn openh264_trace_callback(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nominal_bitrate_scales_with_resolution_and_quality() {
+        assert_eq!(nominal_bitrate(640, 480, 100), 1_500_000);
+        assert_eq!(nominal_bitrate(1280, 720, 100), 2_500_000);
+        assert_eq!(nominal_bitrate(1920, 1080, 100), 4_000_000);
+        assert_eq!(nominal_bitrate(1920, 1080, 50), 2_000_000);
+    }
 
     #[test]
     #[ignore]
