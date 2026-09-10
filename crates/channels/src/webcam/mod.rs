@@ -151,7 +151,11 @@ fn select_camera_index() -> nokhwa::utils::CameraIndex {
     nokhwa::utils::CameraIndex::Index(0)
 }
 
-pub(crate) fn init_real_camera(width: u32, height: u32, fps: u32) -> Result<nokhwa::Camera> {
+/// Returns the camera along with the frame rate of the format it actually accepted, or 0
+/// when the negotiation yielded no answer. `Camera::frame_rate` is not usable for this:
+/// under Media Foundation it keeps reporting a placeholder rate of 1 after the format has
+/// been applied, so the value returned by the request is the only reliable source.
+pub(crate) fn init_real_camera(width: u32, height: u32, fps: u32) -> Result<(nokhwa::Camera, u32)> {
     let index = select_camera_index();
 
     let requested_none = nokhwa::utils::RequestedFormat::new::<nokhwa::pixel_format::RgbFormat>(
@@ -159,6 +163,7 @@ pub(crate) fn init_real_camera(width: u32, height: u32, fps: u32) -> Result<nokh
     );
     let mut cam = nokhwa::Camera::new(index, requested_none).context("Failed to create Camera")?;
 
+    let mut negotiated_fps = 0;
     if let Ok(formats) = cam.compatible_camera_formats() {
         log::debug!("Webcam: All compatible camera formats: {:?}", formats);
         let best_format = formats.iter().min_by_key(|f| {
@@ -174,13 +179,16 @@ pub(crate) fn init_real_camera(width: u32, height: u32, fps: u32) -> Result<nokh
                 nokhwa::utils::RequestedFormat::new::<nokhwa::pixel_format::RgbFormat>(
                     nokhwa::utils::RequestedFormatType::Exact(closest_format),
                 );
-            let _ = cam.set_camera_requset(requested_closest);
+            match cam.set_camera_requset(requested_closest) {
+                Ok(applied) => negotiated_fps = applied.frame_rate(),
+                Err(e) => log::warn!("Webcam: camera rejected the selected format: {e}"),
+            }
         }
     }
 
     cam.open_stream().context("Failed to open Camera stream")?;
 
-    Ok(cam)
+    Ok((cam, negotiated_fps))
 }
 
 // Capture loop lives in capture_loop.rs (CaptureLoop::run)

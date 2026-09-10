@@ -72,7 +72,7 @@ impl CaptureLoop {
             let mut next_frame_at = Instant::now();
             let mut encoder: Box<dyn VideoEncoder> = Box::new(RawEncoder);
             let mut current_mode: Option<WebcamMode> = None;
-            let mut camera: Option<nokhwa::Camera> = None;
+            let mut camera: Option<(nokhwa::Camera, u32)> = None;
             let mut camera_retry_at: Option<Instant> = None;
             let mut is_mock = false;
 
@@ -106,8 +106,8 @@ impl CaptureLoop {
                                 camera = None;
                             } else {
                                 match init_real_camera(width, height, fps) {
-                                    Ok(cam) => {
-                                        let real_fps = effective_fps(fps, cam.frame_rate());
+                                    Ok((cam, camera_fps)) => {
+                                        let real_fps = effective_fps(fps, camera_fps);
                                         if real_fps != fps {
                                             log::info!(
                                                 "Webcam: {fps}fps requested, camera delivers {real_fps}fps; streaming at {real_fps}fps"
@@ -116,7 +116,7 @@ impl CaptureLoop {
                                                 s.fps = real_fps;
                                             }
                                         }
-                                        camera = Some(cam);
+                                        camera = Some((cam, camera_fps));
                                         is_mock = false;
                                         log::debug!("Real camera initialized successfully");
                                     }
@@ -137,8 +137,10 @@ impl CaptureLoop {
                             height,
                             fps,
                         } => {
-                            let fps =
-                                effective_fps(fps, camera.as_ref().map_or(0, |c| c.frame_rate()));
+                            let fps = effective_fps(
+                                fps,
+                                camera.as_ref().map_or(0, |(_, camera_fps)| *camera_fps),
+                            );
                             log::debug!("Webcam: SetFormat {width}x{height} @ {fps}fps");
                             current_mode = None;
                             let mut needs_restart = true;
@@ -160,15 +162,15 @@ impl CaptureLoop {
                             }
 
                             if !is_mock && needs_restart {
-                                if let Some(ref mut cam) = camera {
+                                if let Some((cam, _)) = camera.as_mut() {
                                     let _ = cam.stop_stream();
                                 }
                                 match init_real_camera(width, height, fps) {
-                                    Ok(cam) => {
+                                    Ok((cam, camera_fps)) => {
                                         if let Some(ref mut s) = state {
-                                            s.fps = effective_fps(fps, cam.frame_rate());
+                                            s.fps = effective_fps(fps, camera_fps);
                                         }
-                                        camera = Some(cam);
+                                        camera = Some((cam, camera_fps));
                                         is_mock = false;
                                     }
                                     Err(e) => {
@@ -183,7 +185,7 @@ impl CaptureLoop {
                         }
                         WebcamCommand::StopStream => {
                             log::debug!("Webcam: StopStream");
-                            if let Some(mut cam) = camera.take() {
+                            if let Some((mut cam, _)) = camera.take() {
                                 let _ = cam.stop_stream();
                             }
                             camera_retry_at = None;
@@ -192,7 +194,7 @@ impl CaptureLoop {
                         }
                         WebcamCommand::Close => {
                             log::debug!("Webcam: Close");
-                            if let Some(mut cam) = camera.take() {
+                            if let Some((mut cam, _)) = camera.take() {
                                 let _ = cam.stop_stream();
                             }
                             return;
@@ -207,10 +209,10 @@ impl CaptureLoop {
                     );
                     if !is_mock && camera.is_none() && reopen_due(camera_retry_at, Instant::now()) {
                         match init_real_camera(s.width, s.height, s.fps) {
-                            Ok(cam) => {
+                            Ok((cam, camera_fps)) => {
                                 log::info!("Webcam re-acquired successfully");
-                                s.fps = effective_fps(s.fps, cam.frame_rate());
-                                camera = Some(cam);
+                                s.fps = effective_fps(s.fps, camera_fps);
+                                camera = Some((cam, camera_fps));
                                 camera_retry_at = None;
                                 current_mode = None;
                             }
@@ -224,7 +226,7 @@ impl CaptureLoop {
                     let grabbed = if is_mock {
                         None
                     } else {
-                        camera.as_mut().map(|cam| {
+                        camera.as_mut().map(|(cam, _)| {
                             log::trace!("Calling cam.frame()...");
                             cam.frame()
                         })
