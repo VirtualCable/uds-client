@@ -286,23 +286,11 @@ impl WebcamIntegration for WebcamHandle {
 
     fn request_sample(&self, channel_ptr: usize) {
         *self.active_channel.lock().unwrap() = Some(channel_ptr);
-        let mut reqs = self.samples_requested.lock().unwrap();
-        *reqs += 1;
-
-        let current_mode = *self.mode.lock().unwrap();
-        if current_mode != WebcamMode::H264
-            && *reqs > 0
-            && let (Some(frame), Some(tx)) = (
-                self.latest_frame.lock().unwrap().as_ref(),
-                self.frame_tx.lock().unwrap().as_ref(),
-            )
-        {
-            *reqs -= 1;
-            let _ = tx.send(WebcamFrame {
-                data: frame.to_vec(),
-                channel_ptr,
-            });
-        }
+        // Every mode behaves like H264: the request stays pending and the capture loop
+        // answers it with the next frame it actually grabs, at the camera's real rate.
+        // Serving it here from the cached frame would duplicate frames whenever the
+        // server asks for more fps than the camera can deliver.
+        *self.samples_requested.lock().unwrap() += 1;
     }
 
     fn push_frame(&self, _data: Vec<u8>) {
