@@ -267,61 +267,67 @@ impl CaptureLoop {
                         None => (generate_mock_frame(s), s.width, s.height),
                     };
 
-                    let (dst_w, dst_h) = calculate_scaled_dimensions(s.width, s.height);
-                    let rgb_scaled = resize_rgb(&rgb, src_w, src_h, dst_w, dst_h);
-
                     let mode_val = *self.cam_mode.lock().unwrap();
-                    if current_mode != Some(mode_val) {
-                        encoder = match mode_val {
-                            WebcamMode::MJPEG => Box::new(MjpegEncoder::new()),
-                            WebcamMode::YUY2 => Box::new(Yuy2Encoder::new()),
-                            WebcamMode::H264 => match encoders::H264Encoder::new() {
-                                Ok(enc) => Box::new(enc),
-                                Err(e) => {
-                                    log::error!(
-                                        "Failed to create H264Encoder, falling back to MJPEG: {e}"
-                                    );
-                                    Box::new(MjpegEncoder::new())
-                                }
-                            },
-                            WebcamMode::Raw => Box::new(RawEncoder),
-                        };
-                        let q = WEBCAM_QUALITY.load(std::sync::atomic::Ordering::Relaxed);
-                        let _ = encoder.init(dst_w, dst_h, s.fps, q);
-                        current_mode = Some(mode_val);
-                        log::info!(
-                            "Webcam encoder initialized: Mode={:?}, Resolution={}x{}, FPS={}",
-                            mode_val,
-                            dst_w,
-                            dst_h,
-                            s.fps
-                        );
-                    }
+                    // H264 predicts every frame from the previous one, so encoding a frame
+                    // that is then discarded leaves the server decoding against a reference
+                    // it never received: the picture smears until the next IDR.
+                    let sample_pending = *self.samples_req.lock().unwrap() > 0;
+                    if mode_val != WebcamMode::H264 || sample_pending {
+                        let (dst_w, dst_h) = calculate_scaled_dimensions(s.width, s.height);
+                        let rgb_scaled = resize_rgb(&rgb, src_w, src_h, dst_w, dst_h);
 
-                    let output = match encoder.encode(&rgb_scaled) {
-                        Ok(out) => out,
-                        Err(e) => {
-                            log::error!("Webcam encoder error: {e}");
-                            rgb_scaled.clone()
+                        if current_mode != Some(mode_val) {
+                            encoder = match mode_val {
+                                WebcamMode::MJPEG => Box::new(MjpegEncoder::new()),
+                                WebcamMode::YUY2 => Box::new(Yuy2Encoder::new()),
+                                WebcamMode::H264 => match encoders::H264Encoder::new() {
+                                    Ok(enc) => Box::new(enc),
+                                    Err(e) => {
+                                        log::error!(
+                                            "Failed to create H264Encoder, falling back to MJPEG: {e}"
+                                        );
+                                        Box::new(MjpegEncoder::new())
+                                    }
+                                },
+                                WebcamMode::Raw => Box::new(RawEncoder),
+                            };
+                            let q = WEBCAM_QUALITY.load(std::sync::atomic::Ordering::Relaxed);
+                            let _ = encoder.init(dst_w, dst_h, s.fps, q);
+                            current_mode = Some(mode_val);
+                            log::info!(
+                                "Webcam encoder initialized: Mode={:?}, Resolution={}x{}, FPS={}",
+                                mode_val,
+                                dst_w,
+                                dst_h,
+                                s.fps
+                            );
                         }
-                    };
 
-                    *self.frame_out.lock().unwrap() = Some(output.clone());
-                    frame_count += 1;
-                    bytes_count += output.len() as u64;
+                        let output = match encoder.encode(&rgb_scaled) {
+                            Ok(out) => out,
+                            Err(e) => {
+                                log::error!("Webcam encoder error: {e}");
+                                rgb_scaled.clone()
+                            }
+                        };
 
-                    let mut reqs = self.samples_req.lock().unwrap();
-                    if *reqs > 0
-                        && let (Some(chan), Some(tx)) = (
-                            *self.active_chan.lock().unwrap(),
-                            self.frame_tx_cb.lock().unwrap().as_ref(),
-                        )
-                    {
-                        *reqs -= 1;
-                        let _ = tx.send(WebcamFrame {
-                            data: output,
-                            channel_ptr: chan,
-                        });
+                        *self.frame_out.lock().unwrap() = Some(output.clone());
+                        frame_count += 1;
+                        bytes_count += output.len() as u64;
+
+                        let mut reqs = self.samples_req.lock().unwrap();
+                        if *reqs > 0
+                            && let (Some(chan), Some(tx)) = (
+                                *self.active_chan.lock().unwrap(),
+                                self.frame_tx_cb.lock().unwrap().as_ref(),
+                            )
+                        {
+                            *reqs -= 1;
+                            let _ = tx.send(WebcamFrame {
+                                data: output,
+                                channel_ptr: chan,
+                            });
+                        }
                     }
 
                     let elapsed_total = stream_start_time.elapsed().as_secs();
