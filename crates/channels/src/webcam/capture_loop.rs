@@ -20,6 +20,17 @@ fn next_deadline(previous: Instant, interval: Duration, now: Instant) -> Instant
     (previous + interval).max(now)
 }
 
+/// How long to wait before trying to reopen a camera that stopped delivering frames.
+/// Windows only releases the hardware once the previous instance is dropped, so the
+/// camera is dropped on failure and reacquired on this cadence for as long as the
+/// stream lasts: whatever was holding it (another app, a USB reset, a driver
+/// reconfiguration) usually lets go on its own.
+const CAMERA_REOPEN_INTERVAL: Duration = Duration::from_secs(2);
+
+fn reopen_due(retry_at: Option<Instant>, now: Instant) -> bool {
+    retry_at.is_some_and(|at| now >= at)
+}
+
 /// Holds all channels and state shared with the [`WebcamHandle`](crate::webcam::WebcamHandle).
 pub(crate) struct CaptureLoop {
     cmd_rx: Receiver<WebcamCommand>,
@@ -62,6 +73,7 @@ impl CaptureLoop {
             let mut encoder: Box<dyn VideoEncoder> = Box::new(RawEncoder);
             let mut current_mode: Option<WebcamMode> = None;
             let mut camera: Option<nokhwa::Camera> = None;
+            let mut camera_retry_at: Option<Instant> = None;
             let mut is_mock = false;
 
             loop {
@@ -76,6 +88,7 @@ impl CaptureLoop {
                             last_report = std::time::Instant::now();
                             stream_start_time = std::time::Instant::now();
                             next_frame_at = Instant::now();
+                            camera_retry_at = None;
                             state = Some(StreamState {
                                 width,
                                 height,
@@ -173,6 +186,7 @@ impl CaptureLoop {
                             if let Some(mut cam) = camera.take() {
                                 let _ = cam.stop_stream();
                             }
+                            camera_retry_at = None;
                             state = None;
                             *self.frame_out.lock().unwrap() = None;
                         }
@@ -191,32 +205,56 @@ impl CaptureLoop {
                         "Webcam capture loop iteration: frame_count = {}",
                         frame_count
                     );
-                    let (rgb, src_w, src_h) = if is_mock {
-                        (generate_mock_frame(s), s.width, s.height)
-                    } else if let Some(ref mut cam) = camera {
-                        log::trace!("Calling cam.frame()...");
-                        match cam.frame() {
-                            Ok(frame) => {
-                                log::trace!("cam.frame() returned Ok");
-                                match frame.decode_image::<nokhwa::pixel_format::RgbFormat>() {
-                                    Ok(img) => {
-                                        let w = img.width();
-                                        let h = img.height();
-                                        (img.into_raw(), w, h)
-                                    }
-                                    Err(e) => {
-                                        log::error!("Failed to decode camera frame: {e}");
-                                        (generate_mock_frame(s), s.width, s.height)
-                                    }
-                                }
+                    if !is_mock && camera.is_none() && reopen_due(camera_retry_at, Instant::now()) {
+                        match init_real_camera(s.width, s.height, s.fps) {
+                            Ok(cam) => {
+                                log::info!("Webcam re-acquired successfully");
+                                s.fps = effective_fps(s.fps, cam.frame_rate());
+                                camera = Some(cam);
+                                camera_retry_at = None;
+                                current_mode = None;
                             }
                             Err(e) => {
-                                log::error!("Failed to capture camera frame: {e}");
-                                (generate_mock_frame(s), s.width, s.height)
+                                log::debug!("Webcam: camera still unavailable: {e}");
+                                camera_retry_at = Some(Instant::now() + CAMERA_REOPEN_INTERVAL);
                             }
                         }
+                    }
+
+                    let grabbed = if is_mock {
+                        None
                     } else {
-                        (generate_mock_frame(s), s.width, s.height)
+                        camera.as_mut().map(|cam| {
+                            log::trace!("Calling cam.frame()...");
+                            cam.frame()
+                        })
+                    };
+
+                    let (rgb, src_w, src_h) = match grabbed {
+                        Some(Ok(frame)) => {
+                            log::trace!("cam.frame() returned Ok");
+                            match frame.decode_image::<nokhwa::pixel_format::RgbFormat>() {
+                                Ok(img) => {
+                                    let w = img.width();
+                                    let h = img.height();
+                                    (img.into_raw(), w, h)
+                                }
+                                Err(e) => {
+                                    log::error!("Failed to decode camera frame: {e}");
+                                    (generate_mock_frame(s), s.width, s.height)
+                                }
+                            }
+                        }
+                        Some(Err(e)) => {
+                            log::error!(
+                                "Failed to capture camera frame: {e}. Serving mock frames and retrying every {}s",
+                                CAMERA_REOPEN_INTERVAL.as_secs()
+                            );
+                            camera = None;
+                            camera_retry_at = Some(Instant::now() + CAMERA_REOPEN_INTERVAL);
+                            (generate_mock_frame(s), s.width, s.height)
+                        }
+                        None => (generate_mock_frame(s), s.width, s.height),
                     };
 
                     let (dst_w, dst_h) = calculate_scaled_dimensions(s.width, s.height);
@@ -330,6 +368,18 @@ impl CaptureLoop {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reopen_waits_for_the_scheduled_instant() {
+        let now = Instant::now();
+        assert!(
+            !reopen_due(None, now),
+            "no failure pending, nothing to retry"
+        );
+        assert!(!reopen_due(Some(now + Duration::from_secs(1)), now));
+        assert!(reopen_due(Some(now), now));
+        assert!(reopen_due(Some(now - Duration::from_secs(1)), now));
+    }
 
     #[test]
     fn deadline_advances_by_one_interval_when_work_is_fast() {
