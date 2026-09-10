@@ -82,6 +82,12 @@ impl CaptureLoop {
                     match cmd {
                         WebcamCommand::StartStream { width, height, fps } => {
                             log::debug!("Webcam: StartStream {width}x{height} @ {fps}fps");
+                            // Media Foundation hands out the camera exclusively: the previous
+                            // instance has to be dropped before another one is opened, or the
+                            // open is denied.
+                            if let Some((mut cam, _)) = camera.take() {
+                                let _ = cam.stop_stream();
+                            }
                             current_mode = None;
                             frame_count = 0;
                             bytes_count = 0;
@@ -103,7 +109,6 @@ impl CaptureLoop {
                             if force_mock {
                                 log::info!("Mock Webcam forced by environment variable");
                                 is_mock = true;
-                                camera = None;
                             } else {
                                 match init_real_camera(width, height, fps) {
                                     Ok((cam, camera_fps)) => {
@@ -162,7 +167,10 @@ impl CaptureLoop {
                             }
 
                             if !is_mock && needs_restart {
-                                if let Some((cam, _)) = camera.as_mut() {
+                                // Stopping the stream is not enough: the camera stays alive until
+                                // it is dropped, and Media Foundation denies a second open while
+                                // the old instance holds the hardware.
+                                if let Some((mut cam, _)) = camera.take() {
                                     let _ = cam.stop_stream();
                                 }
                                 match init_real_camera(width, height, fps) {
