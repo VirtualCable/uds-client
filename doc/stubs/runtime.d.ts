@@ -62,38 +62,42 @@ declare module "runtime" {
       user?: string;
       password?: string;
       domain?: string;
-      options?: {
-        verify_cert?: boolean;
-        use_nla?: boolean;
-        use_local_scaler?: boolean;
-        use_tunnel?: boolean;
-      };
       screen_width?: number;
       screen_height?: number;
-      clipboard_redirection?: boolean;
-      audio_redirection?: boolean;
-      microphone_redirection?: boolean;
-      printer_redirection?: boolean;
-      drives_to_redirect?: string[];
-      smartcard?: {
-        enabled?: boolean;
-        /** Emulated card spec: file:<path> | pem:<cert>,<key> | userdefined: */
-        emulated?: string;
-      };
-      webcam?: {
-        enabled: boolean;
-        quality?: number;
-        fps?: number;
-        size_limit?: [number, number];
-      };
-      sound_latency_threshold?: number;
       best_experience?: boolean;
+      redirections?: {
+        clipboard?: boolean;
+        audio?: boolean;
+        mic?: boolean;
+        printing?: boolean;
+        smartcard?: {
+          enabled?: boolean;
+          /** Emulated card spec: file:<path> | pem:<cert>,<key> | userdefined: */
+          emulated?: string;
+        };
+        drives?: string[];
+        webcam?: {
+          enabled: boolean;
+          quality?: number;
+          fps?: number;
+          size_limit?: [number, number];
+        };
+        /** Clamped to 300..1000 when sent. Omit it to let the client derive one. */
+        sound_latency_threshold?: number;
+      };
       rail?: {
         app: string;
         args?: string;
         working_dir?: string;
         title?: string;
         server_info?: { id: string; token: string };
+        behavior?: "compositegdi" | "individualwindows";
+      };
+      options?: {
+        verify_cert?: boolean;
+        use_nla?: boolean;
+        use_local_scaler?: boolean;
+        use_tunnel?: boolean;
       };
     }): void;
     function sign(rdp_string: string, ticket: string): Promise<string>;
