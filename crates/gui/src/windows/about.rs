@@ -32,6 +32,23 @@ const ABOUT_LINES: &[&str] = &[
     "for any damages arising from the use of this software.",
 ];
 
+fn layout_close_button(pw: f32, ph: f32, scale: f32) -> crate::draw::ui::button::Button {
+    let bw = monitor::scaled_val(80) as f32;
+    let bh = monitor::scaled_val(35) as f32;
+
+    crate::draw::ui::button::Button::new(
+        (pw - bw) / 2.0,
+        ph - bh - 20.0 * scale,
+        bw as u32,
+        bh as u32,
+        "Close".to_string(),
+        crate::draw::ui::button::ButtonStyle {
+            font_scale: monitor::scaled_val(14) as f32,
+            ..Default::default()
+        },
+    )
+}
+
 pub struct AboutState {
     window: Arc<Window>,
     renderer: WgpuRenderer,
@@ -70,24 +87,7 @@ impl AboutState {
         let scale = *monitor::SCALE_FACTOR as f32;
         let renderer = WgpuRenderer::new(window.clone(), phys.width, phys.height)?;
         let logo = crate::logo::load_logo();
-        let pw = phys.width as f32;
-        let ph = phys.height as f32;
-        let bw = monitor::scaled_val(80) as f32;
-        let bh = monitor::scaled_val(35) as f32;
-        let bx = (pw - bw) / 2.0;
-        let by = ph - bh - 20.0 * scale;
-
-        let close_btn = crate::draw::ui::button::Button::new(
-            bx,
-            by,
-            bw as u32,
-            bh as u32,
-            "Close".to_string(),
-            crate::draw::ui::button::ButtonStyle {
-                font_scale: monitor::scaled_val(14) as f32,
-                ..Default::default()
-            },
-        );
+        let close_btn = layout_close_button(phys.width as f32, phys.height as f32, scale);
 
         Ok(AboutState {
             window,
@@ -111,6 +111,17 @@ impl AboutState {
 
     pub fn handle_mouse_move(&mut self, logical_x: f32, logical_y: f32) -> bool {
         self.close_btn.handle_mouse_move(logical_x, logical_y)
+    }
+
+    /// The surface is mapped after creation on Linux, so the first real size arrives here.
+    pub fn resize(&mut self, width: u32, height: u32) {
+        if width == 0 || height == 0 {
+            return;
+        }
+        self.phys_w = width;
+        self.phys_h = height;
+        self.scale = *monitor::SCALE_FACTOR as f32;
+        self.close_btn = layout_close_button(width as f32, height as f32, self.scale);
     }
 
     pub fn paint(&mut self) {
@@ -266,6 +277,19 @@ impl ApplicationHandler for AboutHandler<'_> {
                     s.paint();
                 }
             }
+            WindowEvent::Resized(size) => {
+                if let Some(s) = self.state.as_mut() {
+                    s.resize(size.width, size.height);
+                    s.window.request_redraw();
+                }
+            }
+            WindowEvent::ScaleFactorChanged { .. } => {
+                if let Some(s) = self.state.as_mut() {
+                    let size = s.window.inner_size();
+                    s.resize(size.width, size.height);
+                    s.window.request_redraw();
+                }
+            }
             WindowEvent::CursorMoved { position, .. } => {
                 if let Some(s) = self.state.as_mut() {
                     s.last_mouse_pos = Some((position.x as f32, position.y as f32));
@@ -323,6 +347,15 @@ impl crate::AppHandler {
             }
             WindowEvent::RedrawRequested => {
                 a.paint();
+            }
+            WindowEvent::Resized(size) => {
+                a.resize(size.width, size.height);
+                a.window.request_redraw();
+            }
+            WindowEvent::ScaleFactorChanged { .. } => {
+                let size = a.window.inner_size();
+                a.resize(size.width, size.height);
+                a.window.request_redraw();
             }
             _ => {}
         }

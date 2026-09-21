@@ -180,22 +180,16 @@ impl AppHandler {
                 ));
                 rdp::Rdp::set_command_event(&s.command_event);
                 // Pinbar
-                if let RdpMode::Desktop {
-                    ref mut pinbar,
-                    ref full_screen,
-                    ..
-                } = s.mode
-                {
-                    let is_fs = full_screen.load(Ordering::Relaxed);
+                if let RdpMode::Desktop { ref mut pinbar, .. } = s.mode {
                     let trigger_y = crate::monitor::scaled_val(5) as f64;
                     let close_y = crate::monitor::scaled_val(32) as f64;
                     if position.y < trigger_y
                         && position.x > std::cmp::max(phys_w, 1) as f64 * 0.4
                         && position.x < phys_w as f64 * 0.6
                     {
-                        pinbar.visible = is_fs;
+                        pinbar.visible = true;
                     }
-                    if position.y > close_y {
+                    if position.y > close_y && !pinbar.pinned {
                         pinbar.visible = false;
                     }
                 }
@@ -204,13 +198,17 @@ impl AppHandler {
                 state: btn, button, ..
             } => {
                 // Pinbar click — only on press
-                if let RdpMode::Desktop { ref pinbar, .. } = s.mode
+                if let RdpMode::Desktop { ref mut pinbar, .. } = s.mode
                     && btn.is_pressed()
                     && let Some(pos) = self.last_pointer
                     && pinbar.visible
                     && *button == winit::event::MouseButton::Left
                 {
                     let px = pos.x as f32;
+                    if pinbar.btn_pin_x.contains(&px) {
+                        pinbar.pinned = !pinbar.pinned;
+                        return true;
+                    }
                     if pinbar.btn_fs_x.contains(&px) {
                         self.toggle_fullscreen();
                         return true;
