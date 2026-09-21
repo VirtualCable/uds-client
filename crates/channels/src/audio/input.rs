@@ -11,7 +11,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use flume::{Receiver, Sender, unbounded};
 use shared::log;
 
-use super::tools::{ResamplerIterator, f32_to_pcm};
+use super::tools::{Resampler, f32_to_pcm};
 
 use rdp::integrations::AudioInputIntegration;
 
@@ -97,6 +97,8 @@ impl AudioInputIntegration for MicHandle {
                 {
                     let data_tx = data_tx.clone();
                     let sample_buf = Arc::clone(&sample_buf);
+                    let mut resampler =
+                        Resampler::new(actual_rate, sample_rate, actual_channels as u16);
                     move |data: &[f32], _| {
                         let mut buf = sample_buf.write().unwrap();
                         buf.extend(data.iter().copied());
@@ -113,8 +115,9 @@ impl AudioInputIntegration for MicHandle {
                             drop(buf);
 
                             let processed: Vec<f32> = if need_resample {
-                                ResamplerIterator::new(chunk.into_iter(), actual_rate, sample_rate)
-                                    .collect()
+                                let mut resampled = Vec::with_capacity(chunk.len() * 2);
+                                resampler.process(&chunk, &mut resampled);
+                                resampled
                             } else {
                                 chunk
                             };

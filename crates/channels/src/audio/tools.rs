@@ -5,64 +5,54 @@
 
 use shared::log;
 
-pub struct ResamplerIterator<I> {
-    inner: I,
-    input_rate: f32,
-    output_rate: f32,
-    buffer: Vec<f32>,
-    pos: f32,
+/// Linear resampler for interleaved audio. It works in frames, so channels are never
+/// mixed, and keeps the last input frame between calls so consecutive packets join
+/// without a discontinuity.
+pub struct Resampler {
+    channels: usize,
+    step: f64,
+    pos: f64,
+    prev: Option<Vec<f32>>,
     passthrough: bool,
 }
 
-impl<I: Iterator<Item = f32>> ResamplerIterator<I> {
-    pub fn new(inner: I, input_rate: u32, output_rate: u32) -> Self {
+impl Resampler {
+    pub fn new(input_rate: u32, output_rate: u32, channels: u16) -> Self {
         Self {
-            inner,
-            input_rate: input_rate as f32,
-            output_rate: output_rate as f32,
-            buffer: Vec::new(),
+            channels: channels.max(1) as usize,
+            step: input_rate as f64 / output_rate as f64,
             pos: 0.0,
+            prev: None,
             passthrough: input_rate == output_rate,
         }
     }
-}
 
-impl<I: Iterator<Item = f32>> Iterator for ResamplerIterator<I> {
-    type Item = f32;
-
-    fn next(&mut self) -> Option<Self::Item> {
+    pub fn process(&mut self, input: &[f32], out: &mut impl Extend<f32>) {
         if self.passthrough {
-            return self.inner.next();
+            out.extend(input.iter().copied());
+            return;
         }
-        let ratio = self.input_rate / self.output_rate;
-
-        if self.buffer.len() < 2 {
-            let sample = self.inner.next()?;
-            self.buffer.push(sample);
-        }
-
-        let i = self.pos.floor() as usize;
-        let frac = self.pos - i as f32;
-
-        while i + 1 >= self.buffer.len() {
-            let sample = self.inner.next()?;
-            self.buffer.push(sample);
+        let frames: Vec<&[f32]> = self
+            .prev
+            .as_deref()
+            .into_iter()
+            .chain(input.chunks_exact(self.channels))
+            .collect();
+        if frames.len() < 2 {
+            self.prev = frames.first().map(|f| f.to_vec());
+            return;
         }
 
-        let s0 = self.buffer[i];
-        let s1 = self.buffer[i + 1];
-        let out = s0 + (s1 - s0) * frac;
-
-        self.pos += ratio;
-
-        while self.pos >= 1.0 {
-            self.pos -= 1.0;
-            if !self.buffer.is_empty() {
-                self.buffer.remove(0);
-            }
+        while (self.pos as usize) + 1 < frames.len() {
+            let i = self.pos as usize;
+            let frac = (self.pos - i as f64) as f32;
+            let (a, b) = (frames[i], frames[i + 1]);
+            out.extend((0..self.channels).map(|c| a[c] + (b[c] - a[c]) * frac));
+            self.pos += self.step;
         }
 
-        Some(out)
+        self.pos -= (frames.len() - 1) as f64;
+        self.prev = frames.last().map(|f| f.to_vec());
     }
 }
 
@@ -118,45 +108,61 @@ pub fn f32_to_pcm(data: &[f32], bits_per_sample: u16) -> Vec<u8> {
 mod tests {
     use super::*;
 
+    fn resample(input: &[f32], from: u32, to: u32, channels: u16) -> Vec<f32> {
+        let mut out = Vec::new();
+        Resampler::new(from, to, channels).process(input, &mut out);
+        out
+    }
+
     #[test]
-    fn test_passthrough() {
-        let input = vec![0.0, 0.5, -0.5, 1.0, -1.0];
-        let resampler = ResamplerIterator::new(input.clone().into_iter(), 44100, 44100);
-        let out: Vec<f32> = resampler.collect();
-        assert_eq!(out.len(), input.len());
-        for (a, b) in out.iter().zip(input.iter()) {
-            assert!((a - b).abs() < 0.0001);
+    fn passthrough_is_identity() {
+        let input = vec![0.0, 0.5, -0.5, 1.0, -1.0, 0.25];
+        assert_eq!(resample(&input, 44100, 44100, 2), input);
+    }
+
+    #[test]
+    fn stereo_channels_are_not_mixed() {
+        // Left constant 1.0, right constant -1.0: any cross-channel interpolation shows up.
+        let input: Vec<f32> = (0..4410).flat_map(|_| [1.0, -1.0]).collect();
+        let out = resample(&input, 44100, 48000, 2);
+        for frame in out.as_chunks::<2>().0 {
+            assert_eq!(*frame, [1.0, -1.0]);
         }
     }
 
     #[test]
-    fn test_upsample() {
-        let input = vec![0.0, 0.5, -0.5, 1.0, -1.0];
-        let in_len = input.len();
-        let resampler = ResamplerIterator::new(input.into_iter(), 24000, 48000);
-        let out: Vec<f32> = resampler.collect();
-        assert!(out.len() > in_len);
+    fn output_length_follows_rate_ratio() {
+        let input = vec![0.0; 44100 * 2];
+        let frames = resample(&input, 44100, 48000, 2).len() / 2;
+        assert!((47998..=48001).contains(&frames), "got {frames} frames");
     }
 
     #[test]
-    fn test_downsample() {
-        let input = vec![0.0, 0.5, -0.5, 1.0, -1.0];
-        let in_len = input.len();
-        let resampler = ResamplerIterator::new(input.into_iter(), 48000, 24000);
-        let out: Vec<f32> = resampler.collect();
-        assert!(out.len() < in_len);
+    fn chunked_input_matches_single_call() {
+        let input: Vec<f32> = (0..2000).map(|i| (i as f32 * 0.01).sin()).collect();
+        let whole = resample(&input, 44100, 48000, 2);
+
+        let mut resampler = Resampler::new(44100, 48000, 2);
+        let mut chunked = Vec::new();
+        for chunk in input.chunks(2 * 37) {
+            resampler.process(chunk, &mut chunked);
+        }
+        assert_eq!(chunked.len(), whole.len());
+        for (a, b) in chunked.iter().zip(&whole) {
+            assert!((a - b).abs() < 1e-6);
+        }
     }
 
     #[test]
-    fn test_empty_passthrough() {
-        let r = ResamplerIterator::new(std::iter::empty::<f32>(), 44100, 44100);
-        assert_eq!(r.count(), 0);
+    fn downsample_interpolates_between_frames() {
+        let input = vec![0.0, 1.0, 2.0, 3.0];
+        assert_eq!(resample(&input, 48000, 24000, 1), vec![0.0, 2.0]);
     }
 
     #[test]
-    fn test_empty_resample() {
-        let r = ResamplerIterator::new(std::iter::empty::<f32>(), 44100, 48000);
-        assert_eq!(r.count(), 0);
+    fn empty_input_produces_nothing() {
+        assert!(resample(&[], 44100, 48000, 2).is_empty());
+        assert!(resample(&[], 44100, 44100, 2).is_empty());
     }
 
     #[test]

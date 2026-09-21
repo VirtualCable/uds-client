@@ -12,7 +12,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SampleFormat, SizedSample};
 use shared::log;
 
-use super::tools::{ResamplerIterator, pcm_to_f32};
+use super::tools::{Resampler, pcm_to_f32};
 
 use rdp::integrations::AudioOutputIntegration;
 
@@ -196,6 +196,7 @@ impl AudioOutputIntegration for AudioHandle {
                 log::error!("Audio disabled: cpal init failed");
             }
 
+            let mut resampler = Resampler::new(sample_rate, output_sample_rate, channels);
             let mut stats = AudioStats::new();
             // Main loop
             loop {
@@ -204,17 +205,13 @@ impl AudioOutputIntegration for AudioHandle {
                         AudioCommand::Play(data) => {
                             stats.add_play_call();
                             if stream.is_some() {
-                                // Convert PCM to f32, resample and push to buffer
-                                let resampled_iter = ResamplerIterator::new(
-                                    pcm_to_f32(&data, bits_per_sample),
-                                    sample_rate,
-                                    output_sample_rate,
-                                );
+                                let samples: Vec<f32> =
+                                    pcm_to_f32(&data, bits_per_sample).collect();
                                 let mut buf = buffer.write().unwrap();
                                 // Store current buffer length to calculate number of frames added
                                 let added_frames = {
                                     let buf_len = buf.len();
-                                    buf.extend(resampled_iter);
+                                    resampler.process(&samples, &mut *buf);
                                     (buf.len() - buf_len) as u64 / channels as u64
                                 };
                                 stats.add_frames_played(added_frames);
