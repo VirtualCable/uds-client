@@ -15,4 +15,6 @@ pub struct TunnelConnectInfo {
     pub keep_listening_after_timeout: bool, // whether to keep listening after timeout
     pub enable_ipv6: bool,       // whether to enable ipv6 (local and remote)
     pub shared_secret: Option<SharedSecret>, // cryptographic keys for the connection. v5.0
+    pub use_udp: bool,           // whether to try to set up the UDP leg of the tunnel, v5.0
+    pub udp_port: Option<u16>,   // local UDP listen port; None = same as the TCP listener
 }

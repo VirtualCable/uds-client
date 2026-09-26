@@ -13,3 +13,5 @@ pub mod types;
 
 pub mod secrets;
 pub mod tunnel;
+
+pub mod datagram;

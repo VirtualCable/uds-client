@@ -19,8 +19,61 @@ pub mod client;
 pub mod protocol;
 pub mod proxy;
 pub mod server;
+pub mod udp;
 
 use protocol::consts::HANDSHAKE_TEST_RESPONSE;
+
+/// Tries to start the UDP leg of a tunnel session. Any failure degrades to
+/// TCP-only (logged, never breaks the session).
+///
+/// - Local listen port: `info.udp_port` if set, otherwise the TCP listener
+///   port (mstsc expects UDP on the same port it connected to over TCP).
+/// - Remote port: the `udp_port` reported by the server in the open response
+///   if non-zero, otherwise the TCP tunnel port.
+async fn try_start_udp_relay(
+    info: &TunnelConnectInfo,
+    shared_secret: &crypt::types::SharedSecret,
+    token: crypt::datagram::UdpToken,
+    server_udp_port: u16,
+    tcp_listener_port: u16,
+    stop: shared::system::trigger::Trigger,
+) -> Option<udp::UdpRelay> {
+    let local_port = info.udp_port.unwrap_or(tcp_listener_port);
+    let remote_port = if server_udp_port != 0 {
+        server_udp_port
+    } else {
+        info.port
+    };
+    let start = async {
+        let (inbound, outbound) = crypt::secrets::get_udp_crypts(shared_secret, &info.ticket)?;
+        udp::UdpRelay::start(
+            local_port,
+            info.enable_ipv6,
+            &info.addr,
+            remote_port,
+            token,
+            inbound,
+            outbound,
+            stop,
+        )
+        .await
+    };
+    match start.await {
+        std::result::Result::Ok(relay) => {
+            log::info!(
+                "UDP relay listening on {}, forwarding to {}:{}",
+                relay.local_addr(),
+                info.addr,
+                remote_port
+            );
+            Some(relay)
+        }
+        Err(e) => {
+            log::error!("UDP relay unavailable, continuing TCP-only: {e}");
+            None
+        }
+    }
+}
 
 pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Result<()> {
     log::debug!(
@@ -31,7 +84,7 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
     let (_id, registered_trigger, active_connections) = registry::register_tunnel(Some(
         Duration::from_millis(info.startup_time_ms.min(MAX_STARTUP_TIME_MS)),
     ));
-    let shared_secret = info.shared_secret.ok_or(anyhow::format_err!(
+    let shared_secret = info.shared_secret.clone().ok_or(anyhow::format_err!(
         "TunnelConnectInfo must include shared secret"
     ))?;
 
@@ -58,11 +111,37 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
                     crypt_info.clone(),
                     std::time::Duration::from_millis(info.startup_time_ms.min(MAX_STARTUP_TIME_MS)),
                     registered_trigger.clone(),
-                ).run().await?;
+                );
+                let udp_token_handle = proxy.udp_token_handle();
+                let proxy = proxy.run().await?;
 
                 let (reader, writer) = client_stream.into_split();
 
                 let channels = proxy.request_channel(1).await?;
+
+                // UDP leg: only if requested and the server assigned a
+                // non-zero token in the open response. Failures degrade to
+                // TCP-only, never break the session.
+                let udp_relay = if info.use_udp {
+                    let (token, server_udp_port) =
+                        udp_token_handle.lock().unwrap().unwrap_or(([0u8; 16], 0));
+                    if token == [0u8; 16] {
+                        log::debug!("UDP requested but not enabled by server (zero token)");
+                        None
+                    } else {
+                        try_start_udp_relay(
+                            &info,
+                            &shared_secret,
+                            token,
+                            server_udp_port,
+                            listener.local_addr()?.port(),
+                            registered_trigger.clone(),
+                        )
+                        .await
+                    }
+                } else {
+                    None
+                };
 
                 let server = server::TunnelServer::new(
                     reader,
@@ -80,6 +159,8 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
                     let active_connections = active_connections.clone();
                     // let registered_trigger = registered_trigger.clone();
                     async move {
+                        // The UDP relay dies with this TCP connection
+                        let _udp_relay = udp_relay;
                         active_connections.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         log::debug!("Spawning tunnel server task, active connections: {}", active_connections.load(std::sync::atomic::Ordering::Relaxed));
                         if let Err(e) = server.run().await {

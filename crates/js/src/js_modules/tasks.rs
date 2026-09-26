@@ -60,6 +60,8 @@ struct TunnelParams {
     keep_listening_after_timeout: Option<bool>,
     enable_ipv6: Option<bool>,
     shared_secret: Option<Vec<u8>>,
+    use_udp: Option<bool>,
+    udp_port: Option<u16>,
 }
 
 impl TunnelParams {
@@ -82,6 +84,8 @@ impl TunnelParams {
             startup_time_ms: self.startup_time_ms.unwrap_or(0),
             keep_listening_after_timeout: self.keep_listening_after_timeout.unwrap_or(false),
             enable_ipv6: self.enable_ipv6.unwrap_or(false),
+            use_udp: self.use_udp.unwrap_or(false),
+            udp_port: self.udp_port,
             shared_secret: self
                 .shared_secret
                 .as_ref()
@@ -106,7 +110,7 @@ async fn start_tunel_fn(
         extract_js_args!(args, &mut *ctx_borrow, TunnelParams)
     };
     log::debug!(
-        "Starting tunnel to {}:{} with ticket {}, check_certificate: {:?}, listen_timeout_ms: {:?}, local_port: {:?}, keep_listening_after_timeout: {:?}, enable_ipv6: {:?}, shared_secret: {:?}",
+        "Starting tunnel to {}:{} with ticket {}, check_certificate: {:?}, listen_timeout_ms: {:?}, local_port: {:?}, keep_listening_after_timeout: {:?}, enable_ipv6: {:?}, shared_secret: {:?}, use_udp: {:?}, udp_port: {:?}",
         params.addr,
         params.port,
         params.ticket,
@@ -116,6 +120,8 @@ async fn start_tunel_fn(
         params.keep_listening_after_timeout,
         params.enable_ipv6,
         params.shared_secret,
+        params.use_udp,
+        params.udp_port,
     );
     let tunnel_info = params
         .to_connect_info(Some(appdata.verify_ssl(&params.addr)))
@@ -261,6 +267,21 @@ mod tests {
         assert!(!info.enable_ipv6);
         assert!(info.check_certificate);
         assert!(info.shared_secret.is_none());
+        assert!(!info.use_udp);
+        assert!(info.udp_port.is_none());
+    }
+
+    #[test]
+    fn tunnel_params_udp_explicit() {
+        let p = TunnelParams {
+            ticket: "A".repeat(48),
+            use_udp: Some(true),
+            udp_port: Some(13389),
+            ..Default::default()
+        };
+        let info = p.to_connect_info(None).unwrap();
+        assert!(info.use_udp);
+        assert_eq!(info.udp_port, Some(13389));
     }
 
     #[test]

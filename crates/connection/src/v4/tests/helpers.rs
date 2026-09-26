@@ -272,6 +272,8 @@ pub async fn create_runner(port: u16) -> Result<(JoinHandle<()>, JoinHandle<()>,
         keep_listening_after_timeout: false,
         enable_ipv6: false,
         shared_secret: None,
+        use_udp: false,
+        udp_port: None,
     };
     let listener = crate::utils::create_listener(info.local_port, info.enable_ipv6)
         .await

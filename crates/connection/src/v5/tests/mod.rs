@@ -55,6 +55,8 @@ async fn setup_test(
         keep_listening_after_timeout: false,
         enable_ipv6: false,
         shared_secret: Some(dummy_shared_secret()),
+        use_udp: false,
+        udp_port: None,
     };
 
     Ok((remote_server, info, listener))

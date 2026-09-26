@@ -75,7 +75,7 @@ mod test_helpers {
             crypt_input.read(&stop, &mut socket, &mut buf).await?;
         }
         // Send OpenResponse, with same ticket, but do not check it, just skip for tests
-        let open_response = OpenResponse::new(ticket, 1, 1, 1).as_vec();
+        let open_response = OpenResponse::new(ticket, 1, 1, 1, [0u8; 16], 0).as_vec();
         crypt_output
             .write(&stop, &mut socket, 0, &open_response)
             .await?;

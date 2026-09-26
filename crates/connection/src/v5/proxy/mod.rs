@@ -11,7 +11,8 @@ use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use shared::{log, system::trigger::Trigger};
 
 use crypt::{
-    secrets::CryptoKeys, secrets::get_tunnel_crypts, tunnel::types::PacketBuffer, types::Ticket,
+    datagram::UdpToken, secrets::CryptoKeys, secrets::get_tunnel_crypts,
+    tunnel::types::PacketBuffer, types::Ticket,
 };
 
 use super::{
@@ -75,6 +76,11 @@ pub struct Proxy {
     client_correctly_closed: bool,
 
     servers: servers::ServerChannels,
+
+    // UDP token and relay port of the current session, extracted from the
+    // open response (None until the first successful connect; zero token =
+    // UDP disabled, zero port = same as the TCP tunnel port)
+    udp_token: std::sync::Arc<std::sync::Mutex<Option<(UdpToken, u16)>>>,
 }
 
 impl Proxy {
@@ -106,7 +112,14 @@ impl Proxy {
             ),
             client_correctly_closed: false,
             servers: servers::ServerChannels::new(),
+            udp_token: std::sync::Arc::new(std::sync::Mutex::new(None)),
         }
+    }
+
+    /// Shared slot with the UDP token and relay port of the current session,
+    /// filled after each successful (re)connect. `None` until the first connect.
+    pub fn udp_token_handle(&self) -> std::sync::Arc<std::sync::Mutex<Option<(UdpToken, u16)>>> {
+        self.udp_token.clone()
     }
 
     async fn connect(
@@ -190,6 +203,8 @@ impl Proxy {
         // Store reconnect ticket for future use.
         // This is different from original, and different for every conection
         self.ticket = open_response.session_id;
+        // Store the UDP token and relay port of the session (unchanged across recovers)
+        *self.udp_token.lock().unwrap() = Some((open_response.udp_token, open_response.udp_port));
         // Skip, if recovery, the the already processed packets (note that pre increment we must stop on PREV SEQ)
         // inbound = other side inbound, not our
         if self.recover_connection {
