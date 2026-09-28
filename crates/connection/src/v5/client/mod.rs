@@ -132,6 +132,7 @@ where
     async fn run(&mut self, recovery_buffer: RecoveryBuffer) -> Result<()> {
         log::debug!("Starting outbound stream, attempting to recover buffer if needed");
         self.recover_buffer(&recovery_buffer).await?;
+        let keepalive = std::time::Duration::from_secs(crate::consts::KEEPALIVE_INTERVAL_SECS);
         loop {
             tokio::select! {
                     biased;  // Prefer stop over receiving, and avoid using randomness of select
@@ -161,6 +162,20 @@ where
                                 break;
                             }
                         }
+                    }
+                    // Keep-alive for the server-side watchdog. Recreated on
+                    // every loop iteration, so it only fires after the tunnel
+                    // has been idle for the whole interval; real traffic in
+                    // either direction is already proof of life for the
+                    // server. Deliberately not put in the recovery buffer: a
+                    // dropped keep-alive is replaced by the next tick, and
+                    // replaying stale control frames would only skew the
+                    // server's liveness clock. If the write fails, the leg is
+                    // gone (error propagates, tunnel reconnects).
+                    _ = tokio::time::sleep(keepalive) => {
+                        log::debug!("Sending keep-alive to tunnel server");
+                        let nop = PayloadWithChannel::new(0, Command::Nop.to_bytes().as_slice());
+                        self.send_data(&nop).await?;
                     }
             }
         }

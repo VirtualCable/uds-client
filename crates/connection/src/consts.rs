@@ -19,5 +19,13 @@ pub const URL_TEMPLATE: &str = "https://{host}/uds/rest/client";
 pub const TICKET_LENGTH: usize = 48;
 pub const MAX_STARTUP_TIME_MS: u64 = 120_000; // 2 minutes
 
+// Keep-alive cadence towards the tunnel server. The server tears the
+// launcher leg down after 10s of silence (KEEPALIVE_TIMEOUT_SECS on the
+// server side); a fixed 2s period gives several chances to fit inside the
+// deadline, and because the keep-alive rides the outbound stream's select
+// loop it is naturally serialized with tunnel data (no cipher-seq
+// contention) and only fires while the tunnel is idle.
+pub const KEEPALIVE_INTERVAL_SECS: u64 = 2;
+
 pub const LISTEN_ADDRESS: &str = "127.0.0.1";
 pub const LISTEN_ADDRESS_V6: &str = "[::1]";
