@@ -264,13 +264,10 @@ mod tests {
             .unwrap();
 
         let mut buf = [0u8; RECV_BUFFER_SIZE];
-        let len = tokio::time::timeout(
-            std::time::Duration::from_secs(5),
-            mstsc.recv(&mut buf),
-        )
-        .await
-        .unwrap()
-        .unwrap();
+        let len = tokio::time::timeout(std::time::Duration::from_secs(5), mstsc.recv(&mut buf))
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(&buf[..len], b"HELLO UDP");
 
         // Stopping the relay frees the port
@@ -354,13 +351,10 @@ mod tests {
             .unwrap();
 
         let mut buf = [0u8; RECV_BUFFER_SIZE];
-        let len = tokio::time::timeout(
-            std::time::Duration::from_secs(5),
-            mstsc.recv(&mut buf),
-        )
-        .await
-        .unwrap()
-        .unwrap();
+        let len = tokio::time::timeout(std::time::Duration::from_secs(5), mstsc.recv(&mut buf))
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(&buf[..len], b"STILL ALIVE");
 
         stop.trigger();
@@ -378,7 +372,10 @@ mod tests {
         let tcp_tunnel_socket = UdpSocket::bind("127.0.0.1:0").await.unwrap(); // decoy
         let server_socket = UdpSocket::bind("127.0.0.1:0").await.unwrap();
         let server_addr = server_socket.local_addr().unwrap();
-        assert_ne!(tcp_tunnel_socket.local_addr().unwrap().port(), server_addr.port());
+        assert_ne!(
+            tcp_tunnel_socket.local_addr().unwrap().port(),
+            server_addr.port()
+        );
 
         let server_stop = Trigger::new();
         tokio::spawn({
@@ -434,12 +431,9 @@ mod tests {
         let mstsc = UdpSocket::bind("127.0.0.1:0").await.unwrap();
         mstsc.send_to(b"ping", relay.local_addr()).await.unwrap();
 
-        tokio::time::timeout(
-            std::time::Duration::from_secs(5),
-            server_stop.wait_async(),
-        )
-        .await
-        .unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), server_stop.wait_async())
+            .await
+            .unwrap();
 
         // Nothing must have arrived at the decoy (TCP port)
         let mut buf = [0u8; RECV_BUFFER_SIZE];

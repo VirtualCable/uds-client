@@ -183,8 +183,8 @@ mod tests {
         // Inbound (server -> client) must use the expected s2c key: it must
         // decrypt a datagram produced with the known s2c key.
         let expected_s2c: [u8; 32] = [
-            115, 122, 103, 8, 221, 26, 166, 141, 102, 141, 74, 208, 99, 240, 91, 76, 233, 111,
-            200, 0, 152, 79, 177, 241, 178, 56, 195, 87, 176, 182, 35, 9,
+            115, 122, 103, 8, 221, 26, 166, 141, 102, 141, 74, 208, 99, 240, 91, 76, 233, 111, 200,
+            0, 152, 79, 177, 241, 178, 56, 195, 87, 176, 182, 35, 9,
         ];
         let mut reference = DatagramCrypt::new(&SharedSecret::new(expected_s2c));
         let datagram = reference.encrypt(&token, b"kat").unwrap();

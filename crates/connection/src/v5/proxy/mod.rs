@@ -138,6 +138,8 @@ impl Proxy {
 
         // Try to disable Nagle's algorithm for better performance in our case
         stream.set_nodelay(true).ok();
+        // OS-level liveness backup for the KA frames: see `utils::set_keepalive`.
+        crate::utils::set_keepalive(&stream);
 
         // Create the crypt pair
         let (mut inbound_crypt, mut outbound_crypt) =

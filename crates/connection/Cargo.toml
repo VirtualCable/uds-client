@@ -17,6 +17,9 @@ directories-next.workspace = true
 hostname.workspace = true
 num_enum.workspace = true
 
+# socket options (SO keepalive backup for the application-level keep-alive)
+socket2.workspace = true
+
 
 # Encoding/Decoding
 base64.workspace = true

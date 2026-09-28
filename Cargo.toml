@@ -142,6 +142,9 @@ glob = "0.3"
 # Linux/macos
 libc = "0.2"
 
+# raw socket options (TCP keepalive backup)
+socket2 = { version = "0.6", features = ["all"] }
+
 # Windows
 windows = { version = "0.62", features = [
     "Win32_Foundation",

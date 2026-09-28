@@ -15,8 +15,7 @@ const RESERVED_LENGTH: usize = 6;
 
 // Layout: session_id(48) | channel_count(2) | inbound_seq(8) | outbound_seq(8)
 //       | udp_token(16) | udp_port(2) | reserved(6) = 90 bytes
-const OPEN_RESPONSE_LENGTH: usize =
-    TICKET_LENGTH + 2 + 8 + 8 + TOKEN_LENGTH + 2 + RESERVED_LENGTH;
+const OPEN_RESPONSE_LENGTH: usize = TICKET_LENGTH + 2 + 8 + 8 + TOKEN_LENGTH + 2 + RESERVED_LENGTH;
 
 const UDP_TOKEN_START: usize = TICKET_LENGTH + 2 + 8 + 8;
 const UDP_PORT_START: usize = UDP_TOKEN_START + TOKEN_LENGTH;
