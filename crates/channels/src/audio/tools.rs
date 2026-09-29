@@ -61,15 +61,19 @@ pub fn pcm_to_f32<'a>(data: &'a [u8], bits_per_sample: u16) -> impl Iterator<Ite
         8 => Box::new(data.iter().map(|&b| (b as i8) as f32 / i8::MAX as f32))
             as Box<dyn Iterator<Item = f32>>,
         16 => Box::new(
-            data.chunks_exact(2)
+            data.as_chunks::<2>()
+                .0
+                .iter()
                 .map(|c| i16::from_le_bytes([c[0], c[1]]) as f32 / i16::MAX as f32),
         ) as Box<dyn Iterator<Item = f32>>,
-        24 => Box::new(data.chunks_exact(3).map(|c| {
+        24 => Box::new(data.as_chunks::<3>().0.iter().map(|c| {
             let v = ((c[0] as i32) | ((c[1] as i32) << 8) | ((c[2] as i32) << 16)) << 8;
             v as f32 / i32::MAX as f32
         })) as Box<dyn Iterator<Item = f32>>,
         32 => Box::new(
-            data.chunks_exact(4)
+            data.as_chunks::<4>()
+                .0
+                .iter()
                 .map(|c| i32::from_le_bytes([c[0], c[1], c[2], c[3]]) as f32 / i32::MAX as f32),
         ) as Box<dyn Iterator<Item = f32>>,
         _ => Box::new(std::iter::empty()) as Box<dyn Iterator<Item = f32>>,

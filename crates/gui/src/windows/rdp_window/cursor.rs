@@ -37,7 +37,7 @@ impl Cursor {
     pub fn set_icon(&mut self, mut data: Vec<u8>, x: u32, y: u32, width: u32, height: u32) {
         if !self.use_rgba {
             // Convert BGRA to RGBA by swapping Blue and Red channels
-            for chunk in data.chunks_exact_mut(4) {
+            for chunk in data.as_chunks_mut::<4>().0.iter_mut() {
                 chunk.swap(0, 2);
             }
         }

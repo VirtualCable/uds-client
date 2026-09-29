@@ -42,3 +42,5 @@ widestring.workspace = true
 rcgen.workspace = true
 serial_test.workspace = true
 mockito.workspace = true
+# multi-thread runtime for the trigger lost-wakeup stress test
+tokio = { workspace = true, features = ["rt-multi-thread"] }
