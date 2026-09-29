@@ -113,6 +113,13 @@ impl Crypt {
                 self.current_seq()
             ));
         }
+        // Mirror of the server-side guard: `seq` arrives from the wire, and
+        // advancing to `seq + 1` below would overflow on `u64::MAX`. No
+        // honest peer ever reaches this value, so reject the frame instead of
+        // panicking (debug) or wedging the counter (release).
+        if seq == u64::MAX {
+            return Err(anyhow::anyhow!("invalid sequence number: u64::MAX"));
+        }
 
         let length = buffer.length()?;
         if length < (consts::TAG_LENGTH + 2) {
