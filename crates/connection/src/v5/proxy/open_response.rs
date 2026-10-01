@@ -18,7 +18,9 @@ const RESERVED_LENGTH: usize = 6;
 //       | udp_token(16) | udp_port(2) | rekey_log2(1) | reserved(6) = 91 bytes
 // `rekey_log2` is the session's rekeying threshold announced by the server:
 // `0` = OFF (single key forever), `1..=MAX_REKEY_LOG2` = re-derive the key
-// every `2^k` sequence numbers (`epoch = seq >> k`). A value above
+// every `2^k` sequence numbers (`epoch = saturating_sub(seq, seq_base) >> k`;
+// `seq_base` is 0 for TCP and 2^63 for UDP — see the tunnel-server's
+// `docs/rekeying-contract.md` §2). A value above
 // `MAX_REKEY_LOG2` rejects the handshake outright (`seq >> k` would be an
 // undefined shift on u64); the pre-rekeying layout was 90 bytes, so a
 // pre-rekeying launcher and a rekeying server fail the length check in
