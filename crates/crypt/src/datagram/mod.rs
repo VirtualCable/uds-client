@@ -5,12 +5,18 @@
 
 use anyhow::Result;
 
+use std::sync::Arc;
+
 use aes_gcm::{
     AeadInOut, Aes256Gcm, Nonce, Tag,
     aead::{AeadCore, KeyInit},
 };
 
-use crate::{tunnel::consts, types::SharedSecret};
+use crate::{
+    rekey::{DIR_SERVER_TO_LAUNCHER, RekeyState, TRANSPORT_UDP},
+    tunnel::consts,
+    types::SharedSecret,
+};
 
 pub mod replay;
 
@@ -61,19 +67,67 @@ pub const INITIAL_SEQ: u64 = 1 << 63;
 /// no retransmission and no reordering: what is lost is lost (RDPUDP handles
 /// reliability end to end).
 pub struct DatagramCrypt {
-    cipher: Aes256Gcm,
+    /// Cipher for the last datagram this crypt encrypted or authenticated.
+    /// Kept as an `Arc` so an epoch crossing re-derives once and staying
+    /// inside the epoch is a pointer clone.
+    cipher: Arc<Aes256Gcm>,
     send_seq: u64,
     window: ReplayWindow,
+    /// Per-direction rekeying parameters anchored at `INITIAL_SEQ`, so the
+    /// first datagram of a session always sits in epoch 0 (the legacy key)
+    /// even though its absolute seq is 2^63 + 1. `k = 0` collapses to a
+    /// single epoch forever, byte-identical to the pre-rekeying wire format.
+    rekey: Arc<RekeyState>,
+    cipher_epoch: u64,
 }
 
 impl DatagramCrypt {
     pub fn new(key: &SharedSecret) -> Self {
+        let cipher = Arc::new(Aes256Gcm::new(key.as_ref().into()));
         DatagramCrypt {
-            cipher: Aes256Gcm::new(key.as_ref().into()),
+            rekey: Arc::new(RekeyState::epoch0_only(
+                TRANSPORT_UDP,
+                DIR_SERVER_TO_LAUNCHER,
+                INITIAL_SEQ,
+                cipher.clone(),
+            )),
+            cipher,
             send_seq: INITIAL_SEQ,
             window: ReplayWindow::new(),
+            cipher_epoch: 0,
         }
     }
+
+    /// Creates a crypt that rekeys per `rekey`, starting on its epoch-0
+    /// cipher (the legacy UDP-leg key for this direction). The epoch of
+    /// every datagram comes from its own seq, so a late/reordered datagram
+    /// of an earlier epoch re-derives that epoch's key with no transition
+    /// state.
+    pub fn with_rekey(rekey: Arc<RekeyState>) -> Self {
+        DatagramCrypt {
+            cipher: rekey.cipher_for(0),
+            send_seq: INITIAL_SEQ,
+            window: ReplayWindow::new(),
+            rekey,
+            cipher_epoch: 0,
+        }
+    }
+
+    /// Selects the cipher owning `seq`, re-deriving once per epoch crossing.
+    /// The replay window is orthogonal: it bounds *which* seqs are accepted;
+    /// the epoch only decides *which key* decrypts them.
+    fn cipher_for_seq(&mut self, seq: u64) -> Arc<Aes256Gcm> {
+        let epoch = self.rekey.epoch_of(seq);
+        if epoch != self.cipher_epoch {
+            self.cipher = self.rekey.cipher_for(epoch);
+            self.cipher_epoch = epoch;
+        }
+        self.cipher.clone()
+    }
+
+    /// Epoch anchor for UDP rekeying: the first datagram of a session must
+    /// sit in epoch 0 regardless of the 2^63-based counter.
+    pub const INITIAL_SEQ_ANCHOR: u64 = INITIAL_SEQ;
 
     /// Current send sequence (last value used; next datagram gets send_seq + 1).
     pub fn current_seq(&self) -> u64 {
@@ -108,8 +162,8 @@ impl DatagramCrypt {
         let aad = Self::aad_for(token, seq);
 
         let mut data = payload.to_vec();
-        let tag = self
-            .cipher
+        let cipher = self.cipher_for_seq(seq);
+        let tag = cipher
             .encrypt_inout_detached(&nonce, &aad, data.as_mut_slice().into())
             .map_err(|e| anyhow::anyhow!("datagram encryption failure: {:?}", e))?;
 
@@ -152,7 +206,10 @@ impl DatagramCrypt {
             .try_into()
             .map_err(|_| anyhow::anyhow!("invalid datagram tag length"))?;
 
-        self.cipher
+        // Epoch-owned cipher, from the datagram's own seq (the replay
+        // window check below stays the first gate on honest ordering).
+        let cipher = self.cipher_for_seq(seq);
+        cipher
             .decrypt_inout_detached(&nonce, &aad, data.as_mut_slice().into(), tag)
             .map_err(|e| anyhow::anyhow!("datagram decryption failure: {:?}", e))?;
 
@@ -175,6 +232,69 @@ mod tests {
     fn crypt_pair() -> (DatagramCrypt, DatagramCrypt) {
         let key = SharedSecret::new([7u8; 32]);
         (DatagramCrypt::new(&key), DatagramCrypt::new(&key))
+    }
+
+    /// DatagramCrypt rekeying: crossing an epoch boundary rotates the key
+    /// purely by seq; the replay window keeps bounding *which* seqs are
+    /// accepted independently of *which key* decrypts them, and a datagram
+    /// of an earlier epoch that arrives after the receiver already crossed
+    /// boundaries still decrypts (mirror of the server-side test).
+    #[test]
+    fn test_rekey_across_epochs_roundtrip_and_replay() {
+        use crate::rekey::SessionPrk;
+
+        let secret = SharedSecret::new([0x51u8; 32]);
+        let ticket = crate::types::Ticket::new([0x52u8; 48]);
+        let epoch0 = SharedSecret::new([0x53u8; 32]);
+        let mk = || {
+            Arc::new(RekeyState::new(
+                Arc::new(SessionPrk::derive(&secret, &ticket)),
+                TRANSPORT_UDP,
+                DIR_SERVER_TO_LAUNCHER,
+                2, // epoch rotates every 4 datagrams, anchored at INITIAL_SEQ
+                INITIAL_SEQ,
+                Arc::new(Aes256Gcm::new(epoch0.as_ref().into())),
+            ))
+        };
+
+        let token = test_token();
+        let mut sender = DatagramCrypt::with_rekey(mk());
+        let mut receiver = DatagramCrypt::with_rekey(mk());
+
+        // Emit 12 datagrams (seqs INITIAL_SEQ+1..+12, epochs 0,1,2).
+        let mut wire = Vec::new();
+        for i in 1..=12u64 {
+            let payload = format!("dg-{i}");
+            let d = sender.encrypt(&token, payload.as_bytes()).unwrap();
+            wire.push((i, payload.into_bytes(), d));
+        }
+
+        // Deliver epoch 2 first (+12), then two earlier epochs out of order
+        // (+7 = epoch 1, +3 = epoch 0).
+        for &(i, ref payload, ref d) in [&wire[11], &wire[6], &wire[2]] {
+            assert_eq!(
+                receiver.decrypt(&token, d).unwrap().as_deref(),
+                Some(payload.as_slice()),
+                "out-of-order datagram {i}"
+            );
+        }
+
+        // Replay of an already-authenticated datagram is discarded regardless
+        // of its epoch.
+        assert!(receiver.decrypt(&token, &wire[11].2).unwrap().is_none());
+
+        // OFF (k = 0): single epoch forever, byte-identical to a legacy
+        // crypt built with `new` on the same key.
+        let mut legacy = DatagramCrypt::new(&epoch0);
+        let mut off = DatagramCrypt::with_rekey(Arc::new(RekeyState::epoch0_only(
+            TRANSPORT_UDP,
+            DIR_SERVER_TO_LAUNCHER,
+            INITIAL_SEQ,
+            Arc::new(Aes256Gcm::new(epoch0.as_ref().into())),
+        )));
+        let dl = legacy.encrypt(&token, b"x").unwrap();
+        let d0 = off.encrypt(&token, b"x").unwrap();
+        assert_eq!(dl, d0);
     }
 
     #[test]
