@@ -5,6 +5,13 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
+[features]
+# Enables the TLS certificate-verification bypass in the whole dependency
+# graph (shared/connection read `shared::tls::insecure_tls_bypass_allowed`).
+# OFF by default: a release launcher built without it forces verification on
+# everywhere. Debug builds already allow the bypass for tests/diagnostics.
+insecure-tls = ["shared/insecure-tls", "connection/insecure-tls"]
+
 [dependencies]
 shared = { path = "../shared" }
 js = { path = "../js" }

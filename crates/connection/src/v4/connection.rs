@@ -45,8 +45,16 @@ pub async fn connect_and_upgrade(
         .await
         .context("Failed to send HANDSHAKE_V1")?;
     tcp.flush().await.ok();
-
-    // Build TLS client config
+    // Build TLS client config.
+    //
+    // Without the `insecure-tls` bypass compiled in (release build, see
+    // `shared::tls::insecure_tls_bypass_allowed`), `check_certificate` is
+    // forced to verify: a local attacker editing app_data or script
+    // parameters cannot turn verification off. Debug builds keep the knob
+    // for diagnostics and the self-signed test servers (`cfg(test)` only
+    // ever holds for this crate's own test harness, never a shipped binary).
+    let bypass_allowed = shared::tls::insecure_tls_bypass_allowed() || cfg!(test);
+    let check_certificate = check_certificate || !bypass_allowed;
     let config: Arc<ClientConfig> = if check_certificate {
         let mut root_store = RootCertStore::empty();
         let certs_result = load_native_certs();

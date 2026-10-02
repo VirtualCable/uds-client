@@ -52,11 +52,15 @@ impl UdsBrokerApi {
         skip_proxy: bool,
     ) -> Self {
         log::debug!("Creating UDSBrokerApi for URL: {}", broker_url);
+        // Without the `insecure-tls` bypass compiled in (release build),
+        // verification is forced on regardless of `verify_ssl` — see
+        // `shared::tls::insecure_tls_bypass_allowed`.
+        let accept_invalid_certs = !verify_ssl && shared::tls::insecure_tls_bypass_allowed();
         let mut builder = ClientBuilder::new()
             .use_rustls_tls() // Use rustls for TLS
             .timeout(timeout.unwrap_or(std::time::Duration::from_secs(32))) // Long enough timeout
             .connection_verbose(cfg!(debug_assertions))
-            .danger_accept_invalid_certs(!verify_ssl);
+            .danger_accept_invalid_certs(accept_invalid_certs);
 
         if skip_proxy {
             builder = builder.no_proxy();

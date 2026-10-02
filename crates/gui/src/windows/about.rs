@@ -32,6 +32,21 @@ const ABOUT_LINES: &[&str] = &[
     "for any damages arising from the use of this software.",
 ];
 
+/// Shown right below the version when this binary was compiled allowing the
+/// TLS verification bypass (debug build or `--features insecure-tls`): the
+/// "mierda TLS" mode is reachable at runtime, so the About dialog has to say
+/// it out loud. Release builds without the feature never show it because the
+/// bypass was not compiled in at all.
+const INSECURE_TLS_LINE: &str = "!! INSECURE BUILD: TLS verification can be disabled !!";
+
+fn about_lines() -> Vec<&'static str> {
+    let mut lines = ABOUT_LINES.to_vec();
+    if shared::tls::insecure_tls_bypass_allowed() {
+        lines.insert(2, INSECURE_TLS_LINE);
+    }
+    lines
+}
+
 fn layout_close_button(pw: f32, ph: f32, scale: f32) -> crate::draw::ui::button::Button {
     let bw = monitor::scaled_val(80) as f32;
     let bh = monitor::scaled_val(35) as f32;
@@ -179,7 +194,7 @@ impl AboutState {
 
         let mut sections: Vec<OwnedSection> = Vec::new();
         let base_y = self.logo.height as f32 * s + 60.0 * s;
-        for (i, line) in ABOUT_LINES.iter().enumerate() {
+        for (i, line) in about_lines().iter().enumerate() {
             let y = base_y + i as f32 * (22.0 * s);
             sections.push(
                 Section::default()

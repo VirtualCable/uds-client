@@ -10,6 +10,20 @@ use crate::log;
 pub mod ciphers;
 pub mod noverify;
 
+/// Whether this build may disable TLS certificate verification.
+///
+/// "Don't verify" requests (config, `app_data.json` allowlist, JS
+/// `check_certificate: false`) are only honored in debug builds or when the
+/// binary was explicitly compiled with `--features insecure-tls`. A release
+/// launcher without the feature answers `false` to everything: the flag is
+/// forced to "verify" no matter what a local attacker writes into the
+/// app-data file or the script parameters, closing the MiTM path over the
+/// ML-KEM key exchange.
+#[must_use]
+pub const fn insecure_tls_bypass_allowed() -> bool {
+    cfg!(debug_assertions) || cfg!(feature = "insecure-tls")
+}
+
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct CertificateInfo {
     pub key: String,
@@ -31,4 +45,21 @@ pub fn init_tls(ciphers_list: Option<&str>) {
             .install_default()
             .expect("failed to install default provider");
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::insecure_tls_bypass_allowed;
+
+    #[test]
+    fn bypass_availability_matches_build_mode() {
+        // Exactly two ways in: a debug build, or an explicit feature request.
+        // `cargo test --release` (no feature) pins the inert branch, and every
+        // caller ANDs its request against this predicate, so "always verify"
+        // holds for config, app_data and JS flags alike.
+        assert_eq!(
+            insecure_tls_bypass_allowed(),
+            cfg!(debug_assertions) || cfg!(feature = "insecure-tls")
+        );
+    }
 }
