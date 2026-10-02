@@ -8,17 +8,22 @@ use rustls::crypto::CryptoProvider;
 use crate::log;
 
 pub mod ciphers;
+// The TLS verification bypass machinery is compiled ONLY into insecure
+// builds (debug or `--features insecure-tls`). A release binary built
+// without the feature does not contain it at all: skipping certificate
+// verification is not possible, not even by patching the call sites.
+#[cfg(any(debug_assertions, feature = "insecure-tls"))]
 pub mod noverify;
 
-/// Whether this build may disable TLS certificate verification.
+/// Whether this build skips TLS certificate verification entirely.
 ///
-/// "Don't verify" requests (config, `app_data.json` allowlist, JS
-/// `check_certificate: false`) are only honored in debug builds or when the
-/// binary was explicitly compiled with `--features insecure-tls`. A release
-/// launcher without the feature answers `false` to everything: the flag is
-/// forced to "verify" no matter what a local attacker writes into the
-/// app-data file or the script parameters, closing the MiTM path over the
-/// ML-KEM key exchange.
+/// Insecure builds (debug or compiled with `--features insecure-tls`) never
+/// verify certificates, on any connection: broker API and v4 tunnels alike.
+/// The launcher shows a blocking warning dialog at startup for those builds,
+/// so the user is told before anything else happens. Any other build always
+/// verifies: there is no runtime knob left (no config, no `app_data.json`
+/// entry, no JS `check_certificate` flag) that can turn verification off,
+/// closing the MiTM path over the ML-KEM key exchange.
 #[must_use]
 pub const fn insecure_tls_bypass_allowed() -> bool {
     cfg!(debug_assertions) || cfg!(feature = "insecure-tls")
@@ -54,9 +59,9 @@ mod tests {
     #[test]
     fn bypass_availability_matches_build_mode() {
         // Exactly two ways in: a debug build, or an explicit feature request.
-        // `cargo test --release` (no feature) pins the inert branch, and every
-        // caller ANDs its request against this predicate, so "always verify"
-        // holds for config, app_data and JS flags alike.
+        // Insecure builds (this predicate) never verify certificates and show
+        // a startup warning; secure builds don't even contain the bypass
+        // code, so "always verify" holds no matter what the user does.
         assert_eq!(
             insecure_tls_bypass_allowed(),
             cfg!(debug_assertions) || cfg!(feature = "insecure-tls")

@@ -45,17 +45,21 @@ pub struct UdsBrokerApi {
 }
 
 impl UdsBrokerApi {
-    pub fn new(
-        broker_url: &str,
-        timeout: Option<std::time::Duration>,
-        verify_ssl: bool,
-        skip_proxy: bool,
-    ) -> Self {
-        log::debug!("Creating UDSBrokerApi for URL: {}", broker_url);
-        // Without the `insecure-tls` bypass compiled in (release build),
-        // verification is forced on regardless of `verify_ssl` — see
-        // `shared::tls::insecure_tls_bypass_allowed`.
-        let accept_invalid_certs = !verify_ssl && shared::tls::insecure_tls_bypass_allowed();
+    pub fn new(broker_url: &str, timeout: Option<std::time::Duration>, skip_proxy: bool) -> Self {
+        log::debug!("Creating UdsBrokerApi for URL: {}", broker_url);
+        // TLS verification is decided at COMPILE time, not by callers:
+        //
+        // * Insecure builds (debug or `--features insecure-tls`) never verify
+        //   certificates, and the launcher shows a blocking warning about it
+        //   at startup. See `shared::tls::insecure_tls_bypass_allowed`.
+        // * Secure release builds always verify: the "don't verify" branch is
+        //   not even compiled in, so no runtime flag (app_data.json, script
+        //   parameters, ...) can disable it.
+        #[cfg(any(debug_assertions, feature = "insecure-tls"))]
+        let accept_invalid_certs = true;
+        #[cfg(not(any(debug_assertions, feature = "insecure-tls")))]
+        let accept_invalid_certs = false;
+
         let mut builder = ClientBuilder::new()
             .use_rustls_tls() // Use rustls for TLS
             .timeout(timeout.unwrap_or(std::time::Duration::from_secs(32))) // Long enough timeout
@@ -186,7 +190,7 @@ impl BrokerApi for UdsBrokerApi {
         let rdp_sign_data = types::RdpSignRequest { rdp };
         let response = self
             .client
-            .put(format!("{}/{}/rdp_sign", self.broker_url, ticket))
+            .post(format!("{}/{}/rdp_sign", self.broker_url, ticket))
             .headers(self.headers())
             .json(&rdp_sign_data)
             .send()
@@ -205,13 +209,11 @@ static API_INSTANCE: OnceLock<std::sync::Arc<dyn BrokerApi>> = OnceLock::new();
 pub fn new_api(
     host: &str,
     timeout: Option<std::time::Duration>,
-    verify_ssl: bool,
     skip_proxy: bool,
 ) -> std::sync::Arc<dyn BrokerApi> {
     let api = std::sync::Arc::new(UdsBrokerApi::new(
         &consts::URL_TEMPLATE.replace("{host}", host),
         timeout,
-        verify_ssl,
         skip_proxy,
     ));
     API_INSTANCE.set(api.clone()).ok();

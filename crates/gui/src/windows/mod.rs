@@ -4,6 +4,7 @@
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
 pub mod about;
+pub mod insecure_warning;
 pub mod popup;
 pub mod progress;
 pub mod rdp_window;
