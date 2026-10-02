@@ -21,3 +21,4 @@ opencode.jsonc
 # Added by code-review-graph
 .code-review-graph/
 
+__pycache__/

@@ -56,6 +56,12 @@ OPENH264_RPATH: typing.Final[str] = "/Library/Application Support/UDSLauncher/op
 H264_LICENSE_SRC: typing.Final[Path] = SCRIPT_DIR / "H264_BINARY_LICENSE.txt"
 
 
+def cargo_features_args() -> list[str]:
+    """Cargo args for the features requested through UDS_CARGO_FEATURES (comma separated)."""
+    features = os.environ.get("UDS_CARGO_FEATURES", "").strip()
+    return ["--features", features] if features else []
+
+
 def ad_hoc_sign(path: Path, deep: bool = False) -> None:
     print(f"[SIGN] Ad-hoc signing {path}")
     args = ["codesign"] + (["--deep"] if deep else []) + ["--force", "--sign", "-", str(path)]
@@ -476,9 +482,10 @@ def main() -> None:
     # Ensure FreeRDP libs are present, fails if not
     ensure_freerdp_libs()
 
-    print("==> Building Rust binaries (cargo build --release)")
+    cargo_cmd = ["cargo", "build", "--release"] + cargo_features_args()
+    print(f"==> Building Rust binaries ({' '.join(cargo_cmd)})")
     subprocess.run(
-        ["cargo", "build", "--release"],
+        cargo_cmd,
         cwd=WORKSPACE_ROOT,
         check=True,
     )
