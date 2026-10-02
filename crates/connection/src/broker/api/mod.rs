@@ -186,7 +186,7 @@ impl BrokerApi for UdsBrokerApi {
         let rdp_sign_data = types::RdpSignRequest { rdp };
         let response = self
             .client
-            .put(format!("{}/{}/rdp_sign", self.broker_url, ticket))
+            .post(format!("{}/{}/rdp_sign", self.broker_url, ticket))
             .headers(self.headers())
             .json(&rdp_sign_data)
             .send()
