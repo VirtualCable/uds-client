@@ -57,6 +57,27 @@ fn main() {
 
     // Setup tls, with default secure ciphers
     shared::tls::init_tls(None);
+
+    // Insecure builds (debug or `--features insecure-tls`) skip TLS
+    // certificate verification everywhere. The very first thing they do is
+    // telling the user so, and require an explicit confirmation to continue.
+    // Secure builds don't even compile this block in.
+    #[cfg(any(debug_assertions, feature = "insecure-tls"))]
+    {
+        let accepted = gui::windows::insecure_warning::show_insecure_warning(
+            tr!(
+                "This client is INSECURE and intended for POC use only.\nNever use it in production environments."
+            ),
+            tr!("OK"),
+            tr!("Cancel"),
+        );
+        if !accepted {
+            log::error!("Insecure client: user refused to continue.");
+            std::process::exit(1);
+        }
+        log::warn!("Insecure client: TLS certificate verification is DISABLED (user accepted).");
+    }
+
     let (host, ticket, scrambler) = collect_arguments().unwrap_or_else(|| {
         // Show about window if no valid arguments
         gui::windows::about::show_about_window();

@@ -34,11 +34,8 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
 
                 log::debug!("Accepted connection from {}", client_addr);
                 // Open connection, no new test is needed here since we already tested in start_tunnel
-                let (mut reader, mut writer) = connection::connect_and_upgrade(
-                    &info.addr,
-                    info.port,
-                    info.check_certificate,
-                ).await?;
+                let (mut reader, mut writer) =
+                    connection::connect_and_upgrade(&info.addr, info.port).await?;
                 connection::send_open_cmd(&mut reader, &mut writer, &info.ticket).await?;
                 log::debug!("Tunnel connection established, starting proxying");
                 // Start proxying in a new task
@@ -74,8 +71,7 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
 }
 
 pub async fn check_tunnel(info: &TunnelConnectInfo) -> Result<()> {
-    let (mut reader, mut writer) =
-        connection::connect_and_upgrade(&info.addr, info.port, info.check_certificate).await?;
+    let (mut reader, mut writer) = connection::connect_and_upgrade(&info.addr, info.port).await?;
 
     // Test to ensure connection is valid
     connection::send_test_cmd(&mut reader, &mut writer).await?;
@@ -112,5 +108,7 @@ pub async fn start_tunnel(info: TunnelConnectInfo) -> Result<u16> {
     Ok(actual_port)
 }
 
-#[cfg(test)]
+// Tests talk to self-signed servers, so they need the insecure TLS machinery
+// (`shared::tls::noverify`), which only exists in insecure builds.
+#[cfg(all(test, any(debug_assertions, feature = "insecure-tls")))]
 mod tests;

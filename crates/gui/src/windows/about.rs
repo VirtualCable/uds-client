@@ -34,10 +34,10 @@ const ABOUT_LINES: &[&str] = &[
 
 /// Shown right below the version when this binary was compiled allowing the
 /// TLS verification bypass (debug build or `--features insecure-tls`): the
-/// "mierda TLS" mode is reachable at runtime, so the About dialog has to say
-/// it out loud. Release builds without the feature never show it because the
-/// bypass was not compiled in at all.
-const INSECURE_TLS_LINE: &str = "!! INSECURE BUILD: TLS verification can be disabled !!";
+/// insecure mode is always on in those builds, so the About dialog has to
+/// say it out loud. Release builds without the feature never show it because
+/// the bypass code was not compiled in at all.
+const INSECURE_TLS_LINE: &str = "!! INSECURE BUILD: TLS verification is DISABLED !!";
 
 fn about_lines() -> Vec<&'static str> {
     let mut lines = ABOUT_LINES.to_vec();

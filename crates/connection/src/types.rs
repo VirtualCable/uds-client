@@ -10,11 +10,14 @@ pub struct TunnelConnectInfo {
     pub port: u16,
     pub ticket: Ticket,
     pub local_port: Option<u16>, // If None, a random port will be used
-    pub check_certificate: bool, // whether to check server certificate, v4.0
     pub startup_time_ms: u64,    // Timeout for listening, in milliseconds
+    // NOTE: No `check_certificate` here: TLS verification is decided at
+    // compile time (`shared::tls::insecure_tls_bypass_allowed`), never by
+    // script parameters. Scripts may still pass `check_certificate`, it is
+    // simply ignored.
     pub keep_listening_after_timeout: bool, // whether to keep listening after timeout
-    pub enable_ipv6: bool,       // whether to enable ipv6 (local and remote)
+    pub enable_ipv6: bool,                  // whether to enable ipv6 (local and remote)
     pub shared_secret: Option<SharedSecret>, // cryptographic keys for the connection. v5.0
-    pub use_udp: bool,           // whether to try to set up the UDP leg of the tunnel, v5.0
-    pub udp_port: Option<u16>,   // local UDP listen port; None = same as the TCP listener
+    pub use_udp: bool, // whether to try to set up the UDP leg of the tunnel, v5.0
+    pub udp_port: Option<u16>, // local UDP listen port; None = same as the TCP listener
 }
