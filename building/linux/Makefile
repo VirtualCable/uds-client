@@ -3,7 +3,7 @@
 
 .PHONY: all install-udslauncher clean
 
-VERSION := $(shell [ -f ../../../VERSION ] && cat ../../../VERSION || echo "devel")
+VERSION := $(shell [ -f ../../VERSION ] && cat ../../VERSION || echo "devel")
 RELEASE := 1
 
 # Distro to build for (Debian12, Fedora41, openSUSE15)

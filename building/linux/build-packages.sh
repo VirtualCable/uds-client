@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VERSION=$( [ -f ../../../VERSION ] && cat ../../../VERSION || echo "devel" )
+VERSION=$( [ -f ../../VERSION ] && cat ../../VERSION || echo "devel" )
 export VERSION
 
 RELEASE=1
@@ -107,7 +107,9 @@ build_rpm_based() {
 
     mkdir -p "${outdir}"
     rm -f "${outdir}"/udslauncher-*.rpm
-    cp "${TOP}/rpm-${distro_lower}/RPMS/${ARCH}"/udslauncher-*.rpm "${outdir}"/ || return 1
+    # Publish without the rpm release suffix: udslauncher-<version>.<arch>.rpm (no "-<release>")
+    src_rpm=$(ls "${TOP}/rpm-${distro_lower}/RPMS/${ARCH}"/udslauncher-*.rpm | head -n1)
+    cp "${src_rpm}" "${outdir}/udslauncher-${VERSION}.${ARCH}.rpm" || return 1
 }
 build_appimage() {
     local outdir="${TOP}/../bin/appimage"
