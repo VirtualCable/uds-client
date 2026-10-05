@@ -35,6 +35,7 @@ async fn try_start_udp_relay(
     shared_secret: &crypt::types::SharedSecret,
     token: crypt::datagram::UdpToken,
     server_udp_port: u16,
+    rekey_log2: u8,
     tcp_listener_port: u16,
     stop: shared::system::trigger::Trigger,
 ) -> Option<udp::UdpRelay> {
@@ -45,7 +46,8 @@ async fn try_start_udp_relay(
         info.port
     };
     let start = async {
-        let (inbound, outbound) = crypt::secrets::get_udp_crypts(shared_secret, &info.ticket)?;
+        let (inbound, outbound) =
+            crypt::secrets::get_udp_crypts(shared_secret, &info.ticket, rekey_log2)?;
         udp::UdpRelay::start(
             local_port,
             info.enable_ipv6,
@@ -109,6 +111,7 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
                     &format!("{}:{}", info.addr, info.port),
                     info.ticket.clone(),
                     crypt_info.clone(),
+                    &shared_secret,
                     std::time::Duration::from_millis(info.startup_time_ms.min(MAX_STARTUP_TIME_MS)),
                     registered_trigger.clone(),
                 );
@@ -123,8 +126,8 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
                 // non-zero token in the open response. Failures degrade to
                 // TCP-only, never break the session.
                 let udp_relay = if info.use_udp {
-                    let (token, server_udp_port) =
-                        udp_token_handle.lock().unwrap().unwrap_or(([0u8; 16], 0));
+                    let (token, server_udp_port, rekey_log2) =
+                        udp_token_handle.lock().unwrap().unwrap_or(([0u8; 16], 0, 0));
                     if token == [0u8; 16] {
                         log::debug!("UDP requested but not enabled by server (zero token)");
                         None
@@ -134,6 +137,7 @@ pub async fn tunnel_runner(info: TunnelConnectInfo, listener: TcpListener) -> Re
                             &shared_secret,
                             token,
                             server_udp_port,
+                            rekey_log2,
                             listener.local_addr()?.port(),
                             registered_trigger.clone(),
                         )

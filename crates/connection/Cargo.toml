@@ -5,6 +5,10 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
+[features]
+# Propagates the TLS verification bypass flag (see shared::tls).
+insecure-tls = ["shared/insecure-tls"]
+
 [dependencies]
 crypt = { path = "../crypt" }
 shared = { path = "../shared" }

@@ -72,8 +72,19 @@ msgstr ""
 msgid "Preparing connection..."
 msgstr "Konexioa prestatzen..."
 
-#~ msgid "Cancel"
-#~ msgstr "Utzi"
+
+msgid ""
+"This client is INSECURE and intended for POC use only.\n"
+"Never use it in production environments."
+msgstr ""
+"Bezero hau EZEGURRA da eta POC erabiltzeko soilik pentsatuta dago.\n"
+"Ez erabili inoiz ekoizpen inguruneetan."
+
+msgid "OK"
+msgstr "Ados"
+
+msgid "Cancel"
+msgstr "Utzi"
 
 #~ msgid "Confirm"
 #~ msgstr "Berretsi"

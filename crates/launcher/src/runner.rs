@@ -56,12 +56,7 @@ pub async fn run(
 ) -> Result<()> {
     let mut appdata = appdata::AppData::load();
 
-    let api = api::new_api(
-        host,
-        None,
-        appdata.verify_ssl(host),
-        appdata.disable_proxy.unwrap_or(false),
-    );
+    let api = api::new_api(host, None, appdata.disable_proxy.unwrap_or(false));
 
     // Start with 0% progress
     tx.send(GuiMessage::Progress(

@@ -241,7 +241,7 @@ pub async fn connect(
         server,
         port
     );
-    let (reader, writer) = connection::connect_and_upgrade(server, port, false)
+    let (reader, writer) = connection::connect_and_upgrade(server, port)
         .await
         .expect("Failed to connect and upgrade to TLS");
 
@@ -267,7 +267,6 @@ pub async fn create_runner(port: u16) -> Result<(JoinHandle<()>, JoinHandle<()>,
         port,
         ticket: create_ticket(),
         local_port: None,
-        check_certificate: false,
         startup_time_ms: 10000,
         keep_listening_after_timeout: false,
         enable_ipv6: false,

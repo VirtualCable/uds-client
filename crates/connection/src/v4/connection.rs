@@ -7,10 +7,11 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use crypt::types::Ticket;
-use rustls::{
-    pki_types::ServerName,
-    {ClientConfig, RootCertStore},
-};
+use rustls::{ClientConfig, pki_types::ServerName};
+// Only the secure branch (release without `insecure-tls`) loads native certs
+#[cfg(not(any(debug_assertions, feature = "insecure-tls")))]
+use rustls::RootCertStore;
+#[cfg(not(any(debug_assertions, feature = "insecure-tls")))]
 use rustls_native_certs::load_native_certs;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf, split},
@@ -20,12 +21,14 @@ use tokio::{
 use tokio_rustls::{TlsConnector, client::TlsStream};
 
 use super::consts;
-use shared::{log, tls::noverify};
+use shared::log;
+// The bypass machinery only exists in insecure builds
+#[cfg(any(debug_assertions, feature = "insecure-tls"))]
+use shared::tls::noverify;
 
 pub async fn connect_and_upgrade(
     server: &str,
     port: u16,
-    check_certificate: bool,
 ) -> Result<(
     ReadHalf<TlsStream<TcpStream>>,
     WriteHalf<TlsStream<TcpStream>>,
@@ -46,8 +49,19 @@ pub async fn connect_and_upgrade(
         .context("Failed to send HANDSHAKE_V1")?;
     tcp.flush().await.ok();
 
-    // Build TLS client config
-    let config: Arc<ClientConfig> = if check_certificate {
+    // TLS verification policy is decided at COMPILE time, not by callers:
+    //
+    // * Insecure builds (debug or `--features insecure-tls`) never verify
+    //   certificates, and the launcher shows a blocking warning about it at
+    //   startup. Only such builds contain the `noverify` machinery at all.
+    // * Secure release builds do not even compile the bypass branch: there is
+    //   no runtime flag (config, app_data.json, script parameters) that can
+    //   turn verification off. See `shared::tls::insecure_tls_bypass_allowed`.
+    #[cfg(any(debug_assertions, feature = "insecure-tls"))]
+    let config: Arc<ClientConfig> = noverify::client_config();
+
+    #[cfg(not(any(debug_assertions, feature = "insecure-tls")))]
+    let config: Arc<ClientConfig> = {
         let mut root_store = RootCertStore::empty();
         let certs_result = load_native_certs();
 
@@ -68,8 +82,6 @@ pub async fn connect_and_upgrade(
                 .with_root_certificates(Arc::new(root_store))
                 .with_no_client_auth(),
         )
-    } else {
-        noverify::client_config()
     };
 
     let connector = TlsConnector::from(config);

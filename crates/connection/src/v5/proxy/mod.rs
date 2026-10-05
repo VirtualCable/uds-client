@@ -11,8 +11,11 @@ use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use shared::{log, system::trigger::Trigger};
 
 use crypt::{
-    datagram::UdpToken, secrets::CryptoKeys, secrets::get_tunnel_crypts,
-    tunnel::types::PacketBuffer, types::Ticket,
+    datagram::UdpToken,
+    rekey::SessionPrk,
+    secrets::{CryptoKeys, TunnelRekeys, get_tunnel_crypts},
+    tunnel::types::PacketBuffer,
+    types::{SharedSecret, Ticket},
 };
 
 use super::{
@@ -77,10 +80,23 @@ pub struct Proxy {
 
     servers: servers::ServerChannels,
 
-    // UDP token and relay port of the current session, extracted from the
-    // open response (None until the first successful connect; zero token =
-    // UDP disabled, zero port = same as the TCP tunnel port)
-    udp_token: std::sync::Arc<std::sync::Mutex<Option<(UdpToken, u16)>>>,
+    // Session's rekeying material, adopted from the server's
+    // `OpenResponse.rekey_log2`. `k` is `None` until the first successful
+    // Open handshake (the handshake frames themselves run in epoch 0 on the
+    // legacy keys); once adopted it is pinned for the whole session and
+    // re-used on every `Recover` — the server never re-negotiates it, so we
+    // must not either. The PRK is derived once from the session's original
+    // shared secret and ticket (exactly like the server's `Session`), so
+    // epoch >= 1 keys match the far side byte-for-byte.
+    rekey_log2: std::sync::Arc<std::sync::OnceLock<u8>>,
+    rekey_prk: std::sync::Arc<SessionPrk>,
+
+    // UDP token, relay port and adopted rekey threshold of the current
+    // session, extracted from the open response (None until the first
+    // successful connect; zero token = UDP disabled, zero port = same as the
+    // TCP tunnel port). The threshold rides along so the UDP leg can build
+    // its crypts with the very same `k` as the TCP leg.
+    udp_token: std::sync::Arc<std::sync::Mutex<Option<(UdpToken, u16, u8)>>>,
 }
 
 impl Proxy {
@@ -88,12 +104,22 @@ impl Proxy {
         tunnel_server: &str,
         ticket: Ticket,
         crypt_info: CryptoKeys,
+        shared_secret: &SharedSecret,
         initial_timeout: Duration,
         stop: Trigger,
     ) -> Self {
         // Client side channels
         let (tx, tx_receiver) = payload_with_channel_pair();
         let (rx_sender, rx) = payload_with_channel_pair();
+
+        // The session PRK is derived from the *original* ticket (the one the
+        // broker issued and the launcher presents in the Open handshake),
+        // exactly like the server's `Session::with_rekey_log2`. The ticket is
+        // replaced by the equivalent session id after the first response, but
+        // the PRK never is: epoch >= 1 keys must match the far side.
+        // Derived eagerly and cheaply (one HKDF extract); a session that
+        // negotiates k = 0 simply never expands it.
+        let rekey_prk = std::sync::Arc::new(SessionPrk::derive(shared_secret, &ticket));
 
         Self {
             tunnel_server: tunnel_server.to_string(),
@@ -112,14 +138,44 @@ impl Proxy {
             ),
             client_correctly_closed: false,
             servers: servers::ServerChannels::new(),
+            rekey_log2: std::sync::Arc::new(std::sync::OnceLock::new()),
+            rekey_prk,
             udp_token: std::sync::Arc::new(std::sync::Mutex::new(None)),
         }
     }
 
-    /// Shared slot with the UDP token and relay port of the current session,
-    /// filled after each successful (re)connect. `None` until the first connect.
-    pub fn udp_token_handle(&self) -> std::sync::Arc<std::sync::Mutex<Option<(UdpToken, u16)>>> {
+    /// Shared slot with the UDP token, relay port and rekey threshold of the
+    /// current session, filled after each successful (re)connect. `None` until
+    /// the first connect. The threshold rides along so the UDP leg builds its
+    /// crypts with the very same `k` as the TCP leg.
+    pub fn udp_token_handle(
+        &self,
+    ) -> std::sync::Arc<std::sync::Mutex<Option<(UdpToken, u16, u8)>>> {
         self.udp_token.clone()
+    }
+
+    /// Builds the session's TCP rekey states for threshold `k`. `k = 0`
+    /// collapses both states to a single legacy epoch, so installing it is a
+    /// no-op on the wire; the launcher still installs it for symmetry (and to
+    /// pin the adopted value). The PRK was derived once in `new`, so the
+    /// epoch >= 1 keys match the server byte-for-byte.
+    fn tunnel_rekeys(&self, k: u8) -> TunnelRekeys {
+        TunnelRekeys::from_parts(&self.crypt_info, self.rekey_prk.clone(), k)
+    }
+
+    /// Adopts the server-negotiated threshold into the `OnceLock` (first
+    /// writer wins; later recovers keep the pinned session value, exactly as
+    /// the server pins it at session creation). Returns the value now in
+    /// force.
+    fn pin_rekey_log2(&self, k: u8) -> u8 {
+        *self.rekey_log2.get_or_init(|| k)
+    }
+
+    /// Threshold currently pinned for this session (before the first Open
+    /// handshake resolves it, `None` means "not yet negotiated" and the crypts
+    /// run on the legacy epoch-0 keys).
+    fn adopted_rekey_log2(&self) -> Option<u8> {
+        self.rekey_log2.get().copied()
     }
 
     async fn connect(
@@ -144,6 +200,22 @@ impl Proxy {
         // Create the crypt pair
         let (mut inbound_crypt, mut outbound_crypt) =
             get_tunnel_crypts(&self.crypt_info, self.seqs)?;
+
+        // On a `Recover` the session counters are already past zero, so the
+        // handshake ticket frame itself may belong to an epoch > 0. The server
+        // always decrypts it with the session's pinned `k` (it never
+        // re-negotiates), so we must install the adopted rekey state on the
+        // crypts BEFORE writing the ticket. On the very first `Open` there is
+        // no pinned value yet: the ticket and the `OpenResponse` both run in
+        // epoch 0 on the legacy keys (the server's counters are still at 0),
+        // so we adopt `k` only after parsing the response.
+        if self.recover_connection
+            && let Some(k) = self.adopted_rekey_log2()
+        {
+            let rekeys = self.tunnel_rekeys(k);
+            inbound_crypt.set_rekey(rekeys.inbound);
+            outbound_crypt.set_rekey(rekeys.outbound);
+        }
 
         // Send open tunnel command with the ticket and shared secret
         let handshake = if self.recover_connection {
@@ -202,11 +274,44 @@ impl Proxy {
             open_response.session_id
         );
 
+        // Rekeying threshold: the server pins `k` at session creation and
+        // must repeat it verbatim on every `Recover`. A mismatch means the
+        // two sides would derive different epoch keys while still holding
+        // the AEAD-ticket confirm, so both legs are about to walk on
+        // incompatible keystreams — the far side is buggy or hostile; fail
+        // hard rather than silently corrupt the tunnel. On the first `Open`
+        // there is no pinned value yet, so we adopt whatever the server
+        // announced.
+        let k = match self.rekey_log2.get() {
+            Some(&pinned) if pinned != open_response.rekey_log2 => {
+                return Err(anyhow::anyhow!(
+                    "Server rekey threshold changed mid-session (pinned {}, got {}) — aborting",
+                    pinned,
+                    open_response.rekey_log2
+                ));
+            }
+            Some(&pinned) => pinned,
+            None => self.pin_rekey_log2(open_response.rekey_log2),
+        };
+        // Adopt the threshold into the crypts before any data frame flows.
+        // On the first `Open` the handshake frames just exchanged were epoch
+        // 0 on the legacy keys (the server's counters are at their initial
+        // value), so installing at this exact seam is invisible on the wire.
+        // On a `Recover` the states were already installed before the ticket
+        // frame (which itself may sit in an epoch > 0).
+        if !self.recover_connection {
+            let rekeys = self.tunnel_rekeys(k);
+            inbound_crypt.set_rekey(rekeys.inbound);
+            outbound_crypt.set_rekey(rekeys.outbound);
+        }
+
         // Store reconnect ticket for future use.
         // This is different from original, and different for every conection
         self.ticket = open_response.session_id;
-        // Store the UDP token and relay port of the session (unchanged across recovers)
-        *self.udp_token.lock().unwrap() = Some((open_response.udp_token, open_response.udp_port));
+        // Store the UDP token, relay port and threshold of the session
+        // (unchanged across recovers)
+        *self.udp_token.lock().unwrap() =
+            Some((open_response.udp_token, open_response.udp_port, k));
         // Skip, if recovery, the the already processed packets (note that pre increment we must stop on PREV SEQ)
         // inbound = other side inbound, not our
         if self.recover_connection {

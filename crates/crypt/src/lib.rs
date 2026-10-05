@@ -11,6 +11,7 @@ pub mod kem;
 pub mod consts;
 pub mod types;
 
+pub mod rekey;
 pub mod secrets;
 pub mod tunnel;
 
