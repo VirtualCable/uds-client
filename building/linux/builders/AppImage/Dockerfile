@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
   libcairo2-dev freerdp3-dev libasound2-dev libpulse-dev libclang-dev \
   libavcodec-dev libavutil-dev libswscale-dev libavformat-dev libswresample-dev \ 
   libkrb5-dev libopenh264-dev libcups2-dev libfuse3-dev libusb-1.0.0-dev \
+  libpcsclite-dev \
   libxss-dev libgtk-3-bin \
   git python3-pip python3-setuptools wget squashfs-tools zsync \
   fuse libfuse2t64 gnupg gpg \

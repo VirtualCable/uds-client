@@ -102,6 +102,25 @@ fn list_folder_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<
     }
 }
 
+fn get_cwd_fn(_: &JsValue, _: &[JsValue], _: &mut Context) -> JsResult<JsValue> {
+    match std::env::current_dir() {
+        Ok(path) => Ok(JsValue::from(JsString::from(path.to_string_lossy()))),
+        Err(e) => Err(JsError::from(
+            JsNativeError::error().with_message(format!("Error getting current directory: {}", e)),
+        )),
+    }
+}
+
+fn chdir_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let path = extract_js_args!(args, ctx, String);
+    match std::env::set_current_dir(&path) {
+        Ok(_) => Ok(JsValue::from(true)),
+        Err(e) => Err(JsError::from(
+            JsNativeError::error().with_message(format!("Error changing directory: {}", e)),
+        )),
+    }
+}
+
 pub(super) fn register(ctx: &mut Context) -> Result<()> {
     register_js_module!(
         ctx,
@@ -116,6 +135,8 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
             ("getTempDirectory", get_temp_dir_fn, 0),
             ("getHomeDirectory", get_home_dir_fn, 0),
             ("listFolder", list_folder_fn, 1),
+            ("chdir", chdir_fn, 1),
+            ("getCwd", get_cwd_fn, 0),
         ],
         []
     );
@@ -234,5 +255,130 @@ mod tests {
         // convert JsValue to Vec<String>
         let entries_vec: Vec<String> = list_result.try_js_into(&mut ctx).unwrap();
         log::info!("Entries in temp directory: {:?}", entries_vec);
+    }
+
+    /// Tests for `File.chdir` and `File.getCwd`.
+    ///
+    /// `chdir` mutates the *process* working directory via
+    /// `std::env::set_current_dir`, so we capture the original cwd outside
+    /// the test body and restore it *after* the inner closure returns,
+    /// regardless of whether the body succeeded or bailed. That way a
+    /// failure inside the body cannot poison the cwd for the rest of the
+    /// test suite.
+    #[tokio::test]
+    async fn test_file_module_chdir_and_getcwd() -> anyhow::Result<()> {
+        log::setup_logging("debug", log::LogType::Test);
+        let mut ctx = create_context(None)?;
+        register(&mut ctx)?;
+
+        let original_cwd = std::env::current_dir()?;
+
+        // Inner closure that runs the actual assertions. Returning
+        // `Result<(), String>` lets us propagate failures with `?`
+        // instead of `assert!` / `panic!`, so the cwd-restore line outside
+        // is guaranteed to run on every exit path. We avoid `anyhow::Error`
+        // inside because boa_engine's `JsError` is not `Sync`, so it
+        // cannot live inside an `anyhow::Result` returned from an
+        // `async fn` tested with `#[tokio::test]`.
+        let result: Result<(), String> = async {
+            // Sanity: getCwd returns the original cwd at first.
+            let script = "File.getCwd();";
+            let initial_cwd: String = exec_script_with_result(&mut ctx, script)
+                .await
+                .map_err(|e| e.to_string())?
+                .try_js_into(&mut ctx)
+                .map_err(|e| e.to_string())?;
+            // Canonicalize both sides so equal paths compare equal even if
+            // one has symlinks or trailing slashes.
+            let initial_cwd_canon = std::fs::canonicalize(&initial_cwd)
+                .unwrap_or_else(|_| std::path::PathBuf::from(&initial_cwd));
+            let original_cwd_canon =
+                std::fs::canonicalize(&original_cwd).unwrap_or_else(|_| original_cwd.clone());
+            if initial_cwd_canon != original_cwd_canon {
+                return Err("File.getCwd should return the original working directory".to_string());
+            }
+
+            // Pick a known-good directory to chdir into. The system temp
+            // dir is always readable and exists on every supported
+            // platform.
+            let temp_dir = std::env::temp_dir();
+            let temp_dir_str = temp_dir.to_string_lossy().to_string();
+            let temp_dir_for_js = temp_dir_str.replace('\\', "\\\\").replace('"', "\\\"");
+
+            let chdir_script = format!(
+                r#"
+                const ok = File.chdir("{}");
+                const cwd = File.getCwd();
+                ({{ ok, cwd }});
+                "#,
+                temp_dir_for_js
+            );
+            let result = exec_script_with_result(&mut ctx, &chdir_script)
+                .await
+                .map_err(|e| e.to_string())?;
+            let obj = result
+                .as_object()
+                .ok_or_else(|| "chdir result is not an object".to_string())?;
+
+            let ok: bool = obj
+                .get(js_string!("ok"), &mut ctx)
+                .map_err(|e| e.to_string())?
+                .try_js_into(&mut ctx)
+                .map_err(|e| e.to_string())?;
+            if !ok {
+                return Err("File.chdir to temp dir should succeed".to_string());
+            }
+
+            let cwd_after: String = obj
+                .get(js_string!("cwd"), &mut ctx)
+                .map_err(|e| e.to_string())?
+                .try_js_into(&mut ctx)
+                .map_err(|e| e.to_string())?;
+            let cwd_after_canon = std::fs::canonicalize(&cwd_after)
+                .unwrap_or_else(|_| std::path::PathBuf::from(&cwd_after));
+            let temp_dir_canon =
+                std::fs::canonicalize(&temp_dir).unwrap_or_else(|_| temp_dir.clone());
+            if cwd_after_canon != temp_dir_canon {
+                return Err("File.getCwd should return the new directory after chdir".to_string());
+            }
+            // And the actual process cwd must match (chdir affects the
+            // real process).
+            let proc_cwd = std::env::current_dir().map_err(|e| e.to_string())?;
+            let proc_cwd_canon = std::fs::canonicalize(&proc_cwd).unwrap_or(proc_cwd);
+            if proc_cwd_canon != temp_dir_canon {
+                return Err(
+                    "File.chdir should have changed the process working directory".to_string(),
+                );
+            }
+
+            // Negative case: chdir to a non-existent directory must throw.
+            let bad_script = r#"
+                let threw = false;
+                try {
+                    File.chdir("/this/path/definitely/does/not/exist/uds_file_test_xyz");
+                } catch (e) {
+                    threw = true;
+                }
+                threw;
+            "#;
+            let threw: bool = exec_script_with_result(&mut ctx, bad_script)
+                .await
+                .map_err(|e| e.to_string())?
+                .try_js_into(&mut ctx)
+                .map_err(|e| e.to_string())?;
+            if !threw {
+                return Err("File.chdir to a non-existent path should throw a JS error".to_string());
+            }
+
+            Ok(())
+        }
+        .await;
+
+        // Restore the original cwd before returning so we don't break
+        // other tests sharing the same process. This runs whether the
+        // inner closure returned Ok or Err.
+        let _ = std::env::set_current_dir(&original_cwd);
+
+        result.map_err(anyhow::Error::msg)
     }
 }

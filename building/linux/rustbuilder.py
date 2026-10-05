@@ -16,6 +16,12 @@ import collections.abc
 PathLike = str | pathlib.Path
 
 
+def cargo_features_args() -> list[str]:
+    """Cargo args for the features requested through UDS_CARGO_FEATURES (comma separated)."""
+    features = os.environ.get("UDS_CARGO_FEATURES", "").strip()
+    return ["--features", features] if features else []
+
+
 def get_target_path(target_root: PathLike, debug: bool) -> pathlib.Path:
     """Get the target path for the build output."""
     target_root = pathlib.Path(target_root).resolve()
@@ -175,7 +181,7 @@ def exec_builder_for_distro(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Execute build steps
-    build_cmd = ["cargo", "build", "--release"] if not debug else ["cargo", "build"]
+    build_cmd = (["cargo", "build", "--release"] if not debug else ["cargo", "build"]) + cargo_features_args()
     docker_run(crate_path, image_tag, build_cmd, target_root)
 
     if extra_docker_cmd:

@@ -104,7 +104,7 @@ pub fn is_any_tunnel_active() -> bool {
 #[allow(dead_code)]
 pub fn stop_tunnels() {
     let infos = TUNNEL_INFOS.lock().unwrap();
-    for (_id, info) in infos.iter() {
+    for info in infos.values() {
         info.stop.trigger();
     }
 }

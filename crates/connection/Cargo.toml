@@ -5,6 +5,10 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
+[features]
+# Propagates the TLS verification bypass flag (see shared::tls).
+insecure-tls = ["shared/insecure-tls"]
+
 [dependencies]
 crypt = { path = "../crypt" }
 shared = { path = "../shared" }
@@ -16,6 +20,9 @@ chrono.workspace = true
 directories-next.workspace = true
 hostname.workspace = true
 num_enum.workspace = true
+
+# socket options (SO keepalive backup for the application-level keep-alive)
+socket2.workspace = true
 
 
 # Encoding/Decoding
@@ -57,6 +64,8 @@ widestring.workspace = true
 
 
 [dev-dependencies]
+# Virtual time (tokio::time::advance) for the keep-alive emission test.
+tokio = { workspace = true, features = ["test-util"] }
 rcgen.workspace = true
 serial_test.workspace = true
 mockito.workspace = true

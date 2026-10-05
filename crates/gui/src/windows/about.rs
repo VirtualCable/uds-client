@@ -19,7 +19,7 @@ use crate::wgpu_render::{OverlayParams, WgpuRenderer};
 const ABOUT_LINES: &[&str] = &[
     "UDS Launcher",
     "Version: 5.0.0",
-    "UDS Client Launcher",
+    "UDS Connection Launcher",
     "",
     "Developed by Virtual Cable S.L.",
     "https://www.udsenterprise.com",
@@ -31,6 +31,38 @@ const ABOUT_LINES: &[&str] = &[
     "In no event will the authors be held liable",
     "for any damages arising from the use of this software.",
 ];
+
+/// Shown right below the version when this binary was compiled allowing the
+/// TLS verification bypass (debug build or `--features insecure-tls`): the
+/// insecure mode is always on in those builds, so the About dialog has to
+/// say it out loud. Release builds without the feature never show it because
+/// the bypass code was not compiled in at all.
+const INSECURE_TLS_LINE: &str = "!! INSECURE BUILD: TLS verification is DISABLED !!";
+
+fn about_lines() -> Vec<&'static str> {
+    let mut lines = ABOUT_LINES.to_vec();
+    if shared::tls::insecure_tls_bypass_allowed() {
+        lines.insert(2, INSECURE_TLS_LINE);
+    }
+    lines
+}
+
+fn layout_close_button(pw: f32, ph: f32, scale: f32) -> crate::draw::ui::button::Button {
+    let bw = monitor::scaled_val(80) as f32;
+    let bh = monitor::scaled_val(35) as f32;
+
+    crate::draw::ui::button::Button::new(
+        (pw - bw) / 2.0,
+        ph - bh - 20.0 * scale,
+        bw as u32,
+        bh as u32,
+        "Close".to_string(),
+        crate::draw::ui::button::ButtonStyle {
+            font_scale: monitor::scaled_val(14) as f32,
+            ..Default::default()
+        },
+    )
+}
 
 pub struct AboutState {
     window: Arc<Window>,
@@ -70,24 +102,7 @@ impl AboutState {
         let scale = *monitor::SCALE_FACTOR as f32;
         let renderer = WgpuRenderer::new(window.clone(), phys.width, phys.height)?;
         let logo = crate::logo::load_logo();
-        let pw = phys.width as f32;
-        let ph = phys.height as f32;
-        let bw = monitor::scaled_val(80) as f32;
-        let bh = monitor::scaled_val(35) as f32;
-        let bx = (pw - bw) / 2.0;
-        let by = ph - bh - 20.0 * scale;
-
-        let close_btn = crate::draw::ui::button::Button::new(
-            bx,
-            by,
-            bw as u32,
-            bh as u32,
-            "Close".to_string(),
-            crate::draw::ui::button::ButtonStyle {
-                font_scale: monitor::scaled_val(14) as f32,
-                ..Default::default()
-            },
-        );
+        let close_btn = layout_close_button(phys.width as f32, phys.height as f32, scale);
 
         Ok(AboutState {
             window,
@@ -111,6 +126,17 @@ impl AboutState {
 
     pub fn handle_mouse_move(&mut self, logical_x: f32, logical_y: f32) -> bool {
         self.close_btn.handle_mouse_move(logical_x, logical_y)
+    }
+
+    /// The surface is mapped after creation on Linux, so the first real size arrives here.
+    pub fn resize(&mut self, width: u32, height: u32) {
+        if width == 0 || height == 0 {
+            return;
+        }
+        self.phys_w = width;
+        self.phys_h = height;
+        self.scale = *monitor::SCALE_FACTOR as f32;
+        self.close_btn = layout_close_button(width as f32, height as f32, self.scale);
     }
 
     pub fn paint(&mut self) {
@@ -168,7 +194,7 @@ impl AboutState {
 
         let mut sections: Vec<OwnedSection> = Vec::new();
         let base_y = self.logo.height as f32 * s + 60.0 * s;
-        for (i, line) in ABOUT_LINES.iter().enumerate() {
+        for (i, line) in about_lines().iter().enumerate() {
             let y = base_y + i as f32 * (22.0 * s);
             sections.push(
                 Section::default()
@@ -243,7 +269,10 @@ impl ApplicationHandler for AboutHandler<'_> {
         // Without this, SCALE_FACTOR defaults to 1.0 and text is tiny on high-DPI.
         crate::monitor::populate(el);
         match AboutState::new(el) {
-            Ok(s) => *self.state = Some(s),
+            Ok(s) => {
+                s.window.set_visible(true);
+                *self.state = Some(s);
+            }
             Err(e) => {
                 log::error!("{e}");
                 el.exit();
@@ -261,6 +290,19 @@ impl ApplicationHandler for AboutHandler<'_> {
             WindowEvent::RedrawRequested => {
                 if let Some(s) = self.state.as_mut() {
                     s.paint();
+                }
+            }
+            WindowEvent::Resized(size) => {
+                if let Some(s) = self.state.as_mut() {
+                    s.resize(size.width, size.height);
+                    s.window.request_redraw();
+                }
+            }
+            WindowEvent::ScaleFactorChanged { .. } => {
+                if let Some(s) = self.state.as_mut() {
+                    let size = s.window.inner_size();
+                    s.resize(size.width, size.height);
+                    s.window.request_redraw();
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
@@ -320,6 +362,15 @@ impl crate::AppHandler {
             }
             WindowEvent::RedrawRequested => {
                 a.paint();
+            }
+            WindowEvent::Resized(size) => {
+                a.resize(size.width, size.height);
+                a.window.request_redraw();
+            }
+            WindowEvent::ScaleFactorChanged { .. } => {
+                let size = a.window.inner_size();
+                a.resize(size.width, size.height);
+                a.window.request_redraw();
             }
             _ => {}
         }

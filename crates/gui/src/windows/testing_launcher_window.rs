@@ -356,12 +356,16 @@ impl AppHandler {
                         server: "172.27.247.161".to_string(),
                         user: "user".to_string(),
                         password: "temporal".to_string(),
-                        screen_size: rdp::geom::ScreenSize::Fixed(800, 600),
+                        screen_size: rdp::geom::ScreenSize::Fixed(1600, 900),
                         redirections: rdp::settings::RdpRedirections {
                             clipboard: true,
                             audio: true,
                             mic: true,
                             printing: false,
+                            smartcard: rdp::settings::SmartcardSettings {
+                                enabled: true,
+                                ..Default::default()
+                            },
                             drives: vec!["all".to_string()],
                             webcam: Some(rdp::settings::WebcamSettings {
                                 enabled: true,

@@ -17,9 +17,8 @@ const APP_APPLICATION: &str = "launcher";
 pub struct AppData {
     pub approved_hosts: Vec<String>,
 
-    // So we can override proxy and ssl settings if needed
+    // So we can override proxy settings if needed
     pub disable_proxy: Option<bool>,
-    pub verify_ssl: Option<bool>,
     pub fps_limit: Option<u32>,
     // On mac, also allow override launcher path
     #[cfg(target_os = "macos")]

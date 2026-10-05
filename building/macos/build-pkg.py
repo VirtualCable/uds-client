@@ -56,6 +56,12 @@ OPENH264_RPATH: typing.Final[str] = "/Library/Application Support/UDSLauncher/op
 H264_LICENSE_SRC: typing.Final[Path] = SCRIPT_DIR / "H264_BINARY_LICENSE.txt"
 
 
+def cargo_features_args() -> list[str]:
+    """Cargo args for the features requested through UDS_CARGO_FEATURES (comma separated)."""
+    features = os.environ.get("UDS_CARGO_FEATURES", "").strip()
+    return ["--features", features] if features else []
+
+
 def ad_hoc_sign(path: Path, deep: bool = False) -> None:
     print(f"[SIGN] Ad-hoc signing {path}")
     args = ["codesign"] + (["--deep"] if deep else []) + ["--force", "--sign", "-", str(path)]
@@ -382,6 +388,15 @@ def ensure_freerdp_libs() -> None:
             fail(f"Required FreeRDP library not found: {lib_path}")
 
 
+def find_bundled_openh264(app_dir: Path) -> list[Path]:
+    """
+    Our licence from Cisco covers downloading libopenh264, never redistributing it, so no
+    copy of it may ship inside the bundle. The postinstall script fetches it at install
+    time instead. This obligation runs until 2031.
+    """
+    return [path for path in app_dir.rglob("*") if "openh264" in path.name.lower()]
+
+
 def validate_bundle_dependencies(app_dir: Path) -> bool:
     """
     Validate that all binaries and dylibs inside the app bundle only depend on:
@@ -472,9 +487,10 @@ def main() -> None:
     # Ensure FreeRDP libs are present, fails if not
     ensure_freerdp_libs()
 
-    print("==> Building Rust binaries (cargo build --release)")
+    cargo_cmd = ["cargo", "build", "--release"] + cargo_features_args()
+    print(f"==> Building Rust binaries ({' '.join(cargo_cmd)})")
     subprocess.run(
-        ["cargo", "build", "--release"],
+        cargo_cmd,
         cwd=WORKSPACE_ROOT,
         check=True,
     )
@@ -567,6 +583,14 @@ def main() -> None:
     # Validate bundle
     if not validate_bundle_dependencies(APP_DIR):
         fail("App bundle contains invalid dependencies")
+
+    print("==> Checking that no openh264 library ships inside the bundle")
+    bundled_openh264 = find_bundled_openh264(APP_DIR)
+    if bundled_openh264:
+        for path in bundled_openh264:
+            print(f"   !! {path.relative_to(APP_DIR)}")
+        fail("Bundle ships libopenh264; we may only download it, never redistribute it")
+    print(">> No openh264 inside the bundle")
 
     print("==> App bundle structure created successfully")
     print(f"Output path: {APP_DIR}")

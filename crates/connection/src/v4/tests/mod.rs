@@ -73,7 +73,7 @@ async fn test_connect_and_upgrade_invalid_server() {
     log::setup_logging("debug", log::LogType::Test);
     shared::tls::init_tls(None);
     log::debug!("Starting test_connect_and_upgrade_invalid_server");
-    let result = connect_and_upgrade("invalid.server.name", 44916, false).await;
+    let result = connect_and_upgrade("invalid.server.name", 44916).await;
     assert!(result.is_err(), "Connection to invalid server should fail");
     log::debug!("test_connect_and_upgrade_invalid_server completed successfully");
 }

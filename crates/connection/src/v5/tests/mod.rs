@@ -50,11 +50,12 @@ async fn setup_test(
         port: remote_server.listen_port,
         ticket: dummy_ticket(),
         local_port: listener.local_addr()?.port().into(),
-        check_certificate: false,
         startup_time_ms,
         keep_listening_after_timeout: false,
         enable_ipv6: false,
         shared_secret: Some(dummy_shared_secret()),
+        use_udp: false,
+        udp_port: None,
     };
 
     Ok((remote_server, info, listener))

@@ -240,6 +240,72 @@ async fn outbound_chan_closed_works() {
     );
 }
 
+/// Keep-alive emission: while the tunnel is idle the outbound loop writes a
+/// `Nop` on channel 0 every KEEPALIVE_INTERVAL_SECS, and those frames never
+/// touch the proxy command channel. Real payload still flows (and rides the
+/// same cipher sequence). Virtual time makes the intervals deterministic.
+#[serial_test::serial(v5)]
+#[tokio::test(start_paused = true)]
+async fn keepalive_nops_are_emitted_while_idle() {
+    let TestContext {
+        client,
+        mut local,
+        ctrl_tx: _ctrl_tx,
+        ctrl_rx,
+        payload_tx,
+        mut crypt_inbound, // decrypts what the client's outbound writes
+        stop,
+        ..
+    } = create_client();
+
+    tokio::spawn(async move {
+        client.run(create_recovery_buffer()).await;
+    });
+
+    // Let the spawned client reach its select! and arm the keep-alive timer
+    // before the virtual clock moves (a timer armed after `advance` returns
+    // would not fire inside this window).
+    tokio::task::yield_now().await;
+    tokio::task::yield_now().await;
+
+    // Two idle keep-alive intervals (plus slack) -> two Nop frames on the wire.
+    tokio::time::advance(std::time::Duration::from_secs(
+        crate::consts::KEEPALIVE_INTERVAL_SECS * 2 + 1,
+    ))
+    .await;
+
+    for i in 0..2 {
+        let mut buffer = crypt::tunnel::types::PacketBuffer::new();
+        let (data, channel) = crypt_inbound
+            .read(&stop, &mut local, &mut buffer)
+            .await
+            .unwrap_or_else(|e| panic!("failed to read keep-alive {i}: {e:?}"));
+        assert_eq!(channel, 0, "keep-alive must ride the control channel");
+        assert_eq!(
+            super::super::protocol::Command::from_slice(data).unwrap(),
+            super::super::protocol::Command::Nop,
+            "idle frames must be Nop keep-alives"
+        );
+    }
+    assert!(
+        ctrl_rx.try_recv().is_err(),
+        "keep-alives are synthetic control frames, not proxy traffic"
+    );
+
+    // Payload flows through the same loop and is not displaced by the KA.
+    payload_tx
+        .send_async(PayloadWithChannel::new(1, b"payload".as_slice()))
+        .await
+        .unwrap();
+    let mut buffer = crypt::tunnel::types::PacketBuffer::new();
+    let (data, channel) = crypt_inbound
+        .read(&stop, &mut local, &mut buffer)
+        .await
+        .unwrap();
+    assert_eq!(channel, 1);
+    assert_eq!(data, b"payload");
+}
+
 #[serial_test::serial(v5)]
 #[tokio::test]
 async fn sends_data() {

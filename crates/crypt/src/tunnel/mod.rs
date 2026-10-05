@@ -3,12 +3,15 @@
 // All rights reserved.
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
+use std::sync::Arc;
+
 use anyhow::Result;
 
-use aes_gcm::{AeadInPlace, Aes256Gcm, Nonce, aead::KeyInit};
+use aes_gcm::{AeadInOut, Aes256Gcm, Nonce, Tag, aead::KeyInit};
 
 use shared::log;
 
+use crate::rekey::{DIR_LAUNCHER_TO_SERVER, RekeyState, TRANSPORT_TCP};
 use crate::types::SharedSecret;
 
 // Comms related
@@ -16,21 +19,81 @@ pub mod consts;
 pub mod stream;
 pub mod types;
 
+/// AES-GCM crypt for one TCP tunnel direction, with deterministic per-seq
+/// rekeying (mirror of the tunnel-server's `shared::crypt::Crypt`).
+///
+/// The launcher builds the handshake crypt pair from the legacy epoch-0
+/// material (`Crypt::new`), then installs the session's negotiated threshold
+/// with [`Crypt::set_rekey`] right after parsing the `OpenResponse` and
+/// before any data frame flows. Every frame whose epoch differs from the
+/// crypt's cached cipher re-derives that epoch's key from the frame's own
+/// sequence number; `k = 0` states collapse to a single epoch forever,
+/// byte-identical to the pre-rekeying wire format.
 pub struct Crypt {
     key: SharedSecret,
-    cipher: Aes256Gcm,
+    /// Cipher for `cipher_epoch`, the epoch owning the last frame this crypt
+    /// encrypted or authenticated. An `Arc` so an epoch crossing is a
+    /// re-derive (once per `2^k` frames) and staying inside it is cheap.
+    cipher: Arc<Aes256Gcm>,
     seq: u64,
+    rekey: Arc<RekeyState>,
+    cipher_epoch: u64,
 }
 
 impl Crypt {
     pub fn new(key: &SharedSecret, seq: u64) -> Self {
         log::debug!("Creating Crypt with initial seq: {}", seq);
-        let cipher = Aes256Gcm::new(key.as_ref().into());
+        let cipher = Arc::new(Aes256Gcm::new(key.as_ref().into()));
         Crypt {
             key: key.clone(),
+            cipher_epoch: 0,
+            rekey: Arc::new(RekeyState::epoch0_only(
+                TRANSPORT_TCP,
+                DIR_LAUNCHER_TO_SERVER,
+                0,
+                cipher.clone(),
+            )),
             cipher,
             seq,
         }
+    }
+
+    /// Creates a crypt that rekeys per `rekey`, starting on its epoch-0
+    /// cipher. Used by tests and by any future caller that knows `k` up
+    /// front; the production launcher path is `new` + [`Self::set_rekey`].
+    pub fn with_rekey(key: &SharedSecret, seq: u64, rekey: Arc<RekeyState>) -> Self {
+        Crypt {
+            key: key.clone(),
+            cipher_epoch: 0,
+            cipher: rekey.cipher_for(0),
+            rekey,
+            seq,
+        }
+    }
+
+    /// Attaches (or replaces) the rekeying state mid-life. The crypt must be
+    /// sitting in epoch 0 at the call site — which is exactly what the
+    /// launcher does after the handshake and before any data frame flows.
+    /// The epoch-0 cipher is taken from the new state (a byte-identical
+    /// rebuild of the same legacy key), so nothing on the wire changes at
+    /// the seam.
+    pub fn set_rekey(&mut self, rekey: Arc<RekeyState>) {
+        self.cipher_epoch = 0;
+        self.cipher = rekey.cipher_for(0);
+        self.rekey = rekey;
+    }
+
+    /// Selects the cipher for `seq`, re-deriving (once per epoch crossing)
+    /// when the frame belongs to a different epoch than the crypt's cached
+    /// cipher. `k = 0` never leaves epoch 0, which keeps OFF byte-identical
+    /// to the legacy construction.
+    fn cipher_for_seq(&mut self, seq: u64) -> Arc<Aes256Gcm> {
+        let epoch = self.rekey.epoch_of(seq);
+        if epoch != self.cipher_epoch {
+            self.cipher = self.rekey.cipher_for(epoch);
+            self.cipher_epoch = epoch;
+        }
+        self.cipher.clone()
     }
 
     /// Increments and returns the internal seq.
@@ -71,9 +134,10 @@ impl Crypt {
         buffer.set_seq(seq);
         buffer.set_length(data_with_channel_length + consts::TAG_LENGTH)?; // Write header with seq and length of encrypted data
 
-        let mut nonce = [0; 12];
-        nonce[..8].copy_from_slice(&seq.to_be_bytes());
-        let aad = &seq.to_be_bytes();
+        let mut nonce_arr = [0u8; 12];
+        nonce_arr[..8].copy_from_slice(&seq.to_be_bytes());
+        let nonce = Nonce::from(nonce_arr);
+        let aad = seq.to_be_bytes();
 
         // Get pointer to data part of the buffer, where encryption will happen
         let data = buffer.data_with_channel_mut();
@@ -87,16 +151,14 @@ impl Crypt {
         //     channel_id
         // );
 
-        let tag = self
-            .cipher
-            .encrypt_in_place_detached(
-                Nonce::from_slice(&nonce),
-                aad,
-                &mut data[..data_with_channel_length],
-            )
+        // Epoch-owned cipher: identical to `self.cipher` for every frame of
+        // the current epoch, re-derived once at the epoch crossing.
+        let cipher = self.cipher_for_seq(seq);
+        let tag = cipher
+            .encrypt_inout_detached(&nonce, &aad, (&mut data[..data_with_channel_length]).into())
             .map_err(|e| anyhow::anyhow!("encryption failure: {:?}", e))?;
         data[data_with_channel_length..data_with_channel_length + consts::TAG_LENGTH]
-            .copy_from_slice(&tag);
+            .copy_from_slice(tag.as_slice());
 
         // Returns the FULL length of the encrypted packet (header + data + channel + tag)
         Ok(data_with_channel_length + consts::TAG_LENGTH)
@@ -116,6 +178,13 @@ impl Crypt {
                 self.current_seq()
             ));
         }
+        // Mirror of the server-side guard: `seq` arrives from the wire, and
+        // advancing to `seq + 1` below would overflow on `u64::MAX`. No
+        // honest peer ever reaches this value, so reject the frame instead of
+        // panicking (debug) or wedging the counter (release).
+        if seq == u64::MAX {
+            return Err(anyhow::anyhow!("invalid sequence number: u64::MAX"));
+        }
 
         let length = buffer.length()?;
         if length < (consts::TAG_LENGTH + 2) {
@@ -128,16 +197,25 @@ impl Crypt {
         let len = length - consts::TAG_LENGTH;
         let chan_data_buffer = buffer.data_with_channel_mut();
 
-        let mut nonce = [0; 12];
-        nonce[..8].copy_from_slice(&seq.to_be_bytes());
-        let aad = &seq.to_be_bytes();
+        let mut nonce_arr = [0u8; 12];
+        nonce_arr[..8].copy_from_slice(&seq.to_be_bytes());
+        let nonce = Nonce::from(nonce_arr);
+        let aad = seq.to_be_bytes();
 
-        // Split ciphertext and tag
+        // Split ciphertext and tag. `Tag` is parameterised by the tag size (not by
+        // the cipher); its default `U16` matches the tag size of `Aes256Gcm`.
         let (ciphertext, rest) = chan_data_buffer.split_at_mut(len);
-        let tag = &rest[..16];
+        let tag: &Tag = (&rest[..consts::TAG_LENGTH])
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("invalid tag length"))?;
 
-        self.cipher
-            .decrypt_in_place_detached(Nonce::from_slice(&nonce), aad, ciphertext, tag.into())
+        // Epoch-owned cipher. The seq comes from the frame header, so a
+        // late frame of an earlier epoch (legitimately still in flight)
+        // re-derives that epoch's key deterministically; the anti-replay
+        // check above already rejected replays.
+        let cipher = self.cipher_for_seq(seq);
+        cipher
+            .decrypt_inout_detached(&nonce, &aad, ciphertext.into(), tag)
             .map_err(|e| anyhow::anyhow!("decryption failure: {:?}", e))?;
 
         self.seq = seq + 1; // Update to last used seq + 1, so no replays are possible
@@ -161,11 +239,12 @@ impl Crypt {
 impl Clone for Crypt {
     fn clone(&self) -> Self {
         log::debug!("Cloning Crypt with seq: {}", self.seq);
-        let cipher = Aes256Gcm::new(self.key.as_ref().into());
         Crypt {
-            cipher,
+            cipher: self.cipher.clone(),
             key: self.key.clone(),
             seq: self.seq,
+            rekey: self.rekey.clone(),
+            cipher_epoch: self.cipher_epoch,
         }
     }
 }
@@ -193,7 +272,7 @@ pub fn build_header(seq: u64, length: u16, buffer: &mut [u8]) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::types::SharedSecret;
+    use crate::types::{SharedSecret, Ticket};
 
     use super::*;
     fn assert_send<T: Send>() {}
@@ -203,6 +282,134 @@ mod tests {
     fn test_send_sync() {
         assert_send::<Crypt>();
         assert_sync::<Crypt>();
+        assert_send::<RekeyState>();
+        assert_sync::<RekeyState>();
+    }
+
+    fn rekey_state(
+        secret: &SharedSecret,
+        ticket: &Ticket,
+        k: u8,
+        epoch0: &SharedSecret,
+    ) -> Arc<RekeyState> {
+        Arc::new(RekeyState::new(
+            Arc::new(crate::rekey::SessionPrk::derive(secret, ticket)),
+            TRANSPORT_TCP,
+            DIR_LAUNCHER_TO_SERVER,
+            k,
+            0,
+            Arc::new(Aes256Gcm::new(epoch0.as_ref().into())),
+        ))
+    }
+
+    /// A crypt whose rekey state was installed after the handshake rotates
+    /// its cipher at the epoch boundary (mirror of the server-side test),
+    /// and a frame of the previous epoch still in flight decrypts fine:
+    /// the key is a pure function of the frame's own seq.
+    #[test]
+    fn test_rekey_across_epoch_boundary_roundtrip() {
+        let secret = SharedSecret::new([0x11u8; 32]);
+        let ticket = Ticket::new([0x22u8; 48]);
+        let epoch0 = SharedSecret::new([0x33u8; 32]);
+
+        // k = 2: epochs switch every 4 frames.
+        let mut sender = Crypt::new(&epoch0, 0);
+        let mut receiver = Crypt::new(&epoch0, 0);
+        sender.set_rekey(rekey_state(&secret, &ticket, 2, &epoch0));
+        receiver.set_rekey(rekey_state(&secret, &ticket, 2, &epoch0));
+
+        // Frames 1..=12 span epochs 0, 1, 2 (seq>>2): all roundtrip.
+        for i in 1..=12u64 {
+            let payload = format!("frame-{i}");
+            let mut buf = types::PacketBuffer::new();
+            buf.set_data(payload.as_bytes()).unwrap();
+            sender.encrypt(5, payload.len(), &mut buf).unwrap();
+            assert_eq!(buf.seq().unwrap(), i, "seq at {i}");
+            let mut buf2 = buf.clone();
+            receiver.decrypt(&mut buf2).unwrap();
+            assert_eq!(buf2.data(), payload.as_bytes(), "roundtrip at {i}");
+        }
+        assert_eq!(receiver.current_seq(), 13);
+
+        // A late frame of an *earlier* epoch (seq 5: epoch 1, while the
+        // sender sits at epoch 2) still decrypts on a receiver that has not
+        // seen it yet: the key comes from the frame's seq, not from a
+        // transition clock.
+        let mut stale = Crypt::new(&epoch0, 4); // next encrypt gets seq 5
+        stale.set_rekey(rekey_state(&secret, &ticket, 2, &epoch0));
+        let mut late = types::PacketBuffer::new();
+        late.set_data(b"late").unwrap();
+        stale.encrypt(5, 4, &mut late).unwrap();
+        assert_eq!(late.seq().unwrap(), 5);
+        let mut fresh = Crypt::new(&epoch0, 0);
+        fresh.set_rekey(rekey_state(&secret, &ticket, 2, &epoch0));
+        fresh.decrypt(&mut late).unwrap();
+        assert_eq!(late.data(), b"late");
+    }
+
+    /// With `k = 0` (OFF) — the state `Crypt::new` installs and the state
+    /// `set_rekey` installs for an OFF session — the crypt must be
+    /// byte-identical to the legacy construction forever.
+    #[test]
+    fn test_off_rekey_is_byte_identical_to_legacy() {
+        let key = SharedSecret::new([0x44u8; 32]);
+        let mut legacy = Crypt::new(&key, 0);
+
+        let mut off = Crypt::new(&key, 0);
+        off.set_rekey(Arc::new(RekeyState::epoch0_only(
+            TRANSPORT_TCP,
+            DIR_LAUNCHER_TO_SERVER,
+            0,
+            Arc::new(Aes256Gcm::new(key.as_ref().into())),
+        )));
+
+        for i in 0..8u16 {
+            let mut a = types::PacketBuffer::new();
+            let mut b = types::PacketBuffer::new();
+            a.set_data(b"payload bytes").unwrap();
+            b.set_data(b"payload bytes").unwrap();
+            legacy.encrypt(i, 13, &mut a).unwrap();
+            off.encrypt(i, 13, &mut b).unwrap();
+            assert_eq!(
+                a.buffer().unwrap(),
+                b.buffer().unwrap(),
+                "frame {i}: OFF must equal legacy"
+            );
+        }
+    }
+
+    /// The handshake seam: installing the rekey state with the session's `k`
+    /// after the OpenResponse must not change the epoch-0 wire bytes — the
+    /// seam between "legacy handshake frames" and "rekeying data frames" is
+    /// invisible on the wire.
+    #[test]
+    fn test_set_rekey_keeps_epoch0_wire_identical() {
+        let secret = SharedSecret::new([0x11u8; 32]);
+        let ticket = Ticket::new([0x22u8; 48]);
+        let epoch0 = SharedSecret::new([0x33u8; 32]);
+
+        // Two crypts at the same seq: one still legacy (handshake), one with
+        // the negotiated state installed (post-OpenResponse). For every
+        // epoch-0 frame (with k = 8 that is seqs up to 255) they must emit
+        // byte-identical wire bytes.
+        for seed in [0u64, 1, 2, 254] {
+            let mut before = Crypt::new(&epoch0, seed);
+            let mut after = Crypt::new(&epoch0, seed);
+            after.set_rekey(rekey_state(&secret, &ticket, 8, &epoch0));
+
+            let mut a = types::PacketBuffer::new();
+            let mut b = types::PacketBuffer::new();
+            a.set_data(b"ticket-bytes").unwrap();
+            b.set_data(b"ticket-bytes").unwrap();
+            before.encrypt(0, 12, &mut a).unwrap();
+            after.encrypt(0, 12, &mut b).unwrap();
+            assert_eq!(
+                a.buffer().unwrap(),
+                b.buffer().unwrap(),
+                "seam frame at seq {}",
+                seed + 1
+            );
+        }
     }
 
     #[test]

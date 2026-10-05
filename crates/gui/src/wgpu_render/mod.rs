@@ -89,6 +89,7 @@ fn gpu_from_window(window: &winit::window::Window) -> &'static GpuCtx {
             power_preference: wgpu::PowerPreference::HighPerformance,
             compatible_surface: Some(&surface),
             force_fallback_adapter: false,
+            apply_limit_buckets: false,
         }))
         .expect("No suitable GPU adapter");
 
@@ -173,12 +174,15 @@ impl WgpuRenderer {
             alpha_mode,
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
+            color_space: wgpu::SurfaceColorSpace::Auto,
         };
         surface.configure(&g.device, &config);
 
         let gdi = gdi::GdiRenderer::new(&g.device, g.format);
         let overlay = OverlayRenderer::new(&g.device, g.format);
-        let text = TextRenderer::new(&g.device, &g.queue, g.format, crate::draw::INTER_FONT_DATA);
+        let mut text =
+            TextRenderer::new(&g.device, &g.queue, g.format, crate::draw::INTER_FONT_DATA);
+        text.resize(size.width, size.height, &g.queue);
 
         Ok(WgpuRenderer {
             _window: window,
@@ -275,7 +279,7 @@ impl WgpuRenderer {
         }
         g.queue.submit(std::iter::once(enc.finish()));
         self._window.pre_present_notify();
-        output.present();
+        g.queue.present(output);
     }
 
     pub fn reconfigure(&mut self, w: u32, h: u32) {
@@ -283,6 +287,9 @@ impl WgpuRenderer {
         let w = w.min(g.max_texture_size);
         let h = h.min(g.max_texture_size);
         if w == 0 || h == 0 {
+            return;
+        }
+        if self.config.width == w && self.config.height == h {
             return;
         }
         self.config.width = w;

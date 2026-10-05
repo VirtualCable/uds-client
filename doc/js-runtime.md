@@ -7,7 +7,7 @@ This document describes the JavaScript modules and functions available in the ru
 | Module  | Description                                                                                      | Functions |
 | ------- | ------------------------------------------------------------------------------------------------ | --------- |
 | Utils   | Utility functions for environment variables, registry (Windows), encryption, and network testing | 8         |
-| File    | File operations, temporary files, and directory access                                           | 9         |
+| File    | File operations, temporary files, and directory access                                           | 11        |
 | Logger  | Logging functions at different levels                                                            | 5         |
 | Process | Executable finding, process launching, and management                                            | 8         |
 | Tasks   | Task management, cleanup files, and tunnel connections                                           | 4         |
@@ -186,6 +186,38 @@ Gets the user's home directory path.
 
 **Returns:** string - The home directory path.
 
+### listFolder
+
+Lists the names of entries inside a folder.
+
+**Parameters:**
+- `path` (string): Folder path to list.
+
+**Returns:** string[] - Array of file and directory names.
+
+### chdir
+
+Changes the current working directory of the process to the given path.
+
+**Parameters:**
+- `path` (string): The directory to switch to.
+
+**Returns:** boolean - True if the change succeeded.
+
+**Throws:** Error if the path does not exist or is not accessible.
+
+> Note: This mutates the process working directory for the lifetime of the
+> launcher; subsequent calls to `File.getCwd` and any relative path in other
+> runtime functions will use the new directory.
+
+### getCwd
+
+Returns the current working directory of the process.
+
+**Parameters:** None
+
+**Returns:** string - The absolute path to the current working directory.
+
 ### Examples
 
 ```javascript
@@ -206,15 +238,11 @@ const tempDir = File.getTempDirectory();
 
 // List folder entries
 const entries = File.listFolder(tempDir);
+
+// Inspect / change working directory
+const cwd = File.getCwd();
+const ok = File.chdir(tempDir);
 ```
-
-### listFolder
-
-Lists the names of entries inside a folder.
-
-- `path` (string): Folder path to list.
-
-Returns: `string[]` - array of file and directory names.
 
 ## Logger Module
 
@@ -472,6 +500,13 @@ Starts an RDP connection with the specified settings.
     - `mic` (boolean, optional): Whether to enable microphone redirection (default: false).
     - `printing` (boolean, optional): Whether to enable printer redirection (default: false).
     - `drives` (array of strings, optional): List of drive letters to redirect. Valid special values include `"all"` (all drives).
+    - `smartcard` (object, optional): Smartcard redirection settings.
+      - `enabled` (boolean, optional): Whether to enable smartcard redirection (default: false).
+      - `emulated` (string, optional): Emulated card spec. If provided and valid, the emulated smartcard is active instead of a physical one. Accepted specs:
+        - `file:<path>` — path to a local PEM file containing the certificate (`CERTIFICATE` block) and the private key (`PRIVATE KEY` / `ENCRYPTED PRIVATE KEY` / `RSA PRIVATE KEY` blocks). Blocks may be in the same file.
+        - `pem:<cert_pem>,<key_pem>` — the certificate and the private key directly as PEM strings (comma-separated; PEM has no commas, so this is unambiguous).
+        - `userdefined:` — reserved (future; use a browser certificate as a smartcard in the HTML5 client).
+        Supported key formats: RSA, PKCS#8 PEM (unencrypted or **encrypted**). If the key is encrypted, its password acts as the **PIN** (asked only when a private-key operation is needed — the certificate itself is shown without any PIN). If the key has no password, no PIN is requested at all. If the value is invalid, a warning is logged and the session continues **without smartcard**.
     - `sound_latency_threshold` (number, optional): Threshold in ms for sound latency (default: 400).
     - `webcam` (object, optional): Webcam redirection settings. If provided, configures camera settings:
       - `enabled` (boolean): Whether to enable webcam redirection (required if `webcam` is provided).

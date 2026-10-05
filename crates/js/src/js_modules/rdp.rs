@@ -47,11 +47,20 @@ struct WebcamSettings {
 }
 
 #[derive(Debug, Default, TryFromJs, Zeroize, ZeroizeOnDrop, Clone)]
+struct SmartcardSettings {
+    pub enabled: Option<bool>,
+    /// Emulated card spec (`file:...` / `pem:...` / `userdefined:`). If present
+    /// and valid, the emulated smartcard is active; if invalid, no smartcard.
+    pub emulated: Option<String>,
+}
+
+#[derive(Debug, Default, TryFromJs, Zeroize, ZeroizeOnDrop, Clone)]
 struct RdpRedirections {
     pub clipboard: Option<bool>,
     pub audio: Option<bool>,
     pub mic: Option<bool>,
     pub printing: Option<bool>,
+    pub smartcard: Option<SmartcardSettings>,
     pub drives: Option<Vec<String>>,
     pub webcam: Option<WebcamSettings>,
     pub sound_latency_threshold: Option<u16>,
@@ -133,6 +142,17 @@ impl RdpSettings {
                 audio: redirections.audio.unwrap_or(defs.redirections.audio),
                 mic: redirections.mic.unwrap_or(defs.redirections.mic),
                 printing: redirections.printing.unwrap_or(defs.redirections.printing),
+                smartcard: settings::SmartcardSettings {
+                    enabled: redirections
+                        .smartcard
+                        .as_ref()
+                        .and_then(|s| s.enabled)
+                        .unwrap_or(defs.redirections.smartcard.enabled),
+                    emulated: redirections
+                        .smartcard
+                        .as_ref()
+                        .and_then(|s| s.emulated.clone()),
+                },
                 drives: redirections
                     .drives
                     .clone()
@@ -405,6 +425,47 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    #[serial_test::serial(js_modules)]
+    async fn test_smartcard_settings_mapping() -> Result<()> {
+        log::setup_logging("debug", log::LogType::Test);
+        let (messages_tx, messages_rx): (
+            Sender<gui::types::GuiMessage>,
+            Receiver<gui::types::GuiMessage>,
+        ) = bounded(32);
+
+        crate::gui::set_sender(messages_tx);
+
+        let mut ctx = create_context(None)?;
+        register(&mut ctx)?;
+        let script = r#"
+            let rdpSettings = {
+                server: "localhost",
+                redirections: {
+                    smartcard: {
+                        enabled: true,
+                        emulated: "pem:cert;key"
+                    }
+                }
+            };
+            RDP.start(rdpSettings);
+        "#;
+        _ = exec_script(&mut ctx, script).await;
+
+        match messages_rx.try_recv() {
+            Ok(GuiMessage::ConnectRdp(settings)) => {
+                assert!(settings.redirections.smartcard.enabled);
+                assert_eq!(
+                    settings.redirections.smartcard.emulated.as_deref(),
+                    Some("pem:cert;key")
+                );
+            }
+            _ => panic!("Expected GuiMessage::ConnectRdp"),
+        }
+
+        Ok(())
+    }
+
     #[test]
     fn settings_is_valid_empty() {
         let s = RdpSettings::default();
@@ -468,7 +529,9 @@ mod tests {
         s.server = "h".into();
         s.options = Some(JsRdpOptions {
             use_local_scaler: Some(false),
-            ..Default::default()
+            verify_cert: None,
+            use_nla: None,
+            use_tunnel: None,
         });
         assert!(!s.to_core_settings().options.use_local_scaler);
     }

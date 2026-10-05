@@ -8,6 +8,8 @@ use crate::monitor;
 #[allow(dead_code)]
 pub struct Pinbar {
     pub visible: bool,
+    pub pinned: bool,
+    pub btn_pin_x: std::ops::Range<f32>,
     pub rect: Option<(u32, u32)>,
     pub btn_fs_x: std::ops::Range<f32>,
     pub btn_close_x: std::ops::Range<f32>,
@@ -28,6 +30,8 @@ impl Pinbar {
             crate::draw::load_png_rgba(include_bytes!("../../images/pinbar.png"));
         Self {
             visible: false,
+            pinned: false,
+            btn_pin_x: 0.0..0.0,
             rect: None,
             btn_fs_x: 0.0..0.0,
             btn_close_x: 0.0..0.0,
@@ -54,10 +58,15 @@ impl Pinbar {
         ov_data.push(self.bg_rgba.clone());
 
         let font_size = monitor::scaled_val(16) as f32;
+        let title = if self.pinned {
+            "UDS Connection (always on)"
+        } else {
+            "UDS Connection"
+        };
         text_sections.push(
             crate::wgpu_render::Section::default()
                 .add_text(
-                    crate::wgpu_render::Text::new("UDS Connection")
+                    crate::wgpu_render::Text::new(title)
                         .with_scale(font_size)
                         .with_color([1.0, 1.0, 1.0, 1.0]),
                 )
@@ -68,6 +77,7 @@ impl Pinbar {
                 .to_owned(),
         );
 
+        self.btn_pin_x = x..(x + monitor::scaled_val(216) as f32);
         self.btn_fs_x =
             (x + monitor::scaled_val(220) as f32)..(x + monitor::scaled_val(239) as f32);
         self.btn_close_x =

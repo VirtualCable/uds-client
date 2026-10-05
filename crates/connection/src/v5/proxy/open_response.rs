@@ -8,9 +8,29 @@
 use anyhow::Result;
 
 use crate::consts::TICKET_LENGTH;
+use crypt::datagram::{TOKEN_LENGTH, UdpToken};
+use crypt::rekey::MAX_REKEY_LOG2;
 use crypt::types::Ticket;
 
 const RESERVED_LENGTH: usize = 6;
+
+// Layout: session_id(48) | channel_count(2) | inbound_seq(8) | outbound_seq(8)
+//       | udp_token(16) | udp_port(2) | rekey_log2(1) | reserved(6) = 91 bytes
+// `rekey_log2` is the session's rekeying threshold announced by the server:
+// `0` = OFF (single key forever), `1..=MAX_REKEY_LOG2` = re-derive the key
+// every `2^k` sequence numbers (`epoch = saturating_sub(seq, seq_base) >> k`;
+// `seq_base` is 0 for TCP and 2^63 for UDP — see the tunnel-server's
+// `docs/rekeying-contract.md` §2). A value above
+// `MAX_REKEY_LOG2` rejects the handshake outright (`seq >> k` would be an
+// undefined shift on u64); the pre-rekeying layout was 90 bytes, so a
+// pre-rekeying launcher and a rekeying server fail the length check in
+// lockstep — the change is not backward-compatible by design.
+const OPEN_RESPONSE_LENGTH: usize =
+    TICKET_LENGTH + 2 + 8 + 8 + TOKEN_LENGTH + 2 + 1 + RESERVED_LENGTH;
+
+const UDP_TOKEN_START: usize = TICKET_LENGTH + 2 + 8 + 8;
+const UDP_PORT_START: usize = UDP_TOKEN_START + TOKEN_LENGTH;
+const REKEY_LOG2_START: usize = UDP_PORT_START + 2;
 
 // Important Note:
 // inbound is inbound for REMOTE tunnel (so, our outbound),
@@ -21,23 +41,40 @@ pub struct OpenResponse {
     pub channel_count: u16,
     pub inbound_seq: u64,
     pub outbound_seq: u64,
+    pub udp_token: UdpToken, // All zero means UDP is disabled for this session
+    pub udp_port: u16, // Resolved UDP relay port on the server; 0 means "same as the TCP tunnel port"
+    pub rekey_log2: u8, // Rekey threshold negotiated by the server (0 = OFF)
     _reserved: [u8; RESERVED_LENGTH], // For future use, 0 right now
 }
 
 impl OpenResponse {
+    /// Total bytes of the wire layout (91 with `rekey_log2`; the
+    /// pre-rekeying layout was 90).
+    pub const WIRE_LENGTH: usize = OPEN_RESPONSE_LENGTH;
+
     pub fn new(
         session_id: Ticket,
         channel_count: u16,
         inbound_seq: u64,
         outbound_seq: u64,
+        udp_token: UdpToken,
+        udp_port: u16,
+        rekey_log2: u8,
     ) -> Self {
         OpenResponse {
             session_id,
             channel_count,
             inbound_seq,
             outbound_seq,
+            udp_token,
+            udp_port,
+            rekey_log2,
             _reserved: [0u8; RESERVED_LENGTH],
         }
+    }
+
+    pub fn udp_enabled(&self) -> bool {
+        self.udp_token != [0u8; TOKEN_LENGTH]
     }
 
     pub fn as_vec(&self) -> Vec<u8> {
@@ -45,15 +82,18 @@ impl OpenResponse {
         vec.extend_from_slice(&self.channel_count.to_be_bytes());
         vec.extend_from_slice(&self.inbound_seq.to_be_bytes());
         vec.extend_from_slice(&self.outbound_seq.to_be_bytes());
+        vec.extend_from_slice(&self.udp_token);
+        vec.extend_from_slice(&self.udp_port.to_be_bytes());
+        vec.push(self.rekey_log2);
         vec.extend_from_slice(&self._reserved);
         vec
     }
 
     pub fn from_slice(data: &[u8]) -> Result<Self> {
-        if data.len() != TICKET_LENGTH + 2 + 8 + 8 + RESERVED_LENGTH {
+        if data.len() != OPEN_RESPONSE_LENGTH {
             anyhow::bail!(
                 "Invalid OpenResponse length: expected {}, got {}",
-                TICKET_LENGTH + 2 + 8 + 8 + RESERVED_LENGTH,
+                OPEN_RESPONSE_LENGTH,
                 data.len()
             );
         }
@@ -73,14 +113,30 @@ impl OpenResponse {
                 .try_into()
                 .map_err(|_| anyhow::anyhow!("Failed to parse outbound sequence"))?,
         );
-        //
-        // let mut reserved = [0u8; RESERVED_LENGTH];
-        // reserved.copy_from_slice(&data[TICKET_LENGTH + 2..]);
+        let udp_token: UdpToken = data[UDP_TOKEN_START..UDP_TOKEN_START + TOKEN_LENGTH]
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("Failed to parse UDP token"))?;
+        let udp_port = u16::from_be_bytes(
+            data[UDP_PORT_START..UDP_PORT_START + 2]
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("Failed to parse UDP port"))?,
+        );
+        let rekey_log2 = data[REKEY_LOG2_START];
+        if rekey_log2 > MAX_REKEY_LOG2 {
+            // Handshake rejection: `seq >> k` with k >= 64 is an undefined
+            // shift on u64, so such a peer must never get a crypt. The
+            // server clamps its own config the same way; this side only
+            // ever receives already-valid values from an honest server.
+            anyhow::bail!("Invalid rekey_log2 {rekey_log2} (> {MAX_REKEY_LOG2})");
+        }
         Ok(OpenResponse::new(
             session_id,
             channel_count,
             inbound_seq,
             outbound_seq,
+            udp_token,
+            udp_port,
+            rekey_log2,
         ))
     }
 }
@@ -101,13 +157,58 @@ mod tests {
     fn test_open_response_serialization() {
         let session_id = Ticket::new([1u8; TICKET_LENGTH]);
         let channel_count = 1;
-        let open_response = OpenResponse::new(session_id.clone(), channel_count, 1, 2);
+        let udp_token = [0xABu8; TOKEN_LENGTH];
+        let udp_port = 4443u16;
+        let open_response = OpenResponse::new(
+            session_id.clone(),
+            channel_count,
+            1,
+            2,
+            udp_token,
+            udp_port,
+            20,
+        );
         let vec = open_response.as_vec();
+        assert_eq!(vec.len(), OPEN_RESPONSE_LENGTH);
+        assert_eq!(OPEN_RESPONSE_LENGTH, 91);
         let parsed = OpenResponse::try_from(vec.as_slice()).expect("Failed to parse OpenResponse");
         assert_eq!(parsed.session_id, session_id);
         assert_eq!(parsed.channel_count, channel_count);
         assert_eq!(parsed.inbound_seq, 1);
         assert_eq!(parsed.outbound_seq, 2);
+        assert_eq!(parsed.udp_token, udp_token);
+        assert_eq!(parsed.udp_port, udp_port);
+        assert_eq!(parsed.rekey_log2, 20);
+        assert!(parsed.udp_enabled());
+    }
+
+    #[test]
+    fn test_open_response_raw_offsets() {
+        let session_id = Ticket::new([1u8; TICKET_LENGTH]);
+        let udp_token = [0x42u8; TOKEN_LENGTH];
+        let vec = OpenResponse::new(session_id, 0x0102, 1, 2, udp_token, 0x0506, 0x08).as_vec();
+        assert_eq!(vec.len(), 91);
+        // channel_count at 48
+        assert_eq!(&vec[48..50], &[0x01, 0x02]);
+        // udp_token at 66..82
+        assert_eq!(&vec[66..82], &[0x42u8; TOKEN_LENGTH]);
+        // udp_port at 82..84, big-endian
+        assert_eq!(&vec[82..84], &[0x05, 0x06]);
+        // rekey_log2 at 84
+        assert_eq!(vec[84], 0x08);
+        // reserved 85..91 must be zero
+        assert!(vec[85..91].iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn test_open_response_zero_token_means_udp_disabled() {
+        let session_id = Ticket::new([1u8; TICKET_LENGTH]);
+        let open_response = OpenResponse::new(session_id, 1, 1, 1, [0u8; TOKEN_LENGTH], 0, 0);
+        let parsed = OpenResponse::try_from(open_response.as_vec().as_slice()).unwrap();
+        assert_eq!(parsed.udp_token, [0u8; TOKEN_LENGTH]);
+        assert_eq!(parsed.udp_port, 0);
+        assert_eq!(parsed.rekey_log2, 0);
+        assert!(!parsed.udp_enabled());
     }
 
     #[test]
@@ -115,6 +216,55 @@ mod tests {
         let data = vec![0u8; TICKET_LENGTH + 1]; // Invalid length
         let result = OpenResponse::try_from(data.as_slice());
         assert!(result.is_err());
+
+        // Old 72-byte layout (pre-UDP) must be rejected
+        let old_layout = vec![0u8; TICKET_LENGTH + 2 + 8 + 8 + RESERVED_LENGTH];
+        assert!(OpenResponse::try_from(old_layout.as_slice()).is_err());
+
+        // Old 88-byte layout (token but no udp_port) must be rejected
+        let old_layout = vec![0u8; TICKET_LENGTH + 2 + 8 + 8 + TOKEN_LENGTH + RESERVED_LENGTH];
+        assert!(OpenResponse::try_from(old_layout.as_slice()).is_err());
+
+        // Pre-rekeying 90-byte layout must be rejected (the change is not
+        // backward-compatible by design: a server and launcher of different
+        // generations fail the length check in lockstep).
+        let pre_rekey_layout =
+            vec![0u8; TICKET_LENGTH + 2 + 8 + 8 + TOKEN_LENGTH + 2 + RESERVED_LENGTH];
+        assert!(OpenResponse::try_from(pre_rekey_layout.as_slice()).is_err());
+    }
+
+    /// `k` above the shift-safe bound makes `seq >> k` undefined on `u64`;
+    /// such a peer must never get a crypt, so the handshake is rejected.
+    #[test]
+    fn test_open_response_rejects_out_of_range_k() {
+        for k in [64u8, 65, 128, 255] {
+            let session_id = Ticket::new([1u8; TICKET_LENGTH]);
+            let mut vec = session_id.as_ref().to_vec();
+            vec.extend_from_slice(&[0u8; 2]); // channel count
+            vec.extend_from_slice(&[0u8; 8]); // inbound seq
+            vec.extend_from_slice(&[0u8; 8]); // outbound seq
+            vec.extend_from_slice(&[0u8; TOKEN_LENGTH]); // UDP token
+            vec.extend_from_slice(&[0u8; 2]); // UDP port
+            vec.push(k); // rekey_log2
+            vec.extend_from_slice(&[0u8; RESERVED_LENGTH]);
+            let result = OpenResponse::try_from(vec.as_slice());
+            assert!(
+                result.is_err(),
+                "rekey_log2 {k} must be rejected (> {MAX_REKEY_LOG2})"
+            );
+        }
+    }
+
+    /// The boundary values accepted by the wire format (mirrors the server's
+    /// parser: 0 = OFF, MAX_REKEY_LOG2 = the shift-safe ceiling).
+    #[test]
+    fn test_open_response_accepts_valid_k_range() {
+        for k in [0u8, 1, 8, 20, MAX_REKEY_LOG2] {
+            let session_id = Ticket::new([1u8; TICKET_LENGTH]);
+            let open_response = OpenResponse::new(session_id, 1, 1, 1, [0u8; TOKEN_LENGTH], 0, k);
+            let parsed = OpenResponse::try_from(open_response.as_vec().as_slice()).unwrap();
+            assert_eq!(parsed.rekey_log2, k);
+        }
     }
 
     #[test]
@@ -124,6 +274,9 @@ mod tests {
         vec.extend_from_slice(&[0xFF, 0xFF]); // Invalid channel count (65535)
         vec.extend_from_slice(&[0u8; 8]); // Inbound seq
         vec.extend_from_slice(&[0u8; 8]); // Outbound seq
+        vec.extend_from_slice(&[0u8; TOKEN_LENGTH]); // UDP token (disabled)
+        vec.extend_from_slice(&[0u8; 2]); // UDP port
+        vec.extend_from_slice(&[0u8; 1]); // rekey_log2 (OFF)
         vec.extend_from_slice(&[0u8; RESERVED_LENGTH]);
         let result = OpenResponse::try_from(vec.as_slice());
         assert!(result.is_ok()); // Channel count is valid, just large

@@ -22,6 +22,116 @@ pub enum PopupKind {
     Error(String),
 }
 
+// Logical (unscaled) layout of the popup, shared by the window sizing and the painting
+const MARGIN: f32 = 20.0;
+const ICON_SIZE: f32 = 40.0;
+const MESSAGE_FONT_SIZE: f32 = 14.0;
+const MESSAGE_LINE_HEIGHT: f32 = MESSAGE_FONT_SIZE * 1.5;
+const MESSAGE_TOP_GAP: f32 = 10.0;
+const BUTTON_HEIGHT: f32 = 40.0;
+const BUTTON_TOP_GAP: f32 = 15.0;
+const WIDTH: f32 = 400.0;
+const MIN_HEIGHT: f32 = 200.0;
+
+fn message_of(kind: &PopupKind) -> &str {
+    match kind {
+        PopupKind::YesNo { message, .. } => message,
+        PopupKind::Warning(message) | PopupKind::Error(message) => message,
+    }
+}
+
+fn max_chars_per_line(width: f32, font_size: f32) -> usize {
+    ((width - 2.0 * MARGIN) / (font_size * 0.55)) as usize
+}
+
+fn message_top(margin: f32, icon_size: f32, top_gap: f32) -> f32 {
+    margin + icon_size + top_gap
+}
+
+fn scaled(value: f32) -> f32 {
+    value * *monitor::SCALE_FACTOR as f32
+}
+
+fn height_for(line_count: usize) -> f32 {
+    let height = message_top(MARGIN, ICON_SIZE, MESSAGE_TOP_GAP)
+        + line_count as f32 * MESSAGE_LINE_HEIGHT
+        + BUTTON_TOP_GAP
+        + BUTTON_HEIGHT
+        + MARGIN;
+
+    height.max(MIN_HEIGHT)
+}
+
+fn layout_buttons(kind: &PopupKind, pw: f32, ph: f32) -> Vec<crate::draw::ui::button::Button> {
+    let scale = *monitor::SCALE_FACTOR as f32;
+    let bh = scaled(BUTTON_HEIGHT);
+    let by = ph - bh - scaled(MARGIN);
+
+    let mut buttons = Vec::new();
+    match kind {
+        PopupKind::YesNo { .. } => {
+            let bw = monitor::scaled_val(100) as f32;
+            let bx_yes = (pw / 2.0) - bw - 10.0 * scale;
+            let bx_no = (pw / 2.0) + 10.0 * scale;
+
+            buttons.push(crate::draw::ui::button::Button::new(
+                bx_yes,
+                by,
+                bw as u32,
+                bh as u32,
+                "YES".to_string(),
+                crate::draw::ui::button::ButtonStyle {
+                    font_scale: monitor::scaled_val(15) as f32,
+                    radius: 8.0,
+                    bg_color: [45, 45, 55, 255],
+                    border_color: [80, 80, 100, 255],
+                    hover_bg_color: [65, 65, 80, 255],
+                    hover_border_color: [120, 120, 150, 255],
+                    ..Default::default()
+                },
+            ));
+            buttons.push(crate::draw::ui::button::Button::new(
+                bx_no,
+                by,
+                bw as u32,
+                bh as u32,
+                "NO".to_string(),
+                crate::draw::ui::button::ButtonStyle {
+                    font_scale: monitor::scaled_val(15) as f32,
+                    radius: 8.0,
+                    bg_color: [45, 45, 55, 255],
+                    border_color: [80, 80, 100, 255],
+                    hover_bg_color: [65, 65, 80, 255],
+                    hover_border_color: [120, 120, 150, 255],
+                    ..Default::default()
+                },
+            ));
+        }
+        PopupKind::Warning(_) | PopupKind::Error(_) => {
+            let bw = monitor::scaled_val(120) as f32;
+            let bx = pw / 2.0 - bw / 2.0;
+            buttons.push(crate::draw::ui::button::Button::new(
+                bx,
+                by,
+                bw as u32,
+                bh as u32,
+                "GOT IT".to_string(),
+                crate::draw::ui::button::ButtonStyle {
+                    font_scale: monitor::scaled_val(15) as f32,
+                    radius: 8.0,
+                    bg_color: [45, 45, 55, 255],
+                    border_color: [80, 80, 100, 255],
+                    hover_bg_color: [65, 65, 80, 255],
+                    hover_border_color: [120, 120, 150, 255],
+                    ..Default::default()
+                },
+            ));
+        }
+    }
+
+    buttons
+}
+
 pub struct PopupState {
     pub window: Arc<winit::window::Window>,
     pub renderer: WgpuRenderer,
@@ -39,9 +149,11 @@ impl PopupState {
         kind: PopupKind,
     ) -> anyhow::Result<Self> {
         let (dw, dh) = crate::monitor::size(0).unwrap_or((1920, 1080));
-        let ww = 400.0;
-        let wh = 200.0;
         let sf = crate::monitor::scale(0) as f32;
+        let ww = WIDTH;
+        let line_count =
+            text::lines(message_of(&kind), max_chars_per_line(ww, MESSAGE_FONT_SIZE)).len();
+        let wh = height_for(line_count).min(dh as f32 / sf);
         let px = (dw as f32 - ww * sf) / 2.0;
         let py = (dh as f32 - wh * sf) / 2.0;
 
@@ -58,72 +170,7 @@ impl PopupState {
         let phys = window.inner_size();
         let scale = *monitor::SCALE_FACTOR as f32;
         let renderer = WgpuRenderer::new(window.clone(), phys.width, phys.height)?;
-        let pw = phys.width as f32;
-        let ph = phys.height as f32;
-        let bh = monitor::scaled_val(40) as f32;
-        let by = ph - bh - 20.0 * scale;
-
-        let mut buttons = Vec::new();
-        match &kind {
-            PopupKind::YesNo { .. } => {
-                let bw = monitor::scaled_val(100) as f32;
-                let bx_yes = (pw / 2.0) - bw - 10.0 * scale;
-                let bx_no = (pw / 2.0) + 10.0 * scale;
-
-                buttons.push(crate::draw::ui::button::Button::new(
-                    bx_yes,
-                    by,
-                    bw as u32,
-                    bh as u32,
-                    "YES".to_string(),
-                    crate::draw::ui::button::ButtonStyle {
-                        font_scale: monitor::scaled_val(15) as f32,
-                        radius: 8.0,
-                        bg_color: [45, 45, 55, 255],
-                        border_color: [80, 80, 100, 255],
-                        hover_bg_color: [65, 65, 80, 255],
-                        hover_border_color: [120, 120, 150, 255],
-                        ..Default::default()
-                    },
-                ));
-                buttons.push(crate::draw::ui::button::Button::new(
-                    bx_no,
-                    by,
-                    bw as u32,
-                    bh as u32,
-                    "NO".to_string(),
-                    crate::draw::ui::button::ButtonStyle {
-                        font_scale: monitor::scaled_val(15) as f32,
-                        radius: 8.0,
-                        bg_color: [45, 45, 55, 255],
-                        border_color: [80, 80, 100, 255],
-                        hover_bg_color: [65, 65, 80, 255],
-                        hover_border_color: [120, 120, 150, 255],
-                        ..Default::default()
-                    },
-                ));
-            }
-            PopupKind::Warning(_) | PopupKind::Error(_) => {
-                let bw = monitor::scaled_val(120) as f32;
-                let bx = pw / 2.0 - bw / 2.0;
-                buttons.push(crate::draw::ui::button::Button::new(
-                    bx,
-                    by,
-                    bw as u32,
-                    bh as u32,
-                    "GOT IT".to_string(),
-                    crate::draw::ui::button::ButtonStyle {
-                        font_scale: monitor::scaled_val(15) as f32,
-                        radius: 8.0,
-                        bg_color: [45, 45, 55, 255],
-                        border_color: [80, 80, 100, 255],
-                        hover_bg_color: [65, 65, 80, 255],
-                        hover_border_color: [120, 120, 150, 255],
-                        ..Default::default()
-                    },
-                ));
-            }
-        }
+        let buttons = layout_buttons(&kind, phys.width as f32, phys.height as f32);
 
         Ok(PopupState {
             window,
@@ -164,6 +211,17 @@ impl PopupState {
             }
         }
         false
+    }
+
+    /// The surface is mapped after creation on Linux, so the first real size arrives here.
+    pub fn resize(&mut self, width: u32, height: u32) {
+        if width == 0 || height == 0 {
+            return;
+        }
+        self.phys_w = width;
+        self.phys_h = height;
+        self.scale = *monitor::SCALE_FACTOR as f32;
+        self.buttons = layout_buttons(&self.kind, width as f32, height as f32);
     }
 
     pub fn paint(&mut self) {
@@ -208,7 +266,7 @@ impl PopupState {
         data.push(panel_pixmap.take());
         ov_descs.push((0, pw, ph, 0.0, 0.0));
 
-        let icon_size_px = monitor::scaled_val(40) as u32;
+        let icon_size_px = scaled(ICON_SIZE) as u32;
         let mut icon_pixmap = Pixmap::new(icon_size_px, icon_size_px).unwrap();
         let icon_center = icon_size_px as f32 / 2.0;
         let icon_radius = icon_center - 2.0 * s;
@@ -275,18 +333,14 @@ impl PopupState {
                 .to_owned(),
         );
 
-        let msg_fs = monitor::scaled_val(14) as f32;
-        let msg_x = 20.0 * s;
-        let msg_y = 20.0 * s + icon_size_px as f32 + 10.0 * s;
-        let max_chars = ((pw as f32 - 40.0 * s) / (msg_fs * 0.55)) as usize;
         sections.extend(text::wrap(
             message,
-            max_chars,
-            msg_fs,
+            max_chars_per_line(WIDTH, MESSAGE_FONT_SIZE),
+            scaled(MESSAGE_FONT_SIZE),
             [0.9, 0.9, 0.9, 1.0],
-            msg_x,
-            msg_y,
-            msg_fs * 1.5,
+            scaled(MARGIN),
+            scaled(message_top(MARGIN, ICON_SIZE, MESSAGE_TOP_GAP)),
+            scaled(MESSAGE_LINE_HEIGHT),
         ));
 
         for btn in &self.buttons {
@@ -335,6 +389,15 @@ impl crate::AppHandler {
                     popup.window.request_redraw();
                 }
             }
+            WindowEvent::Resized(size) => {
+                popup.resize(size.width, size.height);
+                popup.window.request_redraw();
+            }
+            WindowEvent::ScaleFactorChanged { .. } => {
+                let size = popup.window.inner_size();
+                popup.resize(size.width, size.height);
+                popup.window.request_redraw();
+            }
             WindowEvent::CursorMoved { position, .. } => {
                 let px = position.x as f32;
                 let py = position.y as f32;
@@ -354,5 +417,70 @@ impl crate::AppHandler {
                 self.stop.trigger();
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn short_messages_keep_the_default_size() {
+        assert_eq!(height_for(1), MIN_HEIGHT);
+    }
+
+    #[test]
+    fn the_window_grows_with_the_message() {
+        assert!(height_for(8) > height_for(4));
+        assert_eq!(
+            height_for(8) - height_for(4),
+            4.0 * MESSAGE_LINE_HEIGHT,
+            "each extra line adds exactly one line height"
+        );
+    }
+
+    #[test]
+    fn the_message_never_reaches_the_buttons() {
+        for line_count in 1..20 {
+            let message_bottom = message_top(MARGIN, ICON_SIZE, MESSAGE_TOP_GAP)
+                + line_count as f32 * MESSAGE_LINE_HEIGHT;
+            let buttons_top = height_for(line_count) - BUTTON_HEIGHT - MARGIN;
+
+            assert!(
+                message_bottom <= buttons_top,
+                "{} lines: message ends at {}, buttons start at {}",
+                line_count,
+                message_bottom,
+                buttons_top
+            );
+        }
+    }
+
+    #[test]
+    fn a_wrapped_message_is_taller_than_a_one_liner() {
+        let one_liner = text::lines(
+            "Access denied",
+            max_chars_per_line(WIDTH, MESSAGE_FONT_SIZE),
+        );
+        let long = text::lines(
+            "The server demo50.udsenterprise.com:5443\nmust be approved.\nOnly approve UDS servers you trust.\nDo you want to continue?",
+            max_chars_per_line(WIDTH, MESSAGE_FONT_SIZE),
+        );
+
+        assert!(height_for(long.len()) > height_for(one_liner.len()));
+    }
+
+    #[test]
+    fn the_buttons_follow_the_window_size() {
+        let kind = PopupKind::Warning("hi".to_string());
+        let small = layout_buttons(&kind, 400.0, 200.0);
+        let large = layout_buttons(&kind, 800.0, 400.0);
+
+        assert_eq!(small.len(), 1);
+        assert!(
+            large[0].x > small[0].x,
+            "the button re-centers horizontally"
+        );
+        assert!(large[0].y > small[0].y, "the button stays at the bottom");
     }
 }

@@ -14,7 +14,7 @@ use boa_engine::{
 };
 
 use connection::{tasks, types::TunnelConnectInfo};
-use shared::{appdata, log};
+use shared::log;
 
 fn add_early_unlinkable_file_fn(
     _: &JsValue,
@@ -60,13 +60,12 @@ struct TunnelParams {
     keep_listening_after_timeout: Option<bool>,
     enable_ipv6: Option<bool>,
     shared_secret: Option<Vec<u8>>,
+    use_udp: Option<bool>,
+    udp_port: Option<u16>,
 }
 
 impl TunnelParams {
-    fn to_connect_info(
-        &self,
-        check_cert_default: Option<bool>,
-    ) -> anyhow::Result<TunnelConnectInfo> {
+    fn to_connect_info(&self) -> anyhow::Result<TunnelConnectInfo> {
         Ok(TunnelConnectInfo {
             addr: self.addr.clone(),
             port: self.port,
@@ -75,13 +74,12 @@ impl TunnelParams {
                 .as_bytes()
                 .try_into()
                 .map_err(|_| anyhow::anyhow!("Invalid ticket length, must be 32 bytes"))?,
-            check_certificate: self
-                .check_certificate
-                .unwrap_or(check_cert_default.unwrap_or(true)),
             local_port: self.local_port,
             startup_time_ms: self.startup_time_ms.unwrap_or(0),
             keep_listening_after_timeout: self.keep_listening_after_timeout.unwrap_or(false),
             enable_ipv6: self.enable_ipv6.unwrap_or(false),
+            use_udp: self.use_udp.unwrap_or(false),
+            udp_port: self.udp_port,
             shared_secret: self
                 .shared_secret
                 .as_ref()
@@ -100,13 +98,12 @@ async fn start_tunel_fn(
     args: &[JsValue],
     ctx: &std::cell::RefCell<&mut Context>,
 ) -> JsResult<JsValue> {
-    let appdata = appdata::AppData::load();
     let params = {
         let mut ctx_borrow = ctx.borrow_mut();
         extract_js_args!(args, &mut *ctx_borrow, TunnelParams)
     };
     log::debug!(
-        "Starting tunnel to {}:{} with ticket {}, check_certificate: {:?}, listen_timeout_ms: {:?}, local_port: {:?}, keep_listening_after_timeout: {:?}, enable_ipv6: {:?}, shared_secret: {:?}",
+        "Starting tunnel to {}:{} with ticket {}, check_certificate: {:?} (ignored: TLS verification is a build-time setting), listen_timeout_ms: {:?}, local_port: {:?}, keep_listening_after_timeout: {:?}, enable_ipv6: {:?}, shared_secret: {:?}, use_udp: {:?}, udp_port: {:?}",
         params.addr,
         params.port,
         params.ticket,
@@ -116,9 +113,11 @@ async fn start_tunel_fn(
         params.keep_listening_after_timeout,
         params.enable_ipv6,
         params.shared_secret,
+        params.use_udp,
+        params.udp_port,
     );
     let tunnel_info = params
-        .to_connect_info(appdata.verify_ssl)
+        .to_connect_info()
         .map_err(|e| JsError::from_native(JsNativeError::error().with_message(e.to_string())))?;
 
     let port = connection::start_tunnel(tunnel_info)
@@ -237,7 +236,7 @@ mod tests {
             ticket: "A".repeat(48),
             ..Default::default()
         };
-        assert!(p.to_connect_info(None).is_ok());
+        assert!(p.to_connect_info().is_ok());
     }
 
     #[test]
@@ -246,7 +245,7 @@ mod tests {
             ticket: "short".into(),
             ..Default::default()
         };
-        assert!(p.to_connect_info(None).is_err());
+        assert!(p.to_connect_info().is_err());
     }
 
     #[test]
@@ -255,12 +254,26 @@ mod tests {
             ticket: "A".repeat(48),
             ..Default::default()
         };
-        let info = p.to_connect_info(None).unwrap();
+        let info = p.to_connect_info().unwrap();
         assert_eq!(info.startup_time_ms, 0);
         assert!(!info.keep_listening_after_timeout);
         assert!(!info.enable_ipv6);
-        assert!(info.check_certificate);
         assert!(info.shared_secret.is_none());
+        assert!(!info.use_udp);
+        assert!(info.udp_port.is_none());
+    }
+
+    #[test]
+    fn tunnel_params_udp_explicit() {
+        let p = TunnelParams {
+            ticket: "A".repeat(48),
+            use_udp: Some(true),
+            udp_port: Some(13389),
+            ..Default::default()
+        };
+        let info = p.to_connect_info().unwrap();
+        assert!(info.use_udp);
+        assert_eq!(info.udp_port, Some(13389));
     }
 
     #[test]
@@ -273,22 +286,23 @@ mod tests {
             check_certificate: Some(false),
             ..Default::default()
         };
-        let info = p.to_connect_info(None).unwrap();
+        let info = p.to_connect_info().unwrap();
         assert_eq!(info.startup_time_ms, 5000);
         assert!(info.keep_listening_after_timeout);
         assert!(info.enable_ipv6);
-        assert!(!info.check_certificate);
     }
 
     #[test]
-    fn tunnel_params_check_cert_default_override() {
+    fn tunnel_params_check_certificate_is_accepted_but_ignored() {
+        // Scripts may still pass `check_certificate`, it must parse fine but
+        // never reach the tunnel info: TLS verification is a build-time
+        // setting (`shared::tls::insecure_tls_bypass_allowed`).
         let p = TunnelParams {
             ticket: "A".repeat(48),
+            check_certificate: Some(false),
             ..Default::default()
         };
-        // cert_default = Some(false) overrides the default true
-        let info = p.to_connect_info(Some(false)).unwrap();
-        assert!(!info.check_certificate);
+        assert!(p.to_connect_info().is_ok());
     }
 
     #[test]
@@ -298,7 +312,7 @@ mod tests {
             shared_secret: Some(vec![0u8; 32]),
             ..Default::default()
         };
-        let info = p.to_connect_info(None).unwrap();
+        let info = p.to_connect_info().unwrap();
         assert!(info.shared_secret.is_some());
     }
 
@@ -309,6 +323,6 @@ mod tests {
             shared_secret: Some(vec![0u8; 31]),
             ..Default::default()
         };
-        assert!(p.to_connect_info(None).is_err());
+        assert!(p.to_connect_info().is_err());
     }
 }

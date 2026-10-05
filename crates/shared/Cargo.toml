@@ -5,6 +5,14 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
+[features]
+# Compile-in the TLS certificate-verification bypass. Without this feature
+# (and outside debug builds) every "don't verify" request is forced to
+# "verify": production binaries cannot disable TLS verification by config,
+# app_data or JS flag, closing the local-attacker / MiTM path over the
+# ML-KEM key exchange. Never ship it without an explicit decision.
+insecure-tls = []
+
 [dependencies]
 # Logging
 tracing.workspace = true
@@ -42,3 +50,5 @@ widestring.workspace = true
 rcgen.workspace = true
 serial_test.workspace = true
 mockito.workspace = true
+# multi-thread runtime for the trigger lost-wakeup stress test
+tokio = { workspace = true, features = ["rt-multi-thread"] }

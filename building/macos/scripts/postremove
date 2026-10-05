@@ -1,31 +1,36 @@
 #!/bin/bash
 set -e
 
-TARGET_DIR="/Library/Application Support/UDSLauncher/openh264"
-LOG_FILE="/tmp/udslauncher-postremove.log"
+# --- Configuration -----------------------------------------------------------
+
+SUPPORT_DIR="/Library/Application Support/UDSLauncher"
+TARGET_DIR="$SUPPORT_DIR/openh264"
+TARGET_FILE="libopenh264.8.dylib"
+
+LOG_DIR="/var/log"
+LOG_FILE="$LOG_DIR/udslauncher-install.log"
+
+# --- Helpers -----------------------------------------------------------------
 
 log() {
     echo "$@"
-    echo "$@" >> "$LOG_FILE"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG_FILE"
 }
+
+# --- Remove ------------------------------------------------------------------
 
 log "=== UDSLauncher postremove started at $(date) ==="
 
-if [ -f "$TARGET_DIR/libopenh264.8.dylib" ]; then
-    rm -f "$TARGET_DIR/libopenh264.8.dylib"
-    log "Removed OpenH264 dylib from $TARGET_DIR"
+if [ -f "$TARGET_DIR/$TARGET_FILE" ]; then
+    rm -f "$TARGET_DIR/$TARGET_FILE"
+    log "Removed $TARGET_DIR/$TARGET_FILE"
 else
-    log "No OpenH264 dylib found at $TARGET_DIR"
+    log "Nothing to remove at $TARGET_DIR/$TARGET_FILE"
 fi
 
-if [ -d "$TARGET_DIR" ]; then
-    rmdir "$TARGET_DIR" 2>/dev/null || true
-fi
-
-PARENT_DIR="/Library/Application Support/UDSLauncher"
-if [ -d "$PARENT_DIR" ]; then
-    rmdir "$PARENT_DIR" 2>/dev/null || true
-fi
+# Only prune the directories we created, and only while they are empty.
+rmdir "$TARGET_DIR" 2>/dev/null || true
+rmdir "$SUPPORT_DIR" 2>/dev/null || true
 
 log "=== UDSLauncher postremove finished at $(date) ==="
 exit 0

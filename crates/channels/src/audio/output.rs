@@ -12,7 +12,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SampleFormat, SizedSample};
 use shared::log;
 
-use super::tools::{ResamplerIterator, pcm_to_f32};
+use super::tools::{Resampler, pcm_to_f32};
 
 use rdp::integrations::AudioOutputIntegration;
 
@@ -60,6 +60,28 @@ impl AudioHandle {
                 .unwrap_or_else(|| cfg.with_max_sample_rate()),
         )
     }
+
+    /// Configs to try, in order. WASAPI shared mode only opens streams at the device
+    /// mix format, even when `supported_output_configs` advertises other rates (a
+    /// G435 USB headset lists 44100 Hz and then refuses to build it), so the mix
+    /// format goes first; the resampler absorbs the rate change. It is skipped when
+    /// its channel count differs, as the buffer is interleaved with the server's.
+    pub fn stream_config_candidates(
+        mix_format: Option<cpal::SupportedStreamConfig>,
+        matching_range: Option<cpal::SupportedStreamConfig>,
+        channels: u16,
+    ) -> Vec<cpal::SupportedStreamConfig> {
+        let mut candidates: Vec<_> = mix_format
+            .into_iter()
+            .filter(|cfg| cfg.channels() == channels)
+            .collect();
+        if let Some(cfg) = matching_range
+            && !candidates.contains(&cfg)
+        {
+            candidates.push(cfg);
+        }
+        candidates
+    }
 }
 
 /// Builds an output stream typed to the device's chosen sample format, converting
@@ -85,6 +107,27 @@ where
         |err| log::error!("Stream error: {}", err),
         None,
     )
+}
+
+fn build_output_stream(
+    dev: &cpal::Device,
+    supported: &cpal::SupportedStreamConfig,
+    buffer: &Arc<RwLock<VecDeque<f32>>>,
+) -> Result<cpal::Stream, cpal::Error> {
+    let cfg = supported.config();
+    let buffer = Arc::clone(buffer);
+    match supported.sample_format() {
+        SampleFormat::F32 => build_output_stream_typed::<f32>(dev, cfg, buffer),
+        SampleFormat::I16 => build_output_stream_typed::<i16>(dev, cfg, buffer),
+        SampleFormat::U16 => build_output_stream_typed::<u16>(dev, cfg, buffer),
+        SampleFormat::U8 => build_output_stream_typed::<u8>(dev, cfg, buffer),
+        SampleFormat::I32 => build_output_stream_typed::<i32>(dev, cfg, buffer),
+        SampleFormat::F64 => build_output_stream_typed::<f64>(dev, cfg, buffer),
+        other => Err(cpal::Error::with_message(
+            cpal::ErrorKind::UnsupportedConfig,
+            format!("unsupported sample format {:?}", other),
+        )),
+    }
 }
 
 impl AudioOutputIntegration for AudioHandle {
@@ -122,51 +165,29 @@ impl AudioOutputIntegration for AudioHandle {
             let buffer: Arc<RwLock<VecDeque<f32>>> = Arc::new(RwLock::new(VecDeque::new()));
 
             let mut output_sample_rate = sample_rate;
-            if let Some(dev) = device
-                && let Some(cfg) = AudioHandle::get_stream_config(&dev, sample_rate)
-            {
-                let sample_format = cfg.sample_format();
-                log::debug!(
-                    "Using audio format: {:?}, range={}",
-                    sample_format,
-                    cfg.sample_rate()
+            if let Some(dev) = device {
+                let candidates = AudioHandle::stream_config_candidates(
+                    dev.default_output_config().ok(),
+                    AudioHandle::get_stream_config(&dev, sample_rate),
+                    channels,
                 );
-                let cfg = cfg.config();
-                // Store real output sample rate
-                output_sample_rate = cfg.sample_rate;
-                // Build a stream matching the device's sample format. Never unwrap:
-                // a failed build must disable audio, not crash the whole launcher.
-                let built = match sample_format {
-                    SampleFormat::F32 => {
-                        build_output_stream_typed::<f32>(&dev, cfg, Arc::clone(&buffer))
+                for cfg in candidates {
+                    log::debug!(
+                        "Trying audio format: {:?}, channels={}, rate={}",
+                        cfg.sample_format(),
+                        cfg.channels(),
+                        cfg.sample_rate()
+                    );
+                    // Never unwrap: a failed build must disable audio, not crash the launcher.
+                    match build_output_stream(&dev, &cfg, &buffer) {
+                        Ok(s) => {
+                            output_sample_rate = cfg.sample_rate();
+                            stream = Some(s);
+                            break;
+                        }
+                        Err(e) => log::warn!("Cannot build output stream with {:?}: {}", cfg, e),
                     }
-                    SampleFormat::I16 => {
-                        build_output_stream_typed::<i16>(&dev, cfg, Arc::clone(&buffer))
-                    }
-                    SampleFormat::U16 => {
-                        build_output_stream_typed::<u16>(&dev, cfg, Arc::clone(&buffer))
-                    }
-                    SampleFormat::U8 => {
-                        build_output_stream_typed::<u8>(&dev, cfg, Arc::clone(&buffer))
-                    }
-                    SampleFormat::I32 => {
-                        build_output_stream_typed::<i32>(&dev, cfg, Arc::clone(&buffer))
-                    }
-                    SampleFormat::F64 => {
-                        build_output_stream_typed::<f64>(&dev, cfg, Arc::clone(&buffer))
-                    }
-                    other => Err(cpal::Error::with_message(
-                        cpal::ErrorKind::UnsupportedConfig,
-                        format!("unsupported sample format {:?}", other),
-                    )),
-                };
-                stream = match built {
-                    Ok(s) => Some(s),
-                    Err(e) => {
-                        log::error!("Audio disabled: cannot build output stream: {}", e);
-                        None
-                    }
-                };
+                }
             }
 
             if let Some(s) = &stream {
@@ -175,6 +196,7 @@ impl AudioOutputIntegration for AudioHandle {
                 log::error!("Audio disabled: cpal init failed");
             }
 
+            let mut resampler = Resampler::new(sample_rate, output_sample_rate, channels);
             let mut stats = AudioStats::new();
             // Main loop
             loop {
@@ -183,17 +205,13 @@ impl AudioOutputIntegration for AudioHandle {
                         AudioCommand::Play(data) => {
                             stats.add_play_call();
                             if stream.is_some() {
-                                // Convert PCM to f32, resample and push to buffer
-                                let resampled_iter = ResamplerIterator::new(
-                                    pcm_to_f32(&data, bits_per_sample),
-                                    sample_rate,
-                                    output_sample_rate,
-                                );
+                                let samples: Vec<f32> =
+                                    pcm_to_f32(&data, bits_per_sample).collect();
                                 let mut buf = buffer.write().unwrap();
                                 // Store current buffer length to calculate number of frames added
                                 let added_frames = {
                                     let buf_len = buf.len();
-                                    buf.extend(resampled_iter);
+                                    resampler.process(&samples, &mut *buf);
                                     (buf.len() - buf_len) as u64 / channels as u64
                                 };
                                 stats.add_frames_played(added_frames);
@@ -334,6 +352,41 @@ impl Default for AudioHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn mix(channels: u16, rate: u32) -> cpal::SupportedStreamConfig {
+        cpal::SupportedStreamConfig::new(
+            channels,
+            rate,
+            cpal::SupportedBufferSize::Unknown,
+            SampleFormat::F32,
+        )
+    }
+
+    #[test]
+    fn candidates_try_mix_format_before_advertised_range() {
+        let candidates =
+            AudioHandle::stream_config_candidates(Some(mix(2, 48000)), Some(mix(2, 44100)), 2);
+        assert_eq!(candidates, vec![mix(2, 48000), mix(2, 44100)]);
+    }
+
+    #[test]
+    fn candidates_skip_mix_format_with_other_channel_count() {
+        let candidates =
+            AudioHandle::stream_config_candidates(Some(mix(8, 48000)), Some(mix(2, 44100)), 2);
+        assert_eq!(candidates, vec![mix(2, 44100)]);
+    }
+
+    #[test]
+    fn candidates_do_not_repeat_the_same_config() {
+        let candidates =
+            AudioHandle::stream_config_candidates(Some(mix(2, 48000)), Some(mix(2, 48000)), 2);
+        assert_eq!(candidates, vec![mix(2, 48000)]);
+    }
+
+    #[test]
+    fn candidates_empty_without_device_configs() {
+        assert!(AudioHandle::stream_config_candidates(None, None, 2).is_empty());
+    }
 
     #[test]
     fn test_audio_handle_creation() {
