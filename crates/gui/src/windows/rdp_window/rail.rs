@@ -12,8 +12,8 @@ use shared::log;
 #[allow(dead_code)]
 pub struct RailWindow {
     pub id: u32,
-    pub window: std::sync::Arc<winit::window::Window>,
     pub renderer: Option<crate::wgpu_render::WgpuRenderer>,
+    pub window: std::sync::Arc<winit::window::Window>,
     pub rgba_data: Option<Vec<u8>>,
     pub width: u32,
     pub height: u32,

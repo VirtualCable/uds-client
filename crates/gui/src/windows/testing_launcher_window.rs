@@ -114,8 +114,8 @@ impl TestingLauncherInner {
 
 #[derive(Default)]
 pub struct TestingLauncherState {
-    pub window: Option<Arc<winit::window::Window>>,
     pub renderer: Option<WgpuRenderer>,
+    pub window: Option<Arc<winit::window::Window>>,
     pub inner: TestingLauncherInner,
     pub last_mouse_pos: Option<(f32, f32)>,
 }

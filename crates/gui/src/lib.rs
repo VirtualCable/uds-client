@@ -231,6 +231,7 @@ impl ApplicationHandler for AppHandler {
                     #[allow(clippy::collapsible_match)]
                     Some(WindowKind::Rdp) => {
                         if !self.handle_rdp_input(&event) {
+                            self.close_rdp();
                             self.stop.trigger();
                             el.exit();
                         }
@@ -286,6 +287,8 @@ impl ApplicationHandler for AppHandler {
     }
 
     fn exiting(&mut self, _el: &ActiveEventLoop) {
+        self.close_rdp();
+        self.close_progress();
         self.stop.trigger();
     }
 }
