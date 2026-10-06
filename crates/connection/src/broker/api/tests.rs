@@ -105,7 +105,7 @@ async fn setup_server_and_api() -> (mockito::ServerGuard, UdsBrokerApi) {
     let url = server.url() + "/"; // For testing, our base URL will be the mockito server
 
     log::info!("Setting up mock server and API client");
-    let api = UdsBrokerApi::new(&url, None, false, true);
+    let api = UdsBrokerApi::new(&url, None, true);
     // Pass the base url (without /ui) to the API
     (server, api)
 }
@@ -219,7 +219,7 @@ async fn test_request_rdp_sign() {
 
     let _m = server
         .mock(
-            "PUT",
+            "POST",
             mockito::Matcher::Regex(format!(r"/{}/rdp_sign", TICKET_ID)),
         )
         .match_header("content-type", "application/json")

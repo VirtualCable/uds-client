@@ -6,10 +6,12 @@ authors.workspace = true
 license.workspace = true
 
 [features]
-# Enables the TLS certificate-verification bypass in the whole dependency
-# graph (shared/connection read `shared::tls::insecure_tls_bypass_allowed`).
-# OFF by default: a release launcher built without it forces verification on
-# everywhere. Debug builds already allow the bypass for tests/diagnostics.
+# Compiles the TLS certificate-verification bypass in the whole dependency
+# graph (shared/connection gate the bypass on
+# `debug_assertions || insecure-tls`). Insecure builds never verify
+# certificates anywhere and show a blocking startup warning; OFF by default:
+# a release launcher built without it verifies everywhere and does not even
+# contain the bypass code.
 insecure-tls = ["shared/insecure-tls", "connection/insecure-tls"]
 
 [dependencies]

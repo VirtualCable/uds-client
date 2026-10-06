@@ -73,8 +73,19 @@ msgstr ""
 msgid "Preparing connection..."
 msgstr "Preparant la connexió..."
 
-#~ msgid "Cancel"
-#~ msgstr "Cancel·la"
+
+msgid ""
+"This client is INSECURE and intended for POC use only.\n"
+"Never use it in production environments."
+msgstr ""
+"Aquest client és INSEGUR i està pensat només per a ús en POC.\n"
+"No l'utilitzis mai en entorns de producció."
+
+msgid "OK"
+msgstr "D'acord"
+
+msgid "Cancel"
+msgstr "Cancel·la"
 
 #~ msgid "Confirm"
 #~ msgstr "Confirma"

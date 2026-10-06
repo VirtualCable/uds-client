@@ -31,18 +31,17 @@ pub type UdpToken = [u8; TOKEN_LENGTH];
 
 /// Cleartext datagram header: token (16 bytes) + seq (8 bytes, big-endian).
 pub const DATAGRAM_HEADER_SIZE: usize = TOKEN_LENGTH + 8;
-/// Maximum payload carried by one tunnel datagram. Sized so that a full
-/// RDPUDP2 datagram (MTU 1232) fits.
+/// Maximum payload carried by one tunnel datagram. mstsc sends RDPUDP
+/// datagrams of 1237-1248 bytes (mostly 1239), above the nominal 1232 MTU, so
+/// the cap leaves headroom over them; anything larger is dropped and the RDP
+/// session stalls on a black screen.
 ///
-/// MTU note: the worst-case wire datagram is 1272 bytes of UDP payload
-/// (24 header + 1232 payload + 16 tag), i.e. 1300/1320 bytes on the wire
-/// with IPv4/IPv6 headers. That is fine on typical 1500-byte paths, but it
-/// exceeds the IPv6 *guaranteed minimum* MTU budget (1280 - 48 = 1232) by
-/// exactly our 40-byte overhead: on a path with MTU < 1320, max-size
-/// datagrams would IP-fragment or drop. Accepted trade-off: RDPUDP absorbs
-/// that as ordinary loss and retransmits, and shrinking the cap below 1232
-/// would break full-size RDPUDP2 datagrams on *every* path.
-pub const MAX_DATAGRAM_PAYLOAD: usize = consts::CRYPT_PACKET_SIZE + 32;
+/// MTU note: the worst-case wire datagram is 1440 bytes of UDP payload
+/// (24 header + 1400 payload + 16 tag), i.e. 1468 bytes on the wire with IPv4
+/// headers, which fits a 1500-byte path. On a path with a smaller MTU max-size
+/// datagrams would IP-fragment or drop: RDPUDP absorbs that as ordinary loss
+/// and retransmits.
+pub const MAX_DATAGRAM_PAYLOAD: usize = 1400;
 /// Minimum valid datagram: header + tag + at least one payload byte.
 const MIN_DATAGRAM_SIZE: usize = DATAGRAM_HEADER_SIZE + consts::TAG_LENGTH + 1;
 const MAX_DATAGRAM_SIZE: usize = DATAGRAM_HEADER_SIZE + MAX_DATAGRAM_PAYLOAD + consts::TAG_LENGTH;
@@ -407,6 +406,19 @@ mod tests {
 
         // Max payload roundtrips
         let payload = vec![0xCDu8; MAX_DATAGRAM_PAYLOAD];
+        let d = sender.encrypt(&token, &payload).unwrap();
+        assert_eq!(
+            receiver.decrypt(&token, &d).unwrap().as_deref(),
+            Some(payload.as_slice())
+        );
+    }
+
+    #[test]
+    fn test_mstsc_sized_datagram_roundtrips() {
+        let (mut sender, mut receiver) = crypt_pair();
+        let token = test_token();
+
+        let payload = vec![0xABu8; 1248];
         let d = sender.encrypt(&token, &payload).unwrap();
         assert_eq!(
             receiver.decrypt(&token, &d).unwrap().as_deref(),

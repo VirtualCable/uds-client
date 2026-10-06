@@ -17,9 +17,6 @@ const APP_APPLICATION: &str = "launcher";
 pub struct AppData {
     pub approved_hosts: Vec<String>,
 
-    #[serde(default)]
-    pub insecure_allowed_hosts: Vec<String>,
-
     // So we can override proxy settings if needed
     pub disable_proxy: Option<bool>,
     pub fps_limit: Option<u32>,
@@ -29,14 +26,6 @@ pub struct AppData {
 }
 
 impl AppData {
-    pub fn verify_ssl(&self, hostname: &str) -> bool {
-        let hostname = hostname_without_port(hostname);
-        !self
-            .insecure_allowed_hosts
-            .iter()
-            .any(|allowed_host| hostname_without_port(allowed_host).eq_ignore_ascii_case(hostname))
-    }
-
     pub fn load() -> Self {
         if let Some(proj_dirs) = ProjectDirs::from(APP_QUALIFIER, APP_ORGANIZATION, APP_APPLICATION)
         {
@@ -73,55 +62,5 @@ impl AppData {
                 }
             }
         }
-    }
-}
-
-fn hostname_without_port(hostname: &str) -> &str {
-    if let Some(hostname) = hostname.strip_prefix('[') {
-        return hostname.split_once(']').map_or(hostname, |(host, _)| host);
-    }
-
-    if hostname.matches(':').count() == 1 {
-        return hostname.split_once(':').map_or(hostname, |(host, _)| host);
-    }
-
-    hostname
-}
-
-#[cfg(test)]
-mod tests {
-    use super::AppData;
-
-    #[test]
-    fn verifies_ssl_for_hosts_not_in_allowlist() {
-        let app_data = AppData {
-            insecure_allowed_hosts: vec!["self-signed.example.com".to_string()],
-            ..Default::default()
-        };
-
-        assert!(!app_data.verify_ssl("self-signed.example.com"));
-        assert!(!app_data.verify_ssl("SELF-SIGNED.EXAMPLE.COM"));
-        assert!(app_data.verify_ssl("trusted.example.com"));
-    }
-
-    #[test]
-    fn allowlist_requires_exact_hostname_match() {
-        let app_data = AppData {
-            insecure_allowed_hosts: vec!["example.com".to_string()],
-            ..Default::default()
-        };
-
-        assert!(app_data.verify_ssl("sub.example.com"));
-        assert!(!app_data.verify_ssl("example.com:443"));
-    }
-
-    #[test]
-    fn allowlist_compares_ipv6_hostname_without_port() {
-        let app_data = AppData {
-            insecure_allowed_hosts: vec!["2001:db8::1".to_string()],
-            ..Default::default()
-        };
-
-        assert!(!app_data.verify_ssl("[2001:DB8::1]:443"));
     }
 }
