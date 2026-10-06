@@ -1,6 +1,14 @@
 --- a/freeRDPCore/src/main/java/com/freerdp/freerdpcore/presentation/SessionActivity.java
 +++ b/freeRDPCore/src/main/java/com/freerdp/freerdpcore/presentation/SessionActivity.java
-@@ -124,6 +124,7 @@
+@@ -85,6 +85,7 @@
+ 				{
+ 					sessionView.onSurfaceChange(session);
+ 					scrollView.requestLayout();
++					sessionView.invalidate();
+ 					break;
+ 				}
+ 				case REFRESH_SESSIONVIEW:
+@@ -124,6 +125,7 @@
  		// Action bar is independent of status bar and API level.
  		if (getSupportActionBar() != null)
  		{
@@ -8,18 +16,21 @@
  			if (hideActionBar)
  				getSupportActionBar().hide();
  			else
-@@ -318,6 +319,10 @@
+@@ -318,6 +320,13 @@
  		inputManager.reloadKeyboards();
  
  		hideSystemBars();
 +		if (sessionView != null)
 +		{
-+			sessionView.post(() -> sessionView.zoomToFit());
++			sessionView.post(() -> {
++				sessionView.zoomToFit();
++				sessionView.invalidate();
++			});
 +		}
  	}
  
  	private void processIntent(Intent intent)
-@@ -330,6 +335,15 @@
+@@ -330,6 +339,15 @@
  			// Launched from URI, e.g:
  			// freerdp://user@ip:port/connect?sound=&rfx=&p=password&clipboard=%2b&themes=-
  			connect(openUri);
@@ -35,30 +46,33 @@
  		}
  		else if (bundle.containsKey(PARAM_INSTANCE))
  		{
-@@ -397,8 +411,12 @@
+@@ -397,8 +415,12 @@
  		}
  		if (screenSettings.isFitScreen())
  		{
 -			screenSettings.setHeight(screen_height);
 -			screenSettings.setWidth(screen_width);
-+			int maxDim = Math.max(screen_width, screen_height) & ~3;
-+			int minDim = Math.min(screen_width, screen_height) & ~3;
-+			if (maxDim <= 0) maxDim = 1920;
-+			if (minDim <= 0) minDim = 1080;
-+			screenSettings.setWidth(maxDim);
-+			screenSettings.setHeight(minDim);
++			int w = screen_width & ~3;
++			int h = screen_height & ~3;
++			if (w <= 0) w = 1080;
++			if (h <= 0) h = 1920;
++			screenSettings.setWidth(w);
++			screenSettings.setHeight(h);
  		}
  
  		connectWithTitle(bookmark.getLabel());
-@@ -458,6 +476,7 @@
+@@ -458,6 +480,10 @@
  		inputManager.attachSession(session.getInstance(), surface);
  		inputManager.setScreenSize(screen_width, screen_height);
  		hideSystemBars();
-+		sessionView.post(() -> sessionView.zoomToFit());
++		sessionView.post(() -> {
++			sessionView.zoomToFit();
++			sessionView.invalidate();
++		});
  	}
  
  	private void closeSessionActivity(int resultCode)
-@@ -586,10 +605,13 @@
+@@ -586,10 +612,13 @@
  		// the RDVH bug fix to avoid accidental notifications
  		// (refer to android_freerdp.c for more info on this problem)
  		BookmarkBase.ScreenSettings settings = session.getBookmark().getActiveScreenSettings();

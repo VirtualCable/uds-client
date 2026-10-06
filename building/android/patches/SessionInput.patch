@@ -8,23 +8,44 @@
  	private Matrix scaleMatrix;
  	private Matrix invScaleMatrix;
  	private RectF invalidRegionF;
-@@ -150,11 +151,8 @@
+@@ -139,7 +140,14 @@
+ 
+ 	public void invalidateRegion()
+ 	{
+-		invalidate(invalidRegions.pop());
++		if (!invalidRegions.isEmpty())
++		{
++			invalidate(invalidRegions.pop());
++		}
++		else
++		{
++			invalidate();
++		}
+ 	}
+ 
+ 	public void onSurfaceChange(SessionState session)
+@@ -150,11 +158,10 @@
  		height = bitmap.getHeight();
  		surface.setBounds(0, 0, width, height);
  
 -		setMinimumWidth(width);
 -		setMinimumHeight(height);
 -
--		requestLayout();
- 		currentSession = session;
++		currentSession = session;
 +		zoomToFit();
+ 		requestLayout();
+-		currentSession = session;
++		invalidate();
  	}
  
  	public float getZoom()
-@@ -174,23 +172,72 @@
- 		requestLayout();
- 	}
+@@ -172,25 +179,76 @@
  
+ 		// update layout
+ 		requestLayout();
++		invalidate();
++	}
++
 +	public float getMinScaleFactor()
 +	{
 +		return Math.min(fitScaleFactor, 1.0f);
@@ -71,8 +92,9 @@
 +				((ScrollView2D)getParent()).scrollTo(0, 0);
 +			}
 +		}
-+	}
-+
++		invalidate();
+ 	}
+ 
  	public boolean isAtMaxZoom()
  	{
 -		return (scaleFactor > (MAX_SCALE_FACTOR - SCALE_FACTOR_DELTA));
@@ -99,7 +121,7 @@
  			res = false;
  		}
  		setZoom(scaleFactor);
-@@ -201,9 +248,10 @@
+@@ -201,9 +259,10 @@
  	{
  		boolean res = true;
  		scaleFactor -= factor;
@@ -113,7 +135,7 @@
  			res = false;
  		}
  		setZoom(scaleFactor);
-@@ -285,6 +333,15 @@
+@@ -285,6 +344,15 @@
  				return true;
  			}
  			return true;
@@ -129,7 +151,7 @@
  		}
  
  		boolean res = gestureDetector.onTouchEvent(event);
-@@ -347,6 +404,8 @@
+@@ -347,6 +415,8 @@
  
  	public interface SessionViewListener
  	{
@@ -138,7 +160,7 @@
  		void onSessionViewBeginTouch();
  
  		void onSessionViewEndTouch();
-@@ -496,10 +555,15 @@
+@@ -496,10 +566,15 @@
  		}
  	}
  
@@ -211,7 +233,7 @@
  		{
 -			mgr.hideSoftInputFromWindow(sessionView.getWindowToken(), 0);
 +			if (context instanceof Activity)
-+				{
++			{
 +				WindowInsetsControllerCompat insets =
 +				    WindowCompat.getInsetsController(((Activity)context).getWindow(), sessionView);
 +				insets.hide(WindowInsetsCompat.Type.ime());
