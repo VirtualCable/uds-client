@@ -129,26 +129,23 @@ fn gpu_from_window(window: &winit::window::Window) -> &'static GpuCtx {
 // ── WgpuRenderer ──────
 
 pub struct WgpuRenderer {
-    _window: Arc<winit::window::Window>,
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
     pub gdi: gdi::GdiRenderer,
     pub overlay: OverlayRenderer,
     pub text: TextRenderer,
+    _window: Arc<winit::window::Window>,
 }
 
 impl WgpuRenderer {
     pub fn new(window: Arc<winit::window::Window>, _w: u32, _h: u32) -> Result<Self> {
         let size = window.inner_size();
 
-        // SAFETY: The `Arc<Window>` is stored in `self._window` and lives as long
-        // as this WgpuRenderer. The cast to `&'static` is sound because the Arc
-        // guarantees the window outlives the `Surface<'static>` created below.
-        let sw: &'static winit::window::Window = unsafe { &*Arc::as_ptr(&window) };
+        let g = gpu_from_window(&window);
 
-        let g = gpu_from_window(sw);
-
-        let surface = g._instance.create_surface(wgpu::SurfaceTarget::from(sw))?;
+        let surface = g
+            ._instance
+            .create_surface(wgpu::SurfaceTarget::from(window.clone()))?;
 
         let caps = surface.get_capabilities(&g.adapter);
         let alpha_mode = caps
@@ -185,12 +182,12 @@ impl WgpuRenderer {
         text.resize(size.width, size.height, &g.queue);
 
         Ok(WgpuRenderer {
-            _window: window,
             surface,
             config,
             gdi,
             overlay,
             text,
+            _window: window,
         })
     }
 
