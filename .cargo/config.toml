@@ -9,3 +9,15 @@ rustflags = [
 ]
 
 # In Windows no need for rpath, as the DLLs are located in the same folder as the executable.
+
+# Android NDK 29 ships `armv7a-linux-androideabi29-clang` but cargo's cc-rs
+# expects `arm-linux-androideabi-clang` for the rust target of the same
+# name. Point the linker at the specific NDK binary for each android target.
+[target.aarch64-linux-android]
+linker = "/opt/android-sdk/ndk/29.0.13113456/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android29-clang"
+
+[target.arm-linux-androideabi]
+linker = "/opt/android-sdk/ndk/29.0.13113456/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi29-clang"
+
+[target.x86_64-linux-android]
+linker = "/opt/android-sdk/ndk/29.0.13113456/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android29-clang"
