@@ -1,6 +1,6 @@
 --- a/freeRDPCore/src/main/java/com/freerdp/freerdpcore/presentation/SessionActivity.java
 +++ b/freeRDPCore/src/main/java/com/freerdp/freerdpcore/presentation/SessionActivity.java
-@@ -85,6 +85,7 @@
+@@ -84,6 +84,7 @@
  				{
  					sessionView.onSurfaceChange(session);
  					scrollView.requestLayout();
@@ -16,7 +16,83 @@
  			if (hideActionBar)
  				getSupportActionBar().hide();
  			else
-@@ -318,6 +320,13 @@
+@@ -183,32 +185,62 @@
+ 		// accounting for any status bars etc. that Android might throws on us.
+ 		// A bit weird looking
+ 		// but this is the only way ...
++		sessionView = findViewById(R.id.sessionView);
++		sessionView.requestFocus();
++
++		touchPointerView = findViewById(R.id.touchPointerView);
++
++		KeyboardView keyboardView = findViewById(R.id.extended_keyboard);
++		KeyboardView modifiersKeyboardView = findViewById(R.id.extended_keyboard_header);
++
++		scrollView = findViewById(R.id.sessionScrollView);
++
+ 		final View activityRootView = findViewById(R.id.session_root_view);
+ 		activityRootView.getViewTreeObserver().addOnGlobalLayoutListener(
+ 		    new OnGlobalLayoutListener() {
+ 			    @Override public void onGlobalLayout()
+ 			    {
+-				    screen_width = activityRootView.getWidth();
+-				    screen_height = activityRootView.getHeight();
++				    int w = 0;
++				    int h = 0;
++				    if (scrollView != null && scrollView.getWidth() > 0 && scrollView.getHeight() > 0)
++				    {
++					    w = scrollView.getWidth();
++					    h = scrollView.getHeight();
++				    }
++				    if (w <= 0 || h <= 0)
++				    {
++					    w = activityRootView.getWidth() - activityRootView.getPaddingLeft() - activityRootView.getPaddingRight();
++					    h = activityRootView.getHeight() - activityRootView.getPaddingTop() - activityRootView.getPaddingBottom();
++					    if (getSupportActionBar() != null && getSupportActionBar().isShowing())
++					    {
++						    int abH = getSupportActionBar().getHeight();
++						    if (abH <= 0)
++						    {
++							    android.util.TypedValue tv = new android.util.TypedValue();
++							    if (getTheme().resolveAttribute(androidx.appcompat.R.attr.actionBarSize, tv, true))
++							    {
++								    abH = android.util.TypedValue.complexToDimensionPixelSize(
++								        tv.data, getResources().getDisplayMetrics());
++							    }
++						    }
++						    if (abH > 0)
++							    h -= abH;
++					    }
++				    }
++				    if (w > 0 && h > 0)
++				    {
++					    screen_width = w;
++					    screen_height = h;
++				    }
+ 
+ 				    // start session
+-				    if (!sessionRunning && getIntent() != null)
++				    if (!sessionRunning && getIntent() != null && screen_width > 0 && screen_height > 0)
+ 				    {
+ 					    processIntent(getIntent());
+ 					    sessionRunning = true;
+ 				    }
+ 			    }
+ 		    });
+-
+-		sessionView = findViewById(R.id.sessionView);
+-		sessionView.requestFocus();
+-
+-		touchPointerView = findViewById(R.id.touchPointerView);
+-
+-		KeyboardView keyboardView = findViewById(R.id.extended_keyboard);
+-		KeyboardView modifiersKeyboardView = findViewById(R.id.extended_keyboard_header);
+-
+-		scrollView = findViewById(R.id.sessionScrollView);
+ 		sessionViewModel = new ViewModelProvider(this).get(SessionViewModel.class);
+ 		sessionViewModel.getState().observe(this, this::onConnectionStateChanged);
+ 
+@@ -318,6 +350,13 @@
  		inputManager.reloadKeyboards();
  
  		hideSystemBars();
@@ -30,11 +106,10 @@
  	}
  
  	private void processIntent(Intent intent)
-@@ -330,6 +339,15 @@
- 			// Launched from URI, e.g:
+@@ -331,6 +370,15 @@
  			// freerdp://user@ip:port/connect?sound=&rfx=&p=password&clipboard=%2b&themes=-
  			connect(openUri);
-+		}
+ 		}
 +		else if (bundle != null && bundle.containsKey("uds_bookmark"))
 +		{
 +			BookmarkBase bookmark = bundle.getParcelable("uds_bookmark");
@@ -43,10 +118,11 @@
 +				connect(bookmark);
 +				return;
 +			}
- 		}
++		}
  		else if (bundle.containsKey(PARAM_INSTANCE))
  		{
-@@ -397,8 +415,12 @@
+ 			int inst = bundle.getInt(PARAM_INSTANCE);
+@@ -397,8 +445,12 @@
  		}
  		if (screenSettings.isFitScreen())
  		{
@@ -61,7 +137,7 @@
  		}
  
  		connectWithTitle(bookmark.getLabel());
-@@ -458,6 +480,10 @@
+@@ -458,6 +510,10 @@
  		inputManager.attachSession(session.getInstance(), surface);
  		inputManager.setScreenSize(screen_width, screen_height);
  		hideSystemBars();
@@ -72,7 +148,7 @@
  	}
  
  	private void closeSessionActivity(int resultCode)
-@@ -586,10 +612,13 @@
+@@ -586,10 +642,13 @@
  		// the RDVH bug fix to avoid accidental notifications
  		// (refer to android_freerdp.c for more info on this problem)
  		BookmarkBase.ScreenSettings settings = session.getBookmark().getActiveScreenSettings();

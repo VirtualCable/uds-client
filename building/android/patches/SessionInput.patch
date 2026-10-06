@@ -39,7 +39,7 @@
  	}
  
  	public float getZoom()
-@@ -172,25 +179,76 @@
+@@ -172,25 +179,83 @@
  
  		// update layout
  		requestLayout();
@@ -82,7 +82,14 @@
 +
 +		float scaleX = (float)parentW / (float)width;
 +		float scaleY = (float)parentH / (float)height;
-+		fitScaleFactor = Math.min(scaleX, scaleY);
++		if (Math.abs(scaleX - scaleY) / Math.max(scaleX, scaleY) < 0.03f)
++		{
++			fitScaleFactor = Math.max(scaleX, scaleY);
++		}
++		else
++		{
++			fitScaleFactor = Math.min(scaleX, scaleY);
++		}
 +
 +		if (fitScaleFactor > 0.0f)
 +		{

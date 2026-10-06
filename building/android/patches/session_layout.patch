@@ -1,0 +1,30 @@
+--- a/freeRDPCore/src/main/res/layout/session.xml
++++ b/freeRDPCore/src/main/res/layout/session.xml
+@@ -12,6 +12,7 @@
+     android:id="@+id/session_root_view"
+     android:layout_width="match_parent"
+     android:layout_height="match_parent"
++    android:background="@android:color/black"
+     android:fitsSystemWindows="true">
+ 
+     <!-- children are specified bottom-up so that we have a correct z-order in our final layout -->
+@@ -25,9 +26,10 @@
+     <com.freerdp.freerdpcore.presentation.ScrollView2D
+         android:id="@+id/sessionScrollView"
+         android:layout_width="match_parent"
+-        android:layout_height="wrap_content"
++        android:layout_height="match_parent"
+         android:layout_above="@id/extended_keyboard"
+         android:layout_alignParentTop="true"
++        android:background="@android:color/black"
+         android:drawingCacheQuality="low"
+         android:fillViewport="true"
+         android:isScrollContainer="true"
+@@ -37,6 +39,7 @@
+             android:id="@+id/sessionView"
+             android:layout_width="wrap_content"
+             android:layout_height="wrap_content"
++            android:layout_gravity="center"
+             android:drawingCacheQuality="low"
+             android:focusable="true"
+             android:focusableInTouchMode="true" />
