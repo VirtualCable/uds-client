@@ -7,12 +7,39 @@ use std::sync::OnceLock;
 
 use jni::EnvUnowned;
 use jni::objects::{JByteArray, JClass, JString};
+use jni::strings::JNIString;
 use jni::sys::{jint, jstring};
 use serde_json::json;
 
 use connection::broker::api::BrokerApi;
 use connection::types::TunnelConnectInfo;
 use crypt::types::SharedSecret;
+
+// Manual NewStringUTF wrapper that does not panic on the
+// jni-0.22.4 "Expected an exception after ExceptionCheck"
+// inconsistency when called from a thread that has other
+// tokio workers active. Returns Ok(None) when an exception
+// is pending so the caller can surface it via ThrowRuntimeExAndDefault.
+fn new_string_safe<'local>(
+    env: &mut jni::Env<'local>,
+    s: &str,
+) -> jni::errors::Result<Option<JString<'local>>> {
+    let string = JNIString::new(s);
+    let raw: *mut jni::sys::JNIEnv = env.get_raw();
+    let ptr = string.as_ptr();
+    let result: jstring = unsafe {
+        ((*(*raw)).v1_1.NewStringUTF)(raw, ptr)
+    };
+    if result.is_null() {
+        if env.exception_check() {
+            return Ok(None);
+        }
+        return Err(jni::errors::Error::NullPtr(
+            "NewStringUTF returned null without a pending exception",
+        ));
+    }
+    Ok(Some(unsafe { JString::from_raw(env, result) }))
+}
 
 static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 static PANIC_HOOK_INIT: OnceLock<()> = OnceLock::new();
@@ -112,7 +139,7 @@ pub extern "system" fn Java_com_freerdp_afreerdp_uds_UdsNative_getScript<'local>
                 }
             };
 
-            log_android(3, &format!("getScript: host={host_str}, ticket={ticket_str}"));
+            log_android(3, &format!("getScript: host={host_str}, ticket=<{} chars redacted>", ticket_str.len()));
 
             let rt = get_runtime();
             rt.block_on(async move {
@@ -185,7 +212,10 @@ pub extern "system" fn Java_com_freerdp_afreerdp_uds_UdsNative_getScript<'local>
             }
         };
 
-        let js = JString::from_str(env, json_result)?;
+        let js = match new_string_safe(env, &json_result)? {
+            Some(j) => j,
+            None => return Ok(std::ptr::null_mut()),
+        };
         Ok(js.into_raw())
     });
 
