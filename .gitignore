@@ -6,6 +6,8 @@ target/
 /bin
 /building/udslauncher*
 /building/bin
+/building/android/output
+/building/android/uds-app/jniLibs
 .vscode
 .vs
 *~

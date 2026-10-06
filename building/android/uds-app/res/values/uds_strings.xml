@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="uds_launcher_title">UDS Launcher</string>
+    <string name="uds_url_hint">udssv2://host/ticket/scrambler</string>
+    <string name="uds_connect">Connect</string>
+    <string name="uds_resolving_ticket">Resolving UDS ticket…</string>
+    <string name="uds_connected">Launching session…</string>
+</resources>

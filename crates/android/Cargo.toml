@@ -1,0 +1,24 @@
+[package]
+name = "uds-android"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+name = "uds_android"
+
+[features]
+default = []
+insecure-tls = ["shared/insecure-tls", "connection/insecure-tls"]
+
+[dependencies]
+connection = { path = "../connection" }
+crypt = { path = "../crypt" }
+shared = { path = "../shared" }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+jni = "0.22"
+anyhow = { workspace = true }

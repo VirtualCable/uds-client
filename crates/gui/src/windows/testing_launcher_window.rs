@@ -30,6 +30,7 @@ pub enum TestingLaunchAction {
     ShowWarning,
     ShowError,
     ShowYesNo,
+    ConnectLocalRdp,
     ConnectRdp,
     ConnectRail,
 }
@@ -45,6 +46,7 @@ impl TestingLauncherInner {
         let mut buttons = Vec::new();
         let labels_and_actions = vec![
             ("RDP Connect", TestingLaunchAction::ConnectRdp),
+            ("RDP Local VM", TestingLaunchAction::ConnectLocalRdp),
             ("RDP RAIL Notepad", TestingLaunchAction::ConnectRail),
             ("Progress", TestingLaunchAction::ShowProgress),
             ("About", TestingLaunchAction::ShowAbout),
@@ -348,6 +350,42 @@ impl AppHandler {
                         p.window.set_visible(true);
                         p.window.request_redraw();
                         self.popup = Some(p);
+                    }
+                }
+                TestingLaunchAction::ConnectLocalRdp => {
+                    let Ok(server) = std::env::var("UDS_TEST_RDP_HOST") else {
+                        if let Ok(p) = PopupState::new(
+                            el,
+                            PopupKind::Error("Set UDS_TEST_RDP_HOST before connecting.".into()),
+                        ) {
+                            let wid = p.window.id();
+                            self.register_window(wid, WindowKind::Popup);
+                            p.window.set_visible(true);
+                            p.window.request_redraw();
+                            self.popup = Some(p);
+                        }
+                        return;
+                    };
+                    let settings = rdp::settings::RdpSettings {
+                        server,
+                        user: std::env::var("UDS_TEST_RDP_USER").unwrap_or_default(),
+                        password: std::env::var("UDS_TEST_RDP_PASSWORD").unwrap_or_default(),
+                        screen_size: rdp::geom::ScreenSize::Full,
+                        redirections: rdp::settings::RdpRedirections {
+                            clipboard: true,
+                            ..Default::default()
+                        },
+                        options: rdp::settings::RdpOptions {
+                            use_local_scaler: true,
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    };
+                    self.close_testing_launcher();
+                    if let Err(e) = self.open_rdp(el, settings) {
+                        log::error!("Failed to enter RDP: {e}");
+                        self.stop.trigger();
+                        el.exit();
                     }
                 }
                 TestingLaunchAction::ConnectRdp | TestingLaunchAction::ConnectRail => {

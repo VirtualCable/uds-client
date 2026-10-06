@@ -13,6 +13,8 @@ pub const UDS_CLIENT_AGENT: &str = "UDS-Client/5.0.0 (Windows)";
 pub const UDS_CLIENT_AGENT: &str = "UDS-Client/5.0.0 (Linux)";
 #[cfg(target_os = "macos")]
 pub const UDS_CLIENT_AGENT: &str = "UDS-Client/5.0.0 (MacOS)";
+#[cfg(target_os = "android")]
+pub const UDS_CLIENT_AGENT: &str = "UDS-Client/5.0.0 (Android)";
 
 pub const URL_TEMPLATE: &str = "https://{host}/uds/rest/client";
 

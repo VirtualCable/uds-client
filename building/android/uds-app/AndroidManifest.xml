@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    android:installLocation="auto">
+
+    <application
+        android:name="com.freerdp.afreerdp.application.GlobalApp"
+        android:icon="@drawable/uds_icon"
+        android:label="UDS Launcher"
+        android:resizeableActivity="true">
+
+        <activity
+            android:name="com.freerdp.afreerdp.uds.UdsLauncherActivity"
+            android:exported="true"
+            android:label="UDS Launcher"
+            android:theme="@style/Theme.Main"
+            android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|density|screenLayout">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="udssv2" />
+                <data android:scheme="udss" />
+            </intent-filter>
+        </activity>
+
+        <!-- Main activity -->
+        <activity
+            android:exported="true"
+            android:name="com.freerdp.freerdpcore.presentation.HomeActivity"
+            android:alwaysRetainTaskState="true"
+            android:label="@string/app_title"
+            android:theme="@style/Theme.Main"
+            android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|density|screenLayout">
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:mimeType="application/rdp" />
+                <data android:mimeType="application/x-rdp" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="rdp" />
+                <data android:scheme="Rdp" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="file" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+
+                <data android:pathPattern=".*\\.rdp" />
+                <data android:pathPattern=".*\\..*\\.rdp" />
+                <data android:pathPattern=".*\\..*\\..*\\.rdp" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.rdp" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.rdp" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.rdp" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\..*\\.rdp" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\..*\\..*\\.rdp" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\..*\\..*\\..*\\.rdp" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:exported="true"
+            android:name="com.freerdp.freerdpcore.services.SessionRequestHandlerActivity"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@style/Theme.Main">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+            </intent-filter>
+        </activity>
+
+        <meta-data android:name="com.samsung.android.keepalive.density" android:value="true"/>
+
+    </application>
+
+</manifest>

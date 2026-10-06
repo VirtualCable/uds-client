@@ -1,0 +1,269 @@
+--- a/freeRDPCore/src/main/java/com/freerdp/freerdpcore/presentation/SessionView.java
++++ b/freeRDPCore/src/main/java/com/freerdp/freerdpcore/presentation/SessionView.java
+@@ -56,6 +56,7 @@
+ 	private SessionViewListener sessionViewListener = null;
+ 	// helpers for scaling gesture handling
+ 	private float scaleFactor = 1.0f;
++	private float fitScaleFactor = 1.0f;
+ 	private Matrix scaleMatrix;
+ 	private Matrix invScaleMatrix;
+ 	private RectF invalidRegionF;
+@@ -150,11 +151,8 @@
+ 		height = bitmap.getHeight();
+ 		surface.setBounds(0, 0, width, height);
+ 
+-		setMinimumWidth(width);
+-		setMinimumHeight(height);
+-
+-		requestLayout();
+ 		currentSession = session;
++		zoomToFit();
+ 	}
+ 
+ 	public float getZoom()
+@@ -174,23 +172,72 @@
+ 		requestLayout();
+ 	}
+ 
++	public float getMinScaleFactor()
++	{
++		return Math.min(fitScaleFactor, 1.0f);
++	}
++
++	public float getMaxScaleFactor()
++	{
++		return Math.max(MAX_SCALE_FACTOR, fitScaleFactor * 3.0f);
++	}
++
++	public void zoomToFit()
++	{
++		if (width <= 0 || height <= 0)
++			return;
++
++		int parentW = 0;
++		int parentH = 0;
++		if (getParent() instanceof View)
++		{
++			View parent = (View)getParent();
++			parentW = parent.getWidth();
++			parentH = parent.getHeight();
++		}
++		if (parentW <= 0 || parentH <= 0)
++		{
++			parentW = getWidth();
++			parentH = getHeight();
++		}
++		if (parentW <= 0 || parentH <= 0)
++		{
++			post(this::zoomToFit);
++			return;
++		}
++
++		float scaleX = (float)parentW / (float)width;
++		float scaleY = (float)parentH / (float)height;
++		fitScaleFactor = Math.min(scaleX, scaleY);
++
++		if (fitScaleFactor > 0.0f)
++		{
++			setZoom(fitScaleFactor);
++			if (getParent() instanceof ScrollView2D)
++			{
++				((ScrollView2D)getParent()).scrollTo(0, 0);
++			}
++		}
++	}
++
+ 	public boolean isAtMaxZoom()
+ 	{
+-		return (scaleFactor > (MAX_SCALE_FACTOR - SCALE_FACTOR_DELTA));
++		return (scaleFactor >= (getMaxScaleFactor() - SCALE_FACTOR_DELTA));
+ 	}
+ 
+ 	public boolean isAtMinZoom()
+ 	{
+-		return (scaleFactor < (MIN_SCALE_FACTOR + SCALE_FACTOR_DELTA));
++		return (scaleFactor <= (getMinScaleFactor() + SCALE_FACTOR_DELTA));
+ 	}
+ 
+ 	public boolean zoomIn(float factor)
+ 	{
+ 		boolean res = true;
+ 		scaleFactor += factor;
+-		if (scaleFactor > (MAX_SCALE_FACTOR - SCALE_FACTOR_DELTA))
+-		{
+-			scaleFactor = MAX_SCALE_FACTOR;
++		float max = getMaxScaleFactor();
++		if (scaleFactor > (max - SCALE_FACTOR_DELTA))
++		{
++			scaleFactor = max;
+ 			res = false;
+ 		}
+ 		setZoom(scaleFactor);
+@@ -201,9 +248,10 @@
+ 	{
+ 		boolean res = true;
+ 		scaleFactor -= factor;
+-		if (scaleFactor < (MIN_SCALE_FACTOR + SCALE_FACTOR_DELTA))
+-		{
+-			scaleFactor = MIN_SCALE_FACTOR;
++		float min = getMinScaleFactor();
++		if (scaleFactor < (min + SCALE_FACTOR_DELTA))
++		{
++			scaleFactor = min;
+ 			res = false;
+ 		}
+ 		setZoom(scaleFactor);
+@@ -285,6 +333,15 @@
+ 				return true;
+ 			}
+ 			return true;
++		}
++
++		if (event.getPointerCount() == 3 && event.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN)
++		{
++			if (sessionViewListener != null)
++			{
++				sessionViewListener.onSessionViewToggleKeyboard();
++				return true;
++			}
+ 		}
+ 
+ 		boolean res = gestureDetector.onTouchEvent(event);
+@@ -347,6 +404,8 @@
+ 
+ 	public interface SessionViewListener
+ 	{
++		void onSessionViewToggleKeyboard();
++
+ 		void onSessionViewBeginTouch();
+ 
+ 		void onSessionViewEndTouch();
+@@ -496,10 +555,15 @@
+ 		}
+ 	}
+ 
++	@Override public boolean onCheckIsTextEditor()
++	{
++		return true;
++	}
++
+ 	@Override public InputConnection onCreateInputConnection(EditorInfo outAttrs)
+ 	{
+ 		outAttrs.actionLabel = null;
+-		outAttrs.inputType = InputType.TYPE_NULL;
++		outAttrs.inputType = InputType.TYPE_CLASS_TEXT;
+ 		outAttrs.imeOptions = EditorInfo.IME_ACTION_NONE | EditorInfo.IME_FLAG_NO_EXTRACT_UI |
+ 		                      EditorInfo.IME_FLAG_NO_FULLSCREEN;
+ 		return new BaseInputConnection(this, false);
+--- a/freeRDPCore/src/main/java/com/freerdp/freerdpcore/presentation/SessionInputManager.java
++++ b/freeRDPCore/src/main/java/com/freerdp/freerdpcore/presentation/SessionInputManager.java
+@@ -5,7 +5,11 @@
+ 
+ package com.freerdp.freerdpcore.presentation;
+ 
++import android.app.Activity;
+ import android.content.Context;
++import androidx.core.view.WindowCompat;
++import androidx.core.view.WindowInsetsCompat;
++import androidx.core.view.WindowInsetsControllerCompat;
+ import android.graphics.Bitmap;
+ import android.graphics.Point;
+ import android.inputmethodservice.Keyboard;
+@@ -170,8 +174,8 @@
+ 			// show system keyboard
+ 			setSoftInputState(true);
+ 
+-			// show modifiers keyboard
+-			modifiersKeyboardView.setVisibility(View.VISIBLE);
++			// hide modifiers keyboard header for clean soft keyboard experience
++			modifiersKeyboardView.setVisibility(View.GONE);
+ 		}
+ 		else if (showExtendedKeyboard)
+ 		{
+@@ -200,17 +204,38 @@
+ 
+ 	private void setSoftInputState(boolean state)
+ 	{
+-		InputMethodManager mgr =
+-		    (InputMethodManager)context.getSystemService(Context.INPUT_METHOD_SERVICE);
+-
+ 		if (state)
+ 		{
+-			sessionView.requestFocus();
+-			mgr.showSoftInput(sessionView, InputMethodManager.SHOW_IMPLICIT);
++			sessionView.post(() -> {
++				sessionView.requestFocus();
++				if (context instanceof Activity)
++				{
++					WindowInsetsControllerCompat insets =
++					    WindowCompat.getInsetsController(((Activity)context).getWindow(), sessionView);
++					insets.show(WindowInsetsCompat.Type.ime());
++				}
++				InputMethodManager mgr =
++				    (InputMethodManager)context.getSystemService(Context.INPUT_METHOD_SERVICE);
++				if (mgr != null)
++				{
++					mgr.showSoftInput(sessionView, InputMethodManager.SHOW_FORCED);
++				}
++			});
+ 		}
+ 		else
+ 		{
+-			mgr.hideSoftInputFromWindow(sessionView.getWindowToken(), 0);
++			if (context instanceof Activity)
++				{
++				WindowInsetsControllerCompat insets =
++				    WindowCompat.getInsetsController(((Activity)context).getWindow(), sessionView);
++				insets.hide(WindowInsetsCompat.Type.ime());
++			}
++			InputMethodManager mgr =
++			    (InputMethodManager)context.getSystemService(Context.INPUT_METHOD_SERVICE);
++			if (mgr != null)
++			{
++				mgr.hideSoftInputFromWindow(sessionView.getWindowToken(), 0);
++			}
+ 		}
+ 	}
+ 
+@@ -356,6 +381,11 @@
+ 	// ****************************************************************************
+ 	// SessionView.SessionViewListener
+ 
++	@Override public void onSessionViewToggleKeyboard()
++	{
++		toggleSystemKeyboard();
++	}
++
+ 	@Override public void onSessionViewBeginTouch()
+ 	{
+ 		scrollView.setScrollEnabled(false);
+@@ -626,6 +656,7 @@
+ 		@Override public boolean onScaleBegin(ScaleGestureDetector detector)
+ 		{
+ 			scrollView.setScrollEnabled(false);
++			scaleFactor = sessionView.getZoom();
+ 			return true;
+ 		}
+ 
+@@ -633,8 +664,8 @@
+ 		{
+ 			// calc scale factor
+ 			scaleFactor *= detector.getScaleFactor();
+-			scaleFactor = Math.max(SessionView.MIN_SCALE_FACTOR,
+-			                       Math.min(scaleFactor, SessionView.MAX_SCALE_FACTOR));
++			scaleFactor = Math.max(sessionView.getMinScaleFactor(),
++			                       Math.min(scaleFactor, sessionView.getMaxScaleFactor()));
+ 			sessionView.setZoom(scaleFactor);
+ 
+ 			if (!sessionView.isAtMinZoom() && !sessionView.isAtMaxZoom())
+@@ -662,6 +693,10 @@
+ 		@Override public void onScaleEnd(ScaleGestureDetector de)
+ 		{
+ 			scrollView.setScrollEnabled(true);
++			if (sessionView.isAtMinZoom())
++			{
++				scrollView.scrollTo(0, 0);
++			}
+ 		}
+ 	}
+ }

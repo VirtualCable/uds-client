@@ -11,6 +11,7 @@ members = [
     "crates/js",
     "crates/channels",
     "crates/connection",
+    "crates/android",
 ]
 resolver = "3"
 

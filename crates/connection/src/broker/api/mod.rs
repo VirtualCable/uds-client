@@ -81,7 +81,10 @@ impl UdsBrokerApi {
         Self {
             client,
             broker_url: broker_url.to_string().trim_end_matches('/').to_string(),
-            hostname: hostname::get().unwrap().to_string_lossy().to_string(),
+            hostname: hostname::get()
+                .unwrap_or_else(|_| "android".into())
+                .to_string_lossy()
+                .to_string(),
             public_key: public_key.try_into().unwrap(),
             private_key: private_key.try_into().unwrap(),
         }

@@ -1,0 +1,78 @@
+--- a/freeRDPCore/src/main/java/com/freerdp/freerdpcore/presentation/SessionActivity.java
++++ b/freeRDPCore/src/main/java/com/freerdp/freerdpcore/presentation/SessionActivity.java
+@@ -124,6 +124,7 @@
+ 		// Action bar is independent of status bar and API level.
+ 		if (getSupportActionBar() != null)
+ 		{
++			getSupportActionBar().setDisplayShowTitleEnabled(false);
+ 			if (hideActionBar)
+ 				getSupportActionBar().hide();
+ 			else
+@@ -318,6 +319,10 @@
+ 		inputManager.reloadKeyboards();
+ 
+ 		hideSystemBars();
++		if (sessionView != null)
++		{
++			sessionView.post(() -> sessionView.zoomToFit());
++		}
+ 	}
+ 
+ 	private void processIntent(Intent intent)
+@@ -330,6 +335,15 @@
+ 			// Launched from URI, e.g:
+ 			// freerdp://user@ip:port/connect?sound=&rfx=&p=password&clipboard=%2b&themes=-
+ 			connect(openUri);
++		}
++		else if (bundle != null && bundle.containsKey("uds_bookmark"))
++		{
++			BookmarkBase bookmark = bundle.getParcelable("uds_bookmark");
++			if (bookmark != null)
++			{
++				connect(bookmark);
++				return;
++			}
+ 		}
+ 		else if (bundle.containsKey(PARAM_INSTANCE))
+ 		{
+@@ -397,8 +411,12 @@
+ 		}
+ 		if (screenSettings.isFitScreen())
+ 		{
+-			screenSettings.setHeight(screen_height);
+-			screenSettings.setWidth(screen_width);
++			int maxDim = Math.max(screen_width, screen_height) & ~3;
++			int minDim = Math.min(screen_width, screen_height) & ~3;
++			if (maxDim <= 0) maxDim = 1920;
++			if (minDim <= 0) minDim = 1080;
++			screenSettings.setWidth(maxDim);
++			screenSettings.setHeight(minDim);
+ 		}
+ 
+ 		connectWithTitle(bookmark.getLabel());
+@@ -458,6 +476,7 @@
+ 		inputManager.attachSession(session.getInstance(), surface);
+ 		inputManager.setScreenSize(screen_width, screen_height);
+ 		hideSystemBars();
++		sessionView.post(() -> sessionView.zoomToFit());
+ 	}
+ 
+ 	private void closeSessionActivity(int resultCode)
+@@ -586,10 +605,13 @@
+ 		// the RDVH bug fix to avoid accidental notifications
+ 		// (refer to android_freerdp.c for more info on this problem)
+ 		BookmarkBase.ScreenSettings settings = session.getBookmark().getActiveScreenSettings();
+-		if ((settings.getWidth() != width && settings.getWidth() != width + 1) ||
+-		    settings.getHeight() != height || settings.getColors() != bpp)
+-			uiHandler.sendMessage(Message.obtain(
+-			    null, DISPLAY_TOAST, getResources().getText(R.string.info_capabilities_changed)));
++		if (!settings.isFitScreen() && !settings.isAutomatic() && (getIntent() == null || !getIntent().hasExtra("uds_bookmark")))
++		{
++			if ((settings.getWidth() != width && settings.getWidth() != width + 1) ||
++			    settings.getHeight() != height || settings.getColors() != bpp)
++				uiHandler.sendMessage(Message.obtain(
++				    null, DISPLAY_TOAST, getResources().getText(R.string.info_capabilities_changed)));
++		}
+ 	}
+ 
+ 	@Override public void OnGraphicsUpdate(int x, int y, int width, int height)
