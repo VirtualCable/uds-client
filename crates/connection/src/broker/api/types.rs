@@ -90,11 +90,15 @@ impl Error {
     /// Replaces `message` with the actionable TLS variant produced by
     /// `tls_error::classify` when the current message looks like a TLS
     /// error. Non-TLS errors are left untouched so HTTP and I/O failures
-    /// keep their original wording. `host` is the broker URL or tunnel
-    /// endpoint the client was talking to.
-    pub fn with_tls_classification(mut self, host: &str) -> Self {
+    /// keep their original wording. `broker_url` is reduced to its host so the
+    /// message names what a certificate SAN can actually contain.
+    pub fn with_tls_classification(mut self, broker_url: &str) -> Self {
         if tls_error::looks_like_tls_error(&self.message) {
-            self.message = tls_error::classify(&self.message, host);
+            let host = reqwest::Url::parse(broker_url)
+                .ok()
+                .and_then(|url| url.host_str().map(str::to_string))
+                .unwrap_or_else(|| broker_url.to_string());
+            self.message = tls_error::classify(&self.message, &host);
         }
         self
     }
@@ -476,6 +480,24 @@ mod tests {
             err.message
         );
         assert!(!err.message.contains("NotValidForName"));
+    }
+
+    #[test]
+    fn with_tls_classification_reports_host_not_full_url() {
+        let err = Error {
+            message: "invalid peer certificate: NotValidForName".into(),
+            is_retryable: false,
+            percent: 0,
+        }
+        .with_tls_classification("https://192.168.15.69/uds/rest/client");
+
+        assert!(
+            err.message.contains("192.168.15.69"),
+            "got: {}",
+            err.message
+        );
+        assert!(!err.message.contains("https://"), "got: {}", err.message);
+        assert!(!err.message.contains("/uds/"), "got: {}", err.message);
     }
 
     #[test]
