@@ -122,11 +122,13 @@ impl BrokerApi for UdsBrokerApi {
             .get(self.broker_url.as_str())
             .headers(self.headers())
             .send()
-            .await?;
+            .await
+            .map_err(|e| types::Error::from(e).with_tls_classification(&self.broker_url))?;
 
         response
             .json::<types::BrokerResponse<types::Version>>()
-            .await?
+            .await
+            .map_err(|e| types::Error::from(e).with_tls_classification(&self.broker_url))?
             .into_result()
     }
 
@@ -156,7 +158,8 @@ impl BrokerApi for UdsBrokerApi {
             .json(&req)
             .headers(self.headers())
             .send()
-            .await?;
+            .await
+            .map_err(|e| types::Error::from(e).with_tls_classification(&self.broker_url))?;
 
         // Extract real script info from Ticket
         response

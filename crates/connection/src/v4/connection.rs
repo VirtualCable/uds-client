@@ -21,6 +21,7 @@ use tokio::{
 use tokio_rustls::{TlsConnector, client::TlsStream};
 
 use super::consts;
+use crate::tls_error;
 use shared::log;
 // The bypass machinery only exists in insecure builds
 #[cfg(any(debug_assertions, feature = "insecure-tls"))]
@@ -89,12 +90,30 @@ pub async fn connect_and_upgrade(
     // Perform TLS handshake
     let server_name =
         ServerName::try_from(server.to_string()).context("Invalid server name for TLS")?;
+    let endpoint = format!("{server}:{port}");
     let tls_stream = connector
         .connect(server_name, tcp)
         .await
-        .context("TLS handshake failed")?;
+        .map_err(|e| anyhow::anyhow!(handshake_error_message(&e, &endpoint)))?;
 
     Ok(split(tls_stream))
+}
+
+/// Walks `err` looking for the deepest TLS-level source and returns an
+/// actionable message that names `endpoint`. Exposed for tests so the
+/// mapping can be exercised without a live TLS handshake.
+fn handshake_error_message(err: &(dyn std::error::Error + 'static), endpoint: &str) -> String {
+    let mut cur: &dyn std::error::Error = err;
+    let mut raw = cur.to_string();
+    while let Some(next) = cur.source() {
+        cur = next;
+        let s = cur.to_string();
+        if tls_error::looks_like_tls_error(&s) {
+            raw = s;
+            break;
+        }
+    }
+    tls_error::classify(&raw, endpoint)
 }
 
 async fn send_cmd<R, W>(reader: &mut R, writer: &mut W, cmd: &[u8]) -> Result<()>
@@ -150,4 +169,81 @@ where
     )
     .await
     .context("CMD_OPEN timed out")?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::error::Error as StdError;
+
+    #[derive(Debug)]
+    struct Layer {
+        msg: String,
+        source: Option<Box<dyn StdError + Send + Sync + 'static>>,
+    }
+
+    impl std::fmt::Display for Layer {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str(&self.msg)
+        }
+    }
+
+    impl StdError for Layer {
+        fn source(&self) -> Option<&(dyn StdError + 'static)> {
+            self.source
+                .as_deref()
+                .map(|e| e as &(dyn StdError + 'static))
+        }
+    }
+
+    fn layer(msg: &str) -> Layer {
+        Layer {
+            msg: msg.into(),
+            source: None,
+        }
+    }
+
+    fn layer_above(msg: &str, below: Layer) -> Layer {
+        Layer {
+            msg: msg.into(),
+            source: Some(Box::new(below)),
+        }
+    }
+
+    #[test]
+    fn handshake_error_message_digs_into_source_chain_for_tls_variant() {
+        // Mimic tokio_rustls wrapping rustls::Error: top says "transport",
+        // second says "io error", third (the rustls one) names the variant.
+        let err = layer_above(
+            "transport error",
+            layer_above(
+                "io error",
+                layer("invalid peer certificate: NotValidForName"),
+            ),
+        );
+
+        let msg = handshake_error_message(&err, "broker.example.com:15443");
+        assert!(msg.starts_with("TLS: "), "got: {msg}");
+        assert!(msg.contains("Subject Alternative Name"), "got: {msg}");
+        assert!(msg.contains("broker.example.com:15443"), "got: {msg}");
+        assert!(!msg.contains("NotValidForName"));
+    }
+
+    #[test]
+    fn handshake_error_message_uses_top_message_when_no_tls_in_chain() {
+        let err = layer("connection refused");
+        let msg = handshake_error_message(&err, "broker.example.com:15443");
+        // No TLS signal anywhere: the raw message is returned verbatim by
+        // the classifier, with no host suffix or prefix.
+        assert_eq!(msg, "connection refused");
+    }
+
+    #[test]
+    fn handshake_error_message_includes_endpoint_for_unknown_tls() {
+        let err = layer("invalid peer certificate: SomeFutureVariant");
+        let msg = handshake_error_message(&err, "192.168.15.69:15443");
+        assert!(msg.starts_with("TLS: "), "got: {msg}");
+        assert!(msg.contains("SomeFutureVariant"), "got: {msg}");
+        assert!(msg.contains("192.168.15.69:15443"), "got: {msg}");
+    }
 }

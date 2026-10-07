@@ -17,6 +17,8 @@ use serde_json::Value;
 use shared::log;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
+use crate::tls_error;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Error {
     pub message: String,
@@ -57,27 +59,18 @@ impl From<anyhow::Error> for Error {
 
 impl From<reqwest::Error> for Error {
     fn from(err: reqwest::Error) -> Self {
-        // Defaults to the reqwest error string
+        // Walk the error source chain: the rustls error sits underneath the
+        // reqwest wrapper, sometimes more than one level down. The deepest
+        // TLS-level message is the one we want to hand to the classifier.
         let mut error_text = "Error connecting to broker".to_string();
-
-        // Check if the error or any of its sources is a certificate error
         let mut cur: &dyn StdError = &err;
         loop {
             let cur_str = cur.to_string();
             log::debug!("Checking error source: {}", cur_str);
-            let msg = cur_str.to_lowercase();
-
-            if msg.contains("ssl")
-                || msg.contains("tls")
-                || msg.contains("certificate")
-                || msg.contains("verify")
-                || msg.contains("x509")
-                || msg.contains("handshake")
-            {
-                error_text = format!("TLS: {}", cur_str);
+            if tls_error::looks_like_tls_error(&cur_str) {
+                error_text = cur_str;
                 break;
             }
-
             if let Some(next) = cur.source() {
                 cur = next;
             } else {
@@ -90,6 +83,20 @@ impl From<reqwest::Error> for Error {
             is_retryable: false,
             percent: 0,
         }
+    }
+}
+
+impl Error {
+    /// Replaces `message` with the actionable TLS variant produced by
+    /// `tls_error::classify` when the current message looks like a TLS
+    /// error. Non-TLS errors are left untouched so HTTP and I/O failures
+    /// keep their original wording. `host` is the broker URL or tunnel
+    /// endpoint the client was talking to.
+    pub fn with_tls_classification(mut self, host: &str) -> Self {
+        if tls_error::looks_like_tls_error(&self.message) {
+            self.message = tls_error::classify(&self.message, host);
+        }
+        self
     }
 }
 
@@ -447,5 +454,57 @@ mod tests {
             percent: 0,
         };
         assert!(!e.is_retryable());
+    }
+
+    #[test]
+    fn with_tls_classification_enriches_tls_errors_with_host() {
+        let err = Error {
+            message: "invalid peer certificate: NotValidForName".into(),
+            is_retryable: false,
+            percent: 0,
+        }
+        .with_tls_classification("broker.example.com:5443");
+
+        assert!(
+            err.message.contains("Subject Alternative Name"),
+            "got: {}",
+            err.message
+        );
+        assert!(
+            err.message.contains("broker.example.com:5443"),
+            "got: {}",
+            err.message
+        );
+        assert!(!err.message.contains("NotValidForName"));
+    }
+
+    #[test]
+    fn with_tls_classification_leaves_non_tls_errors_untouched() {
+        let raw = "connection refused".to_string();
+        let err = Error {
+            message: raw.clone(),
+            is_retryable: false,
+            percent: 0,
+        }
+        .with_tls_classification("broker.example.com");
+
+        assert_eq!(err.message, raw);
+    }
+
+    #[test]
+    fn with_tls_classification_handles_unknown_issuer() {
+        let err = Error {
+            message: "invalid peer certificate: UnknownIssuer".into(),
+            is_retryable: false,
+            percent: 0,
+        }
+        .with_tls_classification("broker.example.com");
+
+        assert!(err.message.contains("untrusted"), "got: {}", err.message);
+        assert!(
+            err.message.contains("broker.example.com"),
+            "got: {}",
+            err.message
+        );
     }
 }
