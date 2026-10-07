@@ -164,7 +164,8 @@ impl BrokerApi for UdsBrokerApi {
         // Extract real script info from Ticket
         response
             .json::<types::BrokerResponse<BrokerTicket>>()
-            .await?
+            .await
+            .map_err(|e| types::Error::from(e).with_tls_classification(&self.broker_url))?
             .into_result()?
             .recover_data_from_json(ticket, &self.private_key)
             .map(|json_value| {

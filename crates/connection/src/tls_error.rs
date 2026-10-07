@@ -1,7 +1,7 @@
 // BSD 3-Clause License
 // Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
-// Authors: Adolfo Gómez, dkmaster at dkmon dot com
+// Authors: Janier Rodríguez, jrodriguez at virtualcable dot es
 
 // Converts the cryptic, transport-level TLS error strings produced by rustls
 // (e.g. "invalid peer certificate: NotValidForName") into a single, actionable
@@ -27,7 +27,7 @@ pub(crate) fn looks_like_tls_error(msg: &str) -> bool {
 /// returned prefixed with `"TLS: "` only if the input already smells like
 /// TLS, otherwise the original message is returned unchanged so other
 /// failure modes are not silenced.
-pub fn classify(message: &str, host: &str) -> String {
+pub(crate) fn classify(message: &str, host: &str) -> String {
     let host_label = if host.is_empty() { HOST_UNKNOWN } else { host };
     let lower = message.to_lowercase();
 
@@ -46,8 +46,8 @@ pub fn classify(message: &str, host: &str) -> String {
 
     if lower.contains("unknownissuer") {
         return format!(
-            "TLS: the server's certificate was issued by an untrusted \
-             certificate authority ({host_label}). Install the CA in this \
+            "TLS: the certificate presented by {host_label} was issued by an \
+             untrusted certificate authority. Install the CA in this \
              computer's trust store, or use a certificate signed by a \
              public CA."
         );
