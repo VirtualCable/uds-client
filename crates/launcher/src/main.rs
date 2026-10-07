@@ -43,6 +43,43 @@ fn collect_arguments() -> Option<(String, String, String)> {
     parse_udssv2_url(&args[1])
 }
 
+#[cfg(any(debug_assertions, feature = "insecure-tls"))]
+const INSECURE_WARNING_ENV: &str = "UDS_INSECURE_WARNING";
+
+// winit allows a single EventLoop per process and run_gui needs it, so the
+// warning runs in a child process of this same executable. Fail closed.
+#[cfg(any(debug_assertions, feature = "insecure-tls"))]
+fn confirm_insecure_client() -> bool {
+    if std::env::var_os(INSECURE_WARNING_ENV).is_some() {
+        let accepted = gui::windows::insecure_warning::show_insecure_warning(
+            tr!(
+                "This client is INSECURE and intended for POC use only.\nNever use it in production environments."
+            ),
+            tr!("OK"),
+            tr!("Cancel"),
+        );
+        std::process::exit(if accepted { 0 } else { 1 });
+    }
+
+    let exe = match std::env::current_exe() {
+        Ok(exe) => exe,
+        Err(e) => {
+            log::error!("Cannot locate the launcher executable: {e}");
+            return false;
+        }
+    };
+    match std::process::Command::new(exe)
+        .env(INSECURE_WARNING_ENV, "1")
+        .status()
+    {
+        Ok(status) => status.success(),
+        Err(e) => {
+            log::error!("Cannot show insecure client warning: {e}");
+            false
+        }
+    }
+}
+
 fn main() {
     #[cfg(debug_assertions)]
     {
@@ -64,14 +101,7 @@ fn main() {
     // Secure builds don't even compile this block in.
     #[cfg(any(debug_assertions, feature = "insecure-tls"))]
     {
-        let accepted = gui::windows::insecure_warning::show_insecure_warning(
-            tr!(
-                "This client is INSECURE and intended for POC use only.\nNever use it in production environments."
-            ),
-            tr!("OK"),
-            tr!("Cancel"),
-        );
-        if !accepted {
+        if !confirm_insecure_client() {
             log::error!("Insecure client: user refused to continue.");
             std::process::exit(1);
         }
