@@ -59,31 +59,40 @@ impl From<anyhow::Error> for Error {
 
 impl From<reqwest::Error> for Error {
     fn from(err: reqwest::Error) -> Self {
-        // Walk the error source chain: the rustls error sits underneath the
-        // reqwest wrapper, sometimes more than one level down. The deepest
-        // TLS-level message is the one we want to hand to the classifier.
-        let mut error_text = "Error connecting to broker".to_string();
-        let mut cur: &dyn StdError = &err;
-        loop {
-            let cur_str = cur.to_string();
-            log::debug!("Checking error source: {}", cur_str);
-            if tls_error::looks_like_tls_error(&cur_str) {
-                error_text = cur_str;
-                break;
-            }
-            if let Some(next) = cur.source() {
-                cur = next;
-            } else {
-                break;
-            }
-        }
-
+        // reqwest's top-level Display is "error sending request…" with the
+        // rustls cause buried underneath. Walking here (and not later in
+        // `with_tls_classification`) is the only place we still have access
+        // to the full source chain — once we serialise it into `message`,
+        // the chain is gone.
         Error {
-            message: error_text,
+            message: extract_deepest_tls(&err),
             is_retryable: false,
             percent: 0,
         }
     }
+}
+
+/// Walks the source chain of `err` looking for the deepest message that
+/// smells like a TLS error and returns it; falls back to the top-level
+/// `Display`. Free function so the chain walk is exercised by tests without
+/// having to build a `reqwest::Error`.
+fn extract_deepest_tls(err: &(dyn StdError + 'static)) -> String {
+    let mut error_text = "Error connecting to broker".to_string();
+    let mut cur: &dyn StdError = err;
+    loop {
+        let cur_str = cur.to_string();
+        log::debug!("Checking error source: {}", cur_str);
+        if tls_error::looks_like_tls_error(&cur_str) {
+            error_text = cur_str;
+            break;
+        }
+        if let Some(next) = cur.source() {
+            cur = next;
+        } else {
+            break;
+        }
+    }
+    error_text
 }
 
 impl Error {
@@ -528,5 +537,65 @@ mod tests {
             "got: {}",
             err.message
         );
+    }
+
+    /// Synthetic error with a three-level source chain that mimics how reqwest
+    /// wraps rustls: the top says "error sending request" (reqwest 0.13.4's
+    /// own Display, which mentions nothing about TLS), the middle is an io
+    /// wrapper, and the bottom carries the rustls variant. Walking the chain
+    /// is the only thing that surfaces the variant to the classifier.
+    #[derive(Debug)]
+    struct LayeredReqwestLike {
+        msg: String,
+        source: Option<Box<dyn StdError + Send + Sync + 'static>>,
+    }
+
+    impl std::fmt::Display for LayeredReqwestLike {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str(&self.msg)
+        }
+    }
+
+    impl StdError for LayeredReqwestLike {
+        fn source(&self) -> Option<&(dyn StdError + 'static)> {
+            self.source
+                .as_deref()
+                .map(|e| e as &(dyn StdError + 'static))
+        }
+    }
+
+    #[test]
+    fn extract_deepest_tls_surfaces_the_rustls_variant_under_reqwest() {
+        // Mirrors reqwest 0.13.4 (error sending request...) → io error → invalid peer certificate: NotValidForName
+        let layered = LayeredReqwestLike {
+            msg: "error sending request".into(),
+            source: Some(Box::new(LayeredReqwestLike {
+                msg: "transport error".into(),
+                source: Some(Box::new(LayeredReqwestLike {
+                    msg: "invalid peer certificate: NotValidForName".into(),
+                    source: None,
+                })),
+            })),
+        };
+        assert_eq!(
+            extract_deepest_tls(&layered),
+            "invalid peer certificate: NotValidForName"
+        );
+    }
+
+    #[test]
+    fn extract_deepest_tls_falls_back_to_generic_when_nothing_matches() {
+        let layered = LayeredReqwestLike {
+            msg: "io error".into(),
+            source: Some(Box::new(LayeredReqwestLike {
+                msg: "connection refused".into(),
+                source: None,
+            })),
+        };
+        // No TLS source in the chain → keep the generic fallback that the
+        // caller (From<reqwest::Error>) seeded before walking. Surfacing
+        // the top-level "io error" verbatim is the previous behaviour and
+        // what got rewritten by this refactor.
+        assert_eq!(extract_deepest_tls(&layered), "Error connecting to broker");
     }
 }
