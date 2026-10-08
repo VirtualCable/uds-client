@@ -1,8 +1,0 @@
---- a/aFreeRDP/build.gradle
-+++ b/aFreeRDP/build.gradle
-@@ -47,4 +47,5 @@
- 
- dependencies {
-     implementation project(':freeRDPCore')
-+    implementation 'org.apache.commons:commons-compress:1.26.1'
- }
