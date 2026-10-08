@@ -5,6 +5,11 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 OUTPUT="$ROOT/building/android/output"
 IMAGE=udslauncher-android
 
+CARGO_FEATURES_ARGS=""
+if [ -n "${UDS_CARGO_FEATURES:-}" ]; then
+    CARGO_FEATURES_ARGS="--features $UDS_CARGO_FEATURES"
+fi
+
 NDK=/opt/android-sdk/ndk/29.0.13113456
 NDK_BIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
 
@@ -30,7 +35,7 @@ build_abi() {
         -e TARGET_CC="$NDK_BIN/$linker_name" \
         -e TARGET_CXX="$NDK_BIN/${linker_name%++}++" \
         -e TARGET_AR="$NDK_BIN/llvm-ar" \
-        "$IMAGE" sh -c "rustup target add $target 2>&1 | tail -1; cargo build --release --target $target -p uds-android"
+        "$IMAGE" sh -c "rustup target add $target 2>&1 | tail -1; cargo build --release --target $target -p uds-android $CARGO_FEATURES_ARGS"
 
     mkdir -p "$ROOT/building/android/uds-app/jniLibs/$abi"
     cp "$ROOT/target/$target/release/libuds_android.so" "$ROOT/building/android/uds-app/jniLibs/$abi/"
