@@ -132,7 +132,6 @@ public class UdsLauncherActivity extends Activity {
                 return;
             }
 
-            Log.d(TAG, "Native getScript response: " + responseStr);
             JSONObject json = new JSONObject(responseStr);
 
             if (json.has("error") && !json.isNull("error")) {
