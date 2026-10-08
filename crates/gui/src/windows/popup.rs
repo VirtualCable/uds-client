@@ -133,8 +133,8 @@ fn layout_buttons(kind: &PopupKind, pw: f32, ph: f32) -> Vec<crate::draw::ui::bu
 }
 
 pub struct PopupState {
-    pub window: Arc<winit::window::Window>,
     pub renderer: WgpuRenderer,
+    pub window: Arc<winit::window::Window>,
     pub kind: PopupKind,
     pub phys_w: u32,
     pub phys_h: u32,
@@ -173,8 +173,8 @@ impl PopupState {
         let buttons = layout_buttons(&kind, phys.width as f32, phys.height as f32);
 
         Ok(PopupState {
-            window,
             renderer,
+            window,
             kind,
             phys_w: phys.width,
             phys_h: phys.height,

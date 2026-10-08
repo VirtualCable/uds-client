@@ -10,6 +10,7 @@ pub mod broker;
 pub mod consts;
 pub mod registry;
 pub mod tasks;
+pub mod tls_error;
 pub mod types;
 
 mod tunnel;

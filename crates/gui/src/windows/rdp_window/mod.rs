@@ -29,8 +29,8 @@ const FRAMES_IN_FLIGHT: usize = 128;
 
 #[allow(dead_code)]
 pub struct RdpWindow {
-    pub window: Arc<winit::window::Window>,
     pub renderer: crate::wgpu_render::WgpuRenderer,
+    pub window: Arc<winit::window::Window>,
     pub scratch: Vec<u8>,
 }
 
@@ -320,8 +320,8 @@ impl crate::AppHandler {
             let wid = window.id();
             let renderer = crate::wgpu_render::WgpuRenderer::new(window.clone(), 300, 100)?;
             let rdp_window = RdpWindow {
-                window,
                 renderer,
+                window,
                 scratch: Vec::new(),
             };
             let server_info = settings.rail.as_ref().and_then(|r| r.server_info.clone());
@@ -373,8 +373,8 @@ impl crate::AppHandler {
             let renderer =
                 crate::wgpu_render::WgpuRenderer::new(window.clone(), phys.width, phys.height)?;
             let rdp_window = RdpWindow {
-                window,
                 renderer,
+                window,
                 scratch: Vec::new(),
             };
             let rdp_state = RdpState::new(
@@ -490,8 +490,8 @@ impl crate::AppHandler {
                         *id,
                         RailWindow {
                             id: *id,
-                            window: window.clone(),
                             renderer,
+                            window: window.clone(),
                             rgba_data,
                             width: pw,
                             height: ph,

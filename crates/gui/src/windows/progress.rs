@@ -25,8 +25,8 @@ pub enum ProgressPhase {
 }
 
 pub struct ProgressState {
-    pub window: Arc<winit::window::Window>,
     pub renderer: WgpuRenderer,
+    pub window: Arc<winit::window::Window>,
     pub pct: u8,
     pub message: String,
     pub start: Instant,
@@ -99,8 +99,8 @@ impl ProgressState {
         );
 
         let state = Self {
-            window,
             renderer,
+            window,
             pct: 0,
             message: String::new(),
             start: Instant::now(),

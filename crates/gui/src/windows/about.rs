@@ -65,8 +65,8 @@ fn layout_close_button(pw: f32, ph: f32, scale: f32) -> crate::draw::ui::button:
 }
 
 pub struct AboutState {
-    window: Arc<Window>,
     renderer: WgpuRenderer,
+    window: Arc<Window>,
     logo: crate::logo::LogoImage,
     start: Instant,
     angle: f32,
@@ -105,8 +105,8 @@ impl AboutState {
         let close_btn = layout_close_button(phys.width as f32, phys.height as f32, scale);
 
         Ok(AboutState {
-            window,
             renderer,
+            window,
             logo,
             start: Instant::now(),
             angle: 0.0,
