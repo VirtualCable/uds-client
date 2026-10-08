@@ -13,6 +13,19 @@ members = [
     "crates/connection",
     "crates/android",
 ]
+default-members = [
+    "crates/builder",
+    "crates/launcher",
+    "crates/mac-launcher",
+    "crates/shared",
+    "crates/crypt",
+    "crates/script-tester",
+    "crates/gui",
+    "crates/gui-tester",
+    "crates/js",
+    "crates/channels",
+    "crates/connection",
+]
 resolver = "3"
 
 [profile.release-with-debug]
