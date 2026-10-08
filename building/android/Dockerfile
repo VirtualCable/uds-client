@@ -32,7 +32,7 @@ COPY uds-app/ /tmp/uds-app/
 RUN patch -p1 < /tmp/patches/SessionActivity.patch && \
     patch -p1 < /tmp/patches/session_menu.patch && \
     patch -p1 < /tmp/patches/SessionInput.patch && \
-    patch -p1 < /tmp/patches/build.gradle.patch && \
+    patch -p1 < /tmp/patches/session_layout.patch && \
     cp /tmp/uds-app/AndroidManifest.xml aFreeRDP/src/main/AndroidManifest.xml && \
     cp -r /tmp/uds-app/java/* aFreeRDP/src/main/java/ && \
     cp -r /tmp/uds-app/res/* aFreeRDP/src/main/res/ && \
