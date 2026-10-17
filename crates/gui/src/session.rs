@@ -71,7 +71,7 @@ impl AppHandler {
                     }
                 }
                 GuiMessage::ConnectRdp(settings) => {
-                    let needs_credentials = settings.password.is_empty();
+                    let needs_credentials = settings.password.is_empty() || settings.user.is_empty();
                     if needs_credentials {
                         match crate::windows::credentials::CredentialsState::new(el, *settings) {
                             Ok(c) => {
