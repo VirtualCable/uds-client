@@ -50,6 +50,7 @@ pub struct CredentialsState {
     pub btn_connect: Button,
     pub btn_cancel: Button,
     pub last_mouse_pos: Option<(f32, f32)>,
+    pub error_message: Option<String>,
 }
 
 impl CredentialsState {
@@ -143,6 +144,7 @@ impl CredentialsState {
             btn_connect,
             btn_cancel,
             last_mouse_pos: None,
+            error_message: None,
         })
     }
 
@@ -181,10 +183,7 @@ impl CredentialsState {
                     }
 
                     if self.btn_connect.is_hovered {
-                        return Some(CredentialsAction::Connect {
-                            user: self.user.clone(),
-                            password: self.password.clone(),
-                        });
+                        return self.validate_and_connect();
                     }
                     if self.btn_cancel.is_hovered {
                         return Some(CredentialsAction::Cancel);
@@ -195,10 +194,7 @@ impl CredentialsState {
                 if key_ev.state.is_pressed() {
                     match &key_ev.logical_key {
                         Key::Named(NamedKey::Enter) => {
-                            return Some(CredentialsAction::Connect {
-                                user: self.user.clone(),
-                                password: self.password.clone(),
-                            });
+                            return self.validate_and_connect();
                         }
                         Key::Named(NamedKey::Escape) => {
                             return Some(CredentialsAction::Cancel);
@@ -211,6 +207,7 @@ impl CredentialsState {
                             self.window.request_redraw();
                         }
                         Key::Named(NamedKey::Backspace) => {
+                            self.error_message = None;
                             match self.focused {
                                 FocusedField::User => {
                                     self.user.pop();
@@ -222,6 +219,7 @@ impl CredentialsState {
                             self.window.request_redraw();
                         }
                         Key::Character(s) => {
+                            self.error_message = None;
                             for c in s.chars() {
                                 if !c.is_control() {
                                     match self.focused {
@@ -239,6 +237,25 @@ impl CredentialsState {
             _ => {}
         }
         None
+    }
+
+    fn validate_and_connect(&mut self) -> Option<CredentialsAction> {
+        if self.user.trim().is_empty() {
+            self.focused = FocusedField::User;
+            self.error_message = Some("Username is required".to_string());
+            self.window.request_redraw();
+            return None;
+        }
+        if self.password.is_empty() {
+            self.focused = FocusedField::Password;
+            self.error_message = Some("Password is required".to_string());
+            self.window.request_redraw();
+            return None;
+        }
+        Some(CredentialsAction::Connect {
+            user: self.user.clone(),
+            password: self.password.clone(),
+        })
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
@@ -431,6 +448,20 @@ impl CredentialsState {
             );
         }
 
+        // Error message if validation failed
+        if let Some(ref err) = self.error_message {
+            sections.push(
+                Section::default()
+                    .add_text(
+                        Text::new(err)
+                            .with_scale(label_fs)
+                            .with_color([0.95, 0.35, 0.35, 1.0]),
+                    )
+                    .with_screen_position((scaled(25.0, s), pass_y + fh + scaled(6.0, s)))
+                    .to_owned(),
+            );
+        }
+
         // 4. Buttons
         for btn in [&self.btn_connect, &self.btn_cancel] {
             let (btn_data, btn_text) = btn.render();
@@ -482,5 +513,35 @@ mod tests {
         let masked = "•".repeat(password.chars().count());
         assert_eq!(masked.chars().count(), 17);
         assert!(!masked.contains("secret"));
+    }
+
+    #[test]
+    fn test_validation_rejects_empty_credentials() {
+        fn check_validation(user: &str, pass: &str) -> (bool, Option<&'static str>, FocusedField) {
+            if user.trim().is_empty() {
+                return (false, Some("Username is required"), FocusedField::User);
+            }
+            if pass.is_empty() {
+                return (false, Some("Password is required"), FocusedField::Password);
+            }
+            (true, None, FocusedField::User)
+        }
+
+        assert_eq!(
+            check_validation("", ""),
+            (false, Some("Username is required"), FocusedField::User)
+        );
+        assert_eq!(
+            check_validation("   ", "pass"),
+            (false, Some("Username is required"), FocusedField::User)
+        );
+        assert_eq!(
+            check_validation("admin", ""),
+            (false, Some("Password is required"), FocusedField::Password)
+        );
+        assert_eq!(
+            check_validation("admin", "secret"),
+            (true, None, FocusedField::User)
+        );
     }
 }
