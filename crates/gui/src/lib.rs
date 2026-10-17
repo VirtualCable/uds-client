@@ -55,6 +55,7 @@ enum WindowKind {
     Popup,
     About,
     Progress,
+    Credentials,
 }
 
 pub struct AppHandler {
@@ -64,6 +65,7 @@ pub struct AppHandler {
     rdp: Option<Box<RdpState>>,
     popup: Option<PopupState>,
     about: Option<AboutState>,
+    credentials: Option<crate::windows::credentials::CredentialsState>,
     windows: HashMap<WindowId, WindowKind>,
 
     keys_tx: Sender<RawKey>,
@@ -100,6 +102,7 @@ pub fn run_gui(
         rdp: None,
         popup: None,
         about: None,
+        credentials: None,
         windows: HashMap::new(),
         keys_tx,
         keys_rx,
@@ -218,6 +221,9 @@ impl ApplicationHandler for AppHandler {
                     Some(WindowKind::Popup) => {
                         self.handle_popup_event(WindowEvent::RedrawRequested)
                     }
+                    Some(WindowKind::Credentials) => {
+                        self.handle_credentials_event(el, WindowEvent::RedrawRequested);
+                    }
                     _ => {}
                 }
             }
@@ -241,6 +247,7 @@ impl ApplicationHandler for AppHandler {
                     }
                     Some(WindowKind::Popup) => self.handle_popup_event(event),
                     Some(WindowKind::About) => self.handle_about_event(event),
+                    Some(WindowKind::Credentials) => self.handle_credentials_event(el, event),
                     _ => {}
                 }
             }

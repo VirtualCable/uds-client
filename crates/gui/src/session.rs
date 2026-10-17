@@ -71,7 +71,23 @@ impl AppHandler {
                     }
                 }
                 GuiMessage::ConnectRdp(settings) => {
-                    if let Err(e) = self.open_rdp(el, *settings) {
+                    let needs_credentials = settings.password.is_empty();
+                    if needs_credentials {
+                        match crate::windows::credentials::CredentialsState::new(el, *settings) {
+                            Ok(c) => {
+                                let wid = c.window.id();
+                                self.register_window(wid, WindowKind::Credentials);
+                                c.window.set_visible(true);
+                                c.window.request_redraw();
+                                self.credentials = Some(c);
+                            }
+                            Err(e) => {
+                                log::error!("Failed to open credentials window: {e}");
+                                self.stop.trigger();
+                                el.exit();
+                            }
+                        }
+                    } else if let Err(e) = self.open_rdp(el, *settings) {
                         log::error!("Failed to enter RDP: {e}");
                         self.stop.trigger();
                         el.exit();
@@ -83,5 +99,50 @@ impl AppHandler {
 
         #[cfg(feature = "gui-tester")]
         self.process_testing_launcher_actions(el);
+    }
+
+    pub(crate) fn handle_credentials_event(&mut self, el: &ActiveEventLoop, event: winit::event::WindowEvent) {
+        let Some(ref mut creds) = self.credentials else {
+            return;
+        };
+
+        match event {
+            winit::event::WindowEvent::CloseRequested => {
+                let wid = creds.window.id();
+                self.unregister_window(wid);
+                self.credentials = None;
+                self.stop.trigger();
+                el.exit();
+            }
+            winit::event::WindowEvent::Resized(size) => {
+                creds.resize(size.width, size.height);
+                creds.window.request_redraw();
+            }
+            winit::event::WindowEvent::RedrawRequested => {
+                creds.paint();
+            }
+            _ => {
+                if let Some(action) = creds.handle_event(&event) {
+                    let wid = creds.window.id();
+                    self.unregister_window(wid);
+                    let mut state = self.credentials.take().unwrap();
+                    match action {
+                        crate::windows::credentials::CredentialsAction::Connect { user, password } => {
+                            state.settings.user = user;
+                            state.settings.password = password;
+                            if let Err(e) = self.open_rdp(el, state.settings) {
+                                log::error!("Failed to enter RDP after credentials: {e}");
+                                self.stop.trigger();
+                                el.exit();
+                            }
+                        }
+                        crate::windows::credentials::CredentialsAction::Cancel => {
+                            self.stop.trigger();
+                            el.exit();
+                        }
+                    }
+                }
+            }
+        }
     }
 }
