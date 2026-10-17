@@ -87,11 +87,25 @@ impl AppHandler {
                                 el.exit();
                             }
                         }
-                    } else if let Err(e) = self.open_rdp(el, *settings) {
-                        log::error!("Failed to enter RDP: {e}");
-                        self.stop.trigger();
-                        el.exit();
-                        return;
+                    } else if let Err(e) = self.open_rdp(el, *settings.clone()) {
+                        log::warn!("Failed to enter RDP ({e}), prompting credentials");
+                        let mut retry_settings = *settings;
+                        retry_settings.password = String::new();
+                        match crate::windows::credentials::CredentialsState::new(el, retry_settings) {
+                            Ok(mut c) => {
+                                c.error_message = Some("Authentication failed. Please check username and password.".to_string());
+                                let wid = c.window.id();
+                                self.register_window(wid, WindowKind::Credentials);
+                                c.window.set_visible(true);
+                                c.window.request_redraw();
+                                self.credentials = Some(c);
+                            }
+                            Err(err) => {
+                                log::error!("Failed to open credentials window: {err}");
+                                self.stop.trigger();
+                                el.exit();
+                            }
+                        }
                     }
                 }
             }
@@ -130,10 +144,25 @@ impl AppHandler {
                         crate::windows::credentials::CredentialsAction::Connect { user, password } => {
                             state.settings.user = user;
                             state.settings.password = password;
-                            if let Err(e) = self.open_rdp(el, state.settings) {
-                                log::error!("Failed to enter RDP after credentials: {e}");
-                                self.stop.trigger();
-                                el.exit();
+                            if let Err(e) = self.open_rdp(el, state.settings.clone()) {
+                                log::warn!("Failed to enter RDP after credentials ({e}), prompting again");
+                                let mut retry_settings = state.settings;
+                                retry_settings.password = String::new();
+                                match crate::windows::credentials::CredentialsState::new(el, retry_settings) {
+                                    Ok(mut c) => {
+                                        c.error_message = Some("Authentication failed. Please check username and password.".to_string());
+                                        let wid = c.window.id();
+                                        self.register_window(wid, WindowKind::Credentials);
+                                        c.window.set_visible(true);
+                                        c.window.request_redraw();
+                                        self.credentials = Some(c);
+                                    }
+                                    Err(err) => {
+                                        log::error!("Failed to re-open credentials window: {err}");
+                                        self.stop.trigger();
+                                        el.exit();
+                                    }
+                                }
                             }
                         }
                         crate::windows::credentials::CredentialsAction::Cancel => {

@@ -77,6 +77,8 @@ pub struct RdpState {
     pub pendings: Pendings,
 
     pub cursor: Cursor,
+    pub settings: RdpSettings,
+    pub has_received_frames: bool,
 }
 
 #[allow(dead_code)]
@@ -216,6 +218,8 @@ impl RdpState {
                 rects: Vec::new(),
             },
             cursor: Cursor::new(coords_scale, use_rgba),
+            settings,
+            has_received_frames: false,
         })
     }
 }
@@ -225,12 +229,14 @@ pub fn handle_rdp_message(state: &mut RdpState, message: RdpMessage) -> RdpActio
     log::trace!("RDP message: {:?}", message);
     match message {
         RdpMessage::UpdateRects(rects) => {
+            state.has_received_frames = true;
             if matches!(state.mode, RdpMode::Desktop { .. }) {
                 state.pendings.rects.extend(rects);
             }
             RdpActionResult::Continue
         }
         RdpMessage::DesktopResize(w, h) => {
+            state.has_received_frames = true;
             state.on_desktop_resize(w, h);
             RdpActionResult::Continue
         }
@@ -588,17 +594,32 @@ impl crate::AppHandler {
                     state.window.window.request_redraw();
                 }
 
-                RdpActionResult::Disconnect => {
+                RdpActionResult::Disconnect | RdpActionResult::Error(_) => {
+                    let had_session = state.has_received_frames;
+                    let mut retry_settings = state.settings.clone();
+                    self.close_rdp();
+
+                    if !had_session {
+                        log::warn!("RDP connection ended before session was established, prompting credentials");
+                        retry_settings.password = String::new();
+                        match crate::windows::credentials::CredentialsState::new(el, retry_settings) {
+                            Ok(mut c) => {
+                                c.error_message = Some("Authentication failed. Please check username and password.".to_string());
+                                let wid = c.window.id();
+                                self.register_window(wid, WindowKind::Credentials);
+                                c.window.set_visible(true);
+                                c.window.request_redraw();
+                                self.credentials = Some(c);
+                                return;
+                            }
+                            Err(e) => {
+                                log::error!("Failed to open credentials window: {e}");
+                            }
+                        }
+                    }
+
                     self.stop.trigger();
                     self.return_code = crate::types::ReturnCode::Exit;
-                    self.close_rdp();
-                    el.exit();
-                    return;
-                }
-                RdpActionResult::Error(_) => {
-                    self.stop.trigger();
-                    self.return_code = crate::types::ReturnCode::Exit;
-                    self.close_rdp();
                     el.exit();
                     return;
                 }
