@@ -24,6 +24,7 @@ use rdp::settings::RdpSettings;
 use shared::log;
 
 use crate::RawKey;
+use crate::windows::popup::{PopupKind, PopupState};
 
 const FRAMES_IN_FLIGHT: usize = 128;
 
@@ -596,25 +597,39 @@ impl crate::AppHandler {
 
                 RdpActionResult::Disconnect | RdpActionResult::Error(_) => {
                     let had_session = state.has_received_frames;
-                    let mut retry_settings = state.settings.clone();
+                    let retry_settings = state.settings.clone();
                     self.close_rdp();
 
                     if !had_session {
                         log::warn!("RDP connection ended before session was established, prompting credentials");
-                        retry_settings.password = String::new();
-                        match crate::windows::credentials::CredentialsState::new(el, retry_settings) {
-                            Ok(mut c) => {
-                                c.error_message = Some("Authentication failed. Please check username and password.".to_string());
-                                let wid = c.window.id();
-                                self.register_window(wid, WindowKind::Credentials);
-                                c.window.set_visible(true);
-                                c.window.request_redraw();
-                                self.credentials = Some(c);
-                                return;
+                        self.credentials_retries += 1;
+                        if self.credentials_retries >= crate::MAX_CREDENTIALS_RETRIES {
+                            log::error!(
+                                "Reached credentials retry cap ({}); showing failure",
+                                crate::MAX_CREDENTIALS_RETRIES
+                            );
+                            if let Ok(p) = PopupState::new(
+                                el,
+                                PopupKind::Error(
+                                    "Could not establish an RDP session after several attempts. \
+                                     Please verify the connection details and try again."
+                                        .to_string(),
+                                ),
+                            ) {
+                                let wid = p.window.id();
+                                self.register_window(wid, WindowKind::Popup);
+                                p.window.set_visible(true);
+                                p.window.request_redraw();
+                                self.popup = Some(p);
                             }
-                            Err(e) => {
-                                log::error!("Failed to open credentials window: {e}");
-                            }
+                        } else if let Err(e) = self.prompt_credentials(
+                            el,
+                            retry_settings,
+                            "Invalid username or password. Please check your credentials.",
+                        ) {
+                            log::error!("Failed to open credentials window: {e}");
+                        } else {
+                            return;
                         }
                     }
 

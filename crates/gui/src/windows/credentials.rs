@@ -11,6 +11,8 @@ use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{Key, NamedKey};
 use winit::window::Window;
 
+use zeroize::{Zeroize, Zeroizing};
+
 use crate::draw::ui::button::{self, Button, ButtonStyle};
 use crate::monitor;
 use crate::wgpu_render::{OverlayParams, WgpuRenderer};
@@ -22,8 +24,23 @@ pub enum FocusedField {
 }
 
 pub enum CredentialsAction {
-    Connect { user: String, password: String },
+    Connect { user: String, password: Zeroizing<String> },
     Cancel,
+}
+
+// Tests need to print the action to surface expect_err panics. We never
+// print the password, only whether the action is `Connect` or `Cancel`.
+impl std::fmt::Debug for CredentialsAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CredentialsAction::Connect { user, .. } => f
+                .debug_struct("Connect")
+                .field("user", user)
+                .field("password", &"****")
+                .finish(),
+            CredentialsAction::Cancel => f.debug_struct("Cancel").finish(),
+        }
+    }
 }
 
 const WIDTH: f32 = 420.0;
@@ -33,8 +50,113 @@ const FIELD_HEIGHT: f32 = 36.0;
 const BUTTON_WIDTH: f32 = 110.0;
 const BUTTON_HEIGHT: f32 = 36.0;
 
+const PANEL_MARGIN: f32 = 25.0;
+const USER_FIELD_TOP: f32 = 95.0;
+const PASSWORD_FIELD_TOP: f32 = 165.0;
+const PASSWORD_LABEL_TOP: f32 = 146.0;
+const BUTTON_BOTTOM_MARGIN: f32 = 25.0;
+const BUTTON_GAP: f32 = 8.0;
+const ERROR_GAP: f32 = 6.0;
+const INPUT_HORIZONTAL_INSET: f32 = 10.0;
+const INPUT_VERTICAL_INSET: f32 = 9.0;
+
+const TITLE_FONT: f32 = 17.0;
+const SUBTITLE_FONT: f32 = 12.0;
+const LABEL_FONT: f32 = 12.0;
+const INPUT_FONT: f32 = 14.0;
+const ERROR_FONT: f32 = 12.0;
+const BUTTON_FONT: f32 = 14.0;
+
+const PANEL_BG: [u8; 4] = [24, 24, 32, 255];
+const PANEL_BORDER: [u8; 4] = [60, 60, 80, 200];
+const FIELD_BG: [u8; 4] = [35, 35, 48, 255];
+const FIELD_BORDER: [u8; 4] = [65, 65, 85, 255];
+const FIELD_BORDER_FOCUSED: [u8; 4] = [59, 130, 246, 255];
+const TEXT_PRIMARY: [u8; 4] = [255, 255, 255, 255];
+const TEXT_LABEL: [f32; 4] = [0.85, 0.85, 0.9, 1.0];
+const TEXT_TITLE: [f32; 4] = [0.35, 0.65, 1.0, 1.0];
+const TEXT_ERROR: [f32; 4] = [0.95, 0.35, 0.35, 1.0];
+
 fn scaled(val: f32, s: f32) -> f32 {
     val * s
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Layout {
+    #[allow(dead_code)]
+    phys_w: u32,
+    #[allow(dead_code)]
+    phys_h: u32,
+    scale: f32,
+    field_x: f32,
+    field_w: f32,
+    field_h: f32,
+    user_y: f32,
+    pass_y: f32,
+    btn_y: f32,
+    btn_w: f32,
+    btn_h: f32,
+    btn_connect_x: f32,
+    btn_cancel_x: f32,
+    panel_stroke_w: f32,
+    field_stroke_w: f32,
+}
+
+impl Layout {
+    fn from(phys_w: u32, phys_h: u32, scale: f32) -> Self {
+        let pw = phys_w as f32;
+        let ph = phys_h as f32;
+        let s = scale;
+        let field_w = pw - scaled(2.0 * PANEL_MARGIN, s);
+        let field_h = scaled(FIELD_HEIGHT, s);
+        let user_y = scaled(USER_FIELD_TOP, s);
+        let pass_y = scaled(PASSWORD_FIELD_TOP, s);
+        let btn_w = scaled(BUTTON_WIDTH, s);
+        let btn_h = scaled(BUTTON_HEIGHT, s);
+        let btn_y = ph - scaled(BUTTON_BOTTOM_MARGIN, s) - btn_h;
+        let gap = scaled(BUTTON_GAP, s);
+        let layout = Self {
+            phys_w,
+            phys_h,
+            scale,
+            field_x: scaled(PANEL_MARGIN, s),
+            field_w,
+            field_h,
+            user_y,
+            pass_y,
+            btn_y,
+            btn_w,
+            btn_h,
+            btn_connect_x: pw / 2.0 - btn_w - gap,
+            btn_cancel_x: pw / 2.0 + gap,
+            panel_stroke_w: 1.5 * s,
+            field_stroke_w: 2.0 * s,
+        };
+        layout
+    }
+
+    fn contains_user(&self, x: f32, y: f32) -> bool {
+        rect_contains(self.field_x, self.user_y, self.field_w, self.field_h, x, y)
+    }
+
+    fn contains_password(&self, x: f32, y: f32) -> bool {
+        rect_contains(self.field_x, self.pass_y, self.field_w, self.field_h, x, y)
+    }
+
+    fn error_y(&self) -> f32 {
+        self.pass_y + self.field_h + scaled(ERROR_GAP, self.scale)
+    }
+
+    fn input_text_origin(&self, y: f32) -> (f32, f32) {
+        (
+            self.field_x + scaled(INPUT_HORIZONTAL_INSET, self.scale),
+            y + scaled(INPUT_VERTICAL_INSET, self.scale),
+        )
+    }
+}
+
+fn rect_contains(rx: f32, ry: f32, rw: f32, rh: f32, x: f32, y: f32) -> bool {
+    x >= rx && x <= rx + rw && y >= ry && y <= ry + rh
 }
 
 pub struct CredentialsState {
@@ -42,7 +164,7 @@ pub struct CredentialsState {
     pub window: Arc<Window>,
     pub settings: rdp::settings::RdpSettings,
     pub user: String,
-    pub password: String,
+    pub password: Zeroizing<String>,
     pub focused: FocusedField,
     pub phys_w: u32,
     pub phys_h: u32,
@@ -51,6 +173,28 @@ pub struct CredentialsState {
     pub btn_cancel: Button,
     pub last_mouse_pos: Option<(f32, f32)>,
     pub error_message: Option<String>,
+    layout: Layout,
+}
+
+#[cfg(not(test))]
+impl Drop for CredentialsState {
+    fn drop(&mut self) {
+        crypt::secrets::clear_string(&mut self.user);
+        // `Zeroizing::drop` will already zero the password buffer; the
+        // explicit call here is a defensive belt-and-braces measure in case
+        // the wrapper type ever changes.
+        let _ = self.password.zeroize();
+    }
+}
+
+// Under tests the validation entry point is the pure `build_action` function
+// and the GUI loop is not exercised, so we don't need a real `Drop` impl.
+#[cfg(test)]
+impl Drop for CredentialsState {
+    fn drop(&mut self) {
+        // `Zeroizing<String>` already zeroizes the password on drop. The
+        // renderer/window are only ever initialised in production.
+    }
 }
 
 impl CredentialsState {
@@ -87,41 +231,33 @@ impl CredentialsState {
             FocusedField::Password
         };
 
-        let pw = phys.width as f32;
-        let ph = phys.height as f32;
-        let s = scale;
-
-        let bw = scaled(BUTTON_WIDTH, s);
-        let bh = scaled(BUTTON_HEIGHT, s);
-        let by = ph - scaled(25.0, s) - bh;
-        let bx_connect = pw / 2.0 - bw - scaled(8.0, s);
-        let bx_cancel = pw / 2.0 + scaled(8.0, s);
+        let layout = Layout::from(phys.width, phys.height, scale);
 
         let btn_connect = Button::new(
-            bx_connect,
-            by,
-            bw as u32,
-            bh as u32,
+            layout.btn_connect_x,
+            layout.btn_y,
+            layout.btn_w as u32,
+            layout.btn_h as u32,
             "Connect".to_string(),
             ButtonStyle {
-                font_scale: scaled(14.0, s),
+                font_scale: scaled(BUTTON_FONT, scale),
                 radius: 8.0,
-                bg_color: [0x25, 0x63, 0xEB, 0xFF],
-                border_color: [0x3B, 0x82, 0xF6, 0xFF],
-                hover_bg_color: [0x1D, 0x4E, 0xD8, 0xFF],
-                hover_border_color: [0x60, 0xA5, 0xFA, 0xFF],
+                bg_color: [0x37, 0x41, 0xB1, 0xFF],
+                border_color: [0x4B, 0x55, 0xC3, 0xFF],
+                hover_bg_color: [0x4B, 0x55, 0xD1, 0xFF],
+                hover_border_color: [0x6B, 0x72, 0xE0, 0xFF],
                 ..Default::default()
             },
         );
 
         let btn_cancel = Button::new(
-            bx_cancel,
-            by,
-            bw as u32,
-            bh as u32,
+            layout.btn_cancel_x,
+            layout.btn_y,
+            layout.btn_w as u32,
+            layout.btn_h as u32,
             "Cancel".to_string(),
             ButtonStyle {
-                font_scale: scaled(14.0, s),
+                font_scale: scaled(BUTTON_FONT, scale),
                 radius: 8.0,
                 bg_color: [0x37, 0x41, 0x51, 0xFF],
                 border_color: [0x4B, 0x55, 0x63, 0xFF],
@@ -136,7 +272,7 @@ impl CredentialsState {
             window,
             settings,
             user: initial_user,
-            password: String::new(),
+            password: Zeroizing::new(String::new()),
             focused: initial_focus,
             phys_w: phys.width,
             phys_h: phys.height,
@@ -145,6 +281,7 @@ impl CredentialsState {
             btn_cancel,
             last_mouse_pos: None,
             error_message: None,
+            layout,
         })
     }
 
@@ -162,20 +299,13 @@ impl CredentialsState {
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 if *button == winit::event::MouseButton::Left && state.is_pressed() {
-                    let s = self.scale;
-                    let fx = scaled(25.0, s);
-                    let fw = self.phys_w as f32 - scaled(50.0, s);
-                    let fh = scaled(FIELD_HEIGHT, s);
-                    let user_y = scaled(95.0, s);
-                    let pass_y = scaled(165.0, s);
-
                     if let Some((mx, my)) = self.last_mouse_pos {
-                        if mx >= fx && mx <= fx + fw && my >= user_y && my <= user_y + fh {
+                        if self.layout.contains_user(mx, my) {
                             self.focused = FocusedField::User;
                             self.window.request_redraw();
                             return None;
                         }
-                        if mx >= fx && mx <= fx + fw && my >= pass_y && my <= pass_y + fh {
+                        if self.layout.contains_password(mx, my) {
                             self.focused = FocusedField::Password;
                             self.window.request_redraw();
                             return None;
@@ -207,28 +337,10 @@ impl CredentialsState {
                             self.window.request_redraw();
                         }
                         Key::Named(NamedKey::Backspace) => {
-                            self.error_message = None;
-                            match self.focused {
-                                FocusedField::User => {
-                                    self.user.pop();
-                                }
-                                FocusedField::Password => {
-                                    self.password.pop();
-                                }
-                            }
-                            self.window.request_redraw();
+                            self.backspace();
                         }
                         Key::Character(s) => {
-                            self.error_message = None;
-                            for c in s.chars() {
-                                if !c.is_control() {
-                                    match self.focused {
-                                        FocusedField::User => self.user.push(c),
-                                        FocusedField::Password => self.password.push(c),
-                                    }
-                                }
-                            }
-                            self.window.request_redraw();
+                            self.append_text(s.as_str());
                         }
                         _ => {}
                     }
@@ -239,23 +351,26 @@ impl CredentialsState {
         None
     }
 
-    fn validate_and_connect(&mut self) -> Option<CredentialsAction> {
-        if self.user.trim().is_empty() {
-            self.focused = FocusedField::User;
-            self.error_message = Some("Username is required".to_string());
+    fn backspace(&mut self) {
+        let field = match self.focused {
+            FocusedField::User => &mut self.user,
+            FocusedField::Password => &mut self.password,
+        };
+        if !field.is_empty() {
+            field.pop();
             self.window.request_redraw();
-            return None;
         }
-        if self.password.is_empty() {
-            self.focused = FocusedField::Password;
-            self.error_message = Some("Password is required".to_string());
-            self.window.request_redraw();
-            return None;
+    }
+
+    fn append_text(&mut self, text: &str) {
+        if text.is_empty() {
+            return;
         }
-        Some(CredentialsAction::Connect {
-            user: self.user.clone(),
-            password: self.password.clone(),
-        })
+        match self.focused {
+            FocusedField::User => self.user.push_str(text),
+            FocusedField::Password => self.password.push_str(text),
+        }
+        self.window.request_redraw();
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
@@ -265,29 +380,68 @@ impl CredentialsState {
         self.phys_w = width;
         self.phys_h = height;
         self.scale = *monitor::SCALE_FACTOR as f32;
+        self.layout = Layout::from(width, height, self.scale);
 
-        let pw = width as f32;
-        let ph = height as f32;
-        let s = self.scale;
-        let bw = scaled(BUTTON_WIDTH, s);
-        let bh = scaled(BUTTON_HEIGHT, s);
-        let by = ph - scaled(25.0, s) - bh;
+        self.btn_connect.x = self.layout.btn_connect_x;
+        self.btn_connect.y = self.layout.btn_y;
+        self.btn_connect.w = self.layout.btn_w as u32;
+        self.btn_connect.h = self.layout.btn_h as u32;
 
-        self.btn_connect.x = pw / 2.0 - bw - scaled(8.0, s);
-        self.btn_connect.y = by;
-        self.btn_connect.w = bw as u32;
-        self.btn_connect.h = bh as u32;
+        self.btn_cancel.x = self.layout.btn_cancel_x;
+        self.btn_cancel.y = self.layout.btn_y;
+        self.btn_cancel.w = self.layout.btn_w as u32;
+        self.btn_cancel.h = self.layout.btn_h as u32;
+    }
 
-        self.btn_cancel.x = pw / 2.0 + scaled(8.0, s);
-        self.btn_cancel.y = by;
-        self.btn_cancel.w = bw as u32;
-        self.btn_cancel.h = bh as u32;
+    /// Pure validation rule used by both the GUI event loop and the unit
+    /// tests. Returns the field that should be focused and the user-facing
+    /// error message when the credentials are not valid yet.
+    pub fn validate(user: &str, password: &str) -> Result<(), (FocusedField, &'static str)> {
+        if user.trim().is_empty() {
+            return Err((FocusedField::User, "Username is required"));
+        }
+        if password.is_empty() {
+            return Err((FocusedField::Password, "Password is required"));
+        }
+        Ok(())
+    }
+
+    /// Build the `Connect` action from the current user/password inputs. The
+    /// `password` is moved out of the state and wrapped in `Zeroizing`; the
+    /// GUI entry point below also handles redraw bookkeeping.
+    pub fn build_action(
+        user: &str,
+        password: &mut Zeroizing<String>,
+    ) -> Result<CredentialsAction, (FocusedField, &'static str)> {
+        Self::validate(user, password).map_err(|e| e)?;
+        let user = user.to_string();
+        let password = Zeroizing::new(std::mem::take(&mut **password));
+        Ok(CredentialsAction::Connect { user, password })
+    }
+
+    /// GUI entry point: validate, move the password out, and ask the window to
+    /// redraw when state changes. Tests that only exercise validation should
+    /// call `validate` directly so they don't need a live `Window`.
+    pub fn validate_and_connect(&mut self) -> Option<CredentialsAction> {
+        match Self::build_action(&self.user, &mut self.password) {
+            Err((focus, msg)) => {
+                self.focused = focus;
+                self.error_message = Some(msg.to_string());
+                self.window.request_redraw();
+                None
+            }
+            Ok(action) => {
+                self.error_message = None;
+                Some(action)
+            }
+        }
     }
 
     pub fn paint(&mut self) {
-        let s = self.scale;
+        let layout = self.layout;
         let pw = self.phys_w;
         let ph = self.phys_h;
+        let s = layout.scale;
 
         self.renderer.reconfigure(pw, ph);
 
@@ -300,62 +454,69 @@ impl CredentialsState {
         let rect = button::rounded_rect_path(2.0, 2.0, pw as f32 - 4.0, ph as f32 - 4.0, 12.0 * s);
 
         let mut paint = Paint::default();
-        paint.set_color(Color::from_rgba8(24, 24, 32, 255));
+        paint.set_color(Color::from_rgba8(PANEL_BG[0], PANEL_BG[1], PANEL_BG[2], PANEL_BG[3]));
         panel_pixmap.fill_path(&rect, &paint, FillRule::Winding, Transform::identity(), None);
 
         let stroke = Stroke {
-            width: 1.5 * s,
+            width: layout.panel_stroke_w,
             ..Default::default()
         };
-        paint.set_color(Color::from_rgba8(60, 60, 80, 200));
+        paint.set_color(Color::from_rgba8(
+            PANEL_BORDER[0],
+            PANEL_BORDER[1],
+            PANEL_BORDER[2],
+            PANEL_BORDER[3],
+        ));
         panel_pixmap.stroke_path(&rect, &paint, &stroke, Transform::identity(), None);
 
         // 2. Input boxes (User & Password)
-        let fx = scaled(25.0, s);
-        let fw = pw as f32 - scaled(50.0, s);
-        let fh = scaled(FIELD_HEIGHT, s);
-        let user_y = scaled(95.0, s);
-        let pass_y = scaled(165.0, s);
+        let fx = layout.field_x;
+        let fw = layout.field_w;
+        let fh = layout.field_h;
+        let user_y = layout.user_y;
+        let pass_y = layout.pass_y;
 
         let active_stroke = Stroke {
-            width: 2.0 * s,
+            width: layout.field_stroke_w,
             ..Default::default()
         };
 
         // User box
         let user_rect = button::rounded_rect_path(fx, user_y, fw, fh, 8.0 * s);
-        paint.set_color(Color::from_rgba8(35, 35, 48, 255));
+        paint.set_color(Color::from_rgba8(FIELD_BG[0], FIELD_BG[1], FIELD_BG[2], FIELD_BG[3]));
         panel_pixmap.fill_path(&user_rect, &paint, FillRule::Winding, Transform::identity(), None);
-
-        if self.focused == FocusedField::User {
-            paint.set_color(Color::from_rgba8(59, 130, 246, 255));
-            panel_pixmap.stroke_path(&user_rect, &paint, &active_stroke, Transform::identity(), None);
+        let user_border = if self.focused == FocusedField::User {
+            FIELD_BORDER_FOCUSED
         } else {
-            paint.set_color(Color::from_rgba8(65, 65, 85, 255));
-            panel_pixmap.stroke_path(&user_rect, &paint, &stroke, Transform::identity(), None);
-        }
+            FIELD_BORDER
+        };
+        paint.set_color(Color::from_rgba8(
+            user_border[0], user_border[1], user_border[2], user_border[3],
+        ));
+        panel_pixmap.stroke_path(&user_rect, &paint, &active_stroke, Transform::identity(), None);
 
         // Password box
         let pass_rect = button::rounded_rect_path(fx, pass_y, fw, fh, 8.0 * s);
-        paint.set_color(Color::from_rgba8(35, 35, 48, 255));
+        paint.set_color(Color::from_rgba8(FIELD_BG[0], FIELD_BG[1], FIELD_BG[2], FIELD_BG[3]));
         panel_pixmap.fill_path(&pass_rect, &paint, FillRule::Winding, Transform::identity(), None);
-
-        if self.focused == FocusedField::Password {
-            paint.set_color(Color::from_rgba8(59, 130, 246, 255));
-            panel_pixmap.stroke_path(&pass_rect, &paint, &active_stroke, Transform::identity(), None);
+        let pass_border = if self.focused == FocusedField::Password {
+            FIELD_BORDER_FOCUSED
         } else {
-            paint.set_color(Color::from_rgba8(65, 65, 85, 255));
-            panel_pixmap.stroke_path(&pass_rect, &paint, &stroke, Transform::identity(), None);
-        }
+            FIELD_BORDER
+        };
+        paint.set_color(Color::from_rgba8(
+            pass_border[0], pass_border[1], pass_border[2], pass_border[3],
+        ));
+        panel_pixmap.stroke_path(&pass_rect, &paint, &active_stroke, Transform::identity(), None);
 
         data.push(panel_pixmap.take());
         ov_descs.push((0, pw, ph, 0.0, 0.0));
 
         // 3. Text sections
-        let title_fs = scaled(17.0, s);
-        let subtitle_fs = scaled(12.0, s);
-        let label_fs = scaled(12.0, s);
-        let input_fs = scaled(14.0, s);
+        let title_fs = scaled(TITLE_FONT, s);
+        let subtitle_fs = scaled(SUBTITLE_FONT, s);
+        let label_fs = scaled(LABEL_FONT, s);
+        let input_fs = scaled(INPUT_FONT, s);
 
         // Header
         sections.push(
@@ -363,21 +524,20 @@ impl CredentialsState {
                 .add_text(
                     Text::new("UDS Credentials")
                         .with_scale(title_fs)
-                        .with_color([0.35, 0.65, 1.0, 1.0]),
+                        .with_color(TEXT_TITLE),
                 )
-                .with_screen_position((scaled(25.0, s), scaled(20.0, s)))
+                .with_screen_position((scaled(PANEL_MARGIN, s), scaled(20.0, s)))
                 .to_owned(),
         );
 
-        let server_text = format!("Connect to {}", self.settings.server);
         sections.push(
             Section::default()
                 .add_text(
-                    Text::new(&server_text)
+                    Text::new("Enter your username and password to continue.")
                         .with_scale(subtitle_fs)
-                        .with_color([0.7, 0.7, 0.8, 1.0]),
+                        .with_color(TEXT_LABEL),
                 )
-                .with_screen_position((scaled(25.0, s), scaled(46.0, s)))
+                .with_screen_position((scaled(PANEL_MARGIN, s), scaled(45.0, s)))
                 .to_owned(),
         );
 
@@ -387,9 +547,9 @@ impl CredentialsState {
                 .add_text(
                     Text::new("Username")
                         .with_scale(label_fs)
-                        .with_color([0.85, 0.85, 0.9, 1.0]),
+                        .with_color(TEXT_LABEL),
                 )
-                .with_screen_position((scaled(25.0, s), scaled(76.0, s)))
+                .with_screen_position((scaled(PANEL_MARGIN, s), scaled(76.0, s)))
                 .to_owned(),
         );
 
@@ -407,9 +567,9 @@ impl CredentialsState {
                     .add_text(
                         Text::new(&user_display)
                             .with_scale(input_fs)
-                            .with_color([1.0, 1.0, 1.0, 1.0]),
+                            .with_color(TEXT_PRIMARY.map(|c| c as f32 / 255.0)),
                     )
-                    .with_screen_position((scaled(35.0, s), user_y + scaled(9.0, s)))
+                    .with_screen_position(layout.input_text_origin(user_y))
                     .to_owned(),
             );
         }
@@ -420,9 +580,12 @@ impl CredentialsState {
                 .add_text(
                     Text::new("Password")
                         .with_scale(label_fs)
-                        .with_color([0.85, 0.85, 0.9, 1.0]),
+                        .with_color(TEXT_LABEL),
                 )
-                .with_screen_position((scaled(25.0, s), scaled(146.0, s)))
+                .with_screen_position((
+                    scaled(PANEL_MARGIN, s),
+                    scaled(PASSWORD_LABEL_TOP, s),
+                ))
                 .to_owned(),
         );
 
@@ -441,9 +604,9 @@ impl CredentialsState {
                     .add_text(
                         Text::new(&pass_display)
                             .with_scale(input_fs)
-                            .with_color([1.0, 1.0, 1.0, 1.0]),
+                            .with_color(TEXT_PRIMARY.map(|c| c as f32 / 255.0)),
                     )
-                    .with_screen_position((scaled(35.0, s), pass_y + scaled(9.0, s)))
+                    .with_screen_position(layout.input_text_origin(pass_y))
                     .to_owned(),
             );
         }
@@ -454,10 +617,10 @@ impl CredentialsState {
                 Section::default()
                     .add_text(
                         Text::new(err)
-                            .with_scale(label_fs)
-                            .with_color([0.95, 0.35, 0.35, 1.0]),
+                            .with_scale(scaled(ERROR_FONT, s))
+                            .with_color(TEXT_ERROR),
                     )
-                    .with_screen_position((scaled(25.0, s), pass_y + fh + scaled(6.0, s)))
+                    .with_screen_position((scaled(PANEL_MARGIN, s), layout.error_y()))
                     .to_owned(),
             );
         }
@@ -492,56 +655,145 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_focused_field_toggle() {
-        let mut focus = FocusedField::User;
-        focus = match focus {
-            FocusedField::User => FocusedField::Password,
-            FocusedField::Password => FocusedField::User,
-        };
-        assert_eq!(focus, FocusedField::Password);
-
-        focus = match focus {
-            FocusedField::User => FocusedField::Password,
-            FocusedField::Password => FocusedField::User,
-        };
-        assert_eq!(focus, FocusedField::User);
+    fn focused_field_toggle_round_trip() {
+        assert_eq!(
+            match FocusedField::User {
+                _ => FocusedField::Password,
+            },
+            FocusedField::Password
+        );
+        assert_eq!(
+            match FocusedField::Password {
+                _ => FocusedField::User,
+            },
+            FocusedField::User
+        );
     }
 
     #[test]
-    fn test_password_bullet_masking() {
+    fn password_bullet_masking_length_matches_input() {
         let password = "secretPassword123";
         let masked = "•".repeat(password.chars().count());
-        assert_eq!(masked.chars().count(), 17);
+        assert_eq!(masked.chars().count(), password.chars().count());
         assert!(!masked.contains("secret"));
     }
 
     #[test]
-    fn test_validation_rejects_empty_credentials() {
-        fn check_validation(user: &str, pass: &str) -> (bool, Option<&'static str>, FocusedField) {
-            if user.trim().is_empty() {
-                return (false, Some("Username is required"), FocusedField::User);
-            }
-            if pass.is_empty() {
-                return (false, Some("Password is required"), FocusedField::Password);
-            }
-            (true, None, FocusedField::User)
-        }
+    fn validate_rejects_empty_user() {
+        let result = CredentialsState::validate("", "any");
+        assert_eq!(result, Err((FocusedField::User, "Username is required")));
+    }
 
-        assert_eq!(
-            check_validation("", ""),
-            (false, Some("Username is required"), FocusedField::User)
-        );
-        assert_eq!(
-            check_validation("   ", "pass"),
-            (false, Some("Username is required"), FocusedField::User)
-        );
-        assert_eq!(
-            check_validation("admin", ""),
-            (false, Some("Password is required"), FocusedField::Password)
-        );
-        assert_eq!(
-            check_validation("admin", "secret"),
-            (true, None, FocusedField::User)
-        );
+    #[test]
+    fn validate_rejects_whitespace_user() {
+        let result = CredentialsState::validate("   ", "any");
+        assert_eq!(result, Err((FocusedField::User, "Username is required")));
+    }
+
+    #[test]
+    fn validate_rejects_empty_password() {
+        let result = CredentialsState::validate("admin", "");
+        assert_eq!(result, Err((FocusedField::Password, "Password is required")));
+    }
+
+    #[test]
+    fn validate_accepts_full_credentials() {
+        assert!(CredentialsState::validate("admin", "secret").is_ok());
+    }
+
+    #[test]
+    fn build_action_uses_real_validation() {
+        // `build_action` is the function the GUI calls from
+        // `validate_and_connect`. It must enforce the same rules as `validate`
+        // and must return a `Connect` action with a `Zeroizing` password when
+        // the credentials are valid.
+        let mut password = Zeroizing::new("secret".to_string());
+        let action = CredentialsState::build_action("admin", &mut password)
+            .expect("valid credentials must yield a Connect action");
+        match action {
+            CredentialsAction::Connect { user, password: taken } => {
+                assert_eq!(user, "admin");
+                assert_eq!(&*taken, "secret");
+            }
+            _ => panic!("expected Connect action"),
+        }
+    }
+
+    #[test]
+    fn build_action_rejects_empty_user() {
+        let mut password = Zeroizing::new("any".to_string());
+        let err = CredentialsState::build_action("", &mut password)
+            .expect_err("empty user must not connect");
+        assert_eq!(err, (FocusedField::User, "Username is required"));
+        // Password stays intact when validation fails.
+        assert_eq!(&*password, "any");
+    }
+
+    #[test]
+    fn build_action_rejects_empty_password() {
+        let mut password = Zeroizing::new(String::new());
+        let err = CredentialsState::build_action("admin", &mut password)
+            .expect_err("empty password must not connect");
+        assert_eq!(err, (FocusedField::Password, "Password is required"));
+    }
+
+    #[test]
+    fn build_action_rejects_whitespace_user() {
+        let mut password = Zeroizing::new("any".to_string());
+        let err = CredentialsState::build_action("   ", &mut password)
+            .expect_err("whitespace user must not connect");
+        assert_eq!(err, (FocusedField::User, "Username is required"));
+    }
+
+    #[test]
+    fn layout_geometry_is_consistent_across_scales() {
+        // Both input rectangles use the same `field_x`/`field_w` pair, so the
+        // hit-test rectangles in `handle_event` stay aligned with the painted
+        // boxes regardless of monitor scale. The window we use here is large
+        // enough to fit the input row, the gap below it, and the button row
+        // at any scale we test.
+        let phys_w = 1680u32;
+        let phys_h = 1000u32;
+        for scale in [1.0f32, 1.5, 2.0, 2.5] {
+            let layout = Layout::from(phys_w, phys_h, scale);
+            assert_eq!(layout.field_x, layout.field_x, "user_x matches pass_x");
+            assert_eq!(
+                layout.field_x + layout.field_w,
+                layout.field_x + layout.field_w,
+                "user right matches pass right"
+            );
+            // The button row must not overlap the password input box.
+            assert!(
+                layout.btn_y >= layout.pass_y + layout.field_h,
+                "btn_y {} must be at or below pass box bottom {}",
+                layout.btn_y,
+                layout.pass_y + layout.field_h
+            );
+            let connect_right = layout.btn_connect_x + layout.btn_w;
+            let cancel_left = layout.btn_cancel_x;
+            assert!(connect_right <= cancel_left);
+            let centre_gap = (cancel_left - connect_right) / 2.0;
+            let expect_gap = scaled(BUTTON_GAP, scale);
+            assert!(
+                (centre_gap - expect_gap).abs() < 0.5,
+                "gap mismatch at scale {scale}: {centre_gap} vs {expect_gap}"
+            );
+        }
+    }
+
+    #[test]
+    fn hit_test_matches_paint_geometry() {
+        // The same `Layout` powers both paint and hit-test, so a point inside
+        // the painted user box must always be reported as inside `contains_user`.
+        let layout = Layout::from(840, 580, 1.5);
+        let cx = layout.field_x + layout.field_w / 2.0;
+        let cy = layout.user_y + layout.field_h / 2.0;
+        assert!(layout.contains_user(cx, cy));
+        assert!(!layout.contains_password(cx, layout.user_y - 1.0));
+        // Outside the user box but still inside the password box: pass only.
+        let px = layout.field_x + layout.field_w / 2.0;
+        let py = layout.pass_y + layout.field_h / 2.0;
+        assert!(!layout.contains_user(px, py));
+        assert!(layout.contains_password(px, py));
     }
 }

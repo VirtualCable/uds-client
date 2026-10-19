@@ -330,3 +330,18 @@ mod tests {
     //     assert!(result.is_err());
     // }
 }
+
+/// Replaces the contents of the given `String` with zeroes (length preserved
+/// briefly to avoid leaving the previous allocation size as an obvious
+/// fingerprint) and then truncates it to empty.
+pub fn clear_string(value: &mut String) {
+    if value.is_empty() {
+        return;
+    }
+    let len = value.len();
+    unsafe {
+        let bytes = value.as_bytes_mut();
+        std::ptr::write_bytes(bytes.as_mut_ptr(), 0, len);
+    }
+    value.clear();
+}

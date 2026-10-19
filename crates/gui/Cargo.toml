@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 shared = { path = "../shared" }
 connection = { path = "../connection" }
+crypt = { path = "../crypt" }
 rdp = { workspace = true }
 channels = { path = "../channels" }
 
