@@ -47,7 +47,7 @@ impl JobQueue {
 
         let mut timeouts_borrow = self.timeout_jobs.borrow_mut();
         let mut jobs_to_keep = timeouts_borrow.split_off(&now);
-        jobs_to_keep.retain(|_, job| !job.is_cancelled());
+        jobs_to_keep.retain(|_, job| !job.cancelled());
         let jobs_to_run = std::mem::replace(timeouts_borrow.deref_mut(), jobs_to_keep);
         drop(timeouts_borrow);
 
@@ -189,7 +189,9 @@ pub async fn exec_script(ctx: &mut Context, script: &str) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to link module: {}", e))?;
 
     // Evaluate the module (returns another Promise)
-    let promise = module.evaluate(ctx);
+    let promise = module
+        .evaluate(ctx)
+        .map_err(|e| anyhow::anyhow!("Failed to evaluate module: {}", e))?;
 
     // Run jobs to process the evaluation
     queue
