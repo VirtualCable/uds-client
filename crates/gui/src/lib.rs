@@ -58,8 +58,6 @@ enum WindowKind {
     Credentials,
 }
 
-pub const MAX_CREDENTIALS_RETRIES: u32 = 3;
-
 pub struct AppHandler {
     catalog: gettext::Catalog,
     testing_launcher: Option<TestingLauncherState>,
@@ -68,7 +66,6 @@ pub struct AppHandler {
     popup: Option<PopupState>,
     about: Option<AboutState>,
     credentials: Option<crate::windows::credentials::CredentialsState>,
-    pub(crate) credentials_retries: u32,
     windows: HashMap<WindowId, WindowKind>,
 
     keys_tx: Sender<RawKey>,
@@ -106,7 +103,6 @@ pub fn run_gui(
         popup: None,
         about: None,
         credentials: None,
-        credentials_retries: 0,
         windows: HashMap::new(),
         keys_tx,
         keys_rx,

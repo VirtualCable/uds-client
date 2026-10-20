@@ -24,7 +24,6 @@ use rdp::settings::RdpSettings;
 use shared::log;
 
 use crate::RawKey;
-use crate::windows::popup::{PopupKind, PopupState};
 
 const FRAMES_IN_FLIGHT: usize = 128;
 
@@ -78,7 +77,6 @@ pub struct RdpState {
     pub pendings: Pendings,
 
     pub cursor: Cursor,
-    pub settings: RdpSettings,
     pub has_received_frames: bool,
 }
 
@@ -126,7 +124,7 @@ impl RdpState {
             .map(|h| Arc::new(h) as Arc<dyn rdp::integrations::SmartcardIntegration>),
         };
 
-        let (rdp_instance, command_tx) = rdp::Rdp::new(settings.clone(), tx, use_rgba, None, integrations);
+        let (rdp_instance, command_tx) = rdp::Rdp::new(settings, tx, use_rgba, None, integrations);
         let command_event = rdp_instance.get_command_event();
 
         let mut rdp = Box::pin(rdp_instance);
@@ -219,7 +217,6 @@ impl RdpState {
                 rects: Vec::new(),
             },
             cursor: Cursor::new(coords_scale, use_rgba),
-            settings,
             has_received_frames: false,
         })
     }
@@ -595,42 +592,20 @@ impl crate::AppHandler {
                     state.window.window.request_redraw();
                 }
 
-                RdpActionResult::Disconnect | RdpActionResult::Error(_) => {
+                result @ (RdpActionResult::Disconnect | RdpActionResult::Error(_)) => {
                     let had_session = state.has_received_frames;
-                    let retry_settings = state.settings.clone();
                     self.close_rdp();
 
                     if !had_session {
-                        log::warn!("RDP connection ended before session was established, prompting credentials");
-                        self.credentials_retries += 1;
-                        if self.credentials_retries >= crate::MAX_CREDENTIALS_RETRIES {
-                            log::error!(
-                                "Reached credentials retry cap ({}); showing failure",
-                                crate::MAX_CREDENTIALS_RETRIES
-                            );
-                            if let Ok(p) = PopupState::new(
-                                el,
-                                PopupKind::Error(
-                                    "Could not establish an RDP session after several attempts. \
-                                     Please verify the connection details and try again."
-                                        .to_string(),
-                                ),
-                            ) {
-                                let wid = p.window.id();
-                                self.register_window(wid, WindowKind::Popup);
-                                p.window.set_visible(true);
-                                p.window.request_redraw();
-                                self.popup = Some(p);
-                            }
-                        } else if let Err(e) = self.prompt_credentials(
-                            el,
-                            retry_settings,
-                            "Invalid username or password. Please check your credentials.",
-                        ) {
-                            log::error!("Failed to open credentials window: {e}");
-                        } else {
-                            return;
-                        }
+                        let err = match result {
+                            RdpActionResult::Error(e) => e,
+                            _ => String::new(),
+                        };
+                        log::warn!(
+                            "RDP connection ended before the session was established: {err}"
+                        );
+                        self.show_error_popup(el, Self::failure_message(&err));
+                        return;
                     }
 
                     self.stop.trigger();

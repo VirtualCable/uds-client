@@ -43,7 +43,13 @@ impl AppHandler {
                     }
                 }
                 GuiMessage::ShowYesNo(msg, resp) => {
-                    if let Ok(p) = PopupState::new(el, PopupKind::YesNo { message: msg, response: resp }) {
+                    if let Ok(p) = PopupState::new(
+                        el,
+                        PopupKind::YesNo {
+                            message: msg,
+                            response: resp,
+                        },
+                    ) {
                         let wid = p.window.id();
                         self.register_window(wid, WindowKind::Popup);
                         p.window.set_visible(true);
@@ -66,8 +72,8 @@ impl AppHandler {
                 }
                 GuiMessage::ConnectRdp(settings) => {
                     let settings = *settings;
-                    self.credentials_retries = 0;
-                    let needs_credentials = settings.password.is_empty() || settings.user.is_empty();
+                    let needs_credentials =
+                        settings.password.is_empty() || settings.user.is_empty();
                     if needs_credentials {
                         if let Err(e) =
                             self.prompt_credentials(el, settings, "Authentication required")
@@ -76,9 +82,8 @@ impl AppHandler {
                             self.stop.trigger();
                             el.exit();
                         }
-                    } else if let Err(e) = self.open_rdp(el, settings.clone()) {
-                        log::warn!("Failed to enter RDP ({e}), prompting credentials");
-                        self.handle_rdp_open_failure(el, settings, &e.to_string());
+                    } else if let Err(e) = self.open_rdp(el, settings) {
+                        self.handle_rdp_open_failure(el, &e.to_string());
                     }
                 }
             }
@@ -118,39 +123,15 @@ impl AppHandler {
                     self.unregister_window(wid);
                     let mut state = self.credentials.take().unwrap();
                     match action {
-                        crate::windows::credentials::CredentialsAction::Connect { user, password } => {
+                        crate::windows::credentials::CredentialsAction::Connect {
+                            user,
+                            password,
+                        } => {
                             state.settings.user = user;
                             state.settings.password = password.to_string();
                             if let Err(e) = self.open_rdp(el, state.settings.clone()) {
-                                let err_text = e.to_string();
-                                log::warn!("Failed to enter RDP after credentials ({err_text})");
-                                self.credentials_retries += 1;
-                                if self.credentials_retries >= crate::MAX_CREDENTIALS_RETRIES {
-                                    log::error!(
-                                        "Reached credentials retry cap ({}); showing failure",
-                                        crate::MAX_CREDENTIALS_RETRIES
-                                    );
-                                    self.show_error_popup(
-                                        el,
-                                        format!(
-                                            "Could not connect to the RDP service after {} attempts.\n\n{}",
-                                            crate::MAX_CREDENTIALS_RETRIES, err_text
-                                        ),
-                                    );
-                                    self.stop.trigger();
-                                    el.exit();
-                                } else {
-                                    let mut retry_settings = state.settings.clone();
-                                    retry_settings.password = String::new();
-                                    let prompt = Self::classify_failure(&err_text);
-                                    if let Err(err) =
-                                        self.prompt_credentials(el, retry_settings, &prompt)
-                                    {
-                                        log::error!("Failed to re-open credentials window: {err}");
-                                        self.stop.trigger();
-                                        el.exit();
-                                    }
-                                }
+                                log::warn!("Failed to enter RDP after credentials ({e})");
+                                self.show_error_popup(el, Self::failure_message(&e.to_string()));
                             }
                         }
                         crate::windows::credentials::CredentialsAction::Cancel => {
@@ -189,46 +170,30 @@ impl AppHandler {
         }
     }
 
-    fn show_error_popup(&mut self, el: &ActiveEventLoop, msg: String) {
-        if let Ok(p) = PopupState::new(el, PopupKind::Error(msg)) {
-            let wid = p.window.id();
-            self.register_window(wid, WindowKind::Popup);
-            p.window.set_visible(true);
-            p.window.request_redraw();
-            self.popup = Some(p);
-        }
-    }
-
-    /// Map a connection error string to a user-facing hint. Network/tunnel
-    /// failures must not be presented as a credentials problem; only the
-    /// explicit "Invalid credentials" / "Wrong password" classes trigger the
-    /// credentials dialog.
-    fn handle_rdp_open_failure(
-        &mut self,
-        el: &ActiveEventLoop,
-        settings: rdp::settings::RdpSettings,
-        err: &str,
-    ) {
-        if Self::is_credential_error(err) {
-            if let Err(e) = self.prompt_credentials(
-                el,
-                settings,
-                "Invalid username or password. Please check your credentials.",
-            ) {
-                log::error!("Failed to open credentials window: {e}");
+    /// Closing an error popup stops the launcher (see `handle_popup_event`).
+    pub(crate) fn show_error_popup(&mut self, el: &ActiveEventLoop, msg: String) {
+        match PopupState::new(el, PopupKind::Error(msg)) {
+            Ok(p) => {
+                let wid = p.window.id();
+                self.register_window(wid, WindowKind::Popup);
+                p.window.set_visible(true);
+                p.window.request_redraw();
+                self.popup = Some(p);
+            }
+            Err(e) => {
+                log::error!("Failed to open error popup: {e}");
                 self.stop.trigger();
                 el.exit();
             }
-            return;
         }
+    }
 
-        log::error!("RDP connection failed (non-auth): {err}");
-        self.show_error_popup(
-            el,
-            format!("Could not connect to the RDP service.\n\n{err}"),
-        );
-        self.stop.trigger();
-        el.exit();
+    /// Only one connection attempt is made: with a tunnel, the first attempt
+    /// consumes the one-use ticket, so retrying from here could never succeed.
+    /// The user has to launch the service again from UDS.
+    fn handle_rdp_open_failure(&mut self, el: &ActiveEventLoop, err: &str) {
+        log::error!("RDP connection failed: {err}");
+        self.show_error_popup(el, Self::failure_message(err));
     }
 
     fn is_credential_error(err: &str) -> bool {
@@ -240,13 +205,42 @@ impl AppHandler {
             || lower.contains("password must change")
     }
 
-    fn classify_failure(err: &str) -> String {
-        if Self::is_credential_error(err) {
-            "Invalid username or password. Please check your credentials.".to_string()
+    pub(crate) fn failure_message(err: &str) -> String {
+        if err.trim().is_empty() {
+            "Could not establish the RDP session. Check your credentials and launch the service again."
+                .to_string()
+        } else if Self::is_credential_error(err) {
+            "Invalid username or password. Launch the service again to retry.".to_string()
         } else {
-            // Generic but not falsely credentialled; tell the user we couldn't
-            // reach the server and let them retry the connection itself.
-            format!("Could not connect to the RDP service. {err}")
+            format!("Could not connect to the RDP service.\n\n{err}")
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AppHandler;
+
+    #[test]
+    fn credential_errors_are_reported_as_credentials() {
+        for err in [
+            "ERRCONNECT_LOGON_FAILURE: Logon failure",
+            "Wrong password",
+            "Password has expired",
+        ] {
+            assert!(AppHandler::failure_message(err).starts_with("Invalid username or password"));
+        }
+    }
+
+    #[test]
+    fn network_errors_are_not_reported_as_credentials() {
+        let msg = AppHandler::failure_message("DNS lookup failed for host");
+        assert!(msg.starts_with("Could not connect to the RDP service."));
+        assert!(msg.contains("DNS lookup failed"));
+    }
+
+    #[test]
+    fn empty_error_asks_to_relaunch() {
+        assert!(AppHandler::failure_message("").contains("launch the service again"));
     }
 }
