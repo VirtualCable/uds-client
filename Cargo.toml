@@ -106,8 +106,8 @@ turbojpeg = "1.4"
 open = "5.4"
 
 # Post-quantum cryptography
-libcrux-ml-dsa = "0.0.10"
-libcrux-ml-kem = "0.0.10"
+libcrux-ml-dsa = "0.0.11"
+libcrux-ml-kem = "0.0.11"
 
 # key derivation
 hkdf = "0.13"
@@ -118,7 +118,7 @@ aes-gcm = "0.11"
 regex = "1.13"
 
 # JavaScript engine
-boa_engine = { version = "0.21" }
+boa_engine = { version = "0.22" }
 
 # Logging
 tracing = "0.1"
@@ -134,7 +134,7 @@ serial_test = "4.0"
 mockito = "1.7"
 
 # Building
-bindgen = "0.72"
+bindgen = "0.73"
 cc = "1.2"
 winres = "0.1"
 glob = "0.3"
