@@ -567,7 +567,7 @@ impl DialogState {
 
             let mut button_results = Vec::new();
             for (btn_spec, _) in &self.buttons {
-                let is_pushed = pushed_button_name.map_or(false, |p| p == btn_spec.name);
+                let is_pushed = pushed_button_name.is_some_and(|p| p == btn_spec.name);
                 button_results.push(DialogButtonResult {
                     name: btn_spec.name.clone(),
                     label: btn_spec.label.clone(),
@@ -611,8 +611,10 @@ impl DialogState {
             None,
         );
 
-        let mut stroke = Stroke::default();
-        stroke.width = 1.5;
+        let stroke = Stroke {
+            width: 1.5,
+            ..Default::default()
+        };
         paint.set_color(Color::from_rgba8(65, 65, 80, 255));
         panel_pixmap.stroke_path(&rect, &paint, &stroke, Transform::identity(), None);
 
@@ -727,11 +729,9 @@ impl crate::AppHandler {
             _ => {}
         }
 
-        if close {
-            if let Some(d) = self.dialog.take() {
-                let wid = d.window.id();
-                self.unregister_window(wid);
-            }
+        if close && let Some(d) = self.dialog.take() {
+            let wid = d.window.id();
+            self.unregister_window(wid);
         }
     }
 }

@@ -25,7 +25,7 @@ async fn show_dialog_fn(
 ) -> JsResult<JsValue> {
     let spec: DialogSpec = {
         let mut ctx_borrow = ctx.borrow_mut();
-        let arg = args.get(0).ok_or_else(|| {
+        let arg = args.first().ok_or_else(|| {
             JsError::from_native(
                 JsNativeError::typ().with_message("Dialog.show expects a dialog specification"),
             )
@@ -40,7 +40,7 @@ async fn show_dialog_fn(
             })?
         } else {
             let json_val = arg
-                .to_json(&mut *ctx_borrow)
+                .to_json(&mut ctx_borrow)
                 .map_err(|e| {
                     JsError::from_native(
                         JsNativeError::typ()
@@ -71,7 +71,7 @@ async fn show_dialog_fn(
     })?;
 
     let mut ctx_borrow = ctx.borrow_mut();
-    JsValue::from_json(&json_result, &mut *ctx_borrow).map_err(|e| {
+    JsValue::from_json(&json_result, &mut ctx_borrow).map_err(|e| {
         JsError::from_native(
             JsNativeError::error()
                 .with_message(format!("Failed to convert DialogResult to JsValue: {}", e)),
