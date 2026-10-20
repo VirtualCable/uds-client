@@ -12,7 +12,7 @@ This document describes the JavaScript modules and functions available in the ru
 | Process | Executable finding, process launching, and management                                            | 8         |
 | Tasks   | Task management, cleanup files, and tunnel connections                                           | 4         |
 | RDP     | RDP connection management                                                                        | 2         |
-| Dialog  | Interactive dialog generation for prompting credentials and user input                           | 2         |
+| Dialog  | Interactive dialog generation for prompting credentials and user input                           | 3         |
 
 ## Utils Module
 
@@ -673,6 +673,33 @@ if (res.pushed === "connect") {
 }
 ```
 
+### credentials (async)
+
+Predefined username/password dialog, so transport scripts do not repeat the same specification.
+There is no domain field: write it in the username (`DOMAIN\\user` or `user@domain`).
+
+**Parameters:**
+- `request` (object, optional):
+  - `user` (string, optional): Initial username.
+  - `title` (string, optional): Window title (default `"UDS Credentials"`).
+
+**Returns:** Promise resolving to `{ user, password }` when the user presses **Connect**, or `null` when
+the dialog is cancelled or closed.
+
+**Example (ask before opening the tunnel, only when credentials are missing):**
+```javascript
+import { Dialog, Tasks, RDP } from 'runtime';
+
+if (!data.user || !data.password) {
+    const credentials = await Dialog.credentials({ user: data.user });
+    if (credentials === null) {
+        throw new Error('Connection cancelled by user');
+    }
+    data.user = credentials.user;
+    data.password = credentials.password;
+}
+```
+
 ## Complete Function Reference
 
 | Module  | Function               | Parameters                                                                                                                                                                                                                  | Description                                                 |
@@ -715,3 +742,4 @@ if (res.pushed === "connect") {
 | RDP     | sign (async)           | rdp_string: string, ticket: string                                                                                                                                                                                          | Signs RDP content through the broker API                    |
 | Dialog  | show (async)           | spec: object \| string                                                                                                                                                                                                      | Displays a customizable interactive modal dialog            |
 | Dialog  | ask (async)            | spec: object \| string                                                                                                                                                                                                      | Alias for `Dialog.show`                                     |
+| Dialog  | credentials (async)    | request?: { user?: string, title?: string }                                                                                                                                                                                 | Username/password dialog; `{ user, password }` or `null`    |

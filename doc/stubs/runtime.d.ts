@@ -151,5 +151,12 @@ declare module "runtime" {
 
     function show(spec: Spec | string): Promise<Result>;
     function ask(spec: Spec | string): Promise<Result>;
+
+    export interface Credentials {
+      user: string;
+      password: string;
+    }
+
+    function credentials(request?: { user?: string; title?: string }): Promise<Credentials | null>;
   }
 }
