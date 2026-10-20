@@ -52,6 +52,7 @@ pub struct TextInput {
 }
 
 impl TextInput {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         x: f32,
         y: f32,
@@ -107,6 +108,7 @@ impl TextInput {
         }
     }
 
+    #[allow(clippy::collapsible_match)]
     pub fn handle_key(&mut self, key_ev: &KeyEvent) -> bool {
         if !self.is_focused || !key_ev.state.is_pressed() {
             return false;
@@ -165,7 +167,7 @@ impl TextInput {
             for c in text.chars() {
                 if !c.is_control() {
                     let cur_count = self.value.chars().count();
-                    if self.max_length.map_or(true, |m| cur_count < m) {
+                    if self.max_length.is_none_or(|m| cur_count < m) {
                         let mut chars: Vec<char> = self.value.chars().collect();
                         chars.insert(self.cursor_pos, c);
                         self.value = chars.into_iter().collect();
