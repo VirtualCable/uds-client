@@ -34,6 +34,7 @@ mod session;
 
 use types::{AppState, GuiMessage, ReturnCode};
 use windows::about::AboutState;
+use windows::dialog::DialogState;
 use windows::popup::PopupState;
 use windows::progress::{ProgressPhase, ProgressState};
 use windows::rdp_window::{RdpMode, RdpState};
@@ -55,6 +56,7 @@ enum WindowKind {
     Popup,
     About,
     Progress,
+    Dialog,
 }
 
 pub struct AppHandler {
@@ -64,6 +66,7 @@ pub struct AppHandler {
     rdp: Option<Box<RdpState>>,
     popup: Option<PopupState>,
     about: Option<AboutState>,
+    dialog: Option<DialogState>,
     windows: HashMap<WindowId, WindowKind>,
 
     keys_tx: Sender<RawKey>,
@@ -100,6 +103,7 @@ pub fn run_gui(
         rdp: None,
         popup: None,
         about: None,
+        dialog: None,
         windows: HashMap::new(),
         keys_tx,
         keys_rx,
@@ -218,6 +222,9 @@ impl ApplicationHandler for AppHandler {
                     Some(WindowKind::Popup) => {
                         self.handle_popup_event(WindowEvent::RedrawRequested)
                     }
+                    Some(WindowKind::Dialog) => {
+                        self.handle_dialog_event(WindowEvent::RedrawRequested)
+                    }
                     _ => {}
                 }
             }
@@ -241,6 +248,7 @@ impl ApplicationHandler for AppHandler {
                     }
                     Some(WindowKind::Popup) => self.handle_popup_event(event),
                     Some(WindowKind::About) => self.handle_about_event(event),
+                    Some(WindowKind::Dialog) => self.handle_dialog_event(event),
                     _ => {}
                 }
             }

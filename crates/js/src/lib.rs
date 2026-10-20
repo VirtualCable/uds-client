@@ -41,6 +41,7 @@ fn create_runtime_module(ctx: &mut Context) -> Module {
     let utils = global.get(js_string!("Utils"), ctx).unwrap();
     let tasks = global.get(js_string!("Tasks"), ctx).unwrap();
     let rdp = global.get(js_string!("RDP"), ctx).unwrap();
+    let dialog = global.get(js_string!("Dialog"), ctx).unwrap();
 
     Module::synthetic(
         &[
@@ -50,10 +51,11 @@ fn create_runtime_module(ctx: &mut Context) -> Module {
             js_string!("Utils"),
             js_string!("Tasks"),
             js_string!("RDP"),
+            js_string!("Dialog"),
         ],
         SyntheticModuleInitializer::from_copy_closure_with_captures(
             move |module: &boa_engine::module::SyntheticModule,
-                  (process, logger, file, utils, tasks, rdp),
+                  (process, logger, file, utils, tasks, rdp, dialog),
                   _ctx| {
                 module.set_export(&js_string!("Process"), process.clone())?;
                 module.set_export(&js_string!("Logger"), logger.clone())?;
@@ -61,9 +63,10 @@ fn create_runtime_module(ctx: &mut Context) -> Module {
                 module.set_export(&js_string!("Utils"), utils.clone())?;
                 module.set_export(&js_string!("Tasks"), tasks.clone())?;
                 module.set_export(&js_string!("RDP"), rdp.clone())?;
+                module.set_export(&js_string!("Dialog"), dialog.clone())?;
                 Ok(())
             },
-            (process, logger, file, utils, tasks, rdp),
+            (process, logger, file, utils, tasks, rdp, dialog),
         ),
         None,
         None,

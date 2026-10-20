@@ -30,6 +30,7 @@ pub enum TestingLaunchAction {
     ShowWarning,
     ShowError,
     ShowYesNo,
+    ShowDialog,
     ConnectRdp,
     ConnectRail,
 }
@@ -51,6 +52,7 @@ impl TestingLauncherInner {
             ("Warning", TestingLaunchAction::ShowWarning),
             ("Error", TestingLaunchAction::ShowError),
             ("Yes/No", TestingLaunchAction::ShowYesNo),
+            ("Custom Dialog", TestingLaunchAction::ShowDialog),
         ];
 
         for (i, (label, action)) in labels_and_actions.into_iter().enumerate() {
@@ -348,6 +350,74 @@ impl AppHandler {
                         p.window.set_visible(true);
                         p.window.request_redraw();
                         self.popup = Some(p);
+                    }
+                }
+                TestingLaunchAction::ShowDialog => {
+                    let (rtx, _) = oneshot::channel();
+                    let spec = crate::windows::dialog::DialogSpec {
+                        title: "The Great Gatsby".to_string(),
+                        fields: vec![
+                            crate::windows::dialog::DialogField {
+                                name: "info".to_string(),
+                                label: None,
+                                size: None,
+                                field_type: crate::windows::dialog::DialogFieldType::Text,
+                                value: "Please fill in the required details to proceed:"
+                                    .to_string(),
+                                choices: None,
+                            },
+                            crate::windows::dialog::DialogField {
+                                name: "author".to_string(),
+                                label: Some("Author".to_string()),
+                                size: Some(25),
+                                field_type: crate::windows::dialog::DialogFieldType::String,
+                                value: "F. Scott Fitzgerald".to_string(),
+                                choices: None,
+                            },
+                            crate::windows::dialog::DialogField {
+                                name: "genre".to_string(),
+                                label: Some("Genre / Password".to_string()),
+                                size: Some(25),
+                                field_type: crate::windows::dialog::DialogFieldType::Password,
+                                value: "Novel".to_string(),
+                                choices: None,
+                            },
+                            crate::windows::dialog::DialogField {
+                                name: "published".to_string(),
+                                label: Some("Year Published".to_string()),
+                                size: None,
+                                field_type: crate::windows::dialog::DialogFieldType::Choice,
+                                value: "1925".to_string(),
+                                choices: Some(vec!["1925".into(), "1926".into(), "1927".into()]),
+                            },
+                        ],
+                        buttons: vec![
+                            crate::windows::dialog::DialogButton {
+                                name: "cancel".to_string(),
+                                label: "Cancel".to_string(),
+                                close_on_click: true,
+                                primary: false,
+                            },
+                            crate::windows::dialog::DialogButton {
+                                name: "readMore".to_string(),
+                                label: "Read More".to_string(),
+                                close_on_click: true,
+                                primary: true,
+                            },
+                        ],
+                        width: None,
+                        height: None,
+                    };
+                    if let Ok(d) = crate::windows::dialog::DialogState::new(
+                        el,
+                        spec,
+                        std::sync::Arc::new(std::sync::RwLock::new(Some(rtx))),
+                    ) {
+                        let wid = d.window.id();
+                        self.register_window(wid, WindowKind::Dialog);
+                        d.window.set_visible(true);
+                        d.window.request_redraw();
+                        self.dialog = Some(d);
                     }
                 }
                 TestingLaunchAction::ConnectRdp | TestingLaunchAction::ConnectRail => {

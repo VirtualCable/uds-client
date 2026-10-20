@@ -102,4 +102,54 @@ declare module "runtime" {
     }): void;
     function sign(rdp_string: string, ticket: string): Promise<string>;
   }
+
+  export namespace Dialog {
+    export type FieldType = "string" | "password" | "choice" | "text" | "label" | "markdown";
+
+    export interface Field {
+      name: string;
+      label?: string;
+      size?: number;
+      type: FieldType;
+      value?: string;
+      choices?: string[];
+    }
+
+    export interface Button {
+      name: string;
+      label: string;
+      closeOnClick?: boolean;
+      primary?: boolean;
+    }
+
+    export interface Spec {
+      title: string;
+      fields?: Field[];
+      buttons?: Button[];
+      width?: number;
+      height?: number;
+    }
+
+    export interface FieldResult {
+      name: string;
+      type: FieldType;
+      value: string;
+    }
+
+    export interface ButtonResult {
+      name: string;
+      label: string;
+      pushed: boolean;
+    }
+
+    export interface Result {
+      fields: FieldResult[];
+      buttons: ButtonResult[];
+      pushed?: string;
+      values: Record<string, string>;
+    }
+
+    function show(spec: Spec | string): Promise<Result>;
+    function ask(spec: Spec | string): Promise<Result>;
+  }
 }
