@@ -12,6 +12,7 @@ This document describes the JavaScript modules and functions available in the ru
 | Process | Executable finding, process launching, and management                                            | 8         |
 | Tasks   | Task management, cleanup files, and tunnel connections                                           | 4         |
 | RDP     | RDP connection management                                                                        | 2         |
+| Dialog  | Interactive dialog generation for prompting credentials and user input                           | 2         |
 
 ## Utils Module
 
@@ -585,8 +586,91 @@ RDP.start({
     }
 });
 
-  // Sign an RDP file/string through the broker
-  const signedRdp = await RDP.sign(rdpContent, ticket);
+// Sign an RDP file/string through the broker
+const signedRdp = await RDP.sign(rdpContent, ticket);
+```
+
+## Dialog Module
+
+The Dialog module provides functions to display customizable modal dialogs on the fly directly from JavaScript. This allows prompting the user for input (such as credentials, choices, or confirmations) before starting connection tunnels or launching processes.
+
+### show / ask (async)
+
+Displays an interactive modal dialog and returns a Promise that resolves with the user's input and the button pressed.
+
+**Parameters:**
+- `spec` (object or string): The dialog specification object (or JSON string).
+  - `title` (string): The window title.
+  - `fields` (array of objects, optional): Field definitions:
+    - `name` (string): Unique identifier for the field.
+    - `label` (string, optional): Display label shown above the input.
+    - `type` (string): `"string"`, `"password"`, `"choice"`, or `"text"` (informational text/paragraph).
+    - `value` (string, optional): Initial value for input or text content for `"text"` type.
+    - `size` (number, optional): Character size hint for the input box width.
+    - `choices` (array of strings, optional): Available options for `"choice"` fields.
+  - `buttons` (array of objects, optional): Button definitions:
+    - `name` (string): Button identifier.
+    - `label` (string): Button display text.
+    - `closeOnClick` (boolean, optional, default: `true`): Whether clicking closes the dialog.
+    - `primary` (boolean, optional): Highlight as primary action (default trigger on Enter).
+  - `width` (number, optional): Override dialog window width.
+  - `height` (number, optional): Override dialog window height.
+
+**Returns:** Promise<object> resolving to:
+- `fields`: Array of `{ name, type, value }` with the final field values.
+- `buttons`: Array of `{ name, label, pushed }` indicating which button was pushed.
+- `pushed`: Name of the button pushed (or `null`/`undefined` if closed/cancelled).
+- `values`: Key-value map (`{ [name]: value }`) of all input fields for convenient direct access.
+
+**Example:**
+```javascript
+import { Dialog, RDP, Logger } from 'runtime';
+
+const res = await Dialog.show({
+    title: "Remote Desktop Credentials",
+    fields: [
+        {
+            name: "info",
+            type: "text",
+            value: "Please enter your credentials to connect to the session:"
+        },
+        {
+            name: "username",
+            label: "Username",
+            type: "string",
+            value: data.username || ""
+        },
+        {
+            name: "password",
+            label: "Password",
+            type: "password",
+            value: ""
+        },
+        {
+            name: "domain",
+            label: "Domain",
+            type: "choice",
+            choices: ["CORP", "DMZ", "LOCAL"],
+            value: "CORP"
+        }
+    ],
+    buttons: [
+        { name: "cancel", label: "Cancel", closeOnClick: true },
+        { name: "connect", label: "Connect", closeOnClick: true, primary: true }
+    ]
+});
+
+if (res.pushed === "connect") {
+    Logger.info("Connecting with user: " + res.values.username);
+    RDP.start({
+        server: "192.168.1.100",
+        user: res.values.username,
+        password: res.values.password,
+        domain: res.values.domain
+    });
+} else {
+    Logger.info("Connection cancelled by user.");
+}
 ```
 
 ## Complete Function Reference
@@ -629,3 +713,5 @@ RDP.start({
 | Tasks   | startTunnel (async)    | params: { addr: string, port: number, ticket: string, startup_time_ms?: number, check_certificate?: boolean, local_port?: number, keep_listening_after_timeout?: boolean, enable_ipv6?: boolean, shared_secret?: Uint8Array | number[] }                                                  | Starts tunnel connection |
 | RDP     | start                  | settings: object                                                                                                                                                                                                            | Starts RDP connection                                       |
 | RDP     | sign (async)           | rdp_string: string, ticket: string                                                                                                                                                                                          | Signs RDP content through the broker API                    |
+| Dialog  | show (async)           | spec: object \| string                                                                                                                                                                                                      | Displays a customizable interactive modal dialog            |
+| Dialog  | ask (async)            | spec: object \| string                                                                                                                                                                                                      | Alias for `Dialog.show`                                     |

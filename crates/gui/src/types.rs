@@ -7,6 +7,11 @@ use std::sync::{Arc, RwLock};
 
 use tokio::sync::oneshot;
 
+pub use crate::windows::dialog::{
+    DialogButton, DialogButtonResult, DialogField, DialogFieldResult, DialogFieldType,
+    DialogResult, DialogSpec,
+};
+
 /// Messages the GUI can receive from external code
 #[derive(Debug)]
 pub enum GuiMessage {
@@ -14,6 +19,10 @@ pub enum GuiMessage {
     ShowError(String),
     ShowWarning(String),
     ShowYesNo(String, Arc<RwLock<Option<oneshot::Sender<bool>>>>),
+    ShowCustomDialog(
+        DialogSpec,
+        Arc<RwLock<Option<oneshot::Sender<DialogResult>>>>,
+    ),
     ShowProgress,
     Progress(u8, String),
     ConnectRdp(Box<rdp::settings::RdpSettings>),

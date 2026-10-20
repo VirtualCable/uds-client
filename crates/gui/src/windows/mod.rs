@@ -5,6 +5,7 @@
 
 pub mod about;
 pub mod credentials;
+pub mod dialog;
 pub mod insecure_warning;
 pub mod popup;
 pub mod progress;

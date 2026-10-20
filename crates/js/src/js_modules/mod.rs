@@ -7,6 +7,7 @@ use anyhow::Result;
 use boa_engine::Context;
 
 // Js modules
+mod dialog;
 mod file;
 mod logger;
 mod process;
@@ -21,5 +22,6 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
     tasks::register(ctx)?;
     file::register(ctx)?;
     rdp::register(ctx)?;
+    dialog::register(ctx)?;
     Ok(())
 }

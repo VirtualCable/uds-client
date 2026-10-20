@@ -34,6 +34,7 @@ mod session;
 
 use types::{AppState, GuiMessage, ReturnCode};
 use windows::about::AboutState;
+use windows::dialog::DialogState;
 use windows::popup::PopupState;
 use windows::progress::{ProgressPhase, ProgressState};
 use windows::rdp_window::{RdpMode, RdpState};
@@ -56,6 +57,7 @@ enum WindowKind {
     About,
     Progress,
     Credentials,
+    Dialog,
 }
 
 pub struct AppHandler {
@@ -66,6 +68,7 @@ pub struct AppHandler {
     popup: Option<PopupState>,
     about: Option<AboutState>,
     credentials: Option<crate::windows::credentials::CredentialsState>,
+    dialog: Option<DialogState>,
     windows: HashMap<WindowId, WindowKind>,
 
     keys_tx: Sender<RawKey>,
@@ -103,6 +106,7 @@ pub fn run_gui(
         popup: None,
         about: None,
         credentials: None,
+        dialog: None,
         windows: HashMap::new(),
         keys_tx,
         keys_rx,
@@ -224,6 +228,9 @@ impl ApplicationHandler for AppHandler {
                     Some(WindowKind::Credentials) => {
                         self.handle_credentials_event(el, WindowEvent::RedrawRequested);
                     }
+                    Some(WindowKind::Dialog) => {
+                        self.handle_dialog_event(WindowEvent::RedrawRequested)
+                    }
                     _ => {}
                 }
             }
@@ -248,6 +255,7 @@ impl ApplicationHandler for AppHandler {
                     Some(WindowKind::Popup) => self.handle_popup_event(event),
                     Some(WindowKind::About) => self.handle_about_event(event),
                     Some(WindowKind::Credentials) => self.handle_credentials_event(el, event),
+                    Some(WindowKind::Dialog) => self.handle_dialog_event(event),
                     _ => {}
                 }
             }

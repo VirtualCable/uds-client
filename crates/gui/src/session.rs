@@ -9,6 +9,7 @@ use winit::event_loop::ActiveEventLoop;
 use crate::AppHandler;
 use crate::WindowKind;
 use crate::types::GuiMessage;
+use crate::windows::dialog::DialogState;
 use crate::windows::popup::{PopupKind, PopupState};
 use crate::windows::progress::ProgressPhase;
 
@@ -55,6 +56,15 @@ impl AppHandler {
                         p.window.set_visible(true);
                         p.window.request_redraw();
                         self.popup = Some(p);
+                    }
+                }
+                GuiMessage::ShowCustomDialog(spec, resp) => {
+                    if let Ok(d) = DialogState::new(el, spec, resp) {
+                        let wid = d.window.id();
+                        self.register_window(wid, WindowKind::Dialog);
+                        d.window.set_visible(true);
+                        d.window.request_redraw();
+                        self.dialog = Some(d);
                     }
                 }
                 GuiMessage::ShowProgress => {
