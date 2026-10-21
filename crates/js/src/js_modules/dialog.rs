@@ -15,6 +15,7 @@ use tokio::sync::oneshot;
 use gui::types::{
     DialogButton, DialogField, DialogFieldType, DialogResult, DialogSpec, GuiMessage,
 };
+use gui::windows::credentials::CredentialsState;
 
 use crate::gui::send_message;
 
@@ -93,7 +94,7 @@ async fn ask_gui(spec: DialogSpec) -> DialogResult {
     })
 }
 
-fn credentials_spec(title: Option<String>, user: String) -> DialogSpec {
+fn credentials_spec(title: Option<String>, user: String, error: Option<&str>) -> DialogSpec {
     let field = |name: &str, label: &str, field_type, value: String| DialogField {
         name: name.to_string(),
         label: Some(label.to_string()),
@@ -110,10 +111,14 @@ fn credentials_spec(title: Option<String>, user: String) -> DialogSpec {
     };
     DialogSpec {
         title: title.unwrap_or_else(|| "UDS Credentials".to_string()),
-        fields: vec![
-            field("user", "Username", DialogFieldType::String, user),
-            field("password", "Password", DialogFieldType::Password, String::new()),
-        ],
+        fields: error
+            .map(|e| field("error", "", DialogFieldType::Text, e.to_string()))
+            .into_iter()
+            .chain([
+                field("user", "Username", DialogFieldType::String, user),
+                field("password", "Password", DialogFieldType::Password, String::new()),
+            ])
+            .collect(),
         buttons: vec![button("cancel", "Cancel", false), button("connect", "Connect", true)],
         width: None,
         height: None,
@@ -147,21 +152,26 @@ async fn credentials_fn(
         _ => CredentialsRequest::default(),
     };
 
-    let result = ask_gui(credentials_spec(
-        request.title,
-        request.user.unwrap_or_default(),
-    ))
-    .await;
-
-    if result.pushed.as_deref() != Some("connect") {
-        return Ok(JsValue::null());
+    // Empty credentials must never reach the script: it would open the tunnel and RDP.start
+    // would ask again while the tunnel wait time runs out.
+    let mut user = request.user.unwrap_or_default();
+    let mut error = None;
+    loop {
+        let result = ask_gui(credentials_spec(request.title.clone(), user, error)).await;
+        if result.pushed.as_deref() != Some("connect") {
+            return Ok(JsValue::null());
+        }
+        let mut values = result.values;
+        user = values.remove("user").unwrap_or_default();
+        let password = values.remove("password").unwrap_or_default();
+        match CredentialsState::validate(&user, &password) {
+            Ok(()) => {
+                let credentials = serde_json::json!({ "user": user, "password": password });
+                return JsValue::from_json(&credentials, &mut *ctx.borrow_mut());
+            }
+            Err((_, message)) => error = Some(message),
+        }
     }
-    let mut values = result.values;
-    let credentials = serde_json::json!({
-        "user": values.remove("user").unwrap_or_default(),
-        "password": values.remove("password").unwrap_or_default(),
-    });
-    JsValue::from_json(&credentials, &mut *ctx.borrow_mut())
 }
 
 pub(super) fn register(ctx: &mut Context) -> Result<()> {
@@ -427,6 +437,137 @@ mod tests {
         let (result, seen) = run_transport_script(data, Some(reply_with(Some("cancel"), "", ""))).await;
         assert!(result.is_err());
         assert!(!seen.iter().any(|m| matches!(m, GuiMessage::ConnectRdp(_))));
+    }
+
+
+    async fn run_credentials_replies(
+        script: &str,
+        replies: Vec<DialogResult>,
+    ) -> Result<(Vec<DialogSpec>, String)> {
+        let (messages_tx, messages_rx): (Sender<GuiMessage>, Receiver<GuiMessage>) = bounded(1);
+        crate::gui::set_sender(messages_tx);
+
+        let gui = tokio::spawn(async move {
+            let mut specs = Vec::new();
+            for reply in replies {
+                match messages_rx.recv_async().await {
+                    Ok(GuiMessage::ShowCustomDialog(spec, resp)) => {
+                        let sender = resp.write().unwrap().take().unwrap();
+                        let _ = sender.send(reply);
+                        specs.push(spec);
+                    }
+                    _ => break,
+                }
+            }
+            specs
+        });
+
+        let mut ctx = create_context(None)?;
+        register(&mut ctx)?;
+        let res = exec_script_with_result(&mut ctx, script).await?;
+        let res_str: String = res
+            .try_js_into(&mut ctx)
+            .map_err(|e| anyhow::anyhow!("Failed to convert result from JsValue: {}", e))?;
+        crate::gui::set_sender(bounded(1).0);
+        let specs = tokio::time::timeout(std::time::Duration::from_secs(2), gui).await??;
+        Ok((specs, res_str))
+    }
+
+    const ASK_CREDENTIALS: &str = r#"
+        (async () => {
+            const c = await Dialog.credentials({ user: "alice" });
+            return c === null ? "null" : c.user + "|" + c.password;
+        })()
+    "#;
+
+    #[tokio::test]
+    #[serial_test::serial(js_modules)]
+    async fn test_credentials_empty_password_asks_again_with_error() -> Result<()> {
+        let replies = vec![
+            reply_with(Some("connect"), "alice", ""),
+            reply_with(Some("connect"), "alice", "s3cret"),
+        ];
+        let (specs, res) = run_credentials_replies(ASK_CREDENTIALS, replies).await?;
+
+        assert_eq!(res, "alice|s3cret");
+        assert_eq!(specs.len(), 2);
+        assert!(!specs[0].fields.iter().any(|f| f.name == "error"));
+        let error = specs[1].fields.iter().find(|f| f.name == "error").expect("error field");
+        assert_eq!(error.value, "Password is required");
+        let user = specs[1].fields.iter().find(|f| f.name == "user").unwrap();
+        assert_eq!(user.value, "alice", "typed user is kept on retry");
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[serial_test::serial(js_modules)]
+    async fn test_credentials_blank_user_asks_again_with_error() -> Result<()> {
+        let replies = vec![
+            reply_with(Some("connect"), "   ", "pw"),
+            reply_with(Some("connect"), "bob", "pw"),
+        ];
+        let (specs, res) = run_credentials_replies(ASK_CREDENTIALS, replies).await?;
+
+        assert_eq!(res, "bob|pw");
+        let error = specs[1].fields.iter().find(|f| f.name == "error").expect("error field");
+        assert_eq!(error.value, "Username is required");
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[serial_test::serial(js_modules)]
+    async fn test_credentials_cancel_after_validation_error_returns_null() -> Result<()> {
+        let replies = vec![
+            reply_with(Some("connect"), "", ""),
+            reply_with(Some("cancel"), "", ""),
+        ];
+        let (specs, res) = run_credentials_replies(ASK_CREDENTIALS, replies).await?;
+
+        assert_eq!(res, "null");
+        assert_eq!(specs.len(), 2);
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[serial_test::serial(js_modules)]
+    async fn test_script_empty_submit_does_not_open_tunnel_or_rdp() {
+        let data = serde_json::json!({ "server": "10.0.0.1", "user": "", "password": "" });
+        let (messages_tx, messages_rx): (Sender<GuiMessage>, Receiver<GuiMessage>) = bounded(4);
+        crate::gui::set_sender(messages_tx);
+
+        let gui = tokio::spawn(async move {
+            let mut dialogs = 0;
+            let mut rdp_after_valid = None;
+            while let Ok(msg) = messages_rx.recv_async().await {
+                match msg {
+                    GuiMessage::ShowCustomDialog(_, resp) => {
+                        dialogs += 1;
+                        let reply = if dialogs == 1 {
+                            reply_with(Some("connect"), "", "")
+                        } else {
+                            reply_with(Some("connect"), "carol", "pw")
+                        };
+                        let sender = resp.write().unwrap().take().unwrap();
+                        let _ = sender.send(reply);
+                    }
+                    GuiMessage::ConnectRdp(s) => {
+                        rdp_after_valid = Some((dialogs, s.user.clone(), s.password.clone()));
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            rdp_after_valid
+        });
+
+        let result = crate::run_js(ASK_THEN_START, Some(data)).await;
+        crate::gui::set_sender(bounded(1).0);
+        assert!(result.is_ok(), "{result:?}");
+        let rdp = tokio::time::timeout(std::time::Duration::from_secs(2), gui)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(rdp, Some((2, "carol".to_string(), "pw".to_string())));
     }
 
 }
