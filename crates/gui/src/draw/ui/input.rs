@@ -3,12 +3,36 @@
 // All rights reserved.
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
+use std::sync::LazyLock;
+
 use tiny_skia::{Color, FillRule, Paint, Pixmap, Stroke, Transform};
+use wgpu_text::glyph_brush::ab_glyph::{Font, FontRef, ScaleFont};
 use wgpu_text::glyph_brush::{HorizontalAlign, Layout, OwnedSection, Section, Text, VerticalAlign};
 use winit::event::KeyEvent;
 use winit::keyboard::{Key, NamedKey};
 
 use super::button::rounded_rect_path;
+
+const PASSWORD_MASK: char = '●';
+
+static INPUT_FONT: LazyLock<FontRef<'static>> = LazyLock::new(|| {
+    FontRef::try_from_slice(crate::draw::INTER_FONT_DATA).expect("embedded Inter font is valid")
+});
+
+/// Width of `text` laid out like glyph_brush does (advance plus pair kerning), so the caret
+/// lands where the rendered glyphs end.
+fn text_width(text: &str, font_scale: f32) -> f32 {
+    let font = INPUT_FONT.as_scaled(font_scale);
+    let mut previous = None;
+    text.chars()
+        .map(|c| {
+            let id = font.glyph_id(c);
+            let kern = previous.map_or(0.0, |prev| font.kern(prev, id));
+            previous = Some(id);
+            kern + font.h_advance(id)
+        })
+        .sum()
+}
 
 #[derive(Clone, Debug)]
 pub struct TextInputStyle {
@@ -184,6 +208,14 @@ impl TextInput {
         false
     }
 
+    fn display_text(&self) -> String {
+        if self.is_password {
+            PASSWORD_MASK.to_string().repeat(self.value.chars().count())
+        } else {
+            self.value.clone()
+        }
+    }
+
     pub fn render(&self) -> (Vec<u8>, OwnedSection) {
         let mut pixmap = Pixmap::new(self.w, self.h).unwrap();
         let rect_path =
@@ -224,11 +256,12 @@ impl TextInput {
         );
 
         let pad_x = 10.0;
-        let char_width = self.style.font_scale * 0.55;
+        let display_text = self.display_text();
 
         // Draw cursor line inside pixmap if focused
         if self.is_focused {
-            let cx = pad_x + self.cursor_pos as f32 * char_width;
+            let before_cursor: String = display_text.chars().take(self.cursor_pos).collect();
+            let cx = pad_x + text_width(&before_cursor, self.style.font_scale);
             if cx < self.w as f32 - 4.0 {
                 let cy1 = 6.0;
                 let cy2 = self.h as f32 - 6.0;
@@ -247,12 +280,6 @@ impl TextInput {
                 }
             }
         }
-
-        let display_text = if self.is_password {
-            "●".repeat(self.value.chars().count())
-        } else {
-            self.value.clone()
-        };
 
         let tx = self.x + pad_x;
         let ty = self.y + self.h as f32 / 2.0;
@@ -452,5 +479,90 @@ impl ChoiceInput {
             .to_owned();
 
         (pixmap.take(), section)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wgpu_text::glyph_brush::{GlyphPositioner, SectionGeometry, SectionText};
+
+    const SCALE: f32 = 14.0;
+
+    /// X where glyph_brush places the glyph at `char_index`: what the caret has to match.
+    fn rendered_x_of_char(text: &str, char_index: usize) -> f32 {
+        let fonts = [INPUT_FONT.clone()];
+        let section = SectionText {
+            text,
+            scale: SCALE.into(),
+            ..SectionText::default()
+        };
+        let glyphs = Layout::default().calculate_glyphs(
+            &fonts,
+            &SectionGeometry::default(),
+            &[section],
+        );
+        let byte_index = text.char_indices().nth(char_index).unwrap().0;
+        glyphs
+            .iter()
+            .find(|g| g.byte_index == byte_index)
+            .map(|g| g.glyph.position.x)
+            .unwrap()
+    }
+
+    fn assert_caret_matches_layout(text: &str) {
+        for i in 1..text.chars().count() {
+            let before: String = text.chars().take(i).collect();
+            let expected = rendered_x_of_char(text, i);
+            let got = text_width(&before, SCALE);
+            assert!(
+                (got - expected).abs() < 0.5,
+                "{text:?} caret {i}: measured {got}, rendered at {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn caret_follows_password_mask() {
+        assert_caret_matches_layout(&PASSWORD_MASK.to_string().repeat(12));
+    }
+
+    #[test]
+    fn caret_follows_proportional_text() {
+        assert_caret_matches_layout("Willi AV.Wolf iii");
+        assert_caret_matches_layout("DOMAIN\\user@example.com");
+    }
+
+    #[test]
+    fn mask_is_wider_than_old_fixed_estimate() {
+        // The old caret assumed 0.55 * scale per character; the mask glyph is wider, so the caret
+        // drifted left as the password grew.
+        assert!(text_width(&PASSWORD_MASK.to_string(), SCALE) > SCALE * 0.55);
+    }
+
+    #[test]
+    fn password_display_hides_value() {
+        let input = TextInput::new(
+            0.0,
+            0.0,
+            100,
+            30,
+            "s3cret".to_string(),
+            true,
+            None,
+            TextInputStyle::default(),
+        );
+        assert_eq!(input.display_text(), PASSWORD_MASK.to_string().repeat(6));
+        let plain = TextInput::new(
+            0.0,
+            0.0,
+            100,
+            30,
+            "user".to_string(),
+            false,
+            None,
+            TextInputStyle::default(),
+        );
+        assert_eq!(plain.display_text(), "user");
     }
 }
