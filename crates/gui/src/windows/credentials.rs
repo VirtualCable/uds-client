@@ -115,7 +115,7 @@ impl Layout {
         let btn_h = scaled(BUTTON_HEIGHT, s);
         let btn_y = ph - scaled(BUTTON_BOTTOM_MARGIN, s) - btn_h;
         let gap = scaled(BUTTON_GAP, s);
-        let layout = Self {
+        Self {
             phys_w,
             phys_h,
             scale,
@@ -131,8 +131,7 @@ impl Layout {
             btn_cancel_x: pw / 2.0 + gap,
             panel_stroke_w: 1.5 * s,
             field_stroke_w: 2.0 * s,
-        };
-        layout
+        }
     }
 
     fn contains_user(&self, x: f32, y: f32) -> bool {
@@ -176,24 +175,9 @@ pub struct CredentialsState {
     layout: Layout,
 }
 
-#[cfg(not(test))]
 impl Drop for CredentialsState {
     fn drop(&mut self) {
-        crypt::secrets::clear_string(&mut self.user);
-        // `Zeroizing::drop` will already zero the password buffer; the
-        // explicit call here is a defensive belt-and-braces measure in case
-        // the wrapper type ever changes.
-        let _ = self.password.zeroize();
-    }
-}
-
-// Under tests the validation entry point is the pure `build_action` function
-// and the GUI loop is not exercised, so we don't need a real `Drop` impl.
-#[cfg(test)]
-impl Drop for CredentialsState {
-    fn drop(&mut self) {
-        // `Zeroizing<String>` already zeroizes the password on drop. The
-        // renderer/window are only ever initialised in production.
+        self.user.zeroize();
     }
 }
 
@@ -320,30 +304,28 @@ impl CredentialsState {
                     }
                 }
             }
-            WindowEvent::KeyboardInput { event: key_ev, .. } => {
-                if key_ev.state.is_pressed() {
-                    match &key_ev.logical_key {
-                        Key::Named(NamedKey::Enter) => {
-                            return self.validate_and_connect();
-                        }
-                        Key::Named(NamedKey::Escape) => {
-                            return Some(CredentialsAction::Cancel);
-                        }
-                        Key::Named(NamedKey::Tab) => {
-                            self.focused = match self.focused {
-                                FocusedField::User => FocusedField::Password,
-                                FocusedField::Password => FocusedField::User,
-                            };
-                            self.window.request_redraw();
-                        }
-                        Key::Named(NamedKey::Backspace) => {
-                            self.backspace();
-                        }
-                        Key::Character(s) => {
-                            self.append_text(s.as_str());
-                        }
-                        _ => {}
+            WindowEvent::KeyboardInput { event: key_ev, .. } if key_ev.state.is_pressed() => {
+                match &key_ev.logical_key {
+                    Key::Named(NamedKey::Enter) => {
+                        return self.validate_and_connect();
                     }
+                    Key::Named(NamedKey::Escape) => {
+                        return Some(CredentialsAction::Cancel);
+                    }
+                    Key::Named(NamedKey::Tab) => {
+                        self.focused = match self.focused {
+                            FocusedField::User => FocusedField::Password,
+                            FocusedField::Password => FocusedField::User,
+                        };
+                        self.window.request_redraw();
+                    }
+                    Key::Named(NamedKey::Backspace) => {
+                        self.backspace();
+                    }
+                    Key::Character(s) => {
+                        self.append_text(s.as_str());
+                    }
+                    _ => {}
                 }
             }
             _ => {}
@@ -413,8 +395,8 @@ impl CredentialsState {
         user: &str,
         password: &mut Zeroizing<String>,
     ) -> Result<CredentialsAction, (FocusedField, &'static str)> {
-        Self::validate(user, password).map_err(|e| e)?;
-        let user = user.to_string();
+        Self::validate(user, password)?;
+        let user = user.trim().to_string();
         let password = Zeroizing::new(std::mem::take(&mut **password));
         Ok(CredentialsAction::Connect { user, password })
     }
@@ -655,22 +637,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn focused_field_toggle_round_trip() {
-        assert_eq!(
-            match FocusedField::User {
-                _ => FocusedField::Password,
-            },
-            FocusedField::Password
-        );
-        assert_eq!(
-            match FocusedField::Password {
-                _ => FocusedField::User,
-            },
-            FocusedField::User
-        );
-    }
-
-    #[test]
     fn password_bullet_masking_length_matches_input() {
         let password = "secretPassword123";
         let masked = "•".repeat(password.chars().count());
@@ -714,6 +680,20 @@ mod tests {
             CredentialsAction::Connect { user, password: taken } => {
                 assert_eq!(user, "admin");
                 assert_eq!(&*taken, "secret");
+            }
+            _ => panic!("expected Connect action"),
+        }
+    }
+
+    #[test]
+    fn build_action_returns_trimmed_user() {
+        let mut password = Zeroizing::new(" secret ".to_string());
+        let action = CredentialsState::build_action("  admin ", &mut password)
+            .expect("valid credentials must yield a Connect action");
+        match action {
+            CredentialsAction::Connect { user, password: taken } => {
+                assert_eq!(user, "admin");
+                assert_eq!(&*taken, " secret ", "the password is never trimmed");
             }
             _ => panic!("expected Connect action"),
         }

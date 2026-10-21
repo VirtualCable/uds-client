@@ -135,11 +135,11 @@ impl AppHandler {
                     match action {
                         crate::windows::credentials::CredentialsAction::Connect {
                             user,
-                            password,
+                            mut password,
                         } => {
                             state.settings.user = user;
-                            state.settings.password = password.to_string();
-                            if let Err(e) = self.open_rdp(el, state.settings.clone()) {
+                            state.settings.password = std::mem::take(&mut *password);
+                            if let Err(e) = self.open_rdp(el, std::mem::take(&mut state.settings)) {
                                 log::warn!("Failed to enter RDP after credentials ({e})");
                                 self.show_error_popup(el, Self::failure_message(&e.to_string()));
                             }

@@ -139,9 +139,9 @@ async fn credentials_fn(
     args: &[JsValue],
     ctx: &std::cell::RefCell<&mut Context>,
 ) -> JsResult<JsValue> {
-    let request: CredentialsRequest = match args.get(0) {
+    let request: CredentialsRequest = match args.first() {
         Some(arg) if !arg.is_undefined() && !arg.is_null() => {
-            let json_val = arg.to_json(&mut *ctx.borrow_mut())?.unwrap_or_default();
+            let json_val = arg.to_json(&mut ctx.borrow_mut())?.unwrap_or_default();
             serde_json::from_value(json_val).map_err(|e| {
                 JsError::from_native(
                     JsNativeError::typ()
@@ -166,8 +166,8 @@ async fn credentials_fn(
         let password = values.remove("password").unwrap_or_default();
         match CredentialsState::validate(&user, &password) {
             Ok(()) => {
-                let credentials = serde_json::json!({ "user": user, "password": password });
-                return JsValue::from_json(&credentials, &mut *ctx.borrow_mut());
+                let credentials = serde_json::json!({ "user": user.trim(), "password": password });
+                return JsValue::from_json(&credentials, &mut ctx.borrow_mut());
             }
             Err((_, message)) => error = Some(message),
         }
@@ -515,6 +515,16 @@ mod tests {
         assert_eq!(res, "bob|pw");
         let error = specs[1].fields.iter().find(|f| f.name == "error").expect("error field");
         assert_eq!(error.value, "Username is required");
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[serial_test::serial(js_modules)]
+    async fn test_credentials_returns_trimmed_user() -> Result<()> {
+        let replies = vec![reply_with(Some("connect"), "  bob ", " pw ")];
+        let (_, res) = run_credentials_replies(ASK_CREDENTIALS, replies).await?;
+
+        assert_eq!(res, "bob| pw ");
         Ok(())
     }
 
