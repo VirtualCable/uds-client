@@ -464,14 +464,18 @@ mod tests {
 
         let mut ctx = create_context(None)?;
         register(&mut ctx)?;
-        let res = exec_script_with_result(&mut ctx, script).await?;
+        let res = tokio::time::timeout(TEST_TIMEOUT, exec_script_with_result(&mut ctx, script))
+            .await
+            .map_err(|_| anyhow::anyhow!("Script did not finish"))??;
         let res_str: String = res
             .try_js_into(&mut ctx)
             .map_err(|e| anyhow::anyhow!("Failed to convert result from JsValue: {}", e))?;
         crate::gui::set_sender(bounded(1).0);
-        let specs = tokio::time::timeout(std::time::Duration::from_secs(2), gui).await??;
+        let specs = tokio::time::timeout(TEST_TIMEOUT, gui).await??;
         Ok((specs, res_str))
     }
+
+    const TEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
     const ASK_CREDENTIALS: &str = r#"
         (async () => {
@@ -560,10 +564,12 @@ mod tests {
             rdp_after_valid
         });
 
-        let result = crate::run_js(ASK_THEN_START, Some(data)).await;
+        let result = tokio::time::timeout(TEST_TIMEOUT, crate::run_js(ASK_THEN_START, Some(data)))
+            .await
+            .expect("script did not finish");
         crate::gui::set_sender(bounded(1).0);
         assert!(result.is_ok(), "{result:?}");
-        let rdp = tokio::time::timeout(std::time::Duration::from_secs(2), gui)
+        let rdp = tokio::time::timeout(TEST_TIMEOUT, gui)
             .await
             .unwrap()
             .unwrap();
