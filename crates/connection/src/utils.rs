@@ -44,6 +44,7 @@ pub fn set_keepalive(stream: &tokio::net::TcpStream) {
     // silent at the TCP layer for longer than the KA interval.
     const IDLE_SECS: u64 = 15;
     const INTERVAL_SECS: u64 = 5;
+    #[cfg(unix)]
     const RETRIES: u32 = 3;
 
     let ka = socket2::TcpKeepalive::new()
