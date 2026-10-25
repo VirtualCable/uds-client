@@ -421,7 +421,7 @@ dependencies = [
  "lazycell",
  "log",
  "peeking_take_while",
- "prettyplease 0.2.37",
+ "prettyplease",
  "proc-macro2",
  "quote",
  "regex",
@@ -442,32 +442,13 @@ dependencies = [
  "clang-sys",
  "itertools 0.13.0",
  "log",
- "prettyplease 0.2.37",
+ "prettyplease",
  "proc-macro2",
  "quote",
  "regex",
  "rustc-hash 2.1.3",
  "shlex 1.3.0",
  "syn 2.0.119",
-]
-
-[[package]]
-name = "bindgen"
-version = "0.73.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "787ef8ef523575546b106a58213d6e6b06198a05c2f757258c68a74273670cfa"
-dependencies = [
- "bitflags 2.13.2",
- "cexpr",
- "clang-sys",
- "log",
- "prettyplease 0.3.0",
- "proc-macro2",
- "quote",
- "regex",
- "rustc-hash 2.1.3",
- "shlex 2.0.1",
- "syn 3.0.9",
 ]
 
 [[package]]
@@ -1955,9 +1936,9 @@ dependencies = [
 [[package]]
 name = "freerdp-sys"
 version = "5.0.0"
-source = "git+https://github.com/VirtualCable/freerdp-integration.git?branch=master#9f14213877f3f7c0a181db005f2f684bcb6c3478"
+source = "git+https://github.com/VirtualCable/freerdp-integration.git?branch=master#f19c7f34c6f515bc7ee33f66013f9b1a55c68403"
 dependencies = [
- "bindgen 0.73.2",
+ "bindgen 0.72.1",
  "cc",
  "libc",
 ]
@@ -4699,16 +4680,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "prettyplease"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bfe0f4c752e450fc2faf62654f1c134747922825d5b04ca717b8874f41a40c0"
-dependencies = [
- "proc-macro2",
- "syn 3.0.9",
-]
-
-[[package]]
 name = "proc-macro-crate"
 version = "3.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5102,7 +5073,7 @@ dependencies = [
 [[package]]
 name = "rdp"
 version = "5.0.0"
-source = "git+https://github.com/VirtualCable/freerdp-integration.git?branch=master#9f14213877f3f7c0a181db005f2f684bcb6c3478"
+source = "git+https://github.com/VirtualCable/freerdp-integration.git?branch=master#f19c7f34c6f515bc7ee33f66013f9b1a55c68403"
 dependencies = [
  "anyhow",
  "bitflags 2.13.2",

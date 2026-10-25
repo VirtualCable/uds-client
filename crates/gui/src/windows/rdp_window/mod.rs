@@ -121,6 +121,11 @@ impl RdpState {
                 settings.redirections.smartcard.emulated.clone(),
             )
             .map(|h| Arc::new(h) as Arc<dyn rdp::integrations::SmartcardIntegration>),
+            printer: if settings.redirections.printing {
+                Some(Arc::new(channels::printer::PrinterHandle::new()))
+            } else {
+                None
+            },
         };
 
         let (rdp_instance, command_tx) = rdp::Rdp::new(settings, tx, use_rgba, None, integrations);
