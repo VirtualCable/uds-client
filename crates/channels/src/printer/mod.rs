@@ -13,6 +13,7 @@
 //! - `windows/` (WinSpool RAW / XPS_PASS using winspool.drv)
 //! - `linux/` (CUPS IPP client / spool)
 //! - `macos/` (native CUPS)
+//!
 //! Refer to `doc/printer-redirection-plan.md` for full specifications.
 
 use rdp::integrations::printer::{PrinterDeviceInfo, PrinterIntegration};

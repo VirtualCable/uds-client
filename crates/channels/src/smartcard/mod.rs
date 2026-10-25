@@ -131,6 +131,7 @@ impl SmartcardHandle {
 // Trait delegation
 // ---------------------------------------------------------------------------
 
+#[allow(clippy::useless_conversion)]
 impl SmartcardIntegration for SmartcardHandle {
     fn establish_context(&self, scope: u32) -> Result<ScardContext, u32> {
         self.backend.establish_context(scope.into())

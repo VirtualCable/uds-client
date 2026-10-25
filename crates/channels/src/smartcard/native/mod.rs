@@ -225,6 +225,7 @@ impl SmartcardBackend for NativeBackend {
         })
     }
 
+    #[allow(clippy::useless_conversion)]
     fn get_status_change(
         &self,
         ctx: &ScardContext,
