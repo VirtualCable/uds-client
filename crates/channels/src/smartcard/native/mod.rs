@@ -290,9 +290,13 @@ impl SmartcardBackend for NativeBackend {
     }
 
     fn get_attrib(&self, handle: &ScardHandle, attr_id: DWORD) -> Result<Vec<u8>, u32> {
-        let attribute = dword_to_attribute(attr_id)?;
         let cards = self.registry.cards.read().unwrap();
-        let (card, _) = cards.get(&handle.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
+        let (card, reader_name) = cards.get(&handle.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
+
+        if let Some(name) = reader_name_attribute_w(attr_id, reader_name) {
+            return Ok(name);
+        }
+        let attribute = dword_to_attribute(attr_id)?;
 
         let mut buf = vec![0u8; 1024];
         let slice = card
