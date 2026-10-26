@@ -136,14 +136,20 @@ pub(crate) fn pcsc_status_to_u32(status: pcsc::Status) -> u32 {
     state
 }
 
+// Ids as Windows sends them (SCARD_CLASS_SYSTEM = 0x7FFF). pcsc-sys uses the
+// pcsc-lite class value 0, so its `ffi::SCARD_ATTR_DEVICE_*` constants never
+// match what arrives from the remote side.
+pub(crate) const WIN_SCARD_ATTR_DEVICE_FRIENDLY_NAME_W: DWORD = 0x7FFF_0005;
+pub(crate) const WIN_SCARD_ATTR_DEVICE_SYSTEM_NAME_W: DWORD = 0x7FFF_0006;
+
 /// UTF-16LE reader name for the `_W` name attributes, which pcsc-lite does not
-/// provide (its `SCARD_ATTR_DEVICE_*_NAME` are the ASCII variants). Windows asks
-/// for them before using the card. Same layout as FreeRDP: the system name is a
-/// multi-string (double NUL), the friendly name a single NUL-terminated string.
+/// provide. Windows asks for them before using the card. Same layout as
+/// FreeRDP: the system name is a multi-string (double NUL), the friendly name a
+/// single NUL-terminated string.
 pub(crate) fn reader_name_attribute_w(attr: DWORD, reader_name: &str) -> Option<Vec<u8>> {
     let terminator_len = match attr {
-        ffi::SCARD_ATTR_DEVICE_SYSTEM_NAME_W => 2,
-        ffi::SCARD_ATTR_DEVICE_FRIENDLY_NAME_W => 1,
+        WIN_SCARD_ATTR_DEVICE_SYSTEM_NAME_W => 2,
+        WIN_SCARD_ATTR_DEVICE_FRIENDLY_NAME_W => 1,
         _ => return None,
     };
     let units = reader_name
@@ -213,10 +219,7 @@ mod tests {
         let name = "Lector Ñ 0";
         let mut expected = utf16le(name);
         expected.extend_from_slice(&[0, 0, 0, 0]);
-        assert_eq!(
-            reader_name_attribute_w(ffi::SCARD_ATTR_DEVICE_SYSTEM_NAME_W, name),
-            Some(expected)
-        );
+        assert_eq!(reader_name_attribute_w(0x7FFF_0006, name), Some(expected));
     }
 
     #[test]
@@ -224,21 +227,12 @@ mod tests {
         let name = "Generic Smart Card Reader Interface 0";
         let mut expected = utf16le(name);
         expected.extend_from_slice(&[0, 0]);
-        assert_eq!(
-            reader_name_attribute_w(ffi::SCARD_ATTR_DEVICE_FRIENDLY_NAME_W, name),
-            Some(expected)
-        );
+        assert_eq!(reader_name_attribute_w(0x7FFF_0005, name), Some(expected));
     }
 
     #[test]
     fn other_attributes_are_not_reader_names() {
-        assert_eq!(
-            reader_name_attribute_w(ffi::SCARD_ATTR_DEVICE_SYSTEM_NAME_A, "x"),
-            None
-        );
-        assert_eq!(
-            reader_name_attribute_w(ffi::SCARD_ATTR_ATR_STRING, "x"),
-            None
-        );
+        assert_eq!(reader_name_attribute_w(0x7FFF_0004, "x"), None);
+        assert_eq!(reader_name_attribute_w(0x0000_0006, "x"), None);
     }
 }
