@@ -147,26 +147,43 @@ pub(crate) fn pcsc_status_to_u32(status: pcsc::Status) -> u32 {
     }
 }
 
-// Ids as Windows sends them (SCARD_CLASS_SYSTEM = 0x7FFF). pcsc-sys uses the
-// pcsc-lite class value 0, so its `ffi::SCARD_ATTR_DEVICE_*` constants never
-// match what arrives from the remote side.
-pub(crate) const WIN_SCARD_ATTR_DEVICE_FRIENDLY_NAME_W: DWORD = 0x7FFF_0005;
-pub(crate) const WIN_SCARD_ATTR_DEVICE_SYSTEM_NAME_W: DWORD = 0x7FFF_0006;
+// SCARD_CLASS_SYSTEM attribute ids as Windows sends them (class 0x7FFF). pcsc-sys
+// uses the pcsc-lite class value 0, so its `ffi::SCARD_ATTR_DEVICE_*` constants
+// never match what arrives from the remote side.
+const WIN_SCARD_ATTR_DEVICE_UNIT: DWORD = 0x7FFF_0001;
+const WIN_SCARD_ATTR_DEVICE_FRIENDLY_NAME_A: DWORD = 0x7FFF_0003;
+const WIN_SCARD_ATTR_DEVICE_SYSTEM_NAME_A: DWORD = 0x7FFF_0004;
+const WIN_SCARD_ATTR_DEVICE_FRIENDLY_NAME_W: DWORD = 0x7FFF_0005;
+const WIN_SCARD_ATTR_DEVICE_SYSTEM_NAME_W: DWORD = 0x7FFF_0006;
 
-/// UTF-16LE reader name for the `_W` name attributes, which pcsc-lite does not
-/// provide. Windows asks for them before using the card. Same layout as
-/// FreeRDP: the system name is a multi-string (double NUL), the friendly name a
-/// single NUL-terminated string.
-pub(crate) fn reader_name_attribute_w(attr: DWORD, reader_name: &str) -> Option<Vec<u8>> {
-    let terminator_len = match attr {
-        WIN_SCARD_ATTR_DEVICE_SYSTEM_NAME_W => 2,
-        WIN_SCARD_ATTR_DEVICE_FRIENDLY_NAME_W => 1,
-        _ => return None,
+/// Error Windows returns from SCardGetAttrib for an attribute the reader lacks.
+pub(crate) const ERROR_NOT_SUPPORTED: u32 = 0x32;
+
+/// Answers the SCARD_CLASS_SYSTEM attributes the same way mstsc does for a
+/// redirected reader: device unit 0, and the reader name as ASCII or UTF-16LE.
+/// Byte layouts were taken from SCardGetAttrib in a Windows RDP session: the
+/// friendly names end in a double NUL, the system names in a single NUL.
+pub(crate) fn system_attribute(attr: DWORD, reader_name: &str) -> Option<Vec<u8>> {
+    let ascii = |nuls: usize| {
+        let mut out = reader_name.as_bytes().to_vec();
+        out.extend(std::iter::repeat_n(0, nuls));
+        out
     };
-    let units = reader_name
-        .encode_utf16()
-        .chain(std::iter::repeat_n(0, terminator_len));
-    Some(units.flat_map(u16::to_le_bytes).collect())
+    let utf16 = |nuls: usize| {
+        reader_name
+            .encode_utf16()
+            .chain(std::iter::repeat_n(0, nuls))
+            .flat_map(u16::to_le_bytes)
+            .collect()
+    };
+    match attr {
+        WIN_SCARD_ATTR_DEVICE_UNIT => Some(0u32.to_le_bytes().to_vec()),
+        WIN_SCARD_ATTR_DEVICE_FRIENDLY_NAME_A => Some(ascii(2)),
+        WIN_SCARD_ATTR_DEVICE_SYSTEM_NAME_A => Some(ascii(1)),
+        WIN_SCARD_ATTR_DEVICE_FRIENDLY_NAME_W => Some(utf16(2)),
+        WIN_SCARD_ATTR_DEVICE_SYSTEM_NAME_W => Some(utf16(1)),
+        _ => None,
+    }
 }
 
 pub(crate) fn dword_to_attribute(attr: DWORD) -> Result<pcsc::Attribute, u32> {
@@ -221,24 +238,20 @@ pub(crate) fn dword_to_attribute(attr: DWORD) -> Result<pcsc::Attribute, u32> {
 mod tests {
     use super::*;
 
-    fn utf16le(s: &str) -> Vec<u8> {
-        s.encode_utf16().flat_map(u16::to_le_bytes).collect()
-    }
+    // Lengths as returned by SCardGetAttrib under mstsc for this reader name.
+    const READER: &str = "Generic Smart Card Reader Interface 0";
 
     #[test]
-    fn system_name_w_is_double_nul_terminated_utf16() {
-        let name = "Lector Ñ 0";
-        let mut expected = utf16le(name);
-        expected.extend_from_slice(&[0, 0, 0, 0]);
-        assert_eq!(reader_name_attribute_w(0x7FFF_0006, name), Some(expected));
-    }
-
-    #[test]
-    fn friendly_name_w_is_nul_terminated_utf16() {
-        let name = "Generic Smart Card Reader Interface 0";
-        let mut expected = utf16le(name);
-        expected.extend_from_slice(&[0, 0]);
-        assert_eq!(reader_name_attribute_w(0x7FFF_0005, name), Some(expected));
+    fn system_attributes_match_mstsc_layout() {
+        let name = |attr| system_attribute(attr, READER).unwrap();
+        assert_eq!(name(0x7FFF_0001), vec![0, 0, 0, 0]);
+        assert_eq!(name(0x7FFF_0003).len(), 39);
+        assert_eq!(name(0x7FFF_0004).len(), 38);
+        assert_eq!(name(0x7FFF_0005).len(), 78);
+        assert_eq!(name(0x7FFF_0006).len(), 76);
+        assert!(name(0x7FFF_0003).starts_with(READER.as_bytes()));
+        assert_eq!(&name(0x7FFF_0006)[..4], &[b'G', 0, b'e', 0]);
+        assert_eq!(&name(0x7FFF_0006)[74..], &[0, 0]);
     }
 
     #[test]
@@ -266,8 +279,9 @@ mod tests {
     }
 
     #[test]
-    fn other_attributes_are_not_reader_names() {
-        assert_eq!(reader_name_attribute_w(0x7FFF_0004, "x"), None);
-        assert_eq!(reader_name_attribute_w(0x0000_0006, "x"), None);
+    fn other_attributes_are_not_system_attributes() {
+        assert_eq!(system_attribute(0x7FFF_0002, READER), None);
+        assert_eq!(system_attribute(0x7FFF_0007, READER), None);
+        assert_eq!(system_attribute(0x0000_0006, READER), None);
     }
 }
