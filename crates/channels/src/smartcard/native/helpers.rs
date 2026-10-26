@@ -119,21 +119,32 @@ pub(crate) fn dword_to_state(bits: DWORD) -> pcsc::State {
     pcsc::State::from_bits_retain(bits)
 }
 
+// SCardStatus card states (winscard.h). Unlike SCARD_STATE_* these are an
+// enumeration, not flags.
+const SCARD_UNKNOWN: u32 = 0;
+const SCARD_ABSENT: u32 = 1;
+const SCARD_PRESENT: u32 = 2;
+const SCARD_SWALLOWED: u32 = 3;
+const SCARD_POWERED: u32 = 4;
+const SCARD_SPECIFIC: u32 = 6;
+
+/// Card state for SCardStatus, as Windows reports it. A connected card is
+/// reported as SCARD_SPECIFIC like FreeRDP does: pcsc-lite never sets it and
+/// Windows minidrivers expect it.
 pub(crate) fn pcsc_status_to_u32(status: pcsc::Status) -> u32 {
-    let mut state = 0;
-    if status.contains(pcsc::Status::SPECIFIC) {
-        state |= SCARD_STATE_PRESENT | SCARD_STATE_INUSE;
-    } else if status.contains(pcsc::Status::NEGOTIABLE)
-        || status.contains(pcsc::Status::POWERED)
-        || status.contains(pcsc::Status::PRESENT)
-    {
-        state |= SCARD_STATE_PRESENT;
+    if status.intersects(pcsc::Status::SPECIFIC | pcsc::Status::NEGOTIABLE) {
+        SCARD_SPECIFIC
+    } else if status.contains(pcsc::Status::POWERED) {
+        SCARD_POWERED
     } else if status.contains(pcsc::Status::ABSENT) {
-        state |= SCARD_STATE_EMPTY;
-    } else if status.contains(pcsc::Status::UNKNOWN) {
-        state |= SCARD_STATE_UNKNOWN;
+        SCARD_ABSENT
+    } else if status.contains(pcsc::Status::PRESENT) {
+        SCARD_PRESENT
+    } else if status.contains(pcsc::Status::SWALLOWED) {
+        SCARD_SWALLOWED
+    } else {
+        SCARD_UNKNOWN
     }
-    state
 }
 
 // Ids as Windows sends them (SCARD_CLASS_SYSTEM = 0x7FFF). pcsc-sys uses the
@@ -228,6 +239,30 @@ mod tests {
         let mut expected = utf16le(name);
         expected.extend_from_slice(&[0, 0]);
         assert_eq!(reader_name_attribute_w(0x7FFF_0005, name), Some(expected));
+    }
+
+    #[test]
+    fn connected_card_is_specific() {
+        assert_eq!(pcsc_status_to_u32(pcsc::Status::SPECIFIC), 6);
+        assert_eq!(pcsc_status_to_u32(pcsc::Status::NEGOTIABLE), 6);
+        assert_eq!(
+            pcsc_status_to_u32(
+                pcsc::Status::PRESENT | pcsc::Status::POWERED | pcsc::Status::SPECIFIC
+            ),
+            6
+        );
+    }
+
+    #[test]
+    fn card_states_are_an_enumeration() {
+        assert_eq!(pcsc_status_to_u32(pcsc::Status::empty()), 0);
+        assert_eq!(pcsc_status_to_u32(pcsc::Status::ABSENT), 1);
+        assert_eq!(pcsc_status_to_u32(pcsc::Status::PRESENT), 2);
+        assert_eq!(pcsc_status_to_u32(pcsc::Status::SWALLOWED), 3);
+        assert_eq!(
+            pcsc_status_to_u32(pcsc::Status::PRESENT | pcsc::Status::POWERED),
+            4
+        );
     }
 
     #[test]
