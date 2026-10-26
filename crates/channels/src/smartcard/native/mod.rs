@@ -291,12 +291,32 @@ impl SmartcardBackend for NativeBackend {
 
     fn get_attrib(&self, handle: &ScardHandle, attr_id: DWORD) -> Result<Vec<u8>, u32> {
         let cards = self.registry.cards.read().unwrap();
-        let (card, reader_name) = cards.get(&handle.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
+        let Some((card, reader_name)) = cards.get(&handle.raw()) else {
+            log::trace!(
+                "smartcard native: get_attrib 0x{:X}: unknown handle 0x{:X} (known: {:X?})",
+                attr_id,
+                handle.raw(),
+                cards.keys().collect::<Vec<_>>()
+            );
+            return Err(SCARD_E_INVALID_HANDLE);
+        };
 
         if let Some(name) = reader_name_attribute_w(attr_id, reader_name) {
+            log::trace!(
+                "smartcard native: get_attrib 0x{:X}: reader name '{}' ({} bytes)",
+                attr_id,
+                reader_name,
+                name.len()
+            );
             return Ok(name);
         }
-        let attribute = dword_to_attribute(attr_id)?;
+        let attribute = dword_to_attribute(attr_id).inspect_err(|code| {
+            log::trace!(
+                "smartcard native: get_attrib 0x{:X}: unmapped attribute: 0x{:08X}",
+                attr_id,
+                code
+            )
+        })?;
 
         let mut buf = vec![0u8; 1024];
         let slice = card
