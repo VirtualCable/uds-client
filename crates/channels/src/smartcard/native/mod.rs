@@ -161,13 +161,13 @@ impl SmartcardBackend for NativeBackend {
         let len = card.transmit(pci, data, &mut recv_buf)?;
         recv_buf.truncate(len);
 
-        let recv_pci = card.status().ok().map(|status| ScardIORequest {
-            protocol: active_protocol_to_u32(status.protocol),
-            extra_bytes: Vec::new(),
-        });
-
+        // Like FreeRDP, the reply carries the protocol the request named instead
+        // of costing an SCardStatus round trip per APDU.
         Ok(TransmitResult {
-            recv_pci,
+            recv_pci: Some(ScardIORequest {
+                protocol: send_pci.protocol,
+                extra_bytes: Vec::new(),
+            }),
             recv_buffer: recv_buf,
         })
     }
