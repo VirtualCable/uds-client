@@ -2,17 +2,20 @@
 // Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+//          Janier Rodríguez, jrodriguez at virtualcable dot es
 
 pub(crate) mod helpers;
+pub(crate) mod raw;
 pub(crate) mod types;
 
 use std::time::Duration;
 
-use pcsc::ffi::DWORD;
+use pcsc::ffi::{self, DWORD, SCARD_READERSTATE};
 use rdp::integrations::smartcard::*;
 
 use super::SmartcardBackend;
 use helpers::*;
+use raw::{RawContext, pci_for};
 use types::NativeRegistry;
 
 const MAX_CERTIFICATE_SIZE: usize = 1024 * 1024;
@@ -33,20 +36,26 @@ impl NativeBackend {
 
 impl SmartcardBackend for NativeBackend {
     fn establish_context(&self, _scope: DWORD) -> Result<ScardContext, u32> {
-        let pcsc_ctx = pcsc::Context::establish(pcsc::Scope::System).map_err(pcsc_error_to_u32)?;
+        let raw_ctx = RawContext::establish()?;
         let sc_ctx = ScardContext::new();
         let mut contexts = self.registry.contexts.write().unwrap();
-        contexts.insert(sc_ctx.raw(), pcsc_ctx);
+        contexts.insert(sc_ctx.raw(), raw_ctx);
         Ok(sc_ctx)
     }
 
     fn release_context(&self, ctx: &ScardContext) -> Result<(), u32> {
-        let card_id = self.registry.ctx_cards.write().unwrap().remove(&ctx.raw());
+        let card_ids = self
+            .registry
+            .ctx_cards
+            .write()
+            .unwrap()
+            .take_cards(ctx.raw());
 
-        if let Some(card_id) = card_id
-            && let Some((card, _)) = self.registry.cards.write().unwrap().remove(&card_id)
-        {
-            let _ = card.disconnect(pcsc::Disposition::LeaveCard);
+        let mut cards = self.registry.cards.write().unwrap();
+        for card_id in card_ids {
+            if let Some((card, _)) = cards.remove(&card_id) {
+                let _ = card.disconnect(ffi::SCARD_LEAVE_CARD);
+            }
         }
 
         let mut contexts = self.registry.contexts.write().unwrap();
@@ -65,22 +74,12 @@ impl SmartcardBackend for NativeBackend {
         _groups: Option<&[String]>,
     ) -> Result<Vec<String>, u32> {
         let contexts = self.registry.contexts.read().unwrap();
-        let pcsc_ctx = contexts.get(&ctx.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
+        let raw_ctx = contexts.get(&ctx.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
 
-        let mut readers_buf = [0u8; 4096];
-        let readers = match pcsc_ctx.list_readers(&mut readers_buf) {
-            Ok(r) => r,
-            Err(pcsc::Error::NoReadersAvailable) => return Ok(Vec::new()),
-            Err(e) => return Err(pcsc_error_to_u32(e)),
-        };
-
-        let mut result = Vec::new();
-        for reader in readers {
-            if let Ok(s) = reader.to_str() {
-                result.push(s.to_string());
-            }
+        match raw_ctx.list_readers() {
+            Err(SCARD_E_NO_READERS_AVAILABLE) => Ok(Vec::new()),
+            other => other,
         }
-        Ok(result)
     }
 
     fn connect(
@@ -91,26 +90,13 @@ impl SmartcardBackend for NativeBackend {
         preferred_protocols: DWORD,
     ) -> Result<ConnectResult, u32> {
         let contexts = self.registry.contexts.read().unwrap();
-        let pcsc_ctx = contexts.get(&ctx.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
+        let raw_ctx = contexts.get(&ctx.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
 
         let share = dword_to_share_mode(share_mode)?;
-        let protos = dword_to_protocols(preferred_protocols);
 
         let reader_c = std::ffi::CString::new(reader).map_err(|_| SCARD_E_INVALID_PARAMETER)?;
-        let card = pcsc_ctx
-            .connect(&reader_c, share, protos)
-            .map_err(pcsc_error_to_u32)?;
-
-        let mut r_buf = [0u8; 256];
-        let mut a_buf = [0u8; 36];
-        let active_proto = match card.status2(&mut r_buf, &mut a_buf) {
-            Ok(status) => protocol_to_u32(status.protocol()),
-            Err(err) => {
-                let code = pcsc_error_to_u32(err);
-                let _ = card.disconnect(pcsc::Disposition::LeaveCard);
-                return Err(code);
-            }
-        };
+        let (card, active_proto) = raw_ctx.connect(&reader_c, share, preferred_protocols)?;
+        let active_proto = active_protocol_to_u32(active_proto);
 
         let handle = ScardHandle::new(active_proto);
         let mut cards = self.registry.cards.write().unwrap();
@@ -119,7 +105,7 @@ impl SmartcardBackend for NativeBackend {
             .ctx_cards
             .write()
             .unwrap()
-            .insert(ctx.raw(), handle.raw());
+            .add(ctx.raw(), handle.raw());
 
         Ok(ConnectResult {
             handle,
@@ -135,10 +121,8 @@ impl SmartcardBackend for NativeBackend {
                 .ctx_cards
                 .write()
                 .unwrap()
-                .retain(|_, card_id| *card_id != handle.raw());
+                .remove_card(handle.raw());
             card.disconnect(disp)
-                .map_err(|(_, err)| pcsc_error_to_u32(err))?;
-            Ok(())
         } else {
             Err(SCARD_E_INVALID_HANDLE)
         }
@@ -152,53 +136,39 @@ impl SmartcardBackend for NativeBackend {
         initialization: DWORD,
     ) -> Result<u32, u32> {
         let share = dword_to_share_mode(share_mode)?;
-        let protos = dword_to_protocols(preferred_protocols);
         let init = dword_to_disposition(initialization)?;
 
-        let mut cards = self.registry.cards.write().unwrap();
-        let (card, _) = cards.get_mut(&handle.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
+        let cards = self.registry.cards.read().unwrap();
+        let (card, _) = cards.get(&handle.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
 
-        card.reconnect(share, protos, init)
-            .map_err(pcsc_error_to_u32)?;
-
-        let mut r_buf = [0u8; 256];
-        let mut a_buf = [0u8; 36];
-        let new_proto = card
-            .status2(&mut r_buf, &mut a_buf)
-            .map(|status| protocol_to_u32(status.protocol()))
-            .map_err(pcsc_error_to_u32)?;
-        Ok(new_proto)
+        let new_proto = card.reconnect(share, preferred_protocols, init)?;
+        Ok(active_protocol_to_u32(new_proto))
     }
 
     fn transmit(
         &self,
         handle: &ScardHandle,
-        _send_pci: &ScardIORequest,
+        send_pci: &ScardIORequest,
         data: &[u8],
     ) -> Result<TransmitResult, u32> {
         let cards = self.registry.cards.read().unwrap();
         let (card, _) = cards.get(&handle.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
 
+        let pci = pci_for(send_pci.protocol)
+            .or_else(|| pci_for(handle.active_protocol()))
+            .ok_or(SCARD_E_INVALID_PARAMETER)?;
         let mut recv_buf = vec![0u8; SCARD_TRANSMIT_MAX];
-        let resp_slice = card
-            .transmit(data, &mut recv_buf)
-            .map_err(pcsc_error_to_u32)?;
+        let len = card.transmit(pci, data, &mut recv_buf)?;
+        recv_buf.truncate(len);
 
-        let recv_buffer = resp_slice.to_vec();
-        let mut r_buf = [0u8; 256];
-        let mut a_buf = [0u8; 36];
-        let recv_pci = card
-            .status2(&mut r_buf, &mut a_buf)
-            .ok()
-            .and_then(|status| status.protocol2())
-            .map(|protocol| ScardIORequest {
-                protocol: protocol_to_u32(protocol),
-                extra_bytes: Vec::new(),
-            });
+        let recv_pci = card.status().ok().map(|status| ScardIORequest {
+            protocol: active_protocol_to_u32(status.protocol),
+            extra_bytes: Vec::new(),
+        });
 
         Ok(TransmitResult {
             recv_pci,
-            recv_buffer,
+            recv_buffer: recv_buf,
         })
     }
 
@@ -212,101 +182,108 @@ impl SmartcardBackend for NativeBackend {
         let (card, _) = cards.get(&handle.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
 
         let mut out_buf = vec![0u8; 4096];
-        let resp_slice = card
-            .control(control_code, in_data, &mut out_buf)
-            .map_err(pcsc_error_to_u32)?;
-
-        Ok(resp_slice.to_vec())
+        let len = card.control(control_code, in_data, &mut out_buf)?;
+        out_buf.truncate(len);
+        Ok(out_buf)
     }
 
     fn status(&self, handle: &ScardHandle) -> Result<ScardStatus, u32> {
         let cards = self.registry.cards.read().unwrap();
         let (card, reader_name) = cards.get(&handle.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
 
-        let mut r_buf = [0u8; 256];
-        let mut a_buf = [0u8; 36];
-        let status = card
-            .status2(&mut r_buf, &mut a_buf)
-            .map_err(pcsc_error_to_u32)?;
+        let status = card.status()?;
 
         let result = ScardStatus {
             reader_names: vec![reader_name.clone()],
-            state: pcsc_status_to_u32(status.status()),
-            protocol: protocol_to_u32(status.protocol()),
-            atr: status.atr().to_vec(),
+            state: pcsc_status_to_u32(pcsc::Status::from_bits_truncate(status.state)),
+            protocol: active_protocol_to_u32(status.protocol),
+            atr: status.atr,
         };
         log::trace!(
-            "smartcard native: status 0x{:X}: pcsc={:?} -> state={} protocol=0x{:X}",
+            "smartcard native: status 0x{:X}: pcsc=0x{:X} -> state={} protocol=0x{:X}",
             handle.raw(),
-            status.status(),
+            status.state,
             result.state,
             result.protocol
         );
         Ok(result)
     }
 
-    #[allow(clippy::useless_conversion)]
     fn get_status_change(
         &self,
         ctx: &ScardContext,
         timeout: Duration,
         reader_states: &[ReaderStateIn],
     ) -> Result<(Vec<ReaderStateOut>, u32), u32> {
-        let mut pcsc_states = Vec::new();
+        let mut names = Vec::with_capacity(reader_states.len());
         for rs in reader_states {
-            let cstr = std::ffi::CString::new(rs.reader_name.as_str())
-                .map_err(|_| SCARD_E_INVALID_PARAMETER)?;
-            let current_state = dword_to_state(rs.current_state.into());
-            pcsc_states.push(pcsc::ReaderState::new(cstr, current_state));
+            names.push(
+                std::ffi::CString::new(rs.reader_name.as_str())
+                    .map_err(|_| SCARD_E_INVALID_PARAMETER)?,
+            );
         }
+        // State bits pass through verbatim both ways: Windows sets bits such as
+        // 0x0001_0000 (e.g. for \\?PnP?\Notification) that the remote SCardSvr
+        // expects back, and the FreeRDP channel does not filter them either.
+        let mut raw_states: Vec<SCARD_READERSTATE> = reader_states
+            .iter()
+            .zip(&names)
+            .map(|(rs, name)| SCARD_READERSTATE {
+                szReader: name.as_ptr(),
+                pvUserData: std::ptr::null_mut(),
+                dwCurrentState: rs.current_state as DWORD,
+                dwEventState: 0,
+                cbAtr: 0,
+                rgbAtr: [0u8; ffi::ATR_BUFFER_SIZE],
+            })
+            .collect();
 
         let contexts = self.registry.contexts.read().unwrap();
-        let pcsc_ctx = contexts.get(&ctx.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
+        let raw_ctx = contexts.get(&ctx.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
 
         // Mimic the FreeRDP reference channel: never block the IRP thread for more
         // than a small step (100ms). The caller re-polls on SCARD_E_TIMEOUT.
         let step = timeout.min(Duration::from_millis(100));
-        let gsc_result = pcsc_ctx.get_status_change(step, &mut pcsc_states);
+        let gsc_result = raw_ctx.get_status_change(step, &mut raw_states);
 
-        let mut results = Vec::new();
-        for (i, rs) in reader_states.iter().enumerate() {
-            let out_state = &pcsc_states[i];
-            // Read the raw SCARD_READERSTATE: the pcsc crate's event_state()
-            // uses State::from_bits_truncate which drops the 0x0001_0000 bit
-            // that Windows sets in reader states (e.g. for \\?PnP?\Notification).
-            // The native FreeRDP channel passes these bits through verbatim, and
-            // the remote SCardSvr expects them.
-            let raw: &pcsc::ffi::SCARD_READERSTATE = unsafe { std::mem::transmute(out_state) };
-            let atr_len = (raw.cbAtr as usize).min(raw.rgbAtr.len());
-            results.push(ReaderStateOut {
-                reader_name: rs.reader_name.clone(),
-                current_state: rs.current_state,
-                event_state: raw.dwEventState as u32,
-                atr: raw.rgbAtr[..atr_len].to_vec(),
-            });
-        }
+        let results = reader_states
+            .iter()
+            .zip(&raw_states)
+            .map(|(rs, raw)| {
+                let atr_len = (raw.cbAtr as usize).min(raw.rgbAtr.len());
+                ReaderStateOut {
+                    reader_name: rs.reader_name.clone(),
+                    current_state: rs.current_state,
+                    event_state: raw.dwEventState as u32,
+                    atr: raw.rgbAtr[..atr_len].to_vec(),
+                }
+            })
+            .collect();
 
         match gsc_result {
             Ok(()) => Ok((results, SCARD_S_SUCCESS)),
-            Err(pcsc::Error::Timeout) => Ok((results, SCARD_E_TIMEOUT)),
-            Err(e) => Err(pcsc_error_to_u32(e)),
+            Err(SCARD_E_TIMEOUT) => Ok((results, SCARD_E_TIMEOUT)),
+            Err(code) => Err(code),
         }
     }
 
     fn cancel(&self, ctx: &ScardContext) -> Result<(), u32> {
         let contexts = self.registry.contexts.read().unwrap();
-        let pcsc_ctx = contexts.get(&ctx.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
-        pcsc_ctx.cancel().map_err(pcsc_error_to_u32)
+        let raw_ctx = contexts.get(&ctx.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
+        raw_ctx.cancel()
     }
 
-    fn begin_transaction(&self, _handle: &ScardHandle) -> Result<(), u32> {
-        // Transactions are serialized by the device thread and do not require locks at the local PC/SC layer.
-        Ok(())
+    fn begin_transaction(&self, handle: &ScardHandle) -> Result<(), u32> {
+        let cards = self.registry.cards.read().unwrap();
+        let (card, _) = cards.get(&handle.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
+        card.begin_transaction()
     }
 
-    fn end_transaction(&self, _handle: &ScardHandle, _disposition: DWORD) -> Result<(), u32> {
-        // Transactions are serialized by the device thread and do not require locks at the local PC/SC layer.
-        Ok(())
+    fn end_transaction(&self, handle: &ScardHandle, disposition: DWORD) -> Result<(), u32> {
+        let disp = dword_to_disposition(disposition)?;
+        let cards = self.registry.cards.read().unwrap();
+        let (card, _) = cards.get(&handle.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
+        card.end_transaction(disp)
     }
 
     fn get_attrib(&self, handle: &ScardHandle, attr_id: DWORD) -> Result<Vec<u8>, u32> {
@@ -321,24 +298,19 @@ impl SmartcardBackend for NativeBackend {
             );
             return Ok(value);
         }
-        let Ok(attribute) = dword_to_attribute(attr_id) else {
+        if dword_to_attribute(attr_id).is_err() {
             log::trace!(
                 "smartcard native: get_attrib 0x{:X}: not supported",
                 attr_id
             );
             return Err(ERROR_NOT_SUPPORTED);
-        };
+        }
 
         let mut buf = vec![0u8; 1024];
-        // WinSCard reports a missing attribute as ERROR_NOT_SUPPORTED, a Win32
-        // code the pcsc crate can only surface as UnknownError.
-        let result = card
-            .get_attribute(attribute, &mut buf)
-            .map(<[u8]>::to_vec)
-            .map_err(|err| match err {
-                pcsc::Error::UnknownError => ERROR_NOT_SUPPORTED,
-                other => pcsc_error_to_u32(other),
-            });
+        let result = card.get_attrib(attr_id, &mut buf).map(|len| {
+            buf.truncate(len);
+            buf
+        });
         log::trace!(
             "smartcard native: get_attrib 0x{:X}: {:?}",
             attr_id,
@@ -348,12 +320,10 @@ impl SmartcardBackend for NativeBackend {
     }
 
     fn set_attrib(&self, handle: &ScardHandle, attr_id: DWORD, data: &[u8]) -> Result<(), u32> {
-        let attribute = dword_to_attribute(attr_id)?;
+        dword_to_attribute(attr_id)?;
         let cards = self.registry.cards.read().unwrap();
         let (card, _) = cards.get(&handle.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
-        card.set_attribute(attribute, data)
-            .map_err(pcsc_error_to_u32)?;
-        Ok(())
+        card.set_attrib(attr_id, data)
     }
 
     fn get_container_info(
@@ -391,23 +361,24 @@ impl SmartcardBackend for NativeBackend {
             .ctx_cards
             .read()
             .unwrap()
-            .get(&ctx.raw())
-            .copied()
+            .first_card(ctx.raw())
             .ok_or(SCARD_E_INVALID_HANDLE)?;
         let cards = self.registry.cards.read().unwrap();
         let (card, _) = cards.get(&handle_id).ok_or(SCARD_E_INVALID_HANDLE)?;
+        let pci = pci_for(active_protocol_to_u32(card.status()?.protocol))
+            .ok_or(SCARD_E_INVALID_PARAMETER)?;
 
         // GET DATA DF24 (certificate file) — same APDU msclmd issues.
         let apdu = [0x00, 0xCB, 0xA0, 0x10, 0x04, 0x5C, 0x02, 0xDF, 0x24, 0x00];
         let mut buf = vec![0u8; 4096];
-        let mut full = match card.transmit(&apdu, &mut buf) {
-            Ok(r) => r.to_vec(),
+        let mut full = match card.transmit(pci, &apdu, &mut buf) {
+            Ok(len) => buf[..len].to_vec(),
             Err(e) => {
                 log::debug!(
-                    "smartcard native: get_certificate DF24 transmit error: {:?}",
+                    "smartcard native: get_certificate DF24 transmit error: {:#X}",
                     e
                 );
-                return Err(pcsc_error_to_u32(e));
+                return Err(e);
             }
         };
 
@@ -430,19 +401,19 @@ impl SmartcardBackend for NativeBackend {
                 0x00,
                 if remaining == 0 { 0x00 } else { sw2 },
             ];
-            match card.transmit(&get_resp, &mut buf) {
-                Ok(r) => {
-                    if full.len().saturating_add(r.len()) > MAX_CERTIFICATE_SIZE {
+            match card.transmit(pci, &get_resp, &mut buf) {
+                Ok(len) => {
+                    if full.len().saturating_add(len) > MAX_CERTIFICATE_SIZE {
                         return Err(SCARD_E_INSUFFICIENT_BUFFER);
                     }
-                    full.extend_from_slice(r);
+                    full.extend_from_slice(&buf[..len]);
                 }
                 Err(e) => {
                     log::debug!(
-                        "smartcard native: get_certificate GET RESPONSE error: {:?}",
+                        "smartcard native: get_certificate GET RESPONSE error: {:#X}",
                         e
                     );
-                    return Err(pcsc_error_to_u32(e));
+                    return Err(e);
                 }
             }
         }
@@ -467,6 +438,6 @@ impl SmartcardBackend for NativeBackend {
     }
 
     fn is_available(&self) -> bool {
-        pcsc::Context::establish(pcsc::Scope::System).is_ok()
+        RawContext::establish().is_ok()
     }
 }

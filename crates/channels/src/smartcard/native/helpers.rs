@@ -2,6 +2,7 @@
 // Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+//          Janier Rodríguez, jrodriguez at virtualcable dot es
 
 use pcsc::ffi::{self, DWORD};
 use rdp::integrations::smartcard::consts::*;
@@ -39,84 +40,32 @@ pub(crate) fn strip_do(response: &[u8]) -> Option<&[u8]> {
     }
 }
 
-/// Map pcsc::Error to standard PC/SC u32 error codes
-pub(crate) fn pcsc_error_to_u32(err: pcsc::Error) -> u32 {
-    match err {
-        pcsc::Error::Cancelled => SCARD_E_CANCELLED,
-        pcsc::Error::InvalidHandle => SCARD_E_INVALID_HANDLE,
-        pcsc::Error::InvalidParameter => SCARD_E_INVALID_PARAMETER,
-        pcsc::Error::NoMemory => SCARD_E_NO_MEMORY,
-        pcsc::Error::InsufficientBuffer => SCARD_E_INSUFFICIENT_BUFFER,
-        pcsc::Error::UnknownReader => SCARD_E_UNKNOWN_READER,
-        pcsc::Error::Timeout => SCARD_E_TIMEOUT,
-        pcsc::Error::SharingViolation => SCARD_E_SHARING_VIOLATION,
-        pcsc::Error::NoSmartcard => SCARD_E_NO_SMARTCARD,
-        pcsc::Error::UnknownCard => SCARD_E_UNKNOWN_CARD,
-        pcsc::Error::ProtoMismatch => SCARD_E_PROTO_MISMATCH,
-        pcsc::Error::NotReady => SCARD_E_NOT_READY,
-        pcsc::Error::InvalidValue => SCARD_E_INVALID_VALUE,
-        pcsc::Error::SystemCancelled => SCARD_E_SYSTEM_CANCELLED,
-        pcsc::Error::ReaderUnavailable => SCARD_E_READER_UNAVAILABLE,
-        pcsc::Error::UnsupportedCard => SCARD_W_UNSUPPORTED_CARD,
-        pcsc::Error::UnresponsiveCard => SCARD_W_UNRESPONSIVE_CARD,
-        pcsc::Error::UnpoweredCard => SCARD_W_UNPOWERED_CARD,
-        pcsc::Error::ResetCard => SCARD_W_RESET_CARD,
-        pcsc::Error::RemovedCard => SCARD_W_REMOVED_CARD,
-        pcsc::Error::UnsupportedFeature => SCARD_E_UNSUPPORTED_FEATURE,
-        pcsc::Error::NoService => SCARD_E_NO_SERVICE,
-        pcsc::Error::ServiceStopped => SCARD_E_SERVICE_STOPPED,
-        _ => SCARD_F_UNKNOWN_ERROR,
-    }
-}
-
-pub(crate) fn dword_to_share_mode(mode: DWORD) -> Result<pcsc::ShareMode, u32> {
+pub(crate) fn dword_to_share_mode(mode: DWORD) -> Result<DWORD, u32> {
     match mode {
-        ffi::SCARD_SHARE_EXCLUSIVE => Ok(pcsc::ShareMode::Exclusive),
-        ffi::SCARD_SHARE_SHARED => Ok(pcsc::ShareMode::Shared),
-        ffi::SCARD_SHARE_DIRECT => Ok(pcsc::ShareMode::Direct),
+        ffi::SCARD_SHARE_EXCLUSIVE | ffi::SCARD_SHARE_SHARED | ffi::SCARD_SHARE_DIRECT => Ok(mode),
         _ => Err(SCARD_E_INVALID_PARAMETER),
     }
 }
 
-pub(crate) fn dword_to_protocols(proto: DWORD) -> pcsc::Protocols {
-    let mut p = pcsc::Protocols::empty();
-    if proto & ffi::SCARD_PROTOCOL_T0 != 0 {
-        p.insert(pcsc::Protocols::T0);
-    }
-    if proto & ffi::SCARD_PROTOCOL_T1 != 0 {
-        p.insert(pcsc::Protocols::T1);
-    }
-    if p.is_empty() {
-        pcsc::Protocols::ANY
-    } else {
-        p
+/// The active protocol as WinSCard numbers it; pcsc-lite uses 4 for RAW where
+/// Windows uses 0x10000, and 0 (undefined) must stay 0 for direct connections.
+pub(crate) fn active_protocol_to_u32(protocol: DWORD) -> u32 {
+    match protocol {
+        ffi::SCARD_PROTOCOL_T0 => SCARD_PROTOCOL_T0,
+        ffi::SCARD_PROTOCOL_T1 => SCARD_PROTOCOL_T1,
+        ffi::SCARD_PROTOCOL_RAW => SCARD_PROTOCOL_RAW,
+        other => other as u32,
     }
 }
 
-pub(crate) fn protocol_to_u32(proto: pcsc::Protocol) -> u32 {
-    match proto {
-        pcsc::Protocol::T0 => SCARD_PROTOCOL_T0,
-        pcsc::Protocol::T1 => SCARD_PROTOCOL_T1,
-        pcsc::Protocol::RAW => SCARD_PROTOCOL_RAW,
-    }
-}
-
-pub(crate) fn dword_to_disposition(disp: DWORD) -> Result<pcsc::Disposition, u32> {
+pub(crate) fn dword_to_disposition(disp: DWORD) -> Result<DWORD, u32> {
     match disp {
-        ffi::SCARD_LEAVE_CARD => Ok(pcsc::Disposition::LeaveCard),
-        ffi::SCARD_RESET_CARD => Ok(pcsc::Disposition::ResetCard),
-        ffi::SCARD_UNPOWER_CARD => Ok(pcsc::Disposition::UnpowerCard),
-        ffi::SCARD_EJECT_CARD => Ok(pcsc::Disposition::EjectCard),
+        ffi::SCARD_LEAVE_CARD
+        | ffi::SCARD_RESET_CARD
+        | ffi::SCARD_UNPOWER_CARD
+        | ffi::SCARD_EJECT_CARD => Ok(disp),
         _ => Err(SCARD_E_INVALID_PARAMETER),
     }
-}
-
-pub(crate) fn dword_to_state(bits: DWORD) -> pcsc::State {
-    // Preserve all raw bits. `from_bits_truncate` would drop unknown flags such
-    // as 0x0001_0000 that the RDPSC protocol uses for the `\\?PnP?\Notification`
-    // pseudo-reader; dropping them makes SCardGetStatusChange report a spurious
-    // CHANGED state every poll, which breaks the remote reader monitoring loop.
-    pcsc::State::from_bits_retain(bits)
 }
 
 // SCardStatus card states (winscard.h). Unlike SCARD_STATE_* these are an
@@ -276,6 +225,23 @@ mod tests {
             pcsc_status_to_u32(pcsc::Status::PRESENT | pcsc::Status::POWERED),
             4
         );
+    }
+
+    #[test]
+    fn active_protocol_keeps_undefined_and_renumbers_raw() {
+        assert_eq!(active_protocol_to_u32(ffi::SCARD_PROTOCOL_UNDEFINED), 0);
+        assert_eq!(active_protocol_to_u32(ffi::SCARD_PROTOCOL_T0), 1);
+        assert_eq!(active_protocol_to_u32(ffi::SCARD_PROTOCOL_T1), 2);
+        assert_eq!(active_protocol_to_u32(ffi::SCARD_PROTOCOL_RAW), 0x0001_0000);
+    }
+
+    #[test]
+    fn share_modes_and_dispositions_are_validated() {
+        assert_eq!(dword_to_share_mode(3), Ok(3));
+        assert_eq!(dword_to_share_mode(4), Err(SCARD_E_INVALID_PARAMETER));
+        assert_eq!(dword_to_disposition(0), Ok(0));
+        assert_eq!(dword_to_disposition(3), Ok(3));
+        assert_eq!(dword_to_disposition(4), Err(SCARD_E_INVALID_PARAMETER));
     }
 
     #[test]
