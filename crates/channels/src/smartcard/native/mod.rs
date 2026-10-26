@@ -217,12 +217,20 @@ impl SmartcardBackend for NativeBackend {
             .status2(&mut r_buf, &mut a_buf)
             .map_err(pcsc_error_to_u32)?;
 
-        Ok(ScardStatus {
+        let result = ScardStatus {
             reader_names: vec![reader_name.clone()],
             state: pcsc_status_to_u32(status.status()),
             protocol: protocol_to_u32(status.protocol()),
             atr: status.atr().to_vec(),
-        })
+        };
+        log::trace!(
+            "smartcard native: status 0x{:X}: pcsc={:?} -> state={} protocol=0x{:X}",
+            handle.raw(),
+            status.status(),
+            result.state,
+            result.protocol
+        );
+        Ok(result)
     }
 
     #[allow(clippy::useless_conversion)]
