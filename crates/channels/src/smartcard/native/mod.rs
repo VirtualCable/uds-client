@@ -241,10 +241,9 @@ impl SmartcardBackend for NativeBackend {
         let contexts = self.registry.contexts.read().unwrap();
         let raw_ctx = contexts.get(&ctx.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
 
-        // Mimic the FreeRDP reference channel: never block the IRP thread for more
-        // than a small step (100ms). The caller re-polls on SCARD_E_TIMEOUT.
-        let step = timeout.min(Duration::from_millis(100));
-        let gsc_result = raw_ctx.get_status_change(step, &mut raw_states);
+        // The addin owns the polling loop, so this waits the whole timeout and
+        // an SCardCancel from another thread surfaces as SCARD_E_CANCELLED.
+        let gsc_result = raw_ctx.get_status_change(timeout, &mut raw_states);
 
         let results = reader_states
             .iter()
