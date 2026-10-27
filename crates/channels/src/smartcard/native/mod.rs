@@ -38,8 +38,7 @@ impl SmartcardBackend for NativeBackend {
     fn establish_context(&self, _scope: DWORD) -> Result<ScardContext, u32> {
         let raw_ctx = RawContext::establish()?;
         let sc_ctx = ScardContext::new();
-        let mut contexts = self.registry.contexts.write().unwrap();
-        contexts.insert(sc_ctx.raw(), raw_ctx);
+        self.registry.contexts.insert(sc_ctx.raw(), raw_ctx);
         Ok(sc_ctx)
     }
 
@@ -58,14 +57,15 @@ impl SmartcardBackend for NativeBackend {
             }
         }
 
-        let mut contexts = self.registry.contexts.write().unwrap();
-        contexts.remove(&ctx.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
+        self.registry
+            .contexts
+            .remove(ctx.raw())
+            .ok_or(SCARD_E_INVALID_HANDLE)?;
         Ok(())
     }
 
     fn is_valid_context(&self, ctx: &ScardContext) -> bool {
-        let contexts = self.registry.contexts.read().unwrap();
-        contexts.contains_key(&ctx.raw())
+        self.registry.contexts.contains(ctx.raw())
     }
 
     fn list_readers(
@@ -73,8 +73,11 @@ impl SmartcardBackend for NativeBackend {
         ctx: &ScardContext,
         _groups: Option<&[String]>,
     ) -> Result<Vec<String>, u32> {
-        let contexts = self.registry.contexts.read().unwrap();
-        let raw_ctx = contexts.get(&ctx.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
+        let raw_ctx = self
+            .registry
+            .contexts
+            .get(ctx.raw())
+            .ok_or(SCARD_E_INVALID_HANDLE)?;
 
         match raw_ctx.list_readers() {
             Err(SCARD_E_NO_READERS_AVAILABLE) => Ok(Vec::new()),
@@ -89,8 +92,11 @@ impl SmartcardBackend for NativeBackend {
         share_mode: DWORD,
         preferred_protocols: DWORD,
     ) -> Result<ConnectResult, u32> {
-        let contexts = self.registry.contexts.read().unwrap();
-        let raw_ctx = contexts.get(&ctx.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
+        let raw_ctx = self
+            .registry
+            .contexts
+            .get(ctx.raw())
+            .ok_or(SCARD_E_INVALID_HANDLE)?;
 
         let share = dword_to_share_mode(share_mode)?;
 
@@ -238,8 +244,11 @@ impl SmartcardBackend for NativeBackend {
             })
             .collect();
 
-        let contexts = self.registry.contexts.read().unwrap();
-        let raw_ctx = contexts.get(&ctx.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
+        let raw_ctx = self
+            .registry
+            .contexts
+            .get(ctx.raw())
+            .ok_or(SCARD_E_INVALID_HANDLE)?;
 
         // The addin owns the polling loop, so this waits the whole timeout and
         // an SCardCancel from another thread surfaces as SCARD_E_CANCELLED.
@@ -267,8 +276,11 @@ impl SmartcardBackend for NativeBackend {
     }
 
     fn cancel(&self, ctx: &ScardContext) -> Result<(), u32> {
-        let contexts = self.registry.contexts.read().unwrap();
-        let raw_ctx = contexts.get(&ctx.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
+        let raw_ctx = self
+            .registry
+            .contexts
+            .get(ctx.raw())
+            .ok_or(SCARD_E_INVALID_HANDLE)?;
         raw_ctx.cancel()
     }
 
