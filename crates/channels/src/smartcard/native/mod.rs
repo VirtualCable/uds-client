@@ -184,9 +184,21 @@ impl SmartcardBackend for NativeBackend {
             .transmit(data, &mut recv_buf)
             .map_err(pcsc_error_to_u32)?;
 
+        let recv_buffer = resp_slice.to_vec();
+        let mut r_buf = [0u8; 256];
+        let mut a_buf = [0u8; 36];
+        let recv_pci = card
+            .status2(&mut r_buf, &mut a_buf)
+            .ok()
+            .and_then(|status| status.protocol2())
+            .map(|protocol| ScardIORequest {
+                protocol: protocol_to_u32(protocol),
+                extra_bytes: Vec::new(),
+            });
+
         Ok(TransmitResult {
-            recv_pci: None,
-            recv_buffer: resp_slice.to_vec(),
+            recv_pci,
+            recv_buffer,
         })
     }
 
@@ -217,12 +229,20 @@ impl SmartcardBackend for NativeBackend {
             .status2(&mut r_buf, &mut a_buf)
             .map_err(pcsc_error_to_u32)?;
 
-        Ok(ScardStatus {
+        let result = ScardStatus {
             reader_names: vec![reader_name.clone()],
             state: pcsc_status_to_u32(status.status()),
             protocol: protocol_to_u32(status.protocol()),
             atr: status.atr().to_vec(),
-        })
+        };
+        log::trace!(
+            "smartcard native: status 0x{:X}: pcsc={:?} -> state={} protocol=0x{:X}",
+            handle.raw(),
+            status.status(),
+            result.state,
+            result.protocol
+        );
+        Ok(result)
     }
 
     #[allow(clippy::useless_conversion)]
@@ -240,13 +260,16 @@ impl SmartcardBackend for NativeBackend {
             pcsc_states.push(pcsc::ReaderState::new(cstr, current_state));
         }
 
-        let contexts = self.registry.contexts.read().unwrap();
-        let pcsc_ctx = contexts.get(&ctx.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
+        let pcsc_ctx = self
+            .registry
+            .contexts
+            .read()
+            .unwrap()
+            .get(&ctx.raw())
+            .ok_or(SCARD_E_INVALID_HANDLE)?
+            .clone();
 
-        // Mimic the FreeRDP reference channel: never block the IRP thread for more
-        // than a small step (100ms). The caller re-polls on SCARD_E_TIMEOUT.
-        let step = timeout.min(Duration::from_millis(100));
-        let gsc_result = pcsc_ctx.get_status_change(step, &mut pcsc_states);
+        let gsc_result = pcsc_ctx.get_status_change(timeout, &mut pcsc_states);
 
         let mut results = Vec::new();
         for (i, rs) in reader_states.iter().enumerate() {
@@ -290,15 +313,49 @@ impl SmartcardBackend for NativeBackend {
     }
 
     fn get_attrib(&self, handle: &ScardHandle, attr_id: DWORD) -> Result<Vec<u8>, u32> {
-        let attribute = dword_to_attribute(attr_id)?;
         let cards = self.registry.cards.read().unwrap();
-        let (card, _) = cards.get(&handle.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
+        let Some((card, reader_name)) = cards.get(&handle.raw()) else {
+            log::trace!(
+                "smartcard native: get_attrib 0x{:X}: unknown handle 0x{:X} (known: {:X?})",
+                attr_id,
+                handle.raw(),
+                cards.keys().collect::<Vec<_>>()
+            );
+            return Err(SCARD_E_INVALID_HANDLE);
+        };
+
+        if let Some(value) = system_attribute(attr_id, reader_name) {
+            log::trace!(
+                "smartcard native: get_attrib 0x{:X}: system attribute ({} bytes)",
+                attr_id,
+                value.len()
+            );
+            return Ok(value);
+        }
+        let Ok(attribute) = dword_to_attribute(attr_id) else {
+            log::trace!(
+                "smartcard native: get_attrib 0x{:X}: not supported",
+                attr_id
+            );
+            return Err(ERROR_NOT_SUPPORTED);
+        };
 
         let mut buf = vec![0u8; 1024];
-        let slice = card
+        // WinSCard reports a missing attribute as ERROR_NOT_SUPPORTED, a Win32
+        // code the pcsc crate can only surface as UnknownError.
+        let result = card
             .get_attribute(attribute, &mut buf)
-            .map_err(pcsc_error_to_u32)?;
-        Ok(slice.to_vec())
+            .map(<[u8]>::to_vec)
+            .map_err(|err| match err {
+                pcsc::Error::UnknownError => ERROR_NOT_SUPPORTED,
+                other => pcsc_error_to_u32(other),
+            });
+        log::trace!(
+            "smartcard native: get_attrib 0x{:X}: {:?}",
+            attr_id,
+            result.as_ref().map(Vec::len)
+        );
+        result
     }
 
     fn set_attrib(&self, handle: &ScardHandle, attr_id: DWORD, data: &[u8]) -> Result<(), u32> {
