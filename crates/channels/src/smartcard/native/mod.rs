@@ -260,13 +260,16 @@ impl SmartcardBackend for NativeBackend {
             pcsc_states.push(pcsc::ReaderState::new(cstr, current_state));
         }
 
-        let contexts = self.registry.contexts.read().unwrap();
-        let pcsc_ctx = contexts.get(&ctx.raw()).ok_or(SCARD_E_INVALID_HANDLE)?;
+        let pcsc_ctx = self
+            .registry
+            .contexts
+            .read()
+            .unwrap()
+            .get(&ctx.raw())
+            .ok_or(SCARD_E_INVALID_HANDLE)?
+            .clone();
 
-        // Mimic the FreeRDP reference channel: never block the IRP thread for more
-        // than a small step (100ms). The caller re-polls on SCARD_E_TIMEOUT.
-        let step = timeout.min(Duration::from_millis(100));
-        let gsc_result = pcsc_ctx.get_status_change(step, &mut pcsc_states);
+        let gsc_result = pcsc_ctx.get_status_change(timeout, &mut pcsc_states);
 
         let mut results = Vec::new();
         for (i, rs) in reader_states.iter().enumerate() {
