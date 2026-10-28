@@ -203,12 +203,107 @@ fn a_slow_printer_does_not_block_the_others() {
         std::thread::spawn(move || handle.write_data(slow, b"slow"))
     };
     barrier.wait();
-    assert_eq!(handle.write_data(fast, b"fast"), Ok(4));
-    handle.close_job(fast).unwrap();
+    // If the slow write blocked every printer, this write would never return
+    // and the slow one would wait forever at the second barrier: run it on its
+    // own thread and fail after a timeout instead of hanging the suite.
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    {
+        let handle = handle.clone();
+        std::thread::spawn(move || {
+            let result = handle.write_data(fast, b"fast");
+            handle.close_job(fast).unwrap();
+            done_tx.send(result).unwrap();
+        });
+    }
+    let fast_result = done_rx.recv_timeout(std::time::Duration::from_secs(5));
     barrier.wait();
+    assert_eq!(
+        fast_result,
+        Ok(Ok(4)),
+        "the fast printer was blocked by the slow one"
+    );
     assert_eq!(writer.join().unwrap(), Ok(4));
     assert_eq!(
         spool.lock().unwrap().written,
         vec![b"fast".to_vec(), b"slow".to_vec()]
     );
+}
+
+#[test]
+fn a_close_racing_a_failed_write_never_prints_the_job() {
+    let barrier = Arc::new(std::sync::Barrier::new(2));
+    let backend = FakeBackend {
+        fail_write: true,
+        blocked: Some(("Office".into(), barrier.clone())),
+        ..Default::default()
+    };
+    let spool = backend.spool.clone();
+    let handle = Arc::new(PrinterHandle::with_backend(Some(Box::new(backend))));
+    let job_id = handle.create_job("Office").unwrap();
+
+    let writer = {
+        let handle = handle.clone();
+        std::thread::spawn(move || handle.write_data(job_id, b"page"))
+    };
+    barrier.wait();
+    let closer = {
+        let handle = handle.clone();
+        std::thread::spawn(move || handle.close_job(job_id))
+    };
+    // Give the close time to reach the job lock held by the failing write.
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    barrier.wait();
+
+    assert_eq!(writer.join().unwrap(), Err(STATUS_UNSUCCESSFUL));
+    assert_eq!(closer.join().unwrap(), Err(STATUS_INVALID_HANDLE));
+    let spool = spool.lock().unwrap();
+    assert_eq!((spool.finished, spool.aborted), (0, 1));
+}
+
+#[test]
+fn write_all_retries_short_writes_until_the_chunk_is_done() {
+    let mut calls = Vec::new();
+    let result = write_all(b"abcdef", |pending| {
+        calls.push(pending.to_vec());
+        Ok(pending.len().min(4))
+    });
+    assert_eq!(result, Ok(6));
+    assert_eq!(calls, vec![b"abcdef".to_vec(), b"ef".to_vec()]);
+}
+
+#[test]
+fn write_all_fails_when_the_spooler_makes_no_progress() {
+    assert_eq!(write_all(b"abc", |_| Ok(0)), Err(STATUS_UNSUCCESSFUL));
+    assert_eq!(write_all(b"abc", |_| Err(0xC000_0022)), Err(0xC000_0022));
+    assert_eq!(write_all(b"abc", |_| Ok(9)), Err(STATUS_UNSUCCESSFUL));
+}
+
+#[test]
+fn the_os_default_printer_is_announced_as_default() {
+    let printers = announce(
+        vec![
+            ("A".into(), "Driver A".into(), None),
+            ("B".into(), "Driver B".into(), Some("USB001".into())),
+        ],
+        Some("B"),
+    );
+    let defaults: Vec<_> = printers
+        .iter()
+        .map(|p| (p.id, p.name.as_str(), p.is_default))
+        .collect();
+    assert_eq!(defaults, vec![(1, "A", false), (2, "B", true)]);
+    assert_eq!(printers[1].port_name.as_deref(), Some("USB001"));
+}
+
+#[test]
+fn the_first_printer_is_default_when_the_os_has_none() {
+    let printers = announce(
+        vec![
+            ("A".into(), "Driver A".into(), None),
+            ("B".into(), "Driver B".into(), None),
+        ],
+        None,
+    );
+    assert!(printers[0].is_default && !printers[1].is_default);
+    assert!(announce(Vec::new(), None).is_empty());
 }

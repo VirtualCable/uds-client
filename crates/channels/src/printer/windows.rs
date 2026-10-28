@@ -26,8 +26,7 @@ pub(crate) struct WindowsBackend;
 
 impl PrinterBackend for WindowsBackend {
     fn list_printers(&self) -> Vec<PrinterDeviceInfo> {
-        let default = default_printer();
-        let mut printers: Vec<PrinterDeviceInfo> = enum_printers()
+        let printers = enum_printers()
             .into_iter()
             // Stale connected queues are listed but cannot be opened; announcing
             // them would only make every job on them fail.
@@ -38,24 +37,8 @@ impl PrinterBackend for WindowsBackend {
                     false
                 }
             })
-            .enumerate()
-            .map(
-                |(index, (name, driver_name, port_name))| PrinterDeviceInfo {
-                    id: index as u32 + 1,
-                    is_default: default.as_deref() == Some(name.as_str()),
-                    name,
-                    driver_name,
-                    port_name,
-                },
-            )
             .collect();
-        // Like FreeRDP, the first printer is the default when Windows has none.
-        if !printers.iter().any(|printer| printer.is_default)
-            && let Some(first) = printers.first_mut()
-        {
-            first.is_default = true;
-        }
-        printers
+        super::announce(printers, default_printer().as_deref())
     }
 
     fn start_job(&self, printer_name: &str, job_name: &str) -> Result<Box<dyn BackendJob>, u32> {
@@ -118,20 +101,18 @@ struct SpoolerJob {
 
 impl BackendJob for SpoolerJob {
     fn write(&mut self, data: &[u8]) -> Result<usize, u32> {
-        let mut pending = data;
-        while !pending.is_empty() {
+        super::write_all(data, |pending| {
             let len = u32::try_from(pending.len()).map_err(|_| STATUS_UNSUCCESSFUL)?;
             let mut written = 0u32;
             let ok =
                 unsafe { WritePrinter(self.printer.0, pending.as_ptr().cast(), len, &mut written) }
                     .as_bool();
-            if !ok || written == 0 {
+            if !ok {
                 log::error!("printer: WritePrinter failed: {}", last_error());
                 return Err(STATUS_UNSUCCESSFUL);
             }
-            pending = &pending[written as usize..];
-        }
-        Ok(data.len())
+            Ok(written as usize)
+        })
     }
 
     fn finish(self: Box<Self>) -> Result<(), u32> {

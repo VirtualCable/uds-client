@@ -109,6 +109,52 @@ fn platform_backend() -> Option<Box<dyn PrinterBackend>> {
     None
 }
 
+/// Builds the printers announced to the session from (name, driver, port).
+/// Like FreeRDP, the first printer is the default when the OS has none.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn announce(
+    printers: Vec<(String, String, Option<String>)>,
+    default: Option<&str>,
+) -> Vec<PrinterDeviceInfo> {
+    let mut announced: Vec<PrinterDeviceInfo> = printers
+        .into_iter()
+        .enumerate()
+        .map(
+            |(index, (name, driver_name, port_name))| PrinterDeviceInfo {
+                id: index as u32 + 1,
+                is_default: default == Some(name.as_str()),
+                name,
+                driver_name,
+                port_name,
+            },
+        )
+        .collect();
+    if !announced.iter().any(|printer| printer.is_default)
+        && let Some(first) = announced.first_mut()
+    {
+        first.is_default = true;
+    }
+    announced
+}
+
+/// Calls `write` until the whole chunk is accepted: spoolers may take fewer
+/// bytes than offered. A call that makes no progress is an error.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn write_all(
+    data: &[u8],
+    mut write: impl FnMut(&[u8]) -> Result<usize, u32>,
+) -> Result<usize, u32> {
+    let mut pending = data;
+    while !pending.is_empty() {
+        let written = write(pending)?;
+        if written == 0 || written > pending.len() {
+            return Err(STATUS_UNSUCCESSFUL);
+        }
+        pending = &pending[written..];
+    }
+    Ok(data.len())
+}
+
 impl PrinterIntegration for PrinterHandle {
     fn is_available(&self) -> bool {
         self.backend.is_some()
@@ -134,15 +180,20 @@ impl PrinterIntegration for PrinterHandle {
 
     fn write_data(&self, job_id: u32, data: &[u8]) -> Result<usize, u32> {
         let slot = self.find_job(job_id).ok_or(STATUS_INVALID_HANDLE)?;
-        let result = {
-            let mut job = slot.lock().map_err(|_| STATUS_UNSUCCESSFUL)?;
-            job.as_mut().ok_or(STATUS_INVALID_HANDLE)?.write(data)
-        };
-        if result.is_err() {
+        let mut job = slot.lock().map_err(|_| STATUS_UNSUCCESSFUL)?;
+        let result = job.as_mut().ok_or(STATUS_INVALID_HANDLE)?.write(data);
+        if result.is_err()
+            && let Some(failed) = job.take()
+        {
             // The addin ignores errors on close, so a job that lost data must
-            // not reach close_job and be printed incomplete.
+            // not reach close_job and be printed incomplete. It is taken out
+            // while still locked so a racing close finds the slot empty.
+            drop(job);
             log::error!("printer: aborting job {job_id} after a failed write");
-            self.abort_job(job_id);
+            failed.abort();
+            if let Ok(mut jobs) = self.jobs.lock() {
+                jobs.remove(&job_id);
+            }
         }
         result
     }
