@@ -27,8 +27,17 @@ pub(crate) struct WindowsBackend;
 impl PrinterBackend for WindowsBackend {
     fn list_printers(&self) -> Vec<PrinterDeviceInfo> {
         let default = default_printer();
-        enum_printers()
+        let mut printers: Vec<PrinterDeviceInfo> = enum_printers()
             .into_iter()
+            // Stale connected queues are listed but cannot be opened; announcing
+            // them would only make every job on them fail.
+            .filter(|(name, _, _)| match Printer::open(name) {
+                Ok(_) => true,
+                Err(err) => {
+                    log::warn!("printer: skipping '{name}', it cannot be opened: {err}");
+                    false
+                }
+            })
             .enumerate()
             .map(
                 |(index, (name, driver_name, port_name))| PrinterDeviceInfo {
@@ -39,11 +48,21 @@ impl PrinterBackend for WindowsBackend {
                     port_name,
                 },
             )
-            .collect()
+            .collect();
+        // Like FreeRDP, the first printer is the default when Windows has none.
+        if !printers.iter().any(|printer| printer.is_default)
+            && let Some(first) = printers.first_mut()
+        {
+            first.is_default = true;
+        }
+        printers
     }
 
     fn start_job(&self, printer_name: &str, job_name: &str) -> Result<Box<dyn BackendJob>, u32> {
-        let printer = Printer::open(printer_name)?;
+        let printer = Printer::open(printer_name).map_err(|err| {
+            log::error!("printer: OpenPrinterW failed for '{printer_name}': {err}");
+            STATUS_UNSUCCESSFUL
+        })?;
         let mut doc_name = U16CString::from_str(job_name).map_err(|_| STATUS_UNSUCCESSFUL)?;
         let mut datatype = U16CString::from_str("RAW").map_err(|_| STATUS_UNSUCCESSFUL)?;
         let doc_info = DOC_INFO_1W {
@@ -77,16 +96,10 @@ struct Printer(PRINTER_HANDLE);
 unsafe impl Send for Printer {}
 
 impl Printer {
-    fn open(name: &str) -> Result<Self, u32> {
-        let name = U16CString::from_str(name).map_err(|_| STATUS_UNSUCCESSFUL)?;
+    fn open(name: &str) -> windows::core::Result<Self> {
+        let name = U16CString::from_str(name).map_err(|_| windows::core::Error::empty())?;
         let mut handle = PRINTER_HANDLE::default();
-        unsafe { OpenPrinterW(PCWSTR(name.as_ptr()), &mut handle, None) }.map_err(|err| {
-            log::error!(
-                "printer: OpenPrinterW failed for '{}': {err}",
-                name.to_string_lossy()
-            );
-            STATUS_UNSUCCESSFUL
-        })?;
+        unsafe { OpenPrinterW(PCWSTR(name.as_ptr()), &mut handle, None) }?;
         Ok(Self(handle))
     }
 }
@@ -105,15 +118,20 @@ struct SpoolerJob {
 
 impl BackendJob for SpoolerJob {
     fn write(&mut self, data: &[u8]) -> Result<usize, u32> {
-        let len = u32::try_from(data.len()).map_err(|_| STATUS_UNSUCCESSFUL)?;
-        let mut written = 0u32;
-        if !unsafe { WritePrinter(self.printer.0, data.as_ptr().cast(), len, &mut written) }
-            .as_bool()
-        {
-            log::error!("printer: WritePrinter failed: {}", last_error());
-            return Err(STATUS_UNSUCCESSFUL);
+        let mut pending = data;
+        while !pending.is_empty() {
+            let len = u32::try_from(pending.len()).map_err(|_| STATUS_UNSUCCESSFUL)?;
+            let mut written = 0u32;
+            let ok =
+                unsafe { WritePrinter(self.printer.0, pending.as_ptr().cast(), len, &mut written) }
+                    .as_bool();
+            if !ok || written == 0 {
+                log::error!("printer: WritePrinter failed: {}", last_error());
+                return Err(STATUS_UNSUCCESSFUL);
+            }
+            pending = &pending[written as usize..];
         }
-        Ok(written as usize)
+        Ok(data.len())
     }
 
     fn finish(self: Box<Self>) -> Result<(), u32> {

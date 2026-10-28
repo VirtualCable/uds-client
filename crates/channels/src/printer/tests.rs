@@ -14,14 +14,26 @@ struct Spool {
 struct FakeBackend {
     spool: Arc<Mutex<Spool>>,
     fail_start: bool,
+    fail_write: bool,
+    // When set, writes on the job opened for this printer wait until it is released.
+    blocked: Option<(String, Arc<std::sync::Barrier>)>,
 }
 
 struct FakeJob {
     spool: Arc<Mutex<Spool>>,
+    fail_write: bool,
+    blocked: Option<Arc<std::sync::Barrier>>,
 }
 
 impl BackendJob for FakeJob {
     fn write(&mut self, data: &[u8]) -> Result<usize, u32> {
+        if let Some(barrier) = &self.blocked {
+            barrier.wait();
+            barrier.wait();
+        }
+        if self.fail_write {
+            return Err(STATUS_UNSUCCESSFUL);
+        }
         self.spool.lock().unwrap().written.push(data.to_vec());
         Ok(data.len())
     }
@@ -58,6 +70,12 @@ impl PrinterBackend for FakeBackend {
             .push((printer_name.into(), job_name.into()));
         Ok(Box::new(FakeJob {
             spool: self.spool.clone(),
+            fail_write: self.fail_write,
+            blocked: self
+                .blocked
+                .as_ref()
+                .filter(|(name, _)| name == printer_name)
+                .map(|(_, barrier)| barrier.clone()),
         }))
     }
 }
@@ -149,4 +167,48 @@ fn jobs_left_open_are_aborted_when_the_session_ends() {
     drop(handle);
     let spool = spool.lock().unwrap();
     assert_eq!((spool.finished, spool.aborted), (1, 1));
+}
+
+#[test]
+fn a_failed_write_aborts_the_job_instead_of_printing_it_incomplete() {
+    let backend = FakeBackend {
+        fail_write: true,
+        ..Default::default()
+    };
+    let spool = backend.spool.clone();
+    let handle = PrinterHandle::with_backend(Some(Box::new(backend)));
+    let job_id = handle.create_job("Office").unwrap();
+
+    assert_eq!(handle.write_data(job_id, b"page"), Err(STATUS_UNSUCCESSFUL));
+    assert_eq!(handle.open_jobs(), 0);
+    assert_eq!(handle.close_job(job_id), Err(STATUS_INVALID_HANDLE));
+    let spool = spool.lock().unwrap();
+    assert_eq!((spool.finished, spool.aborted), (0, 1));
+}
+
+#[test]
+fn a_slow_printer_does_not_block_the_others() {
+    let barrier = Arc::new(std::sync::Barrier::new(2));
+    let backend = FakeBackend {
+        blocked: Some(("Slow".into(), barrier.clone())),
+        ..Default::default()
+    };
+    let spool = backend.spool.clone();
+    let handle = Arc::new(PrinterHandle::with_backend(Some(Box::new(backend))));
+    let slow = handle.create_job("Slow").unwrap();
+    let fast = handle.create_job("Office").unwrap();
+
+    let writer = {
+        let handle = handle.clone();
+        std::thread::spawn(move || handle.write_data(slow, b"slow"))
+    };
+    barrier.wait();
+    assert_eq!(handle.write_data(fast, b"fast"), Ok(4));
+    handle.close_job(fast).unwrap();
+    barrier.wait();
+    assert_eq!(writer.join().unwrap(), Ok(4));
+    assert_eq!(
+        spool.lock().unwrap().written,
+        vec![b"fast".to_vec(), b"slow".to_vec()]
+    );
 }

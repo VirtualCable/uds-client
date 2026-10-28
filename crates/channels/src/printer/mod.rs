@@ -20,8 +20,8 @@
 //! Refer to `doc/printer-redirection-plan.md` for full specifications.
 
 use std::collections::HashMap;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 
 use rdp::integrations::printer::{PrinterDeviceInfo, PrinterIntegration};
 
@@ -33,6 +33,7 @@ const STATUS_INVALID_HANDLE: u32 = 0xC000_0008;
 
 /// A print job opened in the local spooler, as the backend sees it.
 pub(crate) trait BackendJob: Send {
+    /// Writes the whole chunk or fails.
     fn write(&mut self, data: &[u8]) -> Result<usize, u32>;
     fn finish(self: Box<Self>) -> Result<(), u32>;
     fn abort(self: Box<Self>);
@@ -44,11 +45,16 @@ pub(crate) trait PrinterBackend: Send + Sync + std::fmt::Debug {
     fn start_job(&self, printer_name: &str, job_name: &str) -> Result<Box<dyn BackendJob>, u32>;
 }
 
+/// An open job; emptied when it is finished or aborted.
+type JobSlot = Arc<Mutex<Option<Box<dyn BackendJob>>>>;
+
 pub struct PrinterHandle {
     backend: Option<Box<dyn PrinterBackend>>,
     // The RDP server echoes this id back as FileId on every write and close.
     next_job_id: AtomicU32,
-    jobs: Mutex<HashMap<u32, Box<dyn BackendJob>>>,
+    // Each job has its own lock so a slow spooler call on one printer does
+    // not stall the worker threads of the others.
+    jobs: Mutex<HashMap<u32, JobSlot>>,
 }
 
 impl std::fmt::Debug for PrinterHandle {
@@ -83,8 +89,13 @@ impl PrinterHandle {
         self.jobs.lock().map(|jobs| jobs.len()).unwrap_or(0)
     }
 
+    fn find_job(&self, job_id: u32) -> Option<JobSlot> {
+        self.jobs.lock().ok()?.get(&job_id).cloned()
+    }
+
     fn take_job(&self, job_id: u32) -> Option<Box<dyn BackendJob>> {
-        self.jobs.lock().ok()?.remove(&job_id)
+        let slot = self.jobs.lock().ok()?.remove(&job_id)?;
+        slot.lock().ok()?.take()
     }
 }
 
@@ -117,14 +128,23 @@ impl PrinterIntegration for PrinterHandle {
         self.jobs
             .lock()
             .map_err(|_| STATUS_UNSUCCESSFUL)?
-            .insert(job_id, job);
+            .insert(job_id, Arc::new(Mutex::new(Some(job))));
         Ok(job_id)
     }
 
     fn write_data(&self, job_id: u32, data: &[u8]) -> Result<usize, u32> {
-        let mut jobs = self.jobs.lock().map_err(|_| STATUS_UNSUCCESSFUL)?;
-        let job = jobs.get_mut(&job_id).ok_or(STATUS_INVALID_HANDLE)?;
-        job.write(data)
+        let slot = self.find_job(job_id).ok_or(STATUS_INVALID_HANDLE)?;
+        let result = {
+            let mut job = slot.lock().map_err(|_| STATUS_UNSUCCESSFUL)?;
+            job.as_mut().ok_or(STATUS_INVALID_HANDLE)?.write(data)
+        };
+        if result.is_err() {
+            // The addin ignores errors on close, so a job that lost data must
+            // not reach close_job and be printed incomplete.
+            log::error!("printer: aborting job {job_id} after a failed write");
+            self.abort_job(job_id);
+        }
+        result
     }
 
     fn close_job(&self, job_id: u32) -> Result<(), u32> {
@@ -145,9 +165,11 @@ impl Drop for PrinterHandle {
         let Ok(jobs) = self.jobs.get_mut() else {
             return;
         };
-        for (job_id, job) in jobs.drain() {
-            log::warn!("printer: aborting job {job_id} left open at session end");
-            job.abort();
+        for (job_id, slot) in jobs.drain() {
+            if let Some(job) = slot.lock().ok().and_then(|mut job| job.take()) {
+                log::warn!("printer: aborting job {job_id} left open at session end");
+                job.abort();
+            }
         }
     }
 }
