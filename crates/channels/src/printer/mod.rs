@@ -125,34 +125,31 @@ fn platform_backend() -> Option<Box<dyn PrinterBackend>> {
 /// announcing them would only make every job on them fail.
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 fn keep_openable(
-    printers: Vec<(String, String, Option<String>)>,
+    printers: Vec<(String, String)>,
     mut can_open: impl FnMut(&str) -> bool,
-) -> Vec<(String, String, Option<String>)> {
+) -> Vec<(String, String)> {
     printers
         .into_iter()
-        .filter(|(name, _, _)| can_open(name))
+        .filter(|(name, _)| can_open(name))
         .collect()
 }
 
-/// Builds the printers announced to the session from (name, driver, port).
+/// Builds the printers announced to the session from (name, driver).
 /// Like FreeRDP, the first printer is the default when the OS has none.
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-fn announce(
-    printers: Vec<(String, String, Option<String>)>,
-    default: Option<&str>,
-) -> Vec<PrinterDeviceInfo> {
+fn announce(printers: Vec<(String, String)>, default: Option<&str>) -> Vec<PrinterDeviceInfo> {
     let mut announced: Vec<PrinterDeviceInfo> = printers
         .into_iter()
         .enumerate()
-        .map(
-            |(index, (name, driver_name, port_name))| PrinterDeviceInfo {
-                id: index as u32 + 1,
-                is_default: default == Some(name.as_str()),
-                name,
-                driver_name,
-                port_name,
-            },
-        )
+        .map(|(index, (name, driver_name))| PrinterDeviceInfo {
+            id: index as u32 + 1,
+            is_default: default == Some(name.as_str()),
+            name,
+            driver_name,
+            // The addin then announces PRN<n>: the device name has 8 bytes,
+            // so Windows port names ("PORTPROMPT:", "WSD-...") get cut.
+            port_name: None,
+        })
         .collect();
     if !announced.iter().any(|printer| printer.is_default)
         && let Some(first) = announced.first_mut()

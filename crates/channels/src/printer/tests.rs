@@ -285,8 +285,8 @@ fn write_all_fails_when_the_spooler_makes_no_progress() {
 fn the_os_default_printer_is_announced_as_default() {
     let printers = announce(
         vec![
-            ("A".into(), "Driver A".into(), None),
-            ("B".into(), "Driver B".into(), Some("USB001".into())),
+            ("A".into(), "Driver A".into()),
+            ("B".into(), "Driver B".into()),
         ],
         Some("B"),
     );
@@ -295,15 +295,15 @@ fn the_os_default_printer_is_announced_as_default() {
         .map(|p| (p.id, p.name.as_str(), p.is_default))
         .collect();
     assert_eq!(defaults, vec![(1, "A", false), (2, "B", true)]);
-    assert_eq!(printers[1].port_name.as_deref(), Some("USB001"));
+    assert!(printers.iter().all(|p| p.port_name.is_none()));
 }
 
 #[test]
 fn the_first_printer_is_default_when_the_os_has_none() {
     let printers = announce(
         vec![
-            ("A".into(), "Driver A".into(), None),
-            ("B".into(), "Driver B".into(), None),
+            ("A".into(), "Driver A".into()),
+            ("B".into(), "Driver B".into()),
         ],
         None,
     );
@@ -342,12 +342,9 @@ fn a_late_cleanup_does_not_remove_a_job_that_reused_the_id() {
 #[test]
 fn queues_that_cannot_be_opened_are_not_announced() {
     let listed = vec![
-        ("Office".into(), "Driver".into(), None),
-        ("Stale".into(), "Driver".into(), None),
+        ("Office".into(), "Driver".into()),
+        ("Stale".into(), "Driver".into()),
     ];
     let kept = keep_openable(listed, |name| name != "Stale");
-    assert_eq!(
-        kept,
-        vec![("Office".to_string(), "Driver".to_string(), None)]
-    );
+    assert_eq!(kept, vec![("Office".to_string(), "Driver".to_string())]);
 }

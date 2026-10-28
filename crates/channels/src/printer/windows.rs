@@ -148,8 +148,8 @@ fn default_printer() -> Option<String> {
         .map(|name| name.to_string_lossy())
 }
 
-/// Local and connected printers as (name, driver, port).
-fn enum_printers() -> Vec<(String, String, Option<String>)> {
+/// Local and connected printers as (name, driver).
+fn enum_printers() -> Vec<(String, String)> {
     let flags = PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS;
     let (mut needed, mut returned) = (0u32, 0u32);
     // The first call only reports the buffer size and always fails with ERROR_INSUFFICIENT_BUFFER.
@@ -183,7 +183,7 @@ fn enum_printers() -> Vec<(String, String, Option<String>)> {
         .filter_map(|info| {
             let name = pwstr_to_string(info.pPrinterName)?;
             let driver = pwstr_to_string(info.pDriverName)?;
-            Some((name, driver, pwstr_to_string(info.pPortName)))
+            Some((name, driver))
         })
         .collect()
 }
