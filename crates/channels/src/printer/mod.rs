@@ -20,6 +20,8 @@
 //! Refer to `doc/printer-redirection-plan.md` for full specifications.
 
 use std::collections::HashMap;
+use std::io::Write;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -43,6 +45,78 @@ pub(crate) trait BackendJob: Send {
 pub(crate) trait PrinterBackend: Send + Sync + std::fmt::Debug {
     fn list_printers(&self) -> Vec<PrinterDeviceInfo>;
     fn start_job(&self, printer_name: &str, job_name: &str) -> Result<Box<dyn BackendJob>, u32>;
+}
+
+/// Print to PDF on the server already sends a finished PDF, and the local
+/// Print to PDF queue rejects it (it expects XPS). Jobs for that driver are
+/// written to a file and the user picks where to save it.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+const PRINT_TO_PDF_DRIVER: &str = "Microsoft Print To PDF";
+
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn is_print_to_pdf(driver_name: &str) -> bool {
+    driver_name.eq_ignore_ascii_case(PRINT_TO_PDF_DRIVER)
+}
+
+/// Receives the finished PDF in a temporary file and the suggested name.
+pub(crate) type DeliverPdf = fn(PathBuf, String);
+
+/// A job saved to a temporary file and handed to `deliver` when it is complete.
+pub(crate) struct SaveAsPdfJob {
+    file: std::fs::File,
+    path: PathBuf,
+    suggested_name: String,
+    deliver: DeliverPdf,
+}
+
+impl SaveAsPdfJob {
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+    pub(crate) fn create(job_name: &str, deliver: DeliverPdf) -> Result<Self, u32> {
+        let path = std::env::temp_dir().join(format!(
+            "uds-print-{}-{}.pdf",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        let file = std::fs::File::create(&path).map_err(|err| {
+            log::error!("printer: cannot create {}: {err}", path.display());
+            STATUS_UNSUCCESSFUL
+        })?;
+        Ok(Self {
+            file,
+            path,
+            suggested_name: format!("{job_name}.pdf"),
+            deliver,
+        })
+    }
+}
+
+impl BackendJob for SaveAsPdfJob {
+    fn write(&mut self, data: &[u8]) -> Result<usize, u32> {
+        self.file.write_all(data).map_err(|err| {
+            log::error!("printer: writing {} failed: {err}", self.path.display());
+            STATUS_UNSUCCESSFUL
+        })?;
+        Ok(data.len())
+    }
+
+    fn finish(self: Box<Self>) -> Result<(), u32> {
+        let Self {
+            file,
+            path,
+            suggested_name,
+            deliver,
+        } = *self;
+        file.sync_all().map_err(|_| STATUS_UNSUCCESSFUL)?;
+        drop(file);
+        deliver(path, suggested_name);
+        Ok(())
+    }
+
+    fn abort(self: Box<Self>) {
+        let Self { file, path, .. } = *self;
+        drop(file);
+        let _ = std::fs::remove_file(path);
+    }
 }
 
 /// An open job; emptied when it is finished or aborted.

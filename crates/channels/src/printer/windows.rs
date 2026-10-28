@@ -16,11 +16,18 @@ use windows::Win32::Graphics::Printing::{
     GetDefaultPrinterW, OpenPrinterW, PRINTER_ENUM_CONNECTIONS, PRINTER_ENUM_LOCAL, PRINTER_HANDLE,
     PRINTER_INFO_2W, StartDocPrinterW, StartPagePrinter, WritePrinter,
 };
+use windows::Win32::System::Com::{
+    COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE, CoInitializeEx, CoUninitialize,
+};
+use windows::Win32::UI::Controls::Dialogs::{
+    GetSaveFileNameW, OFN_EXPLORER, OFN_NOCHANGEDIR, OFN_OVERWRITEPROMPT, OFN_PATHMUSTEXIST,
+    OPENFILENAMEW,
+};
 use windows::core::{PCWSTR, PWSTR};
 
 use rdp::integrations::printer::PrinterDeviceInfo;
 
-use super::{BackendJob, PrinterBackend, STATUS_UNSUCCESSFUL};
+use super::{BackendJob, PrinterBackend, STATUS_UNSUCCESSFUL, SaveAsPdfJob};
 
 #[derive(Debug)]
 pub(crate) struct WindowsBackend;
@@ -39,6 +46,9 @@ impl PrinterBackend for WindowsBackend {
     }
 
     fn start_job(&self, printer_name: &str, job_name: &str) -> Result<Box<dyn BackendJob>, u32> {
+        if printer_driver(printer_name).is_some_and(|driver| super::is_print_to_pdf(&driver)) {
+            return Ok(Box::new(SaveAsPdfJob::create(job_name, save_pdf_as)?));
+        }
         let printer = Printer::open(printer_name).map_err(|err| {
             log::error!("printer: OpenPrinterW failed for '{printer_name}': {err}");
             STATUS_UNSUCCESSFUL
@@ -148,6 +158,13 @@ fn default_printer() -> Option<String> {
         .map(|name| name.to_string_lossy())
 }
 
+fn printer_driver(printer_name: &str) -> Option<String> {
+    enum_printers()
+        .into_iter()
+        .find(|(name, _)| name == printer_name)
+        .map(|(_, driver)| driver)
+}
+
 /// Local and connected printers as (name, driver).
 fn enum_printers() -> Vec<(String, String)> {
     let flags = PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS;
@@ -193,4 +210,64 @@ fn pwstr_to_string(value: PWSTR) -> Option<String> {
         return None;
     }
     unsafe { value.to_string() }.ok()
+}
+
+/// Asks where to save the PDF on its own thread, so the printer worker is not
+/// blocked while the dialog is open.
+fn save_pdf_as(temp: std::path::PathBuf, suggested_name: String) {
+    let spawned = std::thread::Builder::new()
+        .name("printer-save-pdf".into())
+        .spawn(move || {
+            let _ =
+                unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE) };
+            let target = ask_save_path(&suggested_name);
+            unsafe { CoUninitialize() };
+            match target {
+                Some(target) => move_file(&temp, &target),
+                None => {
+                    log::info!("printer: PDF not saved, the dialog was cancelled");
+                    let _ = std::fs::remove_file(&temp);
+                }
+            }
+        });
+    if let Err(err) = spawned {
+        log::error!("printer: cannot open the save dialog: {err}");
+    }
+}
+
+fn move_file(from: &std::path::Path, to: &std::path::Path) {
+    // The temporary folder may be on another volume, where rename fails.
+    let result = std::fs::rename(from, to).or_else(|_| {
+        std::fs::copy(from, to)?;
+        std::fs::remove_file(from)
+    });
+    match result {
+        Ok(()) => log::info!("printer: PDF saved to {}", to.display()),
+        Err(err) => log::error!("printer: saving the PDF to {} failed: {err}", to.display()),
+    }
+}
+
+fn ask_save_path(suggested_name: &str) -> Option<std::path::PathBuf> {
+    const MAX_PATH_CHARS: usize = 32_768;
+    let mut buffer = vec![0u16; MAX_PATH_CHARS];
+    let name: Vec<u16> = suggested_name.encode_utf16().collect();
+    buffer[..name.len().min(MAX_PATH_CHARS - 1)]
+        .copy_from_slice(&name[..name.len().min(MAX_PATH_CHARS - 1)]);
+    let filter: Vec<u16> = "PDF\0*.pdf\0\0".encode_utf16().collect();
+    let default_ext = U16CString::from_str("pdf").ok()?;
+    let mut ofn = OPENFILENAMEW {
+        lStructSize: std::mem::size_of::<OPENFILENAMEW>() as u32,
+        lpstrFilter: PCWSTR(filter.as_ptr()),
+        lpstrFile: PWSTR(buffer.as_mut_ptr()),
+        nMaxFile: MAX_PATH_CHARS as u32,
+        lpstrDefExt: PCWSTR(default_ext.as_ptr()),
+        Flags: OFN_EXPLORER | OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR,
+        ..Default::default()
+    };
+    if !unsafe { GetSaveFileNameW(&mut ofn) }.as_bool() {
+        return None;
+    }
+    U16CStr::from_slice_truncate(&buffer)
+        .ok()
+        .map(|path| std::path::PathBuf::from(path.to_os_string()))
 }

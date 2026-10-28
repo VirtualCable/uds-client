@@ -348,3 +348,47 @@ fn queues_that_cannot_be_opened_are_not_announced() {
     let kept = keep_openable(listed, |name| name != "Stale");
     assert_eq!(kept, vec![("Office".to_string(), "Driver".to_string())]);
 }
+
+static DELIVERED: Mutex<Vec<(std::path::PathBuf, String)>> = Mutex::new(Vec::new());
+
+fn record_delivery(path: std::path::PathBuf, name: String) {
+    DELIVERED.lock().unwrap().push((path, name));
+}
+
+#[test]
+fn print_to_pdf_is_recognised_by_its_driver() {
+    assert!(is_print_to_pdf("Microsoft Print To PDF"));
+    assert!(is_print_to_pdf("microsoft print to pdf"));
+    assert!(!is_print_to_pdf("Microsoft XPS Document Writer v4"));
+}
+
+#[test]
+fn a_pdf_job_is_written_to_a_file_and_handed_over_when_finished() {
+    let mut job = Box::new(SaveAsPdfJob::create("UDS print job 7", record_delivery).unwrap());
+    let path = job.path.clone();
+    job.write(b"%PDF-1.7\n").unwrap();
+    job.write(b"%%EOF").unwrap();
+    job.finish().unwrap();
+
+    let delivered = DELIVERED.lock().unwrap().clone();
+    let (file, name) = delivered.iter().find(|(file, _)| *file == path).unwrap();
+    assert_eq!(name, "UDS print job 7.pdf");
+    assert_eq!(std::fs::read(file).unwrap(), b"%PDF-1.7\n%%EOF");
+    std::fs::remove_file(file).unwrap();
+}
+
+#[test]
+fn an_aborted_pdf_job_leaves_no_file_behind() {
+    let mut job = Box::new(SaveAsPdfJob::create("UDS print job 8", record_delivery).unwrap());
+    let path = job.path.clone();
+    job.write(b"%PDF-1.7").unwrap();
+    job.abort();
+    assert!(!path.exists());
+    assert!(
+        DELIVERED
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|(file, _)| *file != path)
+    );
+}
