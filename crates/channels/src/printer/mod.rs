@@ -106,8 +106,13 @@ impl BackendJob for SaveAsPdfJob {
             suggested_name,
             deliver,
         } = *self;
-        file.sync_all().map_err(|_| STATUS_UNSUCCESSFUL)?;
+        let synced = file.sync_all();
         drop(file);
+        if let Err(err) = synced {
+            log::error!("printer: writing {} failed: {err}", path.display());
+            let _ = std::fs::remove_file(&path);
+            return Err(STATUS_UNSUCCESSFUL);
+        }
         deliver(path, suggested_name);
         Ok(())
     }
@@ -187,7 +192,7 @@ impl PrinterHandle {
 
 #[cfg(target_os = "windows")]
 fn platform_backend() -> Option<Box<dyn PrinterBackend>> {
-    Some(Box::new(windows::WindowsBackend))
+    Some(Box::new(windows::WindowsBackend::default()))
 }
 
 #[cfg(not(target_os = "windows"))]

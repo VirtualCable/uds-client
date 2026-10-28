@@ -23,18 +23,25 @@ use windows::Win32::UI::Controls::Dialogs::{
     GetSaveFileNameW, OFN_EXPLORER, OFN_NOCHANGEDIR, OFN_OVERWRITEPROMPT, OFN_PATHMUSTEXIST,
     OPENFILENAMEW,
 };
+use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
 use windows::core::{PCWSTR, PWSTR};
 
 use rdp::integrations::printer::PrinterDeviceInfo;
 
 use super::{BackendJob, PrinterBackend, STATUS_UNSUCCESSFUL, SaveAsPdfJob};
 
-#[derive(Debug)]
-pub(crate) struct WindowsBackend;
+#[derive(Debug, Default)]
+pub(crate) struct WindowsBackend {
+    // Driver of each announced printer, so a job does not enumerate them again.
+    drivers: std::sync::Mutex<std::collections::HashMap<String, String>>,
+}
 
 impl PrinterBackend for WindowsBackend {
     fn list_printers(&self) -> Vec<PrinterDeviceInfo> {
         let printers = enum_printers();
+        if let Ok(mut drivers) = self.drivers.lock() {
+            *drivers = printers.iter().cloned().collect();
+        }
         let openable = super::keep_openable(printers, |name| match Printer::open(name) {
             Ok(_) => true,
             Err(err) => {
@@ -46,7 +53,13 @@ impl PrinterBackend for WindowsBackend {
     }
 
     fn start_job(&self, printer_name: &str, job_name: &str) -> Result<Box<dyn BackendJob>, u32> {
-        if printer_driver(printer_name).is_some_and(|driver| super::is_print_to_pdf(&driver)) {
+        let driver = self
+            .drivers
+            .lock()
+            .ok()
+            .and_then(|drivers| drivers.get(printer_name).cloned())
+            .or_else(|| printer_driver(printer_name));
+        if driver.is_some_and(|driver| super::is_print_to_pdf(&driver)) {
             return Ok(Box::new(SaveAsPdfJob::create(job_name, save_pdf_as)?));
         }
         let printer = Printer::open(printer_name).map_err(|err| {
@@ -215,23 +228,25 @@ fn pwstr_to_string(value: PWSTR) -> Option<String> {
 /// Asks where to save the PDF on its own thread, so the printer worker is not
 /// blocked while the dialog is open.
 fn save_pdf_as(temp: std::path::PathBuf, suggested_name: String) {
+    let temp_for_error = temp.clone();
     let spawned = std::thread::Builder::new()
         .name("printer-save-pdf".into())
         .spawn(move || {
-            let _ =
+            let com =
                 unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE) };
             let target = ask_save_path(&suggested_name);
-            unsafe { CoUninitialize() };
+            if com.is_ok() {
+                unsafe { CoUninitialize() };
+            }
             match target {
                 Some(target) => move_file(&temp, &target),
-                None => {
-                    log::info!("printer: PDF not saved, the dialog was cancelled");
-                    let _ = std::fs::remove_file(&temp);
-                }
+                None => log::info!("printer: PDF not saved, the dialog was cancelled"),
             }
+            let _ = std::fs::remove_file(&temp);
         });
     if let Err(err) = spawned {
         log::error!("printer: cannot open the save dialog: {err}");
+        let _ = std::fs::remove_file(&temp_for_error);
     }
 }
 
@@ -257,6 +272,8 @@ fn ask_save_path(suggested_name: &str) -> Option<std::path::PathBuf> {
     let default_ext = U16CString::from_str("pdf").ok()?;
     let mut ofn = OPENFILENAMEW {
         lStructSize: std::mem::size_of::<OPENFILENAMEW>() as u32,
+        // The job comes from the session window: keep the dialog above it.
+        hwndOwner: unsafe { GetForegroundWindow() },
         lpstrFilter: PCWSTR(filter.as_ptr()),
         lpstrFile: PWSTR(buffer.as_mut_ptr()),
         nMaxFile: MAX_PATH_CHARS as u32,
