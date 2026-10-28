@@ -6,8 +6,9 @@
 //! Windows print spooler backend (winspool.drv).
 //!
 //! Printers are announced with their own driver name: the RDP server renders
-//! with that driver when it has it, and the data that arrives is already in
-//! the printer language, so it is handed to the spooler as RAW.
+//! with that driver when it has it. The job keeps the queue's default
+//! datatype, as FreeRDP does: forcing RAW breaks v4 (XPS) drivers such as
+//! Microsoft Print to PDF, whose filter pipeline then fails and deletes the job.
 
 use widestring::{U16CStr, U16CString};
 use windows::Win32::Graphics::Printing::{
@@ -43,11 +44,10 @@ impl PrinterBackend for WindowsBackend {
             STATUS_UNSUCCESSFUL
         })?;
         let mut doc_name = U16CString::from_str(job_name).map_err(|_| STATUS_UNSUCCESSFUL)?;
-        let mut datatype = U16CString::from_str("RAW").map_err(|_| STATUS_UNSUCCESSFUL)?;
         let doc_info = DOC_INFO_1W {
             pDocName: PWSTR(doc_name.as_mut_ptr()),
             pOutputFile: PWSTR::null(),
-            pDatatype: PWSTR(datatype.as_mut_ptr()),
+            pDatatype: PWSTR::null(),
         };
         if unsafe { StartDocPrinterW(printer.0, 1, &doc_info) } == 0 {
             log::error!(
