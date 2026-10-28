@@ -93,6 +93,18 @@ impl PrinterHandle {
         self.jobs.lock().ok()?.get(&job_id).cloned()
     }
 
+    /// Removes the entry only if it still holds this slot, so a job that
+    /// reused the id is left alone.
+    fn remove_slot(&self, job_id: u32, slot: &JobSlot) {
+        if let Ok(mut jobs) = self.jobs.lock()
+            && jobs
+                .get(&job_id)
+                .is_some_and(|current| Arc::ptr_eq(current, slot))
+        {
+            jobs.remove(&job_id);
+        }
+    }
+
     fn take_job(&self, job_id: u32) -> Option<Box<dyn BackendJob>> {
         let slot = self.jobs.lock().ok()?.remove(&job_id)?;
         slot.lock().ok()?.take()
@@ -107,6 +119,19 @@ fn platform_backend() -> Option<Box<dyn PrinterBackend>> {
 #[cfg(not(target_os = "windows"))]
 fn platform_backend() -> Option<Box<dyn PrinterBackend>> {
     None
+}
+
+/// Stale connected queues are listed by the OS but cannot be opened;
+/// announcing them would only make every job on them fail.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn keep_openable(
+    printers: Vec<(String, String, Option<String>)>,
+    mut can_open: impl FnMut(&str) -> bool,
+) -> Vec<(String, String, Option<String>)> {
+    printers
+        .into_iter()
+        .filter(|(name, _, _)| can_open(name))
+        .collect()
 }
 
 /// Builds the printers announced to the session from (name, driver, port).
@@ -169,13 +194,27 @@ impl PrinterIntegration for PrinterHandle {
 
     fn create_job(&self, printer_name: &str) -> Result<u32, u32> {
         let backend = self.backend.as_ref().ok_or(STATUS_UNSUCCESSFUL)?;
-        let job_id = self.next_job_id.fetch_add(1, Ordering::Relaxed);
-        let job = backend.start_job(printer_name, &format!("UDS print job {job_id}"))?;
-        self.jobs
-            .lock()
-            .map_err(|_| STATUS_UNSUCCESSFUL)?
-            .insert(job_id, Arc::new(Mutex::new(Some(job))));
-        Ok(job_id)
+        let slot: JobSlot = Arc::new(Mutex::new(None));
+        let job_id = {
+            let mut jobs = self.jobs.lock().map_err(|_| STATUS_UNSUCCESSFUL)?;
+            // Reserve an id no open job uses, in case the counter wraps around.
+            let mut job_id = self.next_job_id.fetch_add(1, Ordering::Relaxed);
+            while jobs.contains_key(&job_id) {
+                job_id = self.next_job_id.fetch_add(1, Ordering::Relaxed);
+            }
+            jobs.insert(job_id, slot.clone());
+            job_id
+        };
+        match backend.start_job(printer_name, &format!("UDS print job {job_id}")) {
+            Ok(job) => {
+                *slot.lock().map_err(|_| STATUS_UNSUCCESSFUL)? = Some(job);
+                Ok(job_id)
+            }
+            Err(err) => {
+                self.remove_slot(job_id, &slot);
+                Err(err)
+            }
+        }
     }
 
     fn write_data(&self, job_id: u32, data: &[u8]) -> Result<usize, u32> {
@@ -191,9 +230,7 @@ impl PrinterIntegration for PrinterHandle {
             drop(job);
             log::error!("printer: aborting job {job_id} after a failed write");
             failed.abort();
-            if let Ok(mut jobs) = self.jobs.lock() {
-                jobs.remove(&job_id);
-            }
+            self.remove_slot(job_id, &slot);
         }
         result
     }

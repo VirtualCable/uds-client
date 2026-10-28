@@ -250,8 +250,11 @@ fn a_close_racing_a_failed_write_never_prints_the_job() {
         let handle = handle.clone();
         std::thread::spawn(move || handle.close_job(job_id))
     };
-    // Give the close time to reach the job lock held by the failing write.
-    std::thread::sleep(std::time::Duration::from_millis(50));
+    // close_job removes the entry from the map before it waits on the job
+    // lock that the failing write still holds.
+    while handle.open_jobs() != 0 {
+        std::thread::yield_now();
+    }
     barrier.wait();
 
     assert_eq!(writer.join().unwrap(), Err(STATUS_UNSUCCESSFUL));
@@ -306,4 +309,45 @@ fn the_first_printer_is_default_when_the_os_has_none() {
     );
     assert!(printers[0].is_default && !printers[1].is_default);
     assert!(announce(Vec::new(), None).is_empty());
+}
+
+#[test]
+fn a_wrapped_counter_never_reuses_the_id_of_an_open_job() {
+    let (handle, spool) = handle();
+    let open = handle.create_job("Office").unwrap();
+    handle.next_job_id.store(open, Ordering::Relaxed);
+
+    let next = handle.create_job("Office").unwrap();
+    assert_ne!(next, open);
+    handle.write_data(open, b"first").unwrap();
+    handle.close_job(open).unwrap();
+    handle.close_job(next).unwrap();
+    assert_eq!(spool.lock().unwrap().finished, 2);
+}
+
+#[test]
+fn a_late_cleanup_does_not_remove_a_job_that_reused_the_id() {
+    let (handle, _) = handle();
+    let job_id = handle.create_job("Office").unwrap();
+    let old_slot = handle.find_job(job_id).unwrap();
+    handle.abort_job(job_id);
+    handle.next_job_id.store(job_id, Ordering::Relaxed);
+    assert_eq!(handle.create_job("Office").unwrap(), job_id);
+
+    handle.remove_slot(job_id, &old_slot);
+    assert_eq!(handle.open_jobs(), 1);
+    assert_eq!(handle.write_data(job_id, b"x"), Ok(1));
+}
+
+#[test]
+fn queues_that_cannot_be_opened_are_not_announced() {
+    let listed = vec![
+        ("Office".into(), "Driver".into(), None),
+        ("Stale".into(), "Driver".into(), None),
+    ];
+    let kept = keep_openable(listed, |name| name != "Stale");
+    assert_eq!(
+        kept,
+        vec![("Office".to_string(), "Driver".to_string(), None)]
+    );
 }

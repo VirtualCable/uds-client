@@ -26,19 +26,15 @@ pub(crate) struct WindowsBackend;
 
 impl PrinterBackend for WindowsBackend {
     fn list_printers(&self) -> Vec<PrinterDeviceInfo> {
-        let printers = enum_printers()
-            .into_iter()
-            // Stale connected queues are listed but cannot be opened; announcing
-            // them would only make every job on them fail.
-            .filter(|(name, _, _)| match Printer::open(name) {
-                Ok(_) => true,
-                Err(err) => {
-                    log::warn!("printer: skipping '{name}', it cannot be opened: {err}");
-                    false
-                }
-            })
-            .collect();
-        super::announce(printers, default_printer().as_deref())
+        let printers = enum_printers();
+        let openable = super::keep_openable(printers, |name| match Printer::open(name) {
+            Ok(_) => true,
+            Err(err) => {
+                log::warn!("printer: skipping '{name}', it cannot be opened: {err}");
+                false
+            }
+        });
+        super::announce(openable, default_printer().as_deref())
     }
 
     fn start_job(&self, printer_name: &str, job_name: &str) -> Result<Box<dyn BackendJob>, u32> {
