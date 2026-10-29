@@ -223,6 +223,11 @@ impl WgpuRenderer {
         let output = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(t)
             | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
+            e if needs_configure(&e) => {
+                // reconfigure() skips an unchanged size, so an outdated surface would never recover
+                self.surface.configure(&g.device, &self.config);
+                return;
+            }
             e => {
                 shared::log::error!("Surface error: {e:?}");
                 return;
@@ -293,5 +298,32 @@ impl WgpuRenderer {
         self.config.height = h;
         self.surface.configure(&g.device, &self.config);
         self.text.resize(w, h, &g.queue);
+    }
+}
+
+fn needs_configure(status: &wgpu::CurrentSurfaceTexture) -> bool {
+    matches!(status, wgpu::CurrentSurfaceTexture::Outdated)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::needs_configure;
+    use wgpu::CurrentSurfaceTexture;
+
+    #[test]
+    fn outdated_surface_is_configured_again() {
+        assert!(needs_configure(&CurrentSurfaceTexture::Outdated));
+    }
+
+    #[test]
+    fn other_surface_errors_are_not_configured() {
+        for status in [
+            CurrentSurfaceTexture::Timeout,
+            CurrentSurfaceTexture::Occluded,
+            CurrentSurfaceTexture::Lost,
+            CurrentSurfaceTexture::Validation,
+        ] {
+            assert!(!needs_configure(&status), "{status:?}");
+        }
     }
 }
