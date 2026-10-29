@@ -14,7 +14,7 @@
 //! # Architecture / Roadmap (for developers / padawans)
 //! Implement OS-specific backends under:
 //! - `windows` (WinSpool RAW using winspool.drv) — done
-//! - `linux/` (CUPS IPP client / spool)
+//! - `cups` (Linux, libcups loaded at run time) — done
 //! - `macos/` (native CUPS)
 //!
 //! Refer to `doc/printer-redirection-plan.md` for full specifications.
@@ -27,6 +27,8 @@ use std::sync::{Arc, Mutex};
 
 use rdp::integrations::printer::{PrinterDeviceInfo, PrinterIntegration};
 
+#[cfg(target_os = "linux")]
+mod cups;
 #[cfg(target_os = "windows")]
 mod windows;
 
@@ -195,7 +197,12 @@ fn platform_backend() -> Option<Box<dyn PrinterBackend>> {
     Some(Box::new(windows::WindowsBackend::default()))
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "linux")]
+fn platform_backend() -> Option<Box<dyn PrinterBackend>> {
+    cups::CupsBackend::load().map(|backend| Box::new(backend) as Box<dyn PrinterBackend>)
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
 fn platform_backend() -> Option<Box<dyn PrinterBackend>> {
     None
 }
@@ -215,7 +222,7 @@ fn keep_openable(
 
 /// Builds the printers announced to the session from (name, driver).
 /// Like FreeRDP, the first printer is the default when the OS has none.
-#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+#[cfg_attr(not(any(target_os = "windows", target_os = "linux")), allow(dead_code))]
 fn announce(printers: Vec<(String, String)>, default: Option<&str>) -> Vec<PrinterDeviceInfo> {
     let mut announced: Vec<PrinterDeviceInfo> = printers
         .into_iter()

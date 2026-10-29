@@ -392,3 +392,137 @@ fn an_aborted_pdf_job_leaves_no_file_behind() {
             .all(|(file, _)| *file != path)
     );
 }
+
+#[cfg(target_os = "linux")]
+mod cups_backend {
+    use std::ffi::{CStr, CString, c_char, c_int, c_void};
+    use std::os::unix::fs::PermissionsExt;
+
+    use super::super::cups::{ANNOUNCED_DRIVER, Cups, CupsDest, CupsJob, queues};
+    use super::*;
+
+    // (printer, title, bytes of the file when CUPS was called)
+    static PRINTED: Mutex<Vec<(String, String, Vec<u8>)>> = Mutex::new(Vec::new());
+
+    unsafe extern "C" fn fake_print_file(
+        printer: *const c_char,
+        file: *const c_char,
+        title: *const c_char,
+        _num_options: c_int,
+        _options: *const c_void,
+    ) -> c_int {
+        let printer = unsafe { CStr::from_ptr(printer) }
+            .to_string_lossy()
+            .into_owned();
+        if printer == "Broken" {
+            return 0;
+        }
+        let file = unsafe { CStr::from_ptr(file) }
+            .to_string_lossy()
+            .into_owned();
+        let title = unsafe { CStr::from_ptr(title) }
+            .to_string_lossy()
+            .into_owned();
+        let data = std::fs::read(file).unwrap();
+        PRINTED.lock().unwrap().push((printer, title, data));
+        42
+    }
+
+    unsafe extern "C" fn fake_last_error() -> *const c_char {
+        c"client-error-not-found".as_ptr()
+    }
+
+    fn cups() -> Arc<Cups> {
+        Arc::new(Cups::with_print_file(fake_print_file, fake_last_error))
+    }
+
+    fn printed_on(printer: &str) -> Vec<(String, Vec<u8>)> {
+        PRINTED
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(name, _, _)| name == printer)
+            .map(|(_, title, data)| (title.clone(), data.clone()))
+            .collect()
+    }
+
+    fn dest(name: &CString, instance: Option<&CString>, is_default: bool) -> CupsDest {
+        CupsDest {
+            name: name.as_ptr().cast_mut(),
+            instance: instance.map_or(std::ptr::null_mut(), |i| i.as_ptr().cast_mut()),
+            is_default: is_default as c_int,
+            num_options: 0,
+            options: std::ptr::null_mut(),
+        }
+    }
+
+    #[test]
+    fn queues_are_announced_with_the_postscript_driver_and_the_cups_default() {
+        let (office, pdf, draft) = (c"Office".to_owned(), c"PDF".to_owned(), c"draft".to_owned());
+        let dests = [
+            dest(&office, None, false),
+            dest(&office, Some(&draft), false),
+            dest(&pdf, None, true),
+        ];
+        let (printers, default) = unsafe { queues(&dests) };
+        assert_eq!(
+            printers,
+            vec![
+                ("Office".to_string(), ANNOUNCED_DRIVER.to_string()),
+                ("PDF".to_string(), ANNOUNCED_DRIVER.to_string()),
+            ]
+        );
+        assert_eq!(default.as_deref(), Some("PDF"));
+    }
+
+    #[test]
+    fn the_whole_job_reaches_cups_once_it_is_closed() {
+        let mut job = Box::new(CupsJob::create(cups(), "Whole", "UDS print job 3").unwrap());
+        let path = job.path().to_path_buf();
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        job.write(b"%!PS-Adobe-3.0\n").unwrap();
+        assert!(printed_on("Whole").is_empty());
+        job.write(b"%%EOF\n").unwrap();
+        job.finish().unwrap();
+
+        assert_eq!(
+            printed_on("Whole"),
+            vec![(
+                "UDS print job 3".to_string(),
+                b"%!PS-Adobe-3.0\n%%EOF\n".to_vec()
+            )]
+        );
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn an_aborted_job_never_reaches_cups() {
+        let mut job = Box::new(CupsJob::create(cups(), "Aborted", "UDS print job 4").unwrap());
+        let path = job.path().to_path_buf();
+        job.write(b"partial").unwrap();
+        job.abort();
+        assert!(printed_on("Aborted").is_empty());
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn an_empty_job_is_not_sent() {
+        let job = Box::new(CupsJob::create(cups(), "Empty", "UDS print job 5").unwrap());
+        let path = job.path().to_path_buf();
+        assert_eq!(job.finish(), Ok(()));
+        assert!(printed_on("Empty").is_empty());
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn a_job_cups_rejects_fails_and_leaves_no_file() {
+        let mut job = Box::new(CupsJob::create(cups(), "Broken", "UDS print job 6").unwrap());
+        let path = job.path().to_path_buf();
+        job.write(b"data").unwrap();
+        assert_eq!(job.finish(), Err(STATUS_UNSUCCESSFUL));
+        assert!(!path.exists());
+    }
+}
