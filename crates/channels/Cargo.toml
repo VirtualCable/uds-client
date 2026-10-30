@@ -28,3 +28,7 @@ pem = "3.0"
 rand = { workspace = true }
 log = "0.4"
 pcsc = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows.workspace = true
+widestring.workspace = true

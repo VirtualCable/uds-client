@@ -899,6 +899,8 @@ dependencies = [
  "sha2 0.10.9",
  "shared",
  "turbojpeg",
+ "widestring",
+ "windows 0.62.2",
 ]
 
 [[package]]
