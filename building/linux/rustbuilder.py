@@ -278,7 +278,7 @@ def main() -> None:
     distro: str = args.distro
     crate_path = pathlib.Path(args.crate_path).resolve()
     debug: bool = args.debug
-    # On debian 12 and openSUSE, copy .so files after build to target. Also, create the symlinks
+    # On debian 12, debian 13 and openSUSE, copy .so files after build to target. Also, create the symlinks
     # to them for .so.X.Y files.
     SCRIPT: typing.Final[str] = (
         "cp /usr/local/lib/*so [TARGET] && "
@@ -288,6 +288,7 @@ def main() -> None:
 
     extra_docker_cmd: str = {
         "Debian12": SCRIPT,
+        "Debian13": SCRIPT,
         "AppImage": "/usr/local/bin/build-appimage.sh",
         "openSUSE": SCRIPT.replace("/usr/local/lib", "/usr/local/lib64"),
     }.get(distro, "")
