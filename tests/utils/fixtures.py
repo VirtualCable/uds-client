@@ -46,6 +46,7 @@ TESTING_SCRIPT: str = '''
 # TODO: add testing script here
 '''
 SCRIPT: str = TESTING_SCRIPT
+LOG_DATA: typing.Dict[str, typing.Any] = {}
 PARAMETERS: typing.MutableMapping[str, typing.Any] = {
     # TODO: add parameters here
 }
@@ -82,14 +83,14 @@ def check_version() -> str:
 
 def script_and_parameters(
     ticket: str, scrambler: str
-) -> typing.Tuple[str, typing.MutableMapping[str, typing.Any]]:
+) -> typing.Tuple[str, typing.MutableMapping[str, typing.Any], typing.Dict[str, typing.Any]]:
     global SCRIPT
     if SCRIPT == 'fail':
         raise Exception('Script retrieval failed miserably! :) (just for testing)')
     elif SCRIPT == 'retry':
         # Will not be on loop forever, because there will be only one call
         raise exceptions.RetryException('Just for testing')
-    return SCRIPT, PARAMETERS
+    return SCRIPT, PARAMETERS, LOG_DATA
 
 
 REST_METHODS_INFO: typing.List[autospec.AutoSpecMethodInfo] = [

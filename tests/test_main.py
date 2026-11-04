@@ -98,7 +98,8 @@ class TestClient(TestCase):
         with fixtures.patch_rest_api() as api:
             self.assertEqual(api.get_version(), fixtures.REQUIRED_VERSION)
             self.assertEqual(
-                api.get_script_and_parameters('ticket', 'scrambler'), (fixtures.SCRIPT, fixtures.PARAMETERS)
+                api.get_script_and_parameters('ticket', 'scrambler'),
+                (fixtures.SCRIPT, fixtures.PARAMETERS, fixtures.LOG_DATA),
             )
 
             from_api = rest.RestApi.api('host', lambda x, y: True)
@@ -106,7 +107,7 @@ class TestClient(TestCase):
             self.assertEqual(from_api.get_version(), fixtures.REQUIRED_VERSION)
             self.assertEqual(
                 from_api.get_script_and_parameters('ticket', 'scrambler'),
-                (fixtures.SCRIPT, fixtures.PARAMETERS),
+                (fixtures.SCRIPT, fixtures.PARAMETERS, fixtures.LOG_DATA),
             )
             # And also, the api is the same
             self.assertEqual(from_api, api)
@@ -124,13 +125,13 @@ class TestClient(TestCase):
                     client.api.get_version.assert_called_with()  # type: ignore
                     client.api.get_script_and_parameters.assert_called_with(client.ticket, client.scrambler)  # type: ignore
 
-                    # Builtin exec should be called with:
-                    #  - The script
-                    #  - The globals, because the globals in scripts may be different, we use mock.ANY
-                    #  - The locals ->  {'parent': self, 'sp': params}, where self is the client and params is the parameters
-                    builtins_exec.assert_called_with(
-                        fixtures.SCRIPT, mock.ANY, {'parent': client, 'sp': fixtures.PARAMETERS}
-                    )
+                    # Builtin exec should be called with the script and a globals dict
+                    # that exposes the client, the parameters and the api to the script
+                    script, script_globals = builtins_exec.call_args.args
+                    self.assertEqual(script, fixtures.SCRIPT)
+                    self.assertIs(script_globals['parent'], client)
+                    self.assertEqual(script_globals['sp'], fixtures.PARAMETERS)
+                    self.assertIs(script_globals['api'], client.api)
 
                     # And also, process_waiting_tasks should be called, to process remaining tasks
                     client.process_waiting_tasks.assert_called_with()  # type: ignore
