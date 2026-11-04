@@ -126,6 +126,12 @@ fn expandvars_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<J
     Ok(JsValue::from(JsString::from(expanded)))
 }
 
+fn client_version_fn(_: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
+    Ok(JsValue::from(JsString::from(
+        connection::consts::UDS_CLIENT_VERSION,
+    )))
+}
+
 async fn sleep_fn(_: &JsValue, args: &[JsValue], ctx: &RefCell<&mut Context>) -> JsResult<JsValue> {
     let milliseconds = {
         let mut ctx = ctx.borrow_mut();
@@ -147,6 +153,7 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
             ("writeHkcuDword", write_hkcu_dword_fn, 3),
             ("readHkcu", read_hkcu_fn, 2),
             ("readHklm", read_hklm_fn, 2),
+            ("clientVersion", client_version_fn, 0),
         ],
         // Async functions, test server can have some delay
         [("testServer", test_server_fn, 3), ("sleep", sleep_fn, 1),],
@@ -194,6 +201,25 @@ mod tests {
         assert_eq!(
             result,
             JsValue::from(JsString::from("Hello, Test123 AnotherValue!"))
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_utils_client_version() -> Result<()> {
+        log::setup_logging("debug", log::LogType::Test);
+        let mut ctx = create_context(None)?;
+
+        register(&mut ctx)?;
+
+        let result = exec_script_with_result(&mut ctx, "Utils.clientVersion()")
+            .await
+            .map_err(|e| anyhow::anyhow!("JavaScript execution error: {}", e))?;
+
+        assert_eq!(
+            result,
+            JsValue::from(JsString::from(connection::consts::UDS_CLIENT_VERSION))
         );
 
         Ok(())
