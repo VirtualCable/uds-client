@@ -6,7 +6,7 @@ This document describes the JavaScript modules and functions available in the ru
 
 | Module  | Description                                                                                      | Functions |
 | ------- | ------------------------------------------------------------------------------------------------ | --------- |
-| Utils   | Utility functions for environment variables, registry (Windows), encryption, and network testing | 8         |
+| Utils   | Utility functions for environment variables, registry (Windows), encryption, network testing and client version | 9         |
 | File    | File operations, temporary files, and directory access                                           | 11        |
 | Logger  | Logging functions at different levels                                                            | 5         |
 | Process | Executable finding, process launching, and management                                            | 8         |
@@ -16,7 +16,7 @@ This document describes the JavaScript modules and functions available in the ru
 
 ## Utils Module
 
-The Utils module provides utility functions for environment variable expansion, registry operations (Windows only), encryption, and network testing.
+The Utils module provides utility functions for environment variable expansion, registry operations (Windows only), encryption, network testing and client version lookup.
 
 ### expandVars
 
@@ -94,6 +94,16 @@ Waits for a specified number of milliseconds.
 
 **Returns:** undefined
 
+### clientVersion
+
+Returns the version of the running UDS client, so a script can refuse to run on a client older than the one it needs.
+
+**Parameters:** none
+
+**Returns:** string - The client version (e.g. `"5.0.0"`).
+
+Clients older than this function do not have it, so check that it exists before calling it. Compare the numeric parts of the version, not the strings: `"5.10.0" < "5.9.0"` is true as text.
+
 ### Examples
 
 ```javascript
@@ -108,6 +118,13 @@ const expanded = Utils.expandVars("%USERPROFILE%/file.txt");
 
 // Read registry (Windows only)
 const value = Utils.readHklm("SOFTWARE\\Microsoft\\Windows\\CurrentVersion", "ProgramFilesDir");
+
+// Refuse to run on a client older than the one this script needs (5.1.0 here)
+const version = typeof Utils.clientVersion === "function" ? Utils.clientVersion() : "0.0.0";
+const [major, minor] = version.split(".").map(Number);
+if (major < 5 || (major === 5 && minor < 1)) {
+    throw new Error("This transport needs UDS client 5.1.0 or later, found " + version);
+}
 ```
 
 ## File Module
@@ -685,6 +702,7 @@ if (res.pushed === "connect") {
 | Utils   | readHklm               | key: string, value_name: string                                                                                                                                                                                             | Reads string from HKLM registry (Windows only)              |
 | Utils   | testServer (async)     | host: string, port: number, timeout_ms: number                                                                                                                                                                              | Tests server connectivity                                   |
 | Utils   | sleep (async)          | milliseconds: number                                                                                                                                                                                                        | Waits for a specified number of milliseconds                |
+| Utils   | clientVersion          | -                                                                                                                                                                                                                           | Returns the running client version                          |
 | File    | createTempFile         | folder?: string, content?: string, extension?: string                                                                                                                                                                       | Creates temporary file                                      |
 | File    | read                   | path: string                                                                                                                                                                                                                | Reads file content                                          |
 | File    | write                  | path: string, content: string                                                                                                                                                                                               | Writes content to file                                      |
