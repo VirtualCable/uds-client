@@ -102,6 +102,8 @@ Returns the version of the running UDS client, so a script can refuse to run on 
 
 **Returns:** string - The client version (e.g. `"5.0.0"`).
 
+Clients older than this function do not have it, so check that it exists before calling it. Compare the numeric parts of the version, not the strings: `"5.10.0" < "5.9.0"` is true as text.
+
 ### Examples
 
 ```javascript
@@ -117,9 +119,11 @@ const expanded = Utils.expandVars("%USERPROFILE%/file.txt");
 // Read registry (Windows only)
 const value = Utils.readHklm("SOFTWARE\\Microsoft\\Windows\\CurrentVersion", "ProgramFilesDir");
 
-// Refuse to run on a client older than the one this script needs
-if (Utils.clientVersion() < "5.1.0") {
-    throw new Error("This transport needs UDS client 5.1.0 or later, found " + Utils.clientVersion());
+// Refuse to run on a client older than the one this script needs (5.1.0 here)
+const version = typeof Utils.clientVersion === "function" ? Utils.clientVersion() : "0.0.0";
+const [major, minor] = version.split(".").map(Number);
+if (major < 5 || (major === 5 && minor < 1)) {
+    throw new Error("This transport needs UDS client 5.1.0 or later, found " + version);
 }
 ```
 
