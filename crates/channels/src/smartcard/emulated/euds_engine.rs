@@ -6,7 +6,7 @@
 //! eUDS Engine — processes ISO 7816 APDUs for the eUDS custom protocol.
 
 use num_bigint::BigUint;
-use rsa::RsaPrivateKey;
+use rsa::PrivateKey;
 use rsa::pkcs1::EncodeRsaPrivateKey;
 
 use super::consts::*;
@@ -37,7 +37,7 @@ impl std::fmt::Debug for EudsEngine {
 impl EudsEngine {
     pub fn new(
         cert_der: Vec<u8>,
-        private_key: RsaPrivateKey,
+        private_key: PrivateKey,
         pin: String,
         pin_mode: PinMode,
     ) -> Self {

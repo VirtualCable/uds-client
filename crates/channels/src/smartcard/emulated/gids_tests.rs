@@ -20,8 +20,8 @@ mod tests {
     };
 
     fn make_engine() -> (GidsEngine, BigUint, BigUint, BigUint) {
-        let mut rng = rsa::rand_core::OsRng;
-        let key = rsa::RsaPrivateKey::new(&mut rng, 2048).unwrap();
+        let mut rng = rand::rngs::SysRng;
+        let key = rsa::PrivateKey::new(&mut rng, 2048).unwrap();
         let pkcs1 = key.to_pkcs1_der().unwrap();
         let (n, e, d) =
             crate::smartcard::emulated::helpers::parse_rsa_pkcs1_components(pkcs1.as_bytes())
@@ -43,12 +43,14 @@ mod tests {
     /// is built as a minimal but valid X.509 DER containing the RSA public key, since
     /// the encrypted path extracts the public part from the certificate.
     fn make_encrypted_engine(password: &str) -> GidsEngine {
-        let mut rng = rsa::rand_core::OsRng;
-        let key = rsa::RsaPrivateKey::new(&mut rng, 2048).unwrap();
+        let mut rng = rand::rngs::SysRng;
+        let key = rsa::PrivateKey::new(&mut rng, 2048).unwrap();
         let pkcs1 = key.to_pkcs1_der().unwrap();
         let (n, e, _) = parse_rsa_pkcs1_components(pkcs1.as_bytes()).unwrap();
+        // In rsa 0.10 / pkcs8 0.11 the RNG parameter is gone: encryption salt comes from
+        // the system RNG (pkcs8 `getrandom` feature, enabled via dev-dependency below).
         let key_pem = key
-            .to_pkcs8_encrypted_pem(&mut rng, password, LineEnding::LF)
+            .to_pkcs8_encrypted_pem(password, LineEnding::LF)
             .unwrap()
             .to_string();
         GidsEngine::new(build_min_cert_der(&n, &e), key_pem).unwrap()
@@ -371,8 +373,8 @@ mod tests {
 
     #[test]
     fn from_spec_pem_parses() {
-        let mut rng = rsa::rand_core::OsRng;
-        let key = rsa::RsaPrivateKey::new(&mut rng, 2048).unwrap();
+        let mut rng = rand::rngs::SysRng;
+        let key = rsa::PrivateKey::new(&mut rng, 2048).unwrap();
         let key_pem = key.to_pkcs8_pem(LineEnding::LF).unwrap().to_string();
         let cert_pem = pem::Pem::new("CERTIFICATE", vec![0x30, 0x82, 0x01, 0x00]).to_string();
         let backend = crate::smartcard::emulated::EmulatedBackend::from_spec(&format!(

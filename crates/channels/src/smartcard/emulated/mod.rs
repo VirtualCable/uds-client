@@ -29,7 +29,7 @@ mod tests;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use rsa::RsaPrivateKey;
+use rsa::PrivateKey;
 
 use pcsc::ffi::DWORD;
 use rdp::integrations::smartcard::*;
@@ -62,7 +62,7 @@ impl EmulatedBackend {
         use rsa::pkcs8::{DecodePrivateKey, EncodePrivateKey, LineEnding};
         // DER path: the key must be unencrypted (no PEM password to decrypt on VERIFY).
         let private_key =
-            RsaPrivateKey::from_pkcs8_der(key_pkcs8_der).map_err(|e| format!("key DER: {}", e))?;
+            PrivateKey::from_pkcs8_der(key_pkcs8_der).map_err(|e| format!("key DER: {}", e))?;
         let key_pem = private_key
             .to_pkcs8_pem(LineEnding::LF)
             .map_err(|e| format!("key PEM: {}", e))?

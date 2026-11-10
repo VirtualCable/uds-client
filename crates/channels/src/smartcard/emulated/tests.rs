@@ -17,8 +17,8 @@ mod tests {
     use crate::smartcard::emulated::helpers::*;
 
     fn make_test_engine(pin_mode: PinMode) -> EudsEngine {
-        let mut rng = rsa::rand_core::OsRng;
-        let key = rsa::RsaPrivateKey::new(&mut rng, 2048).unwrap();
+        let mut rng = rand::rngs::SysRng;
+        let key = rsa::PrivateKey::new(&mut rng, 2048).unwrap();
         let cert_der = vec![0x30, 0x82, 0x01, 0x00];
         let pin = if pin_mode == PinMode::Required {
             "testpin".to_string()
@@ -45,10 +45,10 @@ mod tests {
     #[test]
     fn parse_rsa_components_roundtrip() {
         use rsa::traits::PublicKeyParts;
-        let mut rng = rsa::rand_core::OsRng;
-        let key = rsa::RsaPrivateKey::new(&mut rng, 2048).unwrap();
+        let mut rng = rand::rngs::SysRng;
+        let key = rsa::PrivateKey::new(&mut rng, 2048).unwrap();
         let (n, e, d) = parse_rsa_pkcs1_components(key.to_pkcs1_der().unwrap().as_bytes()).unwrap();
-        assert_eq!(n.to_bytes_be(), key.n().to_bytes_be());
+        assert_eq!(n.to_bytes_be(), key.n_bytes().as_ref());
         assert_eq!(e, BigUint::from(65537u32));
         assert!(d > BigUint::from(0u32));
     }
@@ -193,8 +193,8 @@ mod tests {
 
     #[test]
     fn get_certificate_chaining() {
-        let mut rng = rsa::rand_core::OsRng;
-        let key = rsa::RsaPrivateKey::new(&mut rng, 2048).unwrap();
+        let mut rng = rand::rngs::SysRng;
+        let key = rsa::PrivateKey::new(&mut rng, 2048).unwrap();
         let large_cert = vec![0x42; 300];
         let mut e = EudsEngine::new(large_cert, key, String::new(), PinMode::NotRequired);
 
@@ -337,8 +337,8 @@ mod tests {
 
     #[test]
     fn decrypt_pkcs1() {
-        let mut rng = rsa::rand_core::OsRng;
-        let key = rsa::RsaPrivateKey::new(&mut rng, 2048).unwrap();
+        let mut rng = rand::rngs::SysRng;
+        let key = rsa::PrivateKey::new(&mut rng, 2048).unwrap();
         let mut e = EudsEngine::new(
             vec![0x30, 0x82],
             key.clone(),
@@ -390,8 +390,8 @@ mod tests {
 
     #[test]
     fn new_command_clears_chaining_buffer() {
-        let mut rng = rsa::rand_core::OsRng;
-        let key = rsa::RsaPrivateKey::new(&mut rng, 2048).unwrap();
+        let mut rng = rand::rngs::SysRng;
+        let key = rsa::PrivateKey::new(&mut rng, 2048).unwrap();
         let large_cert = vec![0x42; 300];
         let mut e = EudsEngine::new(large_cert, key, String::new(), PinMode::NotRequired);
 
