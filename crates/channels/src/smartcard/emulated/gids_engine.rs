@@ -25,7 +25,7 @@ use std::sync::LazyLock;
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
 use num_bigint::BigUint;
-use rsa::RsaPrivateKey;
+use rsa::PrivateKey;
 use rsa::pkcs1::EncodeRsaPrivateKey;
 use rsa::pkcs8::DecodePrivateKey;
 
@@ -191,7 +191,7 @@ impl GidsEngine {
 
         // Try the private key WITHOUT a password (unencrypted). If that fails the
         // key is encrypted and its password will act as the card PIN.
-        if let Ok(key) = RsaPrivateKey::from_pkcs8_pem(&key_pem) {
+        if let Ok(key) = PrivateKey::from_pkcs8_pem(&key_pem) {
             let pkcs1 = key
                 .to_pkcs1_der()
                 .map_err(|e| format!("serialize key: {e}"))?;
@@ -375,7 +375,7 @@ impl GidsEngine {
                     PinMode::KeyPassword => {
                         let pem = self.key_pem.as_ref().unwrap();
                         let pin = String::from_utf8_lossy(data);
-                        match RsaPrivateKey::from_pkcs8_encrypted_pem(pem, pin.as_bytes()) {
+                        match PrivateKey::from_pkcs8_encrypted_pem(pem, pin.as_bytes()) {
                             Ok(key) => {
                                 let pkcs1 = match key.to_pkcs1_der() {
                                     Ok(p) => p,
