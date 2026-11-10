@@ -170,8 +170,8 @@ objc2-app-kit = "0.3"
 # PC/SC integration
 pcsc = "2.8"
 
-rdp = { git = "https://github.com/VirtualCable/freerdp-integration.git", package = "rdp", branch = "master" }
-freerdp-sys = { git = "https://github.com/VirtualCable/freerdp-integration.git", package = "freerdp-sys", branch = "master" }
+rdp = { git = "https://github.com/VirtualCable/freerdp-integration.git", package = "rdp", branch = "v5.0" }
+freerdp-sys = { git = "https://github.com/VirtualCable/freerdp-integration.git", package = "freerdp-sys", branch = "v5.0" }
 
 # Local development overrides (uncomment to use the local freerdp-integration checkout).
 # [patch."https://github.com/VirtualCable/freerdp-integration.git"]
