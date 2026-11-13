@@ -103,6 +103,51 @@ declare module "runtime" {
     function sign(rdp_string: string, ticket: string): Promise<string>;
   }
 
+
+  /**
+   * UDS Remote Protocol (URP) session. `ticket` is the broker ticket
+   * verbatim (48 alphanumeric chars, never hashed client-side) and
+   * `shared_secret` is the KEM envelope's secret (`data.shared_secret`).
+   * **Do not use `null` for optional fields** — omit the key instead.
+   */
+  export namespace URP {
+    function start(settings: {
+      server: string;
+      /** Default: 14433 */
+      port?: number;
+      /** Broker ticket, 48 alphanumeric characters, verbatim. */
+      ticket: string;
+      /** Session PSK as 64 hex chars (pass `data.shared_secret` through). */
+      shared_secret: string;
+      /** Interactive credentials; `user` and `password` must come together. */
+      user?: string;
+      password?: string;
+      domain?: string;
+      /** Broker-fixed remote resolution; omit both for "not fixed". */
+      screen_width?: number;
+      screen_height?: number;
+      fullscreen?: boolean;
+      /** Stretch the remote image in fullscreen; false = centered with black borders. */
+      allow_fullscreen_scaling?: boolean;
+      /** Cap for the auto fullscreen resolution (default: 1920x1080). */
+      max_fullscreen_width?: number;
+      max_fullscreen_height?: number;
+      redirections?: {
+        audio?: boolean;
+        mic?: boolean;
+        clipboard?: boolean;
+        printing?: boolean;
+        webcam?: boolean;
+        smartcard?: boolean;
+        storage?: boolean;
+      };
+      options?: {
+        /** Codec preset preference; omit to let the server ladder decide. */
+        preferred_codec?: string;
+      };
+    }): void;
+  }
+
   export namespace Dialog {
     export type FieldType = "string" | "password" | "choice" | "text" | "label" | "markdown";
 

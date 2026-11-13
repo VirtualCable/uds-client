@@ -10,3 +10,4 @@ pub mod popup;
 pub mod progress;
 pub mod rdp_window;
 pub mod testing_launcher_window;
+pub mod urp_window;

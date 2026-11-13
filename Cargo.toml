@@ -173,7 +173,14 @@ pcsc = "2.8"
 rdp = { git = "https://github.com/VirtualCable/freerdp-integration.git", package = "rdp", branch = "master" }
 freerdp-sys = { git = "https://github.com/VirtualCable/freerdp-integration.git", package = "freerdp-sys", branch = "master" }
 
+# UDS Remote Protocol (URP) client facade
+uds-rp = { git = "https://github.com/VirtualCable/uds-remote-protocol.git", package = "uds-rp", branch = "master" }
+
 # Local development overrides (uncomment to use the local freerdp-integration checkout).
 # [patch."https://github.com/VirtualCable/freerdp-integration.git"]
 # rdp = { path = "../freerdp-integration/rdp" }
 # freerdp-sys = { path = "../freerdp-integration/freerdp-sys" }
+
+# Local development overrides (uncomment to use the local uds-remote-protocol checkout).
+# [patch."https://github.com/VirtualCable/uds-remote-protocol.git"]
+# uds-rp = { path = "../../repos/uds-remote-protocol/crates/uds-rp" }

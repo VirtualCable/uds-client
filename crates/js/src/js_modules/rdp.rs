@@ -254,7 +254,7 @@ fn start_rdp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<Js
     send_message(GuiMessage::ConnectRdp(Box::new(settings)));
     // Launcher needs to know that RDP client is running
     // so it doesn't close the GUI immediately
-    connection::tasks::mark_internal_rdp_as_running();
+    connection::tasks::mark_remote_session_running();
 
     Ok(JsValue::undefined())
 }

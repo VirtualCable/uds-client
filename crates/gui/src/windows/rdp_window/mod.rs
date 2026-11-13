@@ -171,9 +171,9 @@ impl RdpState {
         };
 
         std::thread::spawn(move || {
-            connection::tasks::mark_internal_rdp_as_running();
+            connection::tasks::mark_remote_session_running();
             let res = rdp.run();
-            connection::tasks::mark_internal_rdp_as_not_running();
+            connection::tasks::mark_remote_session_not_running();
             if let Err(e) = res {
                 log::error!("RDP thread error: {}", e);
             }

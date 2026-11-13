@@ -70,26 +70,44 @@ pub async fn wait_all_tunnels(stop: Trigger) {
     }
 }
 
-pub fn mark_internal_rdp_as_running() {
-    log::debug!("Marking internal RDP client as running");
+/// Marks that an embedded remote-session client (RDP, URP) is running,
+/// so the launcher does not close the GUI immediately.
+pub fn mark_remote_session_running() {
+    log::debug!("Marking remote session client as running");
     let mut running = INTERNAL_RDP_RUNNING.lock().unwrap();
     *running = true;
 }
 
-pub fn mark_internal_rdp_as_not_running() {
-    log::debug!("Marking internal RDP client as not running");
+pub fn mark_remote_session_not_running() {
+    log::debug!("Marking remote session client as not running");
     let mut running = INTERNAL_RDP_RUNNING.lock().unwrap();
     *running = false;
 }
 
-pub fn is_internal_rdp_running() -> bool {
+pub fn is_remote_session_running() -> bool {
     let running = INTERNAL_RDP_RUNNING.lock().unwrap();
     *running
 }
 
+// Deprecated aliases kept for one release.
+#[deprecated(note = "use mark_remote_session_running")]
+pub fn mark_internal_rdp_as_running() {
+    mark_remote_session_running();
+}
+
+#[deprecated(note = "use mark_remote_session_not_running")]
+pub fn mark_internal_rdp_as_not_running() {
+    mark_remote_session_not_running();
+}
+
+#[deprecated(note = "use is_remote_session_running")]
+pub fn is_internal_rdp_running() -> bool {
+    is_remote_session_running()
+}
+
 async fn wait_internal_rdp(stop: Trigger) {
     loop {
-        if !is_internal_rdp_running()
+        if !is_remote_session_running()
             || stop
                 .wait_timeout_async(std::time::Duration::from_secs(2))
                 .await

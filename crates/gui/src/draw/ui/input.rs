@@ -497,11 +497,8 @@ mod tests {
             scale: SCALE.into(),
             ..SectionText::default()
         };
-        let glyphs = Layout::default().calculate_glyphs(
-            &fonts,
-            &SectionGeometry::default(),
-            &[section],
-        );
+        let glyphs =
+            Layout::default().calculate_glyphs(&fonts, &SectionGeometry::default(), &[section]);
         let byte_index = text.char_indices().nth(char_index).unwrap().0;
         glyphs
             .iter()
