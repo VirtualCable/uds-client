@@ -13,6 +13,7 @@ mod logger;
 mod process;
 mod rdp;
 mod tasks;
+mod urp;
 mod utils;
 
 pub(super) fn register(ctx: &mut Context) -> Result<()> {
@@ -22,6 +23,7 @@ pub(super) fn register(ctx: &mut Context) -> Result<()> {
     tasks::register(ctx)?;
     file::register(ctx)?;
     rdp::register(ctx)?;
+    urp::register(ctx)?;
     dialog::register(ctx)?;
     Ok(())
 }

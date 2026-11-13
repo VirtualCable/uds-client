@@ -12,6 +12,7 @@ This document describes the JavaScript modules and functions available in the ru
 | Process | Executable finding, process launching, and management                                            | 8         |
 | Tasks   | Task management, cleanup files, and tunnel connections                                           | 4         |
 | RDP     | RDP connection management                                                                        | 2         |
+| URP     | UDS Remote Protocol (URP) connection management                                                  | 1         |
 | Dialog  | Interactive dialog generation for prompting credentials and user input                           | 2         |
 
 ## Utils Module
@@ -605,6 +606,68 @@ RDP.start({
 
 // Sign an RDP file/string through the broker
 const signedRdp = await RDP.sign(rdpContent, ticket);
+```
+
+## URP Module
+
+The URP module starts a UDS Remote Protocol session (the UDS native protocol, agent port 14433). The session secrets never travel in the clear: `ticket` is the broker ticket verbatim and `shared_secret` is injected by the launcher from the script's KEM envelope (`data.shared_secret`) — scripts just forward it.
+
+> **⚠️ Important:** All optional fields must be either present with a valid value or **omitted entirely** — never `null`.
+
+### start
+
+Starts a URP session with the specified settings.
+
+**Parameters:**
+- `settings` (object):
+  - `server` (string): The URP server address (required).
+  - `port` (number, optional): The URP server port (default: 14433).
+  - `ticket` (string, required): The broker ticket (48 alphanumeric characters, verbatim; it is NOT hashed client-side).
+  - `shared_secret` (string, required): Session PSK as 64 hex characters — pass `data.shared_secret` through.
+  - `user` (string, optional): Username, collected interactively when the broker does not know the credentials. Must come together with `password`.
+  - `password` (string, optional): Password (sent to the agent inside the encrypted channel, right after the handshake).
+  - `domain` (string, optional): Domain for authentication.
+  - `screen_width` / `screen_height` (number, optional): Broker-fixed remote resolution; omit both for "not fixed" (the client then uses the local monitor geometry capped by `max_fullscreen_*` when fullscreen, or a windowed default).
+  - `fullscreen` (boolean, optional): Start in fullscreen (default: false).
+  - `allow_fullscreen_scaling` (boolean, optional): Stretch the remote image when the fullscreen area exceeds it; when false the image is centered with black borders (default: false).
+  - `max_fullscreen_width` / `max_fullscreen_height` (number, optional): Cap for the auto fullscreen resolution (default: 1920x1080).
+  - `redirections` (object, optional): Channel switches; defaults mirror the broker's conservative policy:
+    - `audio` (boolean, optional): Audio out (default: true).
+    - `mic` (boolean, optional): Microphone in (default: false).
+    - `clipboard` (boolean, optional): Clipboard redirection (default: true).
+    - `printing` (boolean, optional): Printer redirection (default: false).
+    - `webcam` (boolean, optional): Webcam redirection (default: false).
+    - `smartcard` (boolean, optional): Smartcard redirection (default: false).
+    - `storage` (boolean, optional): File transfer spool (default: true).
+  - `options` (object, optional):
+    - `preferred_codec` (string, optional): Codec preset preference; omit to let the server ladder decide.
+
+**Returns:** undefined
+
+### Example
+
+```javascript
+// UDS Remote Protocol session; ask for credentials when the broker
+// did not provide them
+if (!data.has_credentials) {
+    const res = await Dialog.show({
+        title: "Remote Desktop Credentials",
+        fields: [
+            { name: "user", label: "Username", type: "string", value: data.user || "" },
+            { name: "password", label: "Password", type: "password", value: "" }
+        ],
+        buttons: [
+            { name: "cancel", label: "Cancel" },
+            { name: "connect", label: "Connect", primary: true }
+        ]
+    });
+    if (res.pushed !== "connect") {
+        throw new Error("Connection cancelled by user");
+    }
+    data.user = res.values.user;
+    data.password = res.values.password;
+}
+URP.start(data);
 ```
 
 ## Dialog Module

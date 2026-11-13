@@ -149,7 +149,7 @@ pub async fn run(
 
     log::debug!("Script obtained and executed successfully.");
     // All done, send hide message if NOT internal RDP is running
-    if tasks::is_internal_rdp_running() {
+    if tasks::is_remote_session_running() {
         log::debug!("Internal RDP is running.");
     } else {
         log::debug!("No internal RDP is running. Closing Progress window.");

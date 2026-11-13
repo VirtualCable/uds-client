@@ -88,6 +88,14 @@ impl AppHandler {
                         return;
                     }
                 }
+                GuiMessage::ConnectUrp(settings) => {
+                    if let Err(e) = self.open_urp(el, *settings) {
+                        log::error!("Failed to enter URP: {e}");
+                        self.stop.trigger();
+                        el.exit();
+                        return;
+                    }
+                }
             }
         }
 

@@ -10,6 +10,7 @@ shared = { path = "../shared" }
 connection = { path = "../connection" }
 rdp = { workspace = true }
 channels = { path = "../channels" }
+uds-rp.workspace = true
 
 anyhow.workspace = true
 

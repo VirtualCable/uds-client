@@ -3,6 +3,7 @@
 // All rights reserved.
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
 
+mod cursor;
 mod gdi;
 mod overlay;
 
@@ -14,6 +15,7 @@ use wgpu_text::glyph_brush::ab_glyph::FontRef;
 pub use wgpu_text::glyph_brush::{OwnedSection, Section, Text};
 use wgpu_text::{BrushBuilder, TextBrush};
 
+pub use cursor::{CursorDraw, CursorRenderer, CursorSprite};
 pub use overlay::{OverlayParams, OverlayRenderer};
 
 /// Lightweight descriptor for an overlay queued for rendering.
@@ -134,6 +136,7 @@ pub struct WgpuRenderer {
     pub gdi: gdi::GdiRenderer,
     pub overlay: OverlayRenderer,
     pub text: TextRenderer,
+    pub cursor: CursorRenderer,
     _window: Arc<winit::window::Window>,
 }
 
@@ -177,6 +180,7 @@ impl WgpuRenderer {
 
         let gdi = gdi::GdiRenderer::new(&g.device, g.format);
         let overlay = OverlayRenderer::new(&g.device, g.format);
+        let cursor = CursorRenderer::new(&g.device, g.format);
         let mut text =
             TextRenderer::new(&g.device, &g.queue, g.format, crate::draw::INTER_FONT_DATA);
         text.resize(size.width, size.height, &g.queue);
@@ -187,6 +191,7 @@ impl WgpuRenderer {
             gdi,
             overlay,
             text,
+            cursor,
             _window: window,
         })
     }
@@ -202,6 +207,23 @@ impl WgpuRenderer {
         self.gdi.upload(&g.device, &g.queue, rgba, sw, sh, rects);
     }
 
+    /// Builds a cursor sprite from a wire cursor shape (protocol §10).
+    #[allow(clippy::too_many_arguments)]
+    pub fn make_cursor_sprite(
+        &self,
+        width: u16,
+        height: u16,
+        hot_x: u16,
+        hot_y: u16,
+        rgba: &[u8],
+        xor_mask: &[u8],
+    ) -> CursorSprite {
+        let g = gpu();
+        CursorSprite::new(
+            &g.device, &g.queue, width, height, hot_x, hot_y, rgba, xor_mask,
+        )
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn update_and_render(
         &mut self,
@@ -212,6 +234,43 @@ impl WgpuRenderer {
         sections: &[OwnedSection],
         cursor: Option<&OverlayParams>,
         rects: Option<&[(u32, u32, u32, u32)]>,
+    ) {
+        self.render_frame(rgba, sw, sh, overlays, sections, cursor, None, rects, None);
+    }
+
+    /// Renders a URP session frame: like [`Self::update_and_render`], but the
+    /// cursor is the two-pass XOR sprite (protocol §10) and `viewport`, when
+    /// set, constrains the desktop quad to that surface-pixel rect
+    /// (letterboxing when the remote image is not scaled to the window).
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_urp(
+        &mut self,
+        rgba: &[u8],
+        sw: u32,
+        sh: u32,
+        overlays: &[OverlayParams],
+        sections: &[OwnedSection],
+        cursor: Option<&CursorDraw<'_>>,
+        rects: Option<&[(u32, u32, u32, u32)]>,
+        viewport: Option<(f32, f32, f32, f32)>,
+    ) {
+        self.render_frame(
+            rgba, sw, sh, overlays, sections, None, cursor, rects, viewport,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_frame(
+        &mut self,
+        rgba: &[u8],
+        sw: u32,
+        sh: u32,
+        overlays: &[OverlayParams],
+        sections: &[OwnedSection],
+        legacy_cursor: Option<&OverlayParams>,
+        xor_cursor: Option<&CursorDraw<'_>>,
+        rects: Option<&[(u32, u32, u32, u32)]>,
+        viewport: Option<(f32, f32, f32, f32)>,
     ) {
         let g = gpu();
         let sw = sw.min(g.max_texture_size);
@@ -268,15 +327,24 @@ impl WgpuRenderer {
             });
 
             if let Some(ref bg) = gdi_bg {
+                if let Some((vx, vy, vw, vh)) = viewport {
+                    rp.set_viewport(vx, vy, vw, vh, 0.0, 1.0);
+                }
                 self.gdi.draw(&mut rp, bg);
+                if viewport.is_some() {
+                    rp.set_viewport(0.0, 0.0, pw as f32, ph as f32, 0.0, 1.0);
+                }
             }
             self.overlay
                 .upload_and_draw(&g.device, &g.queue, &mut rp, overlays, pw, ph);
             self.text
                 .queue_and_draw(&g.device, &g.queue, &mut rp, sections);
-            if let Some(cur) = cursor {
+            if let Some(cur) = legacy_cursor {
                 self.overlay
                     .draw_single(&g.device, &g.queue, &mut rp, cur, pw, ph);
+            }
+            if let Some(cur) = xor_cursor {
+                self.cursor.draw(&g.device, &g.queue, &mut rp, cur, pw, ph);
             }
         }
         g.queue.submit(std::iter::once(enc.finish()));

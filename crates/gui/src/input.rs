@@ -76,6 +76,17 @@ impl AppHandler {
     }
 
     pub(crate) fn toggle_fullscreen(&mut self) {
+        if let Some(s) = &mut self.urp {
+            let is_fs = s.fullscreen;
+            if is_fs {
+                s.window.set_fullscreen(None);
+            } else {
+                s.window
+                    .set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+            }
+            s.fullscreen = !is_fs;
+            return;
+        }
         let Some(s) = &mut self.rdp else { return };
         if let RdpMode::Desktop {
             ref full_screen,
@@ -279,6 +290,75 @@ impl AppHandler {
                     ));
                     rdp::Rdp::set_command_event(&s.command_event);
                 }
+            }
+            _ => {}
+        }
+        true
+    }
+
+    /// URP session window input. Returns false when the session must end
+    /// (window close requested).
+    pub(crate) fn handle_urp_input(&mut self, event: &WindowEvent) -> bool {
+        use uds_rp::core::{InputMessage, PointerButton};
+
+        let Some(s) = &mut self.urp else { return true };
+        match event {
+            WindowEvent::CloseRequested => return false,
+            WindowEvent::Resized(_) => {
+                if !s.window.is_minimized().unwrap_or(false) {
+                    let phys = s.window.inner_size();
+                    s.renderer.reconfigure(phys.width, phys.height);
+                    s.window.request_redraw();
+                }
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                s.pointer = (position.x, position.y);
+                s.send_pointer_move();
+                s.window.request_redraw();
+            }
+            WindowEvent::MouseInput {
+                state: btn, button, ..
+            } => {
+                let button = match button {
+                    winit::event::MouseButton::Left => PointerButton::Left,
+                    winit::event::MouseButton::Right => PointerButton::Right,
+                    winit::event::MouseButton::Middle => PointerButton::Middle,
+                    winit::event::MouseButton::Back => PointerButton::X1,
+                    winit::event::MouseButton::Forward => PointerButton::X2,
+                    winit::event::MouseButton::Other(_) => return true,
+                };
+                let _ = s.commands.try_send(uds_rp::client::ClientCommand::Input(
+                    InputMessage::PointerButton {
+                        button,
+                        down: btn.is_pressed(),
+                    },
+                ));
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                let (v, h) = match delta {
+                    winit::event::MouseScrollDelta::LineDelta(x, y) => (*y, *x),
+                    winit::event::MouseScrollDelta::PixelDelta(pos) => {
+                        #[expect(clippy::cast_possible_truncation)]
+                        let (x, y) = (pos.x as f32 / 120.0, pos.y as f32 / 120.0);
+                        (y, x)
+                    }
+                };
+                #[expect(clippy::cast_possible_truncation)]
+                let (v, h) = ((v * 120.0) as i16, (h * 120.0) as i16);
+                if v != 0 || h != 0 {
+                    let _ = s.commands.try_send(uds_rp::client::ClientCommand::Input(
+                        InputMessage::PointerWheel {
+                            delta: v,
+                            hdelta: h,
+                        },
+                    ));
+                }
+            }
+            WindowEvent::Focused(false) => {
+                // Focus lost: pending key-ups may never arrive; drop the
+                // AltGr ownership so a later AltGr does not release a Ctrl
+                // the user is physically holding again.
+                s.reset_altgr();
             }
             _ => {}
         }

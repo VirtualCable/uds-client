@@ -29,6 +29,7 @@ mod draw;
 pub mod ipc;
 mod wgpu_render;
 
+mod altgr;
 mod input;
 mod session;
 
@@ -39,6 +40,7 @@ use windows::popup::PopupState;
 use windows::progress::{ProgressPhase, ProgressState};
 use windows::rdp_window::{RdpMode, RdpState};
 use windows::testing_launcher_window::TestingLauncherState;
+use windows::urp_window::UrpState;
 
 #[derive(Debug)]
 pub struct RawKey {
@@ -53,6 +55,7 @@ enum WindowKind {
     TestingLauncher,
     Rdp,
     RdpRail(u32),
+    Urp,
     Popup,
     About,
     Progress,
@@ -64,6 +67,7 @@ pub struct AppHandler {
     testing_launcher: Option<TestingLauncherState>,
     progress: Option<ProgressState>,
     rdp: Option<Box<RdpState>>,
+    urp: Option<Box<UrpState>>,
     popup: Option<PopupState>,
     about: Option<AboutState>,
     dialog: Option<DialogState>,
@@ -101,6 +105,7 @@ pub fn run_gui(
         testing_launcher: None,
         progress: None,
         rdp: None,
+        urp: None,
         popup: None,
         about: None,
         dialog: None,
@@ -187,6 +192,7 @@ impl ApplicationHandler for AppHandler {
                 // Process messages and updates (always)
                 self.process_gui_messages(el);
                 self.process_rdp_updates(el);
+                self.process_urp_updates(el);
                 self.process_rail_actions(el);
 
                 // Dispatch redraw by window kind
@@ -215,6 +221,11 @@ impl ApplicationHandler for AppHandler {
                     }
                     Some(&WindowKind::RdpRail(id)) => {
                         self.handle_rail_redraw(id);
+                    }
+                    Some(WindowKind::Urp) => {
+                        if let Some(ref mut state) = self.urp {
+                            state.update_screen();
+                        }
                     }
                     Some(WindowKind::About) => {
                         self.handle_about_event(WindowEvent::RedrawRequested)
@@ -246,6 +257,13 @@ impl ApplicationHandler for AppHandler {
                     Some(&WindowKind::RdpRail(id)) => {
                         self.handle_rail_event(id, event);
                     }
+                    Some(WindowKind::Urp) => {
+                        if !self.handle_urp_input(&event) {
+                            self.close_urp();
+                            self.stop.trigger();
+                            el.exit();
+                        }
+                    }
                     Some(WindowKind::Popup) => self.handle_popup_event(event),
                     Some(WindowKind::About) => self.handle_about_event(event),
                     Some(WindowKind::Dialog) => self.handle_dialog_event(event),
@@ -263,12 +281,14 @@ impl ApplicationHandler for AppHandler {
 
         self.process_gui_messages(el);
         self.process_rdp_updates(el);
+        self.process_urp_updates(el);
         self.process_rail_actions(el);
 
         let has_active_animations = self.progress.is_some() || self.about.is_some();
         let rdp_active = self.rdp.is_some();
+        let urp_active = self.urp.is_some();
 
-        if has_active_animations || rdp_active {
+        if has_active_animations || rdp_active || urp_active {
             let now = Instant::now();
             let fps = self.fps_limit;
             let interval = Duration::from_secs_f64(1.0 / fps as f64);
@@ -296,6 +316,7 @@ impl ApplicationHandler for AppHandler {
 
     fn exiting(&mut self, _el: &ActiveEventLoop) {
         self.close_rdp();
+        self.close_urp();
         self.close_progress();
         self.stop.trigger();
     }
