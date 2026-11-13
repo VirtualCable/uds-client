@@ -8,21 +8,21 @@
 //! shared display framebuffer with the two-pass XOR cursor (protocol §10)
 //! and forwarding input as Set-1 scancodes + normalized pointer moves.
 //!
-//! Scaling policy (per the transport settings): the remote resolution is
-//! fixed at connect time (the protocol has no display-mode renegotiation
-//! yet). With `allow_fullscreen_scaling` the image stretches to the window;
-//! otherwise it is drawn 1:1 (shrinking only when the window is smaller),
-//! centered with black bars.
+//! Scaling policy: the remote resolution is fixed at connect time (the
+//! launcher never renegotiates it; the protocol's DesktopResize stays a
+//! lab-client feature for now) and the remote image is always stretched
+//! to the window size by wgpu.
 
 use std::net::ToSocketAddrs;
 use std::sync::atomic::Ordering;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
 
 use anyhow::Result;
 use flume::Receiver;
 use rdp::integrations::ClipboardIntegration;
 use shared::log;
+use tokio::sync::oneshot;
 use uds_rp::client::{
     ClientCommand, ClientEvent, CommandSender, Displays, EVENT_CHANNEL_CAPACITY, Session,
     SessionCredentials,
@@ -34,10 +34,14 @@ use winit::keyboard::KeyCode;
 use crate::altgr::{AltGr, CtrlAction};
 use crate::types::UrpSettings;
 use crate::wgpu_render::{CursorSprite, WgpuRenderer};
+use crate::windows::dialog::{
+    DialogButton, DialogField, DialogFieldType, DialogResult, DialogSpec, DialogState,
+};
 use crate::{AppHandler, RawKey, WindowKind};
 
-/// Default cap for the auto (monitor-derived) remote resolution.
-const DEFAULT_MAX_FULLSCREEN: (u32, u32) = (1920, 1080);
+/// Fallback remote resolution when the broker does not fix one and the
+/// monitor geometry cannot be determined.
+const DEFAULT_RESOLUTION: (u32, u32) = (1920, 1080);
 
 /// Local clipboard watcher callback: announces local clipboard text to the
 /// session, swallowing the echo of a text we just applied from the remote.
@@ -79,9 +83,18 @@ pub struct UrpState {
     /// Whether the remote cursor is visible (server-driven, §10).
     pub cursor_visible: bool,
     pub fullscreen: bool,
-    pub allow_scaling: bool,
     /// True while the remote console is on a secure desktop (§18.41).
     pub secure_desktop: bool,
+    /// Storage channel enabled by the transport policy (Alt+U / Alt+D).
+    pub storage_enabled: bool,
+    /// Spool entries from the last `StorageList`, kept while the picker
+    /// dialog is open to map the chosen label back to the file name.
+    pub spool_entries: Vec<(String, u64)>,
+    /// Set by the `StorageList` event; drained by `process_urp_updates`
+    /// (which owns the `ActiveEventLoop` needed to build the dialog).
+    pub spool_dialog_pending: bool,
+    /// Reply channel of the open spool picker dialog, if any.
+    pub spool_reply: Option<oneshot::Receiver<DialogResult>>,
     altgr: AltGr,
     lctrl_held: bool,
     clipboard: Option<channels::clipboard::ClipboardHandle>,
@@ -96,17 +109,12 @@ pub enum UrpAction {
     Disconnect,
 }
 
-/// Surface-pixel rect the desktop image occupies (letterboxed when the
-/// remote image is not allowed to stretch).
+/// Surface-pixel rect the desktop image occupies: always the full window
+/// (the remote image is stretched to fit; the remote resolution is fixed
+/// at connect time).
 #[expect(clippy::cast_precision_loss, reason = "window sizes fit in f32")]
-pub fn dest_rect(win: (u32, u32), disp: (u32, u32), allow_scaling: bool) -> (f32, f32, f32, f32) {
-    let (ww, wh) = (win.0 as f32, win.1 as f32);
-    if allow_scaling || disp.0 == 0 || disp.1 == 0 || ww <= 0.0 || wh <= 0.0 {
-        return (0.0, 0.0, ww, wh);
-    }
-    let s = (ww / disp.0 as f32).min(wh / disp.1 as f32).min(1.0);
-    let (w, h) = (disp.0 as f32 * s, disp.1 as f32 * s);
-    ((ww - w) / 2.0, (wh - h) / 2.0, w, h)
+pub fn dest_rect(win: (u32, u32)) -> (f32, f32, f32, f32) {
+    (0.0, 0.0, win.0 as f32, win.1 as f32)
 }
 
 /// Maps a window position to protocol normalized pointer coordinates
@@ -207,6 +215,33 @@ fn handle_urp_event(state: &mut UrpState, event: ClientEvent) -> UrpAction {
             UrpAction::Continue
         }
         ClientEvent::Disconnected => UrpAction::Disconnect,
+        ClientEvent::StorageList { entries } => {
+            log::debug!("URP spool list: {} entries", entries.len());
+            state.spool_entries = entries;
+            state.spool_dialog_pending = true;
+            UrpAction::Continue
+        }
+        ClientEvent::TransferDone {
+            direction,
+            name,
+            bytes,
+            ..
+        } => {
+            log::info!("URP {direction:?} finished: {name} ({bytes} bytes)");
+            UrpAction::Continue
+        }
+        ClientEvent::TransferError { message, .. } => {
+            log::warn!("URP transfer error: {message}");
+            UrpAction::Continue
+        }
+        ClientEvent::TransferProgress { .. } => UrpAction::Continue,
+        ClientEvent::PrintJobDone { path, bytes } => {
+            log::info!("URP print job done: {} ({} bytes)", path.display(), bytes);
+            if let Err(e) = open::that_detached(&path) {
+                log::warn!("URP could not open printed PDF {}: {e}", path.display());
+            }
+            UrpAction::Continue
+        }
         _ => UrpAction::Continue,
     }
 }
@@ -275,14 +310,38 @@ impl UrpState {
         self.lctrl_held = false;
     }
 
+    /// Opens a native file picker and uploads the chosen file to the
+    /// server spool. The dialog runs on its own thread so the winit loop
+    /// never blocks on it.
+    pub(crate) fn start_upload(&self) {
+        if !self.storage_enabled {
+            return;
+        }
+        let commands = self.commands.clone();
+        let spawned = std::thread::Builder::new()
+            .name("uds-rp-upload-pick".to_string())
+            .spawn(move || {
+                if let Some(path) = rfd::FileDialog::new().pick_file() {
+                    let _ = commands.try_send(ClientCommand::StorageUpload { path });
+                }
+            });
+        if let Err(e) = spawned {
+            log::warn!("URP upload picker thread failed: {e}");
+        }
+    }
+
+    /// Requests the server spool listing; the answer arrives as a
+    /// `ClientEvent::StorageList` and opens the download picker dialog.
+    pub(crate) fn request_spool_list(&self) {
+        if self.storage_enabled {
+            let _ = self.commands.try_send(ClientCommand::StorageList);
+        }
+    }
+
     /// Sends the current pointer position to the server.
     pub(crate) fn send_pointer_move(&self) {
         let size = self.window.inner_size();
-        let dest = dest_rect(
-            (size.width, size.height),
-            self.desktop_size,
-            self.allow_scaling,
-        );
+        let dest = dest_rect((size.width, size.height));
         let (x, y) = normalize_pointer(self.pointer, dest);
         let _ = self
             .commands
@@ -327,7 +386,7 @@ impl UrpState {
             .upload_gdi(&self.scratch, w, h, Some(&[(0, 0, w, h)]));
 
         let size = self.window.inner_size();
-        let dest = dest_rect((size.width, size.height), (w, h), self.allow_scaling);
+        let dest = dest_rect((size.width, size.height));
         let cursor = if self.cursor_visible {
             self.cursor
                 .as_ref()
@@ -361,30 +420,15 @@ impl AppHandler {
         self.close_progress(); // Ensure progress is closed if it was open before
         log::info!("open_urp: {settings:?}");
 
-        let cap = (
-            if settings.max_fullscreen_width > 0 {
-                settings.max_fullscreen_width
-            } else {
-                DEFAULT_MAX_FULLSCREEN.0
-            },
-            if settings.max_fullscreen_height > 0 {
-                settings.max_fullscreen_height
-            } else {
-                DEFAULT_MAX_FULLSCREEN.1
-            },
-        );
         let monitor_scale = crate::monitor::scale(0);
-        let (mon_w, mon_h) = crate::monitor::size(0).unwrap_or(DEFAULT_MAX_FULLSCREEN);
+        let (mon_w, mon_h) = crate::monitor::size(0).unwrap_or(DEFAULT_RESOLUTION);
         let (mon_lw, mon_lh) =
             crate::monitor::phys_2_logic((mon_w as i32, mon_h as i32), monitor_scale);
         let fixed = settings.screen_width > 0 && settings.screen_height > 0;
         let (remote_w, remote_h) = if fixed {
             (settings.screen_width, settings.screen_height)
         } else {
-            (
-                (mon_lw as u32).clamp(1, cap.0),
-                (mon_lh as u32).clamp(1, cap.1),
-            )
+            (mon_lw.max(1) as u32, mon_lh.max(1) as u32)
         };
         let pref_resolution = (
             u16::try_from(remote_w).unwrap_or(u16::MAX),
@@ -426,19 +470,60 @@ impl AppHandler {
             _ => None,
         };
 
+        // Device integrations (§15.3): the uds-rp `channels` crate owns the
+        // OS device stacks (cpal audio, nokhwa webcam, PC/SC smartcard) — the
+        // same backends the labclient validated; each `Some` offers its
+        // channel in the HELLO. Probing failures degrade to `None` (channel
+        // simply not offered), they never abort the connection.
+        let red = settings.redirections;
+        let integrations = uds_rp::client::integrations::Integrations {
+            webcam: red
+                .webcam
+                .then(uds_rp_channels::webcam::default_source)
+                .flatten(),
+            printer: if red.printing {
+                // Phase 0: PDF-to-directory sink; PrintJobDone opens the PDF
+                // with the system viewer.
+                let dir = std::env::temp_dir().join(format!("uds-rp-print-{}", std::process::id()));
+                match uds_rp_channels::printer::PdfToDirSink::new(dir, uds_rp::core::MAX_JOB_BYTES)
+                {
+                    Ok(sink) => Some(Box::new(sink) as _),
+                    Err(e) => {
+                        log::warn!("URP printer redirection unavailable: {e}");
+                        None
+                    }
+                }
+            } else {
+                None
+            },
+            mic: red
+                .mic
+                .then(uds_rp_channels::audio::input::default_mic_factory),
+            audio_out: red
+                .audio
+                .then(uds_rp_channels::audio::output::default_output_factory),
+            smartcard: red
+                .smartcard
+                .then(uds_rp_channels::smartcard::default_backend)
+                .flatten(),
+        };
+
         let config = uds_rp::client::ClientConfig {
             addr,
             ticket: settings.ticket,
             key: settings.key,
             audio: settings.redirections.audio,
             audio_dump: None,
-            mic: uds_rp::client::mic::MicMode::Off,
+            mic: if settings.redirections.mic {
+                uds_rp::client::mic::MicMode::Device
+            } else {
+                uds_rp::client::mic::MicMode::Off
+            },
             // Privacy screen stays off: the server ignores the flag anyway
             // (incompatible with console-mirror capture; the IddCx work is
             // archived in the uds-rp `archive/iddcx-display` branch).
             privacy_screen: false,
-            // Phase 4 wires the real device adapters from `channels`.
-            integrations: uds_rp::client::integrations::Integrations::default(),
+            integrations,
             pref_resolution,
             credentials,
         };
@@ -488,8 +573,11 @@ impl AppHandler {
             cursor: None,
             cursor_visible: true,
             fullscreen: settings.fullscreen,
-            allow_scaling: settings.allow_fullscreen_scaling,
             secure_desktop: false,
+            storage_enabled: settings.redirections.storage,
+            spool_entries: Vec::new(),
+            spool_dialog_pending: false,
+            spool_reply: None,
             altgr: AltGr::default(),
             lctrl_held: false,
             clipboard,
@@ -521,33 +609,171 @@ impl AppHandler {
     }
 
     pub(crate) fn process_urp_updates(&mut self, el: &ActiveEventLoop) {
-        let Some(ref mut state) = self.urp else {
-            return;
-        };
-        state.drain_keys();
-        while let Ok(event) = state.events_rx.try_recv() {
-            match handle_urp_event(state, event) {
-                UrpAction::Continue => {
-                    state.window.request_redraw();
+        let spool_dialog = {
+            let Some(ref mut state) = self.urp else {
+                return;
+            };
+            state.drain_keys();
+            while let Ok(event) = state.events_rx.try_recv() {
+                match handle_urp_event(state, event) {
+                    UrpAction::Continue => {
+                        state.window.request_redraw();
+                    }
+                    UrpAction::Disconnect => {
+                        self.stop.trigger();
+                        self.return_code = crate::types::ReturnCode::Exit;
+                        self.close_urp();
+                        el.exit();
+                        return;
+                    }
                 }
-                UrpAction::Disconnect => {
-                    self.stop.trigger();
-                    self.return_code = crate::types::ReturnCode::Exit;
-                    self.close_urp();
-                    el.exit();
+            }
+            // The worker thread is gone without a Disconnected event (panic).
+            if let Ok(result) = state.result_rx.try_recv() {
+                if let Err(e) = result {
+                    log::error!("URP worker died: {e}");
+                }
+                self.stop.trigger();
+                self.return_code = crate::types::ReturnCode::Exit;
+                self.close_urp();
+                el.exit();
+                return;
+            }
+            let pending = state.spool_dialog_pending;
+            state.spool_dialog_pending = false;
+            pending
+        };
+        if spool_dialog {
+            self.open_urp_spool_dialog(el);
+        }
+        self.poll_urp_spool_reply();
+    }
+
+    /// Opens the spool picker dialog with the entries of the last
+    /// `StorageList` event.
+    fn open_urp_spool_dialog(&mut self, el: &ActiveEventLoop) {
+        let entries = match self.urp {
+            Some(ref mut s) => std::mem::take(&mut s.spool_entries),
+            None => return,
+        };
+        if entries.is_empty() {
+            log::info!("URP remote spool is empty; nothing to download");
+            return;
+        }
+        let choices: Vec<String> = entries
+            .iter()
+            .map(|(n, sz)| format!("{n} ({sz} bytes)"))
+            .collect();
+        let spec = DialogSpec {
+            title: "Download from remote".to_string(),
+            fields: vec![DialogField {
+                name: "file".to_string(),
+                label: Some("Spool file".to_string()),
+                size: None,
+                field_type: DialogFieldType::Choice,
+                value: String::new(),
+                choices: Some(choices),
+            }],
+            buttons: vec![
+                DialogButton {
+                    name: "download".to_string(),
+                    label: "Download".to_string(),
+                    close_on_click: true,
+                    primary: true,
+                },
+                DialogButton {
+                    name: "cancel".to_string(),
+                    label: "Cancel".to_string(),
+                    close_on_click: true,
+                    primary: false,
+                },
+            ],
+            width: None,
+            height: None,
+        };
+        let (tx, rx) = oneshot::channel();
+        let resp = Arc::new(RwLock::new(Some(tx)));
+        match DialogState::new(el, spec, resp) {
+            Ok(d) => {
+                let wid = d.window.id();
+                self.register_window(wid, WindowKind::Dialog);
+                d.window.set_visible(true);
+                d.window.request_redraw();
+                self.dialog = Some(d);
+                if let Some(ref mut s) = self.urp {
+                    s.spool_entries = entries;
+                    s.spool_reply = Some(rx);
+                }
+            }
+            Err(e) => log::warn!("URP spool dialog failed: {e}"),
+        }
+    }
+
+    /// Polls the spool picker answer; on "download", asks for the local
+    /// destination with a native save dialog and starts the transfer.
+    fn poll_urp_spool_reply(&mut self) {
+        enum Poll {
+            Result(Box<DialogResult>),
+            Closed,
+            Pending,
+        }
+        let poll = {
+            let Some(ref mut state) = self.urp else {
+                return;
+            };
+            let Some(ref mut rx) = state.spool_reply else {
+                return;
+            };
+            match rx.try_recv() {
+                Ok(r) => Poll::Result(Box::new(r)),
+                Err(oneshot::error::TryRecvError::Empty) => Poll::Pending,
+                Err(oneshot::error::TryRecvError::Closed) => Poll::Closed,
+            }
+        };
+        match poll {
+            Poll::Pending => {}
+            Poll::Closed => {
+                // Dialog window closed without an answer.
+                if let Some(ref mut s) = self.urp {
+                    s.spool_reply = None;
+                }
+            }
+            Poll::Result(result) => {
+                let Some(ref mut state) = self.urp else {
+                    return;
+                };
+                state.spool_reply = None;
+                if result.pushed.as_deref() != Some("download") {
                     return;
                 }
+                let name = result
+                    .values
+                    .get("file")
+                    .and_then(|chosen| {
+                        state
+                            .spool_entries
+                            .iter()
+                            .find(|(n, sz)| format!("{n} ({sz} bytes)") == *chosen)
+                            .map(|(n, _)| n.clone())
+                    })
+                    .or_else(|| state.spool_entries.first().map(|(n, _)| n.clone()));
+                let Some(name) = name else {
+                    return;
+                };
+                let commands = state.commands.clone();
+                let spawned = std::thread::Builder::new()
+                    .name("uds-rp-download-pick".to_string())
+                    .spawn(move || {
+                        if let Some(dest) = rfd::FileDialog::new().set_file_name(&name).save_file()
+                        {
+                            let _ =
+                                commands.try_send(ClientCommand::StorageDownload { name, dest });
+                        }
+                    });
+                if let Err(e) = spawned {
+                    log::warn!("URP download picker thread failed: {e}");
+                }
             }
-        }
-        // The worker thread is gone without a Disconnected event (panic).
-        if let Ok(result) = state.result_rx.try_recv() {
-            if let Err(e) = result {
-                log::error!("URP worker died: {e}");
-            }
-            self.stop.trigger();
-            self.return_code = crate::types::ReturnCode::Exit;
-            self.close_urp();
-            el.exit();
         }
     }
 }
@@ -557,27 +783,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn dest_rect_stretches_when_scaling_allowed() {
-        assert_eq!(
-            dest_rect((800, 600), (1920, 1080), true),
-            (0.0, 0.0, 800.0, 600.0)
-        );
-    }
-
-    #[test]
-    fn dest_rect_centers_1to1_when_not_scaling() {
-        // 1920x1080 remote on a 2000x1200 window: 1:1, centered.
-        let (x, y, w, h) = dest_rect((2000, 1200), (1920, 1080), false);
-        assert_eq!((w, h), (1920.0, 1080.0));
-        assert_eq!((x, y), (40.0, 60.0));
-    }
-
-    #[test]
-    fn dest_rect_shrinks_to_fit_smaller_window() {
-        // 1920x1080 remote on a 960x600 window: fit = 960x540, centered.
-        let (x, y, w, h) = dest_rect((960, 600), (1920, 1080), false);
-        assert_eq!((w, h), (960.0, 540.0));
-        assert_eq!((x, y), (0.0, 30.0));
+    fn dest_rect_is_always_the_full_window() {
+        assert_eq!(dest_rect((800, 600)), (0.0, 0.0, 800.0, 600.0));
     }
 
     #[test]

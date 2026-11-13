@@ -11,6 +11,7 @@ connection = { path = "../connection" }
 rdp = { workspace = true }
 channels = { path = "../channels" }
 uds-rp.workspace = true
+uds-rp-channels.workspace = true
 
 anyhow.workspace = true
 
@@ -28,6 +29,7 @@ zeroize.workspace = true
 image.workspace = true
 
 open.workspace = true
+rfd.workspace = true
 
 serde.workspace = true
 serde_json.workspace = true

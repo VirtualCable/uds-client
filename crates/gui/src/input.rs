@@ -48,6 +48,20 @@ impl AppHandler {
                     self.toggle_fullscreen();
                     return true;
                 }
+                winit::keyboard::KeyCode::KeyU => {
+                    if let Some(ref s) = self.urp {
+                        log::debug!("Alt+U → URP storage upload");
+                        s.start_upload();
+                        return true;
+                    }
+                }
+                winit::keyboard::KeyCode::KeyD => {
+                    if let Some(ref s) = self.urp {
+                        log::debug!("Alt+D → URP spool list/download");
+                        s.request_spool_list();
+                        return true;
+                    }
+                }
                 winit::keyboard::KeyCode::KeyF if !is_rail => {
                     if let Some(ref s) = self.rdp
                         && let RdpMode::Desktop { ref fps, .. } = s.mode

@@ -20,8 +20,6 @@ use gui::types::{UrpRedirections, UrpSettings};
 
 /// Default URP agent port.
 const DEFAULT_PORT: u16 = 14433;
-/// Default cap for the auto (monitor) fullscreen resolution.
-const DEFAULT_MAX_FULLSCREEN: (u32, u32) = (1920, 1080);
 
 #[derive(Debug, Default, TryFromJs, Zeroize, ZeroizeOnDrop, Clone)]
 struct JsUrpRedirections {
@@ -61,12 +59,6 @@ struct JsUrpSettings {
     #[zeroize(skip)]
     pub fullscreen: Option<bool>,
     #[zeroize(skip)]
-    pub allow_fullscreen_scaling: Option<bool>,
-    #[zeroize(skip)]
-    pub max_fullscreen_width: Option<u32>,
-    #[zeroize(skip)]
-    pub max_fullscreen_height: Option<u32>,
-    #[zeroize(skip)]
     pub redirections: Option<JsUrpRedirections>,
     #[zeroize(skip)]
     pub options: Option<JsUrpOptions>,
@@ -85,9 +77,6 @@ impl Default for JsUrpSettings {
             screen_width: None,
             screen_height: None,
             fullscreen: None,
-            allow_fullscreen_scaling: None,
-            max_fullscreen_width: None,
-            max_fullscreen_height: None,
             redirections: None,
             options: None,
         }
@@ -124,13 +113,6 @@ impl JsUrpSettings {
             screen_width: self.screen_width.unwrap_or(0),
             screen_height: self.screen_height.unwrap_or(0),
             fullscreen: self.fullscreen.unwrap_or(false),
-            allow_fullscreen_scaling: self.allow_fullscreen_scaling.unwrap_or(false),
-            max_fullscreen_width: self
-                .max_fullscreen_width
-                .unwrap_or(DEFAULT_MAX_FULLSCREEN.0),
-            max_fullscreen_height: self
-                .max_fullscreen_height
-                .unwrap_or(DEFAULT_MAX_FULLSCREEN.1),
             redirections: UrpRedirections {
                 audio: red.audio.unwrap_or(defs.audio),
                 mic: red.mic.unwrap_or(defs.mic),
@@ -231,9 +213,6 @@ mod tests {
                 assert!(settings.user.is_none());
                 assert!(settings.password.is_none());
                 assert!(!settings.fullscreen);
-                assert!(!settings.allow_fullscreen_scaling);
-                assert_eq!(settings.max_fullscreen_width, 1920);
-                assert_eq!(settings.max_fullscreen_height, 1080);
                 assert_eq!((settings.screen_width, settings.screen_height), (0, 0));
                 // Conservative defaults (broker channel policy).
                 assert!(settings.redirections.audio);
@@ -269,9 +248,6 @@ mod tests {
                 screen_width: 2560,
                 screen_height: 1440,
                 fullscreen: true,
-                allow_fullscreen_scaling: true,
-                max_fullscreen_width: 3840,
-                max_fullscreen_height: 2160,
                 redirections: {{ audio: false, mic: true, webcam: true }},
                 options: {{ preferred_codec: "ladder" }}
             }});
@@ -293,9 +269,6 @@ mod tests {
                     (2560, 1440)
                 );
                 assert!(settings.fullscreen);
-                assert!(settings.allow_fullscreen_scaling);
-                assert_eq!(settings.max_fullscreen_width, 3840);
-                assert_eq!(settings.max_fullscreen_height, 2160);
                 assert!(!settings.redirections.audio);
                 assert!(settings.redirections.mic);
                 assert!(settings.redirections.webcam);
