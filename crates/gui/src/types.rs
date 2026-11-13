@@ -81,11 +81,6 @@ pub struct UrpSettings {
     pub screen_height: u32,
     /// Start in fullscreen.
     pub fullscreen: bool,
-    /// Allow stretching the remote image when fullscreen exceeds it.
-    pub allow_fullscreen_scaling: bool,
-    /// Cap for the auto (monitor) fullscreen resolution.
-    pub max_fullscreen_width: u32,
-    pub max_fullscreen_height: u32,
     pub redirections: UrpRedirections,
     /// Codec preset preference (`None` = server ladder decides).
     pub preferred_codec: Option<String>,
@@ -105,9 +100,6 @@ impl std::fmt::Debug for UrpSettings {
             .field("screen_width", &self.screen_width)
             .field("screen_height", &self.screen_height)
             .field("fullscreen", &self.fullscreen)
-            .field("allow_fullscreen_scaling", &self.allow_fullscreen_scaling)
-            .field("max_fullscreen_width", &self.max_fullscreen_width)
-            .field("max_fullscreen_height", &self.max_fullscreen_height)
             .field("redirections", &self.redirections)
             .field("preferred_codec", &self.preferred_codec)
             .finish()

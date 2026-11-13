@@ -105,6 +105,9 @@ turbojpeg = "1.4"
 # For opening links
 open = "5.4"
 
+# Native file dialogs (Win32 / Cocoa / xdg-portal), MIT/Apache-2.0
+rfd = "0.15"
+
 # Post-quantum cryptography
 libcrux-ml-dsa = "0.0.11"
 libcrux-ml-kem = "0.0.11"
@@ -175,6 +178,8 @@ freerdp-sys = { git = "https://github.com/VirtualCable/freerdp-integration.git",
 
 # UDS Remote Protocol (URP) client facade
 uds-rp = { git = "https://github.com/VirtualCable/uds-remote-protocol.git", package = "uds-rp", branch = "master" }
+# URP device backends (audio/mic via cpal, webcam via nokhwa, PC/SC smartcard, PDF printer sink)
+uds-rp-channels = { git = "https://github.com/VirtualCable/uds-remote-protocol.git", package = "channels", branch = "master", features = ["audio", "smartcard"] }
 
 # Local development overrides (uncomment to use the local freerdp-integration checkout).
 # [patch."https://github.com/VirtualCable/freerdp-integration.git"]
@@ -184,3 +189,4 @@ uds-rp = { git = "https://github.com/VirtualCable/uds-remote-protocol.git", pack
 # Local development overrides (uncomment to use the local uds-remote-protocol checkout).
 # [patch."https://github.com/VirtualCable/uds-remote-protocol.git"]
 # uds-rp = { path = "../../repos/uds-remote-protocol/crates/uds-rp" }
+# channels = { path = "../../repos/uds-remote-protocol/crates/channels" }
