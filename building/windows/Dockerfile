@@ -18,7 +18,11 @@ RUN choco install -y git ; \
 RUN choco install -y visualstudio2022buildtools \
     --package-parameters "'--installPath C:\BuildTools --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --quiet --wait --norestart'"
 
-# Define environment variables for Rust, vcpkg, and LLVM. Also define root for FreeRDP build installation
+# Define environment variables for Rust, vcpkg, and LLVM. Also define root for FreeRDP build installation.
+# CMAKE_POLICY_VERSION_MINIMUM: cmake 4 rejects the old cmake_minimum_required
+# of vendored C deps (audiopus_sys/opus) without the policy floor.
+# RUSTFLAGS crt-static: self-contained Rust binaries and makes vcpkg-rs pick
+# the x64-windows-static triplet (static libvpx for uds-rp's vpx-sys).
 RUN $old=[Environment]::GetEnvironmentVariable('PATH','Machine'); \
     $new=$old+';C:\rust\cargo\bin;C:\vcpkg;C:\Program Files\LLVM\bin'; \
     [Environment]::SetEnvironmentVariable('PATH',$new,'Machine'); \
@@ -26,6 +30,8 @@ RUN $old=[Environment]::GetEnvironmentVariable('PATH','Machine'); \
     [Environment]::SetEnvironmentVariable('RUSTUP_HOME','C:\rust\rustup','Machine'); \
     [Environment]::SetEnvironmentVariable('VCPKG_ROOT','C:\vcpkg','Machine'); \
     [Environment]::SetEnvironmentVariable('FREERDP_ROOT','C:\dev\freerdp','Machine'); \
+    [Environment]::SetEnvironmentVariable('CMAKE_POLICY_VERSION_MINIMUM','3.5','Machine'); \
+    [Environment]::SetEnvironmentVariable('RUSTFLAGS','-C target-feature=+crt-static','Machine'); \
     [Environment]::SetEnvironmentVariable('LIBCLANG_PATH','C:\Program Files\LLVM\bin','Machine');
 
 # install Rust
@@ -38,6 +44,11 @@ RUN git clone https://github.com/microsoft/vcpkg $env:VCPKG_ROOT ; \
     & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat"
 
 RUN C:\vcpkg\vcpkg install openssl zlib ffmpeg cjson libusb
+
+# Static libvpx for uds-rp's vpx-sys (VP9 decode). The x64-windows-static
+# triplet (/MT) matches the crt-static RUSTFLAGS above; vcpkg-rs selects it
+# automatically, so no vpx.dll needs to ship with the launcher.
+RUN C:\vcpkg\vcpkg install libvpx:x64-windows-static
 
 # Clone freerdp and buiild using comp-release.ps1 file
 RUN mkdir C:\dev ; \

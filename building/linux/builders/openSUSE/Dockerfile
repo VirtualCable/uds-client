@@ -8,13 +8,15 @@ RUN zypper refresh && zypper install -y \
     pango-devel cairo-devel glib2-devel \
     alsa-devel libpulse-devel clang-devel libusb-1_0-devel \
     libavcodec-devel libavutil-devel libswscale-devel libavformat-devel libswresample-devel \
-    krb5-devel cups-devel fuse3-devel libjpeg8-devel \
+    krb5-devel cups-devel fuse3-devel libjpeg8-devel libvpx-devel \
     libopenh264-devel \
     pcsc-lite-devel \
     rpm-build rpmdevtools \
     && zypper clean -a
 
 ENV FREERDP_ROOT="/usr/local"
+# cmake 4 rejects the vendored opus cmake_minimum_required without the policy floor
+ENV CMAKE_POLICY_VERSION_MINIMUM="3.5"
 
 WORKDIR /freerdp-build
 RUN git clone --branch 3.26.0 --depth 1 https://github.com/FreeRDP/FreeRDP.git

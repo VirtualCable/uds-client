@@ -7,9 +7,10 @@ RUN dnf install -y \
     pango-devel cairo-devel glib2-devel \
     freerdp-devel alsa-lib-devel pulseaudio-libs-devel clang-devel \
     ffmpeg-free-devel krb5-devel openh264-devel cups-devel fuse3-devel libusbx-devel \
-    pcsc-lite-devel \
+    pcsc-lite-devel libvpx-devel \
     rpm-build rpmdevtools strip redhat-rpm-config \
     && dnf clean all
 
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
+ENV CMAKE_POLICY_VERSION_MINIMUM="3.5"
 ENV PATH="/root/.cargo/bin:$PATH"

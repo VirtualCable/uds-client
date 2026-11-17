@@ -1,7 +1,8 @@
 # Very simple guide to building FreeRDP on mac
 # Needs homebrew and the following packages installed:
 # Also python is needed (maybe pyenv to manage versions)
-# brew install git cmake pkg-config libusb openssl ffmpeg jpeg-turbo openh264
+# brew install git cmake pkg-config libusb openssl ffmpeg jpeg-turbo openh264 libvpx
+# (libvpx is needed by uds-rp's VP9 decoder; vpx-sys locates it via pkg-config)
 # Note:
 # Will build against the latest macOS SDK installed on your system.
 # To ensure compat with older macOS versions, better compile it
