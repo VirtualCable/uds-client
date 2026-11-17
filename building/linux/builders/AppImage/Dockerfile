@@ -8,13 +8,14 @@ RUN apt-get update && apt-get install -y \
   libcairo2-dev freerdp3-dev libasound2-dev libpulse-dev libclang-dev \
   libavcodec-dev libavutil-dev libswscale-dev libavformat-dev libswresample-dev \ 
   libkrb5-dev libopenh264-dev libcups2-dev libfuse3-dev libusb-1.0.0-dev \
-  libpcsclite-dev \
+  libpcsclite-dev libvpx-dev \
   libxss-dev libgtk-3-bin \
   git python3-pip python3-setuptools wget squashfs-tools zsync \
   fuse libfuse2t64 gnupg gpg \
   && rm -rf /var/lib/apt/lists/*
 
 # Set environment variable to allow AppImages to run in Docker without FUSE
+ENV CMAKE_POLICY_VERSION_MINIMUM="3.5"
 ENV APPIMAGE_EXTRACT_AND_RUN=1
 
 # Copy local apt-key to satisfy appimage-builder 1.1.0 on Trixie

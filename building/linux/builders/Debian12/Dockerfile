@@ -9,11 +9,13 @@ RUN apt-get update && apt-get install -y \
   ninja-build cmake libturbojpeg0-dev libusb-1.0.0-dev \
   libavcodec-dev libavutil-dev libswscale-dev libavformat-dev libswresample-dev \
   libopenh264-dev libkrb5-dev libcups2-dev libfuse3-dev \
-  libpcsclite-dev \
+  libpcsclite-dev libvpx-dev \
   devscripts debhelper \
   && rm -rf /var/lib/apt/lists/*
 
 ENV FREERDP_ROOT="/usr/local"
+# cmake 4 rejects the vendored opus cmake_minimum_required without the policy floor
+ENV CMAKE_POLICY_VERSION_MINIMUM="3.5"
 
 WORKDIR /freerdp-build
 RUN git clone --branch 3.26.0 --depth 1 https://github.com/FreeRDP/FreeRDP.git
