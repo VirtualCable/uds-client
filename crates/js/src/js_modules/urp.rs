@@ -45,8 +45,8 @@ struct JsUrpSettings {
     /// Broker ticket (48 alphanumeric chars, verbatim — the pq wire
     /// mapping is raw UTF-8; SHA-384 is only the standalone/lab mode).
     pub ticket: String,
-    /// Session PSK as 64 hex chars (the KEM envelope's shared secret).
-    pub shared_secret: String,
+    /// Session PSK: the 32 raw bytes of the KEM shared secret, as a JS array.
+    pub shared_secret: Vec<u8>,
     /// Interactive logon credentials (the script asked the user when the
     /// broker did not know them).
     pub user: Option<String>,
@@ -74,7 +74,7 @@ impl Default for JsUrpSettings {
             server: String::new(),
             port: Some(DEFAULT_PORT),
             ticket: String::new(),
-            shared_secret: String::new(),
+            shared_secret: Vec::new(),
             user: None,
             password: None,
             domain: None,
@@ -98,8 +98,11 @@ impl JsUrpSettings {
         }
         let ticket = uds_rp::core::wire_ticket_from_str(&self.ticket)
             .map_err(|e| format!("invalid ticket: {e}"))?;
-        let key: [u8; 32] = uds_rp::core::hex::decode(&self.shared_secret)
-            .map_err(|_| "'shared_secret' must be 64 hex characters".to_string())?;
+        let key: [u8; 32] = self
+            .shared_secret
+            .as_slice()
+            .try_into()
+            .map_err(|_| "'shared_secret' must be 32 bytes".to_string())?;
         // Credentials travel together or not at all.
         if self.user.is_some() != self.password.is_some() {
             return Err("'user' and 'password' must come together".into());
@@ -199,7 +202,7 @@ mod tests {
     }
 
     const VALID_TICKET: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRST01";
-    const VALID_SECRET: &str = "733b5b19754ebb4af75efa1b885e078116b85abb8488c4381078bf5fcb90958c";
+    const VALID_SECRET_JS: &str = "[115,59,91,25,117,78,187,74,247,94,250,27,136,94,7,129,22,184,90,187,132,136,196,56,16,120,191,95,203,144,149,140]";
 
     #[tokio::test]
     #[serial_test::serial(js_modules)]
@@ -212,7 +215,7 @@ mod tests {
             URP.start({{
                 server: "172.27.1.4",
                 ticket: "{VALID_TICKET}",
-                shared_secret: "{VALID_SECRET}"
+                shared_secret: {VALID_SECRET_JS}
             }});
         "#
         );
@@ -259,7 +262,7 @@ mod tests {
                 server: "broker-vm",
                 port: 14434,
                 ticket: "{VALID_TICKET}",
-                shared_secret: "{VALID_SECRET}",
+                shared_secret: {VALID_SECRET_JS},
                 user: "dkmaster",
                 password: "s3cret",
                 domain: "LAB",
@@ -363,17 +366,17 @@ mod tests {
         let mut ctx = create_context(None)?;
         register(&mut ctx)?;
         for (ticket, secret) in [
-            ("short", VALID_SECRET),
+            ("short", VALID_SECRET_JS),
             // 48 chars but not alphanumeric
             (
                 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!",
-                VALID_SECRET,
+                VALID_SECRET_JS,
             ),
-            (VALID_TICKET, "not-hex"),
-            (VALID_TICKET, "733b"),
+            (VALID_TICKET, "[1,2,3]"),
+            (VALID_TICKET, "[]"),
         ] {
             let script = format!(
-                r#"URP.start({{ server: "h", ticket: "{ticket}", shared_secret: "{secret}" }});"#
+                r#"URP.start({{ server: "h", ticket: "{ticket}", shared_secret: {secret} }});"#
             );
             let result = exec_script(&mut ctx, &script).await;
             assert!(result.is_err(), "ticket={ticket} secret={secret} must fail");
@@ -389,7 +392,7 @@ mod tests {
         let mut ctx = create_context(None)?;
         register(&mut ctx)?;
         let script = format!(
-            r#"URP.start({{ server: "h", ticket: "{VALID_TICKET}", shared_secret: "{VALID_SECRET}", user: "u" }});"#
+            r#"URP.start({{ server: "h", ticket: "{VALID_TICKET}", shared_secret: {VALID_SECRET_JS}, user: "u" }});"#
         );
         assert!(exec_script(&mut ctx, &script).await.is_err());
         assert!(messages_rx.try_recv().is_err());
