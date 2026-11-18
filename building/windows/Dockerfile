@@ -52,11 +52,6 @@ RUN Copy-Item C:\vcpkg\installed\x64-windows\bin\libz.dll C:\vcpkg\installed\x64
 # automatically, so no vpx.dll needs to ship with the launcher.
 RUN C:\vcpkg\vcpkg install libvpx:x64-windows-static
 
-# Static libvpx for uds-rp's vpx-sys (VP9 decode). The x64-windows-static
-# triplet (/MT) matches the crt-static RUSTFLAGS above; vcpkg-rs selects it
-# automatically, so no vpx.dll needs to ship with the launcher.
-RUN C:\vcpkg\vcpkg install libvpx:x64-windows-static
-
 # Clone freerdp and buiild using comp-release.ps1 file
 RUN mkdir C:\dev ; \
     git clone --branch 3.26.0 --depth 1 https://github.com/FreeRDP/FreeRDP.git C:\dev\FreeRDP.git ; \
