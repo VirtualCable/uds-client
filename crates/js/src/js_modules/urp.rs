@@ -310,7 +310,7 @@ mod tests {
         let mut ctx = create_context(None)?;
         register(&mut ctx)?;
         let script = format!(
-            r#"URP.start({{ server: "h", ticket: "{VALID_TICKET}", shared_secret: "{VALID_SECRET}", window_mode: "maximized" }});"#
+            r#"URP.start({{ server: "h", ticket: "{VALID_TICKET}", shared_secret: {VALID_SECRET_JS}, window_mode: "maximized" }});"#
         );
         exec_script(&mut ctx, &script)
             .await
@@ -331,7 +331,7 @@ mod tests {
         let mut ctx = create_context(None)?;
         register(&mut ctx)?;
         let script = format!(
-            r#"URP.start({{ server: "h", ticket: "{VALID_TICKET}", shared_secret: "{VALID_SECRET}", fullscreen: false }});"#
+            r#"URP.start({{ server: "h", ticket: "{VALID_TICKET}", shared_secret: {VALID_SECRET_JS}, fullscreen: false }});"#
         );
         exec_script(&mut ctx, &script)
             .await
@@ -352,7 +352,7 @@ mod tests {
         let mut ctx = create_context(None)?;
         register(&mut ctx)?;
         let script = format!(
-            r#"URP.start({{ server: "h", ticket: "{VALID_TICKET}", shared_secret: "{VALID_SECRET}", window_mode: "huge" }});"#
+            r#"URP.start({{ server: "h", ticket: "{VALID_TICKET}", shared_secret: {VALID_SECRET_JS}, window_mode: "huge" }});"#
         );
         assert!(exec_script(&mut ctx, &script).await.is_err());
         assert!(messages_rx.try_recv().is_err());
