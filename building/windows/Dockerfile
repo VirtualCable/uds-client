@@ -44,6 +44,13 @@ RUN git clone https://github.com/microsoft/vcpkg $env:VCPKG_ROOT ; \
     & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat"
 
 RUN C:\vcpkg\vcpkg install openssl zlib ffmpeg cjson libusb
+# freerdp-integration rdp/build.rs expects z.dll; this vcpkg zlib installs libz.dll
+RUN Copy-Item C:\vcpkg\installed\x64-windows\bin\libz.dll C:\vcpkg\installed\x64-windows\bin\z.dll
+
+# Static libvpx for uds-rp's vpx-sys (VP9 decode). The x64-windows-static
+# triplet (/MT) matches the crt-static RUSTFLAGS above; vcpkg-rs selects it
+# automatically, so no vpx.dll needs to ship with the launcher.
+RUN C:\vcpkg\vcpkg install libvpx:x64-windows-static
 
 # Static libvpx for uds-rp's vpx-sys (VP9 decode). The x64-windows-static
 # triplet (/MT) matches the crt-static RUSTFLAGS above; vcpkg-rs selects it

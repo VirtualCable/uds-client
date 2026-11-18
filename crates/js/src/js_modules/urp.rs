@@ -16,7 +16,7 @@ use shared::log;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::gui::{GuiMessage, send_message};
-use gui::types::{UrpRedirections, UrpSettings};
+use gui::types::{UrpRedirections, UrpSettings, UrpWindowMode};
 
 /// Default URP agent port.
 const DEFAULT_PORT: u16 = 14433;
@@ -45,8 +45,8 @@ struct JsUrpSettings {
     /// Broker ticket (48 alphanumeric chars, verbatim — the pq wire
     /// mapping is raw UTF-8; SHA-384 is only the standalone/lab mode).
     pub ticket: String,
-    /// Session PSK as 64 hex chars (the KEM envelope's shared secret).
-    pub shared_secret: String,
+    /// Session PSK: the 32 raw bytes of the KEM shared secret, as a JS array.
+    pub shared_secret: Vec<u8>,
     /// Interactive logon credentials (the script asked the user when the
     /// broker did not know them).
     pub user: Option<String>,
@@ -58,6 +58,10 @@ struct JsUrpSettings {
     pub screen_height: Option<u32>,
     #[zeroize(skip)]
     pub fullscreen: Option<bool>,
+    /// "fullscreen", "maximized", "windowed" or "minimized". When absent,
+    /// `fullscreen` decides (false = windowed, otherwise fullscreen).
+    #[zeroize(skip)]
+    pub window_mode: Option<String>,
     #[zeroize(skip)]
     pub redirections: Option<JsUrpRedirections>,
     #[zeroize(skip)]
@@ -70,13 +74,14 @@ impl Default for JsUrpSettings {
             server: String::new(),
             port: Some(DEFAULT_PORT),
             ticket: String::new(),
-            shared_secret: String::new(),
+            shared_secret: Vec::new(),
             user: None,
             password: None,
             domain: None,
             screen_width: None,
             screen_height: None,
             fullscreen: None,
+            window_mode: None,
             redirections: None,
             options: None,
         }
@@ -93,15 +98,31 @@ impl JsUrpSettings {
         }
         let ticket = uds_rp::core::wire_ticket_from_str(&self.ticket)
             .map_err(|e| format!("invalid ticket: {e}"))?;
-        let key: [u8; 32] = uds_rp::core::hex::decode(&self.shared_secret)
-            .map_err(|_| "'shared_secret' must be 64 hex characters".to_string())?;
-        // Credentials travel together or not at all.
-        if self.user.is_some() != self.password.is_some() {
-            return Err("'user' and 'password' must come together".into());
+        let key: [u8; 32] = self
+            .shared_secret
+            .as_slice()
+            .try_into()
+            .map_err(|_| "'shared_secret' must be 32 bytes".to_string())?;
+        // The broker never sends a password here: it stays inside the ticket for the agent.
+        if self.password.is_some() && self.user.is_none() {
+            return Err("'password' requires 'user'".into());
         }
         let red = self.redirections.clone().unwrap_or_default();
         let defs = UrpRedirections::default();
         let opt = self.options.clone().unwrap_or_default();
+        let window_mode = match (self.window_mode.as_deref(), self.fullscreen) {
+            (Some("fullscreen"), _) => UrpWindowMode::Fullscreen,
+            (Some("maximized"), _) => UrpWindowMode::Maximized,
+            (Some("windowed"), _) => UrpWindowMode::Windowed,
+            (Some("minimized"), _) => UrpWindowMode::Minimized,
+            (Some(_), _) => {
+                return Err(
+                    "'window_mode' must be fullscreen, maximized, windowed or minimized".into(),
+                );
+            }
+            (None, Some(false)) => UrpWindowMode::Windowed,
+            (None, _) => UrpWindowMode::Fullscreen,
+        };
         Ok(UrpSettings {
             server: self.server.clone(),
             port: self.port.unwrap_or(DEFAULT_PORT),
@@ -112,7 +133,7 @@ impl JsUrpSettings {
             domain: self.domain.clone(),
             screen_width: self.screen_width.unwrap_or(0),
             screen_height: self.screen_height.unwrap_or(0),
-            fullscreen: self.fullscreen.unwrap_or(false),
+            window_mode,
             redirections: UrpRedirections {
                 audio: red.audio.unwrap_or(defs.audio),
                 mic: red.mic.unwrap_or(defs.mic),
@@ -130,10 +151,10 @@ impl JsUrpSettings {
 fn start_urp_fn(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let js_settings = extract_js_args!(args, ctx, JsUrpSettings);
     log::debug!(
-        "URP settings parsed - server: '{}', port: {:?}, fullscreen: {:?}",
+        "URP settings parsed - server: '{}', port: {:?}, window_mode: {:?}",
         js_settings.server,
         js_settings.port,
-        js_settings.fullscreen
+        js_settings.window_mode
     );
 
     let settings = js_settings
@@ -181,7 +202,7 @@ mod tests {
     }
 
     const VALID_TICKET: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRST01";
-    const VALID_SECRET: &str = "733b5b19754ebb4af75efa1b885e078116b85abb8488c4381078bf5fcb90958c";
+    const VALID_SECRET_JS: &str = "[115,59,91,25,117,78,187,74,247,94,250,27,136,94,7,129,22,184,90,187,132,136,196,56,16,120,191,95,203,144,149,140]";
 
     #[tokio::test]
     #[serial_test::serial(js_modules)]
@@ -194,7 +215,7 @@ mod tests {
             URP.start({{
                 server: "172.27.1.4",
                 ticket: "{VALID_TICKET}",
-                shared_secret: "{VALID_SECRET}"
+                shared_secret: {VALID_SECRET_JS}
             }});
         "#
         );
@@ -212,7 +233,7 @@ mod tests {
                 assert_eq!(settings.key[31], 0x8c);
                 assert!(settings.user.is_none());
                 assert!(settings.password.is_none());
-                assert!(!settings.fullscreen);
+                assert_eq!(settings.window_mode, UrpWindowMode::Fullscreen);
                 assert_eq!((settings.screen_width, settings.screen_height), (0, 0));
                 // Conservative defaults (broker channel policy).
                 assert!(settings.redirections.audio);
@@ -241,7 +262,7 @@ mod tests {
                 server: "broker-vm",
                 port: 14434,
                 ticket: "{VALID_TICKET}",
-                shared_secret: "{VALID_SECRET}",
+                shared_secret: {VALID_SECRET_JS},
                 user: "dkmaster",
                 password: "s3cret",
                 domain: "LAB",
@@ -268,7 +289,7 @@ mod tests {
                     (settings.screen_width, settings.screen_height),
                     (2560, 1440)
                 );
-                assert!(settings.fullscreen);
+                assert_eq!(settings.window_mode, UrpWindowMode::Fullscreen);
                 assert!(!settings.redirections.audio);
                 assert!(settings.redirections.mic);
                 assert!(settings.redirections.webcam);
@@ -284,22 +305,78 @@ mod tests {
 
     #[tokio::test]
     #[serial_test::serial(js_modules)]
+    async fn test_window_mode_from_script() -> Result<()> {
+        let messages_rx = test_setup()?;
+        let mut ctx = create_context(None)?;
+        register(&mut ctx)?;
+        let script = format!(
+            r#"URP.start({{ server: "h", ticket: "{VALID_TICKET}", shared_secret: "{VALID_SECRET}", window_mode: "maximized" }});"#
+        );
+        exec_script(&mut ctx, &script)
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+        match messages_rx.try_recv() {
+            Ok(GuiMessage::ConnectUrp(settings)) => {
+                assert_eq!(settings.window_mode, UrpWindowMode::Maximized);
+            }
+            _ => panic!("Expected GuiMessage::ConnectUrp"),
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[serial_test::serial(js_modules)]
+    async fn test_windowed_when_fullscreen_is_false() -> Result<()> {
+        let messages_rx = test_setup()?;
+        let mut ctx = create_context(None)?;
+        register(&mut ctx)?;
+        let script = format!(
+            r#"URP.start({{ server: "h", ticket: "{VALID_TICKET}", shared_secret: "{VALID_SECRET}", fullscreen: false }});"#
+        );
+        exec_script(&mut ctx, &script)
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+        match messages_rx.try_recv() {
+            Ok(GuiMessage::ConnectUrp(settings)) => {
+                assert_eq!(settings.window_mode, UrpWindowMode::Windowed);
+            }
+            _ => panic!("Expected GuiMessage::ConnectUrp"),
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[serial_test::serial(js_modules)]
+    async fn test_rejects_unknown_window_mode() -> Result<()> {
+        let messages_rx = test_setup()?;
+        let mut ctx = create_context(None)?;
+        register(&mut ctx)?;
+        let script = format!(
+            r#"URP.start({{ server: "h", ticket: "{VALID_TICKET}", shared_secret: "{VALID_SECRET}", window_mode: "huge" }});"#
+        );
+        assert!(exec_script(&mut ctx, &script).await.is_err());
+        assert!(messages_rx.try_recv().is_err());
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[serial_test::serial(js_modules)]
     async fn test_rejects_bad_ticket_and_secret() -> Result<()> {
         let messages_rx = test_setup()?;
         let mut ctx = create_context(None)?;
         register(&mut ctx)?;
         for (ticket, secret) in [
-            ("short", VALID_SECRET),
+            ("short", VALID_SECRET_JS),
             // 48 chars but not alphanumeric
             (
                 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!",
-                VALID_SECRET,
+                VALID_SECRET_JS,
             ),
-            (VALID_TICKET, "not-hex"),
-            (VALID_TICKET, "733b"),
+            (VALID_TICKET, "[1,2,3]"),
+            (VALID_TICKET, "[]"),
         ] {
             let script = format!(
-                r#"URP.start({{ server: "h", ticket: "{ticket}", shared_secret: "{secret}" }});"#
+                r#"URP.start({{ server: "h", ticket: "{ticket}", shared_secret: {secret} }});"#
             );
             let result = exec_script(&mut ctx, &script).await;
             assert!(result.is_err(), "ticket={ticket} secret={secret} must fail");
@@ -310,15 +387,35 @@ mod tests {
 
     #[tokio::test]
     #[serial_test::serial(js_modules)]
-    async fn test_rejects_half_credentials() -> Result<()> {
+    async fn test_rejects_password_without_user() -> Result<()> {
         let messages_rx = test_setup()?;
         let mut ctx = create_context(None)?;
         register(&mut ctx)?;
         let script = format!(
-            r#"URP.start({{ server: "h", ticket: "{VALID_TICKET}", shared_secret: "{VALID_SECRET}", user: "u" }});"#
+            r#"URP.start({{ server: "h", ticket: "{VALID_TICKET}", shared_secret: {VALID_SECRET_JS}, password: "p" }});"#
         );
         assert!(exec_script(&mut ctx, &script).await.is_err());
         assert!(messages_rx.try_recv().is_err());
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[serial_test::serial(js_modules)]
+    async fn test_accepts_user_without_password() -> Result<()> {
+        let messages_rx = test_setup()?;
+        let mut ctx = create_context(None)?;
+        register(&mut ctx)?;
+        let script = format!(
+            r#"URP.start({{ server: "h", ticket: "{VALID_TICKET}", shared_secret: {VALID_SECRET_JS}, user: "u" }});"#
+        );
+        exec_script(&mut ctx, &script).await.map_err(|e| anyhow::anyhow!(e))?;
+        match messages_rx.try_recv() {
+            Ok(GuiMessage::ConnectUrp(settings)) => {
+                assert_eq!(settings.user.as_deref(), Some("u"));
+                assert!(settings.password.is_none());
+            }
+            other => panic!("Expected GuiMessage::ConnectUrp, got {:?}", other.is_ok()),
+        }
         Ok(())
     }
 }
