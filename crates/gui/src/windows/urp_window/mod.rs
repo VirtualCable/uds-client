@@ -33,7 +33,8 @@ use winit::keyboard::KeyCode;
 
 use crate::altgr::{AltGr, CtrlAction};
 use crate::types::UrpSettings;
-use crate::wgpu_render::{CursorSprite, WgpuRenderer};
+use crate::draw::ui::waves::{self, Wave};
+use crate::wgpu_render::{CursorSprite, OverlayParams, WgpuRenderer};
 use crate::windows::dialog::{
     DialogButton, DialogField, DialogFieldType, DialogResult, DialogSpec, DialogState,
 };
@@ -74,6 +75,13 @@ pub struct UrpState {
     pub keys_rx: Receiver<RawKey>,
     /// Remote desktop geometry announced by the server (display 0).
     pub desktop_size: (u32, u32),
+    /// False until the server announces the primary display; until then the
+    /// window shows a connecting message instead of an empty canvas.
+    pub desktop_ready: bool,
+    /// Phase of the connecting animation (waves move while it is not ready).
+    pub connecting_anim: f32,
+    pub connecting_waves: Vec<Wave>,
+    pub connecting_logo: crate::logo::LogoImage,
     /// Scratch buffer for packed dirty-rect uploads.
     pub scratch: Vec<u8>,
     /// Last known local pointer position (physical window pixels).
@@ -145,6 +153,15 @@ fn urp_scancode(key: &KeyCode) -> Option<(u16, bool)> {
     Some((v & 0x00FF, v & 0x0100 != 0))
 }
 
+/// Wave layout of the connecting screen (same look as the progress window).
+fn connecting_waves() -> Vec<Wave> {
+    vec![
+        Wave { y_base: 0.4, amplitude: 25.0, speed: 0.04, offset: 0.0, thickness: 5.0, opacity: 0.5 },
+        Wave { y_base: 0.42, amplitude: 20.0, speed: 0.06, offset: 2.0, thickness: 3.5, opacity: 0.3 },
+        Wave { y_base: 0.38, amplitude: 22.0, speed: 0.03, offset: 4.0, thickness: 6.0, opacity: 0.25 },
+    ]
+}
+
 fn handle_urp_event(state: &mut UrpState, event: ClientEvent) -> UrpAction {
     log::trace!("URP event: {event:?}");
     match event {
@@ -161,6 +178,8 @@ fn handle_urp_event(state: &mut UrpState, event: ClientEvent) -> UrpAction {
             log::info!("URP display {display_id}: {width}x{height} codec={codec:?}");
             if display_id == 0 {
                 state.desktop_size = (width, height);
+                state.desktop_ready = true;
+                state.window.set_title("UDS Remote Desktop");
             }
             UrpAction::Continue
         }
@@ -352,9 +371,71 @@ impl UrpState {
             }));
     }
 
+    /// Draws the connecting screen (animated waves and the UDS logo) while the
+    /// server has not announced a display yet.
+    fn render_connecting(&mut self) {
+        let size = self.window.inner_size();
+        let (w, h) = (size.width.max(1), size.height.max(1));
+        let Some(mut pixmap) = tiny_skia::Pixmap::new(w, h) else {
+            return;
+        };
+        pixmap.fill(tiny_skia::Color::from_rgba8(30, 30, 35, 255));
+        let wave_data = waves::render(w, h, self.connecting_anim, 1.0, &self.connecting_waves);
+        if let Some(size) = tiny_skia::IntSize::from_wh(w, h)
+            && let Some(wave_pix) = tiny_skia::Pixmap::from_vec(wave_data, size)
+        {
+            pixmap.draw_pixmap(
+                0,
+                0,
+                wave_pix.as_ref(),
+                &tiny_skia::PixmapPaint::default(),
+                tiny_skia::Transform::identity(),
+                None,
+            );
+        }
+        let mut bgra = pixmap.data().to_vec();
+        for px in bgra.chunks_exact_mut(4) {
+            px.swap(0, 2);
+        }
+        self.renderer
+            .upload_gdi(&bgra, w, h, Some(&[(0, 0, w, h)]));
+
+        let logo = &self.connecting_logo;
+        let logo_x = (w as f32 - logo.width as f32) / 2.0;
+        let logo_y = (h as f32 * 0.35 - logo.height as f32 / 2.0).max(0.0);
+        let overlays = [OverlayParams {
+            rgba: &logo.rgba,
+            width: logo.width,
+            height: logo.height,
+            x: logo_x,
+            y: logo_y,
+            scale: 1.0,
+        }];
+        let sections = vec![
+            crate::wgpu_render::OwnedSection::default()
+                .with_screen_position((
+                    (w as f32 / 2.0 - 190.0).max(16.0),
+                    logo_y + logo.height as f32 + 24.0,
+                ))
+                .add_text(
+                    wgpu_text::glyph_brush::OwnedText::new(
+                        "Connecting to the virtual machine...",
+                    )
+                    .with_scale(22.0)
+                    .with_color([0.85, 0.85, 0.9, 1.0]),
+                ),
+        ];
+        self.renderer
+            .render_urp(&[], w, h, &overlays, &sections, None, None, None);
+    }
+
     /// Renders one frame: uploads pending damage from the shared framebuffer
     /// and presents it with the software cursor on top.
     pub fn update_screen(&mut self) {
+        if !self.desktop_ready {
+            self.render_connecting();
+            return;
+        }
         let Some(display) = self.displays.get(0) else {
             return;
         };
@@ -439,7 +520,7 @@ impl AppHandler {
             el.create_window(
                 winit::window::Window::default_attributes()
                     .with_visible(false)
-                    .with_title("UDS Remote Desktop")
+                    .with_title("UDS Remote Desktop - connecting...")
                     .with_inner_size(winit::dpi::LogicalSize::new(
                         remote_w as f64,
                         remote_h as f64,
@@ -568,6 +649,10 @@ impl AppHandler {
             result_rx,
             keys_rx: self.keys_rx.clone(),
             desktop_size: (remote_w, remote_h),
+            desktop_ready: false,
+            connecting_anim: 0.0,
+            connecting_waves: connecting_waves(),
+            connecting_logo: crate::logo::load_logo(),
             scratch: Vec::new(),
             pointer: (0.0, 0.0),
             cursor: None,
