@@ -419,7 +419,7 @@ impl UrpState {
                 ))
                 .add_text(
                     wgpu_text::glyph_brush::OwnedText::new(
-                        "Conectando con la máquina virtual...",
+                        "Connecting to the virtual machine...",
                     )
                     .with_scale(22.0)
                     .with_color([0.85, 0.85, 0.9, 1.0]),
@@ -520,7 +520,7 @@ impl AppHandler {
             el.create_window(
                 winit::window::Window::default_attributes()
                     .with_visible(false)
-                    .with_title("UDS Remote Desktop - conectando...")
+                    .with_title("UDS Remote Desktop - connecting...")
                     .with_inner_size(winit::dpi::LogicalSize::new(
                         remote_w as f64,
                         remote_h as f64,
