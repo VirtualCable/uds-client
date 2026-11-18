@@ -61,6 +61,20 @@ impl Default for UrpRedirections {
 /// Core settings of a UDS Remote Protocol (URP) session, translated from
 /// the JS namespace parameters. Free of protocol-crate types so the gui
 /// crate does not depend on it.
+/// How the URP session window opens (chosen by the transport).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum UrpWindowMode {
+    /// Borderless full screen (default).
+    #[default]
+    Fullscreen,
+    /// Normal window, maximized.
+    Maximized,
+    /// Normal window with its default size.
+    Windowed,
+    /// Opened minimized (restore it from the taskbar).
+    Minimized,
+}
+
 #[derive(Clone)]
 pub struct UrpSettings {
     /// Server host (direct, or the local tunnel endpoint).
@@ -79,8 +93,8 @@ pub struct UrpSettings {
     /// Broker-fixed remote resolution; (0, 0) = not fixed.
     pub screen_width: u32,
     pub screen_height: u32,
-    /// Start in fullscreen.
-    pub fullscreen: bool,
+    /// How the session window opens.
+    pub window_mode: UrpWindowMode,
     pub redirections: UrpRedirections,
     /// Codec preset preference (`None` = server ladder decides).
     pub preferred_codec: Option<String>,
@@ -99,7 +113,7 @@ impl std::fmt::Debug for UrpSettings {
             .field("domain", &self.domain)
             .field("screen_width", &self.screen_width)
             .field("screen_height", &self.screen_height)
-            .field("fullscreen", &self.fullscreen)
+            .field("window_mode", &self.window_mode)
             .field("redirections", &self.redirections)
             .field("preferred_codec", &self.preferred_codec)
             .finish()

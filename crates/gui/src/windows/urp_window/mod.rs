@@ -32,7 +32,7 @@ use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
 
 use crate::altgr::{AltGr, CtrlAction};
-use crate::types::UrpSettings;
+use crate::types::{UrpSettings, UrpWindowMode};
 use crate::draw::ui::waves::{self, Wave};
 use crate::wgpu_render::{CursorSprite, OverlayParams, WgpuRenderer};
 use crate::windows::dialog::{
@@ -529,8 +529,13 @@ impl AppHandler {
             )?,
         );
         let wid = window.id();
-        if settings.fullscreen {
-            window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+        let window_mode = settings.window_mode;
+        match window_mode {
+            UrpWindowMode::Fullscreen => {
+                window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+            }
+            UrpWindowMode::Maximized => window.set_maximized(true),
+            UrpWindowMode::Windowed | UrpWindowMode::Minimized => {}
         }
         let phys = window.inner_size();
         let renderer = WgpuRenderer::new(window.clone(), phys.width, phys.height)?;
@@ -657,7 +662,7 @@ impl AppHandler {
             pointer: (0.0, 0.0),
             cursor: None,
             cursor_visible: true,
-            fullscreen: settings.fullscreen,
+            fullscreen: window_mode == UrpWindowMode::Fullscreen,
             secure_desktop: false,
             storage_enabled: settings.redirections.storage,
             spool_entries: Vec::new(),
@@ -675,6 +680,9 @@ impl AppHandler {
         if let Some(ref state) = self.urp {
             state.window.set_cursor_visible(false);
             state.window.set_visible(true);
+            if window_mode == UrpWindowMode::Minimized {
+                state.window.set_minimized(true);
+            }
             state.window.request_redraw();
         }
         Ok(())
