@@ -112,7 +112,7 @@ impl JsUrpSettings {
             domain: self.domain.clone(),
             screen_width: self.screen_width.unwrap_or(0),
             screen_height: self.screen_height.unwrap_or(0),
-            fullscreen: self.fullscreen.unwrap_or(false),
+            fullscreen: self.fullscreen.unwrap_or(true),
             redirections: UrpRedirections {
                 audio: red.audio.unwrap_or(defs.audio),
                 mic: red.mic.unwrap_or(defs.mic),
@@ -212,7 +212,7 @@ mod tests {
                 assert_eq!(settings.key[31], 0x8c);
                 assert!(settings.user.is_none());
                 assert!(settings.password.is_none());
-                assert!(!settings.fullscreen);
+                assert!(settings.fullscreen);
                 assert_eq!((settings.screen_width, settings.screen_height), (0, 0));
                 // Conservative defaults (broker channel policy).
                 assert!(settings.redirections.audio);
