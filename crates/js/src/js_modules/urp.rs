@@ -103,9 +103,9 @@ impl JsUrpSettings {
             .as_slice()
             .try_into()
             .map_err(|_| "'shared_secret' must be 32 bytes".to_string())?;
-        // Credentials travel together or not at all.
-        if self.user.is_some() != self.password.is_some() {
-            return Err("'user' and 'password' must come together".into());
+        // The broker never sends a password here: it stays inside the ticket for the agent.
+        if self.password.is_some() && self.user.is_none() {
+            return Err("'password' requires 'user'".into());
         }
         let red = self.redirections.clone().unwrap_or_default();
         let defs = UrpRedirections::default();
@@ -387,15 +387,35 @@ mod tests {
 
     #[tokio::test]
     #[serial_test::serial(js_modules)]
-    async fn test_rejects_half_credentials() -> Result<()> {
+    async fn test_rejects_password_without_user() -> Result<()> {
+        let messages_rx = test_setup()?;
+        let mut ctx = create_context(None)?;
+        register(&mut ctx)?;
+        let script = format!(
+            r#"URP.start({{ server: "h", ticket: "{VALID_TICKET}", shared_secret: {VALID_SECRET_JS}, password: "p" }});"#
+        );
+        assert!(exec_script(&mut ctx, &script).await.is_err());
+        assert!(messages_rx.try_recv().is_err());
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[serial_test::serial(js_modules)]
+    async fn test_accepts_user_without_password() -> Result<()> {
         let messages_rx = test_setup()?;
         let mut ctx = create_context(None)?;
         register(&mut ctx)?;
         let script = format!(
             r#"URP.start({{ server: "h", ticket: "{VALID_TICKET}", shared_secret: {VALID_SECRET_JS}, user: "u" }});"#
         );
-        assert!(exec_script(&mut ctx, &script).await.is_err());
-        assert!(messages_rx.try_recv().is_err());
+        exec_script(&mut ctx, &script).await.map_err(|e| anyhow::anyhow!(e))?;
+        match messages_rx.try_recv() {
+            Ok(GuiMessage::ConnectUrp(settings)) => {
+                assert_eq!(settings.user.as_deref(), Some("u"));
+                assert!(settings.password.is_none());
+            }
+            other => panic!("Expected GuiMessage::ConnectUrp, got {:?}", other.is_ok()),
+        }
         Ok(())
     }
 }
