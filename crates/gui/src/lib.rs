@@ -142,6 +142,12 @@ impl AppHandler {
     }
 
     fn tick_animations(&mut self) {
+        if let Some(ref mut u) = self.urp
+            && !u.desktop_ready
+        {
+            u.connecting_anim += 0.3;
+            u.window.request_redraw();
+        }
         if let Some(ref mut p) = self.progress {
             p.animation_time += 0.3;
             if self.testing_launcher.is_some() && p.pct < 100 {
