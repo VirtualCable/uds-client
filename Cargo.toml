@@ -106,7 +106,7 @@ turbojpeg = "1.4"
 open = "5.4"
 
 # Native file dialogs (Win32 / Cocoa / xdg-portal), MIT/Apache-2.0
-rfd = "0.15"
+rfd = "0.18"
 
 # Post-quantum cryptography
 libcrux-ml-dsa = "0.0.11"
