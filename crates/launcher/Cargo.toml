@@ -40,3 +40,4 @@ sys-locale = { workspace = true }
 flume = { workspace = true }
 
 [build-dependencies]
+builder = { path = "../builder" }
