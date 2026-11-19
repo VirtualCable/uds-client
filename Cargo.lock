@@ -885,7 +885,7 @@ dependencies = [
 [[package]]
 name = "channels"
 version = "0.1.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#abd5f8b5d35833604425903c48171e7b13303b4f"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#4483e05b201376e519bf3c3d46dcddbf25b41e0d"
 dependencies = [
  "anyhow",
  "client",
@@ -964,7 +964,7 @@ dependencies = [
 [[package]]
 name = "client"
 version = "0.1.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#abd5f8b5d35833604425903c48171e7b13303b4f"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#4483e05b201376e519bf3c3d46dcddbf25b41e0d"
 dependencies = [
  "anyhow",
  "codec",
@@ -1057,7 +1057,7 @@ dependencies = [
 [[package]]
 name = "codec"
 version = "0.1.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#abd5f8b5d35833604425903c48171e7b13303b4f"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#4483e05b201376e519bf3c3d46dcddbf25b41e0d"
 dependencies = [
  "anyhow",
  "libloading",
@@ -3146,6 +3146,7 @@ name = "launcher"
 version = "5.0.0"
 dependencies = [
  "anyhow",
+ "builder",
  "connection",
  "crypt",
  "flume 0.12.0",
@@ -3182,9 +3183,9 @@ checksum = "7a79a3332a6609480d7d0c9eab957bca6b455b91bb84e66d19f5ff66294b85b8"
 
 [[package]]
 name = "libbz2-rs-sys"
-version = "0.2.6"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32f454fd6831a29c0e827ed075bca2a15be201bd57f4168f0fd1041124eab17e"
+checksum = "a5314d1d545fce0307c770d791adf20d997e0b63b64e1ffeed8a920e290eabe4"
 
 [[package]]
 name = "libc"
@@ -4585,29 +4586,29 @@ dependencies = [
 
 [[package]]
 name = "pin-project"
-version = "1.1.13"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2466b2336ed02bcdca6b294417127b90ec92038d1d5c4fbeac971a922e0e0924"
+checksum = "a6c2123f4708bbd422630a6dae7c03f678b1ce1f1c99e4c4b3beac69c8174cc9"
 dependencies = [
  "pin-project-internal",
 ]
 
 [[package]]
 name = "pin-project-internal"
-version = "1.1.13"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c96395f0a926bc13b1c17622aaddda1ecb55d49c8f1bf9777e4d877800a43f8b"
+checksum = "358938fd6df944c1e44bb328b60fb275f13c804aac47ba26a1165d45a3f87756"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.119",
+ "syn 3.0.10",
 ]
 
 [[package]]
 name = "pin-project-lite"
-version = "0.2.17"
+version = "0.2.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
+checksum = "c938015719552d665fd0553b90d96cd7ff58e83e4c061ca99e6bb78865a72752"
 
 [[package]]
 name = "pkcs1"
@@ -4691,9 +4692,9 @@ dependencies = [
 
 [[package]]
 name = "pollster"
-version = "1.0.2"
+version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c2c80c4e3afbec8224b9d3e641fbf3a5690cc7595b887b0a27a926bb357ed5c"
+checksum = "7e9b9cf600136f5b976fbc5727d58c26e1ecab8ee23088d44ef1c7af793550ab"
 
 [[package]]
 name = "polyval"
@@ -4848,7 +4849,7 @@ dependencies = [
 [[package]]
 name = "protocol"
 version = "0.1.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#abd5f8b5d35833604425903c48171e7b13303b4f"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#4483e05b201376e519bf3c3d46dcddbf25b41e0d"
 dependencies = [
  "aes-gcm",
  "hkdf",
@@ -5742,7 +5743,7 @@ dependencies = [
 [[package]]
 name = "server"
 version = "0.1.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#abd5f8b5d35833604425903c48171e7b13303b4f"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#4483e05b201376e519bf3c3d46dcddbf25b41e0d"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5764,7 +5765,7 @@ dependencies = [
 [[package]]
 name = "server-config"
 version = "0.1.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#abd5f8b5d35833604425903c48171e7b13303b4f"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#4483e05b201376e519bf3c3d46dcddbf25b41e0d"
 dependencies = [
  "anyhow",
  "getrandom 0.3.4",
@@ -6600,7 +6601,7 @@ dependencies = [
 [[package]]
 name = "transport"
 version = "0.1.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#abd5f8b5d35833604425903c48171e7b13303b4f"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#4483e05b201376e519bf3c3d46dcddbf25b41e0d"
 dependencies = [
  "async-trait",
  "getrandom 0.3.4",
@@ -6665,7 +6666,7 @@ checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 [[package]]
 name = "uds-rp"
 version = "0.1.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#abd5f8b5d35833604425903c48171e7b13303b4f"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#4483e05b201376e519bf3c3d46dcddbf25b41e0d"
 dependencies = [
  "client",
  "codec",
@@ -6813,7 +6814,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "vpx-sys"
 version = "0.1.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#abd5f8b5d35833604425903c48171e7b13303b4f"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#4483e05b201376e519bf3c3d46dcddbf25b41e0d"
 dependencies = [
  "pkg-config",
  "vcpkg",

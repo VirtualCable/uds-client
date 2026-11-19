@@ -9,7 +9,7 @@ RUN zypper refresh && zypper install -y \
     alsa-devel libpulse-devel clang-devel libusb-1_0-devel \
     libavcodec-devel libavutil-devel libswscale-devel libavformat-devel libswresample-devel \
     krb5-devel cups-devel fuse3-devel libjpeg8-devel libvpx-devel \
-    libopenh264-devel \
+    libopenh264-devel libopus-devel \
     pcsc-lite-devel \
     rpm-build rpmdevtools \
     && zypper clean -a
