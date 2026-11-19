@@ -52,7 +52,6 @@ flume.workspace = true
 # non blocking TLS streams
 tokio-rustls.workspace = true
 tokio.workspace = true
-futures.workspace = true
 async-trait.workspace = true
 
 # HTTP client

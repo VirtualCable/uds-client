@@ -30,21 +30,16 @@ zeroize.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 
-rand.workspace = true
-
 # SSL/TLS
 rustls.workspace = true
-rustls-native-certs.workspace = true
 
-# non blocking TLS streams
-tokio-rustls.workspace = true
+# Async runtime
 tokio.workspace = true
-futures.workspace = true
-async-trait.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows.workspace = true
 widestring.workspace = true
+rand.workspace = true
 
 [dev-dependencies]
 rcgen.workspace = true
