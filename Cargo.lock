@@ -885,7 +885,7 @@ dependencies = [
 [[package]]
 name = "channels"
 version = "0.1.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#abd5f8b5d35833604425903c48171e7b13303b4f"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#45c75c47f7a6ea20ba304770873bf9a514bbbf26"
 dependencies = [
  "anyhow",
  "client",
@@ -964,7 +964,7 @@ dependencies = [
 [[package]]
 name = "client"
 version = "0.1.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#abd5f8b5d35833604425903c48171e7b13303b4f"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#45c75c47f7a6ea20ba304770873bf9a514bbbf26"
 dependencies = [
  "anyhow",
  "codec",
@@ -1057,7 +1057,7 @@ dependencies = [
 [[package]]
 name = "codec"
 version = "0.1.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#abd5f8b5d35833604425903c48171e7b13303b4f"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#45c75c47f7a6ea20ba304770873bf9a514bbbf26"
 dependencies = [
  "anyhow",
  "libloading",
@@ -1092,7 +1092,7 @@ version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "faf9468729b8cbcea668e36183cb69d317348c2e08e994829fb56ebfdfbaac34"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1818,7 +1818,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e35d6e78f4cebb90e51d543db8fe41528851d6deeef6ef21ebd4bfdc1e784776"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4848,7 +4848,7 @@ dependencies = [
 [[package]]
 name = "protocol"
 version = "0.1.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#abd5f8b5d35833604425903c48171e7b13303b4f"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#45c75c47f7a6ea20ba304770873bf9a514bbbf26"
 dependencies = [
  "aes-gcm",
  "hkdf",
@@ -4942,7 +4942,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5417,7 +5417,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5430,7 +5430,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5488,7 +5488,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5742,7 +5742,7 @@ dependencies = [
 [[package]]
 name = "server"
 version = "0.1.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#abd5f8b5d35833604425903c48171e7b13303b4f"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#45c75c47f7a6ea20ba304770873bf9a514bbbf26"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5764,7 +5764,7 @@ dependencies = [
 [[package]]
 name = "server-config"
 version = "0.1.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#abd5f8b5d35833604425903c48171e7b13303b4f"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#45c75c47f7a6ea20ba304770873bf9a514bbbf26"
 dependencies = [
  "anyhow",
  "getrandom 0.3.4",
@@ -6600,7 +6600,7 @@ dependencies = [
 [[package]]
 name = "transport"
 version = "0.1.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#abd5f8b5d35833604425903c48171e7b13303b4f"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#45c75c47f7a6ea20ba304770873bf9a514bbbf26"
 dependencies = [
  "async-trait",
  "getrandom 0.3.4",
@@ -6665,7 +6665,7 @@ checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 [[package]]
 name = "uds-rp"
 version = "0.1.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#abd5f8b5d35833604425903c48171e7b13303b4f"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#45c75c47f7a6ea20ba304770873bf9a514bbbf26"
 dependencies = [
  "client",
  "codec",
@@ -6813,7 +6813,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "vpx-sys"
 version = "0.1.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#abd5f8b5d35833604425903c48171e7b13303b4f"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#45c75c47f7a6ea20ba304770873bf9a514bbbf26"
 dependencies = [
  "pkg-config",
  "vcpkg",
@@ -7277,7 +7277,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -7461,15 +7461,6 @@ name = "windows-sys"
 version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "282be5f36a8ce781fad8c8ae18fa3f9beff57ec1b52cb3de0789201425d9a33d"
-dependencies = [
- "windows-targets 0.52.6",
-]
-
-[[package]]
-name = "windows-sys"
-version = "0.59.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e38bc4d79ed67fd075bcc251a1c39b32a1776bbe92e5bef1f0bf1f8c531853b"
 dependencies = [
  "windows-targets 0.52.6",
 ]
