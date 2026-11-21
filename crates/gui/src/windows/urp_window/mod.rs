@@ -107,6 +107,12 @@ pub struct UrpState {
     lctrl_held: bool,
     clipboard: Option<channels::clipboard::ClipboardHandle>,
     clipboard_suppress: Arc<Mutex<Option<String>>>,
+    /// Local device consent (§18.78): the redirection toggles the user
+    /// chose in the launcher ARE the consent — a remote peer asking for
+    /// the camera or the card is answered with them, and a redirection
+    /// the user never enabled is never granted.
+    webcam_allowed: bool,
+    smartcard_allowed: bool,
 }
 
 /// Result of handling one session event.
@@ -259,6 +265,26 @@ fn handle_urp_event(state: &mut UrpState, event: ClientEvent) -> UrpAction {
             if let Err(e) = open::that_detached(&path) {
                 log::warn!("URP could not open printed PDF {}: {e}", path.display());
             }
+            UrpAction::Continue
+        }
+        // §18.78 local consent: the camera/card never open on the peer's
+        // request alone. The user's redirection toggles ARE the consent —
+        // a channel the user never enabled was never offered in the HELLO,
+        // so granting here can only affect what the user already chose.
+        ClientEvent::WebcamConsentRequired { .. } => {
+            let allow = state.webcam_allowed;
+            log::info!("URP webcam requested by the remote peer; consent: {allow}");
+            let _ = state.commands.try_send(ClientCommand::WebcamConsent(allow));
+            UrpAction::Continue
+        }
+        ClientEvent::WebcamActive { active } => {
+            log::info!("URP webcam active: {active}");
+            UrpAction::Continue
+        }
+        ClientEvent::SmartcardConsentRequired => {
+            let allow = state.smartcard_allowed;
+            log::info!("URP smartcard requested by the remote peer; consent: {allow}");
+            let _ = state.commands.try_send(ClientCommand::SmartcardConsent(allow));
             UrpAction::Continue
         }
         _ => UrpAction::Continue,
@@ -672,6 +698,8 @@ impl AppHandler {
             lctrl_held: false,
             clipboard,
             clipboard_suppress,
+            webcam_allowed: settings.redirections.webcam,
+            smartcard_allowed: settings.redirections.smartcard,
         };
         self.urp = Some(Box::new(state));
         self.register_window(wid, WindowKind::Urp);
