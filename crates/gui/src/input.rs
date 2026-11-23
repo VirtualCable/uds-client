@@ -322,6 +322,9 @@ impl AppHandler {
                 if !s.window.is_minimized().unwrap_or(false) {
                     let phys = s.window.inner_size();
                     s.renderer.reconfigure(phys.width, phys.height);
+                    if s.dynamic_resize {
+                        s.pending_resize = Some(std::time::Instant::now());
+                    }
                     s.window.request_redraw();
                 }
             }

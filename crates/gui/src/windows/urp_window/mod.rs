@@ -2,21 +2,23 @@
 // Copyright (c) 2026, Virtual Cable S.L.
 // All rights reserved.
 // Authors: Adolfo Gómez, dkmaster at dkmon dot com
+// Author: Andres Schumann, aschumann at virtualcable dot es
 
 //! URP (UDS Remote Protocol) session window: drives a
 //! `uds_rp::client::Session` from the launcher's winit loop, rendering the
 //! shared display framebuffer with the two-pass XOR cursor (protocol §10)
 //! and forwarding input as Set-1 scancodes + normalized pointer moves.
 //!
-//! Scaling policy: the remote resolution is fixed at connect time (the
-//! launcher never renegotiates it; the protocol's DesktopResize stays a
-//! lab-client feature for now) and the remote image is always stretched
-//! to the window size by wgpu.
+//! Scaling policy: the remote resolution starts at the connect-time size and,
+//! unless the transport settings fix it, follows the window once it settles
+//! (`DesktopResize`, §18.37; the server applies it only when it has a matching
+//! console mode). The remote image is always stretched to the window size by
+//! wgpu.
 
 use std::net::ToSocketAddrs;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex, RwLock};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use flume::Receiver;
@@ -65,6 +67,42 @@ impl rdp::integrations::ClipboardCallback for UrpClipboardCallback {
     }
 }
 
+/// Quiet time after the last window resize before the new desktop size is requested.
+const RESIZE_DEBOUNCE: Duration = Duration::from_millis(300);
+/// Smallest window worth matching with a remote desktop; smaller windows are left alone.
+const MIN_REMOTE_DIMENSION: u32 = 480;
+/// Largest desktop axis the server accepts (`MAX_DESKTOP_DIMENSION`, 8K UHD).
+const MAX_REMOTE_DIMENSION: u32 = 7680;
+/// Aspect ratios the launcher requests. The server applies a console mode only when its
+/// aspect matches the request within 1 %, so the window's own shape is never sent as is.
+const REMOTE_ASPECTS: [(u32, u32); 3] = [(16, 9), (16, 10), (4, 3)];
+
+/// Remote desktop to request for a window of `width` x `height` physical pixels: the largest
+/// rectangle with the standard aspect closest to the window's that fits inside the window.
+fn remote_size_for_window(width: u32, height: u32) -> Option<(u32, u32)> {
+    if width < MIN_REMOTE_DIMENSION || height < MIN_REMOTE_DIMENSION {
+        return None;
+    }
+    let width = width.min(MAX_REMOTE_DIMENSION);
+    let height = height.min(MAX_REMOTE_DIMENSION);
+    let window_aspect = f64::from(width) / f64::from(height);
+    let &(aw, ah) = REMOTE_ASPECTS.iter().min_by(|a, b| {
+        let da = (f64::from(a.0) / f64::from(a.1) - window_aspect).abs();
+        let db = (f64::from(b.0) / f64::from(b.1) - window_aspect).abs();
+        da.total_cmp(&db)
+    })?;
+    let fit_height = u64::from(width) * u64::from(ah) / u64::from(aw);
+    let (w, h) = if fit_height <= u64::from(height) {
+        (width, fit_height as u32)
+    } else {
+        (
+            (u64::from(height) * u64::from(aw) / u64::from(ah)) as u32,
+            height,
+        )
+    };
+    Some((w & !1, h & !1))
+}
+
 pub struct UrpState {
     pub window: Arc<winit::window::Window>,
     pub renderer: WgpuRenderer,
@@ -78,6 +116,12 @@ pub struct UrpState {
     /// False until the server announces the primary display; until then the
     /// window shows a connecting message instead of an empty canvas.
     pub desktop_ready: bool,
+    /// Set on every window resize; the remote size is requested after `RESIZE_DEBOUNCE` of quiet.
+    pub pending_resize: Option<Instant>,
+    /// Last remote size requested, so an unchanged size is not sent twice.
+    pub last_requested_size: Option<(u32, u32)>,
+    /// False when the transport settings fix the remote resolution.
+    pub dynamic_resize: bool,
     /// Phase of the connecting animation (waves move while it is not ready).
     pub connecting_anim: f32,
     pub connecting_waves: Vec<Wave>,
@@ -292,6 +336,39 @@ fn handle_urp_event(state: &mut UrpState, event: ClientEvent) -> UrpAction {
 }
 
 impl UrpState {
+    fn flush_pending_resize(&mut self) {
+        let Some(since) = self.pending_resize else {
+            return;
+        };
+        if since.elapsed() < RESIZE_DEBOUNCE {
+            return;
+        }
+        let phys = self.window.inner_size();
+        let Some(size) = remote_size_for_window(phys.width, phys.height) else {
+            self.pending_resize = None;
+            return;
+        };
+        if self.last_requested_size == Some(size) {
+            self.pending_resize = None;
+            return;
+        }
+        let request = ClientCommand::Resize {
+            width: size.0,
+            height: size.1,
+        };
+        if self.commands.try_send(request).is_ok() {
+            self.pending_resize = None;
+            self.last_requested_size = Some(size);
+            log::info!(
+                "requested remote desktop {}x{} for window {}x{}",
+                size.0,
+                size.1,
+                phys.width,
+                phys.height
+            );
+        }
+    }
+
     /// Drains the local key queue, translating to protocol input with the
     /// AltGr↔LCtrl pairing (Windows sends a fake LCtrl around AltGr).
     fn drain_keys(&mut self) {
@@ -682,6 +759,9 @@ impl AppHandler {
             keys_rx: self.keys_rx.clone(),
             desktop_size: (remote_w, remote_h),
             desktop_ready: false,
+            pending_resize: None,
+            last_requested_size: remote_size_for_window(remote_w, remote_h),
+            dynamic_resize: !fixed,
             connecting_anim: 0.0,
             connecting_waves: connecting_waves(),
             connecting_logo: crate::logo::load_logo(),
@@ -736,6 +816,7 @@ impl AppHandler {
                 return;
             };
             state.drain_keys();
+            state.flush_pending_resize();
             while let Ok(event) = state.events_rx.try_recv() {
                 match handle_urp_event(state, event) {
                     UrpAction::Continue => {
@@ -923,5 +1004,53 @@ mod tests {
         let dest = (40.0, 60.0, 1920.0, 1080.0);
         assert_eq!(normalize_pointer((0.0, 0.0), dest), (0, 0));
         assert_eq!(normalize_pointer((10000.0, 10000.0), dest), (65535, 65535));
+    }
+}
+
+#[cfg(test)]
+mod remote_size_tests {
+    use super::{MIN_REMOTE_DIMENSION, REMOTE_ASPECTS, remote_size_for_window};
+
+    #[test]
+    fn keeps_a_window_with_a_standard_aspect() {
+        assert_eq!(remote_size_for_window(1920, 1080), Some((1920, 1080)));
+    }
+
+    #[test]
+    fn fits_the_nearest_standard_aspect_inside_the_window() {
+        assert_eq!(remote_size_for_window(1000, 1000), Some((1000, 750)));
+        assert_eq!(remote_size_for_window(1500, 900), Some((1440, 900)));
+    }
+
+    #[test]
+    fn caps_each_axis_at_the_server_maximum_keeping_the_aspect() {
+        assert_eq!(remote_size_for_window(8000, 4500), Some((7680, 4320)));
+    }
+
+    #[test]
+    fn leaves_windows_below_the_minimum_alone() {
+        assert_eq!(remote_size_for_window(MIN_REMOTE_DIMENSION - 2, 1080), None);
+        assert_eq!(remote_size_for_window(1920, 300), None);
+    }
+
+    #[test]
+    fn never_exceeds_the_window_and_matches_a_standard_aspect() {
+        for (w, h) in [
+            (800, 600),
+            (1280, 1024),
+            (2560, 1080),
+            (1366, 768),
+            (700, 1000),
+            (3840, 2160),
+        ] {
+            let (rw, rh) = remote_size_for_window(w, h).expect("window is large enough");
+            assert!(rw <= w && rh <= h, "{rw}x{rh} exceeds {w}x{h}");
+            assert_eq!((rw % 2, rh % 2), (0, 0));
+            let remote = f64::from(rw) / f64::from(rh);
+            let matches_standard = REMOTE_ASPECTS
+                .iter()
+                .any(|&(a, b)| (f64::from(a) / f64::from(b) - remote).abs() / remote < 0.01);
+            assert!(matches_standard, "{rw}x{rh} has no standard aspect");
+        }
     }
 }
