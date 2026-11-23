@@ -610,7 +610,7 @@ const signedRdp = await RDP.sign(rdpContent, ticket);
 
 ## URP Module
 
-The URP module starts a UDS Remote Protocol session (the UDS native protocol, agent port 14433). The session secrets never travel in the clear: `ticket` is the broker ticket verbatim and `shared_secret` is injected by the launcher from the script's KEM envelope (`data.shared_secret`) — scripts just forward it.
+The URP module starts a UDS Remote Protocol session (the UDS native protocol, agent port 14433). Scripts forward the broker `ticket` verbatim; `shared_secret` is injected by the launcher from the script's KEM envelope (`data.shared_secret`). The initial Hello carries the ticket before session encryption, so use a tunnel when the network path requires confidentiality for it.
 
 > **⚠️ Important:** All optional fields must be either present with a valid value or **omitted entirely** — never `null`.
 
