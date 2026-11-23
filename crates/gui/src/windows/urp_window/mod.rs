@@ -439,10 +439,11 @@ impl UrpState {
         }];
         let sections = vec![
             crate::wgpu_render::OwnedSection::default()
-                .with_screen_position((
-                    (w as f32 / 2.0 - 190.0).max(16.0),
-                    logo_y + logo.height as f32 + 24.0,
-                ))
+                .with_layout(
+                    wgpu_text::glyph_brush::Layout::default()
+                        .h_align(wgpu_text::glyph_brush::HorizontalAlign::Center),
+                )
+                .with_screen_position((w as f32 / 2.0, logo_y + logo.height as f32 + 24.0))
                 .add_text(
                     wgpu_text::glyph_brush::OwnedText::new(
                         "Connecting to the virtual machine...",
