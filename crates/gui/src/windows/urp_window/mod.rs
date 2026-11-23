@@ -230,6 +230,9 @@ fn handle_urp_event(state: &mut UrpState, event: ClientEvent) -> UrpAction {
                 state.desktop_size = (width, height);
                 state.desktop_ready = true;
                 state.window.set_title("UDS Remote Desktop");
+                if state.dynamic_resize {
+                    state.pending_resize = Some(Instant::now());
+                }
             }
             UrpAction::Continue
         }
