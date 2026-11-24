@@ -173,9 +173,9 @@ pcsc = "2.8"
 rdp = { git = "https://github.com/VirtualCable/freerdp-integration.git", package = "rdp", branch = "v5.0" }
 
 # UDS Remote Protocol (URP) client facade
-uds-rp = { git = "https://github.com/VirtualCable/uds-remote-protocol.git", package = "uds-rp", branch = "master", features = ["vp9", "jpeg", "audio", "h264"] }
+uds-rp = { git = "https://github.com/VirtualCable/uds-remote-protocol.git", package = "uds-rp", branch = "master-fix/session-mode-retry", features = ["vp9", "jpeg", "audio", "h264"] }
 # URP device backends (audio/mic via cpal, webcam via nokhwa, PC/SC smartcard, PDF printer sink)
-uds-rp-channels = { git = "https://github.com/VirtualCable/uds-remote-protocol.git", package = "channels", branch = "master", features = ["audio", "smartcard"] }
+uds-rp-channels = { git = "https://github.com/VirtualCable/uds-remote-protocol.git", package = "channels", branch = "master-fix/session-mode-retry", features = ["audio", "smartcard"] }
 
 # Local development overrides (uncomment to use the local freerdp-integration checkout).
 # [patch."https://github.com/VirtualCable/freerdp-integration.git"]
