@@ -67,6 +67,9 @@ impl rdp::integrations::ClipboardCallback for UrpClipboardCallback {
     }
 }
 
+/// Connecting line shown before the server reports its first progress stage.
+const CONNECTING_TEXT: &str = "Connecting to the virtual machine...";
+
 /// Quiet time after the last window resize before the new desktop size is requested.
 const RESIZE_DEBOUNCE: Duration = Duration::from_millis(300);
 /// Smallest window worth matching with a remote desktop; smaller windows are left alone.
@@ -116,6 +119,8 @@ pub struct UrpState {
     /// False until the server announces the primary display; until then the
     /// window shows a connecting message instead of an empty canvas.
     pub desktop_ready: bool,
+    /// Line shown under the logo while connecting; the server's progress updates replace it.
+    pub connecting_text: String,
     /// Set on every window resize; the remote size is requested after `RESIZE_DEBOUNCE` of quiet.
     pub pending_resize: Option<Instant>,
     /// Last remote size requested, so an unchanged size is not sent twice.
@@ -280,6 +285,7 @@ fn handle_urp_event(state: &mut UrpState, event: ClientEvent) -> UrpAction {
         }
         ClientEvent::Status(s) => {
             log::info!("URP status: {s}");
+            state.connecting_text = s;
             UrpAction::Continue
         }
         ClientEvent::Error(e) => {
@@ -525,9 +531,7 @@ impl UrpState {
                 )
                 .with_screen_position((w as f32 / 2.0, logo_y + logo.height as f32 + 24.0))
                 .add_text(
-                    wgpu_text::glyph_brush::OwnedText::new(
-                        "Connecting to the virtual machine...",
-                    )
+                    wgpu_text::glyph_brush::OwnedText::new(self.connecting_text.clone())
                     .with_scale(22.0)
                     .with_color([0.85, 0.85, 0.9, 1.0]),
                 ),
@@ -762,6 +766,7 @@ impl AppHandler {
             keys_rx: self.keys_rx.clone(),
             desktop_size: (remote_w, remote_h),
             desktop_ready: false,
+            connecting_text: CONNECTING_TEXT.to_string(),
             pending_resize: None,
             last_requested_size: remote_size_for_window(remote_w, remote_h),
             dynamic_resize: !fixed,
