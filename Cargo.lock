@@ -885,7 +885,7 @@ dependencies = [
 [[package]]
 name = "channels"
 version = "1.0.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#e3327130822c29472a92527ce40fa46aa6587600"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#c01239224de591741487e84291ca7f1ac22c558f"
 dependencies = [
  "anyhow",
  "client",
@@ -964,7 +964,7 @@ dependencies = [
 [[package]]
 name = "client"
 version = "1.0.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#e3327130822c29472a92527ce40fa46aa6587600"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#c01239224de591741487e84291ca7f1ac22c558f"
 dependencies = [
  "anyhow",
  "codec",
@@ -1057,7 +1057,7 @@ dependencies = [
 [[package]]
 name = "codec"
 version = "1.0.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#e3327130822c29472a92527ce40fa46aa6587600"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#c01239224de591741487e84291ca7f1ac22c558f"
 dependencies = [
  "anyhow",
  "libloading",
@@ -4849,7 +4849,7 @@ dependencies = [
 [[package]]
 name = "protocol"
 version = "1.0.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#e3327130822c29472a92527ce40fa46aa6587600"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#c01239224de591741487e84291ca7f1ac22c558f"
 dependencies = [
  "aes-gcm",
  "hkdf",
@@ -5743,7 +5743,7 @@ dependencies = [
 [[package]]
 name = "server"
 version = "1.0.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#e3327130822c29472a92527ce40fa46aa6587600"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#c01239224de591741487e84291ca7f1ac22c558f"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5765,7 +5765,7 @@ dependencies = [
 [[package]]
 name = "server-config"
 version = "1.0.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#e3327130822c29472a92527ce40fa46aa6587600"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#c01239224de591741487e84291ca7f1ac22c558f"
 dependencies = [
  "anyhow",
  "getrandom 0.3.4",
@@ -6601,7 +6601,7 @@ dependencies = [
 [[package]]
 name = "transport"
 version = "1.0.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#e3327130822c29472a92527ce40fa46aa6587600"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#c01239224de591741487e84291ca7f1ac22c558f"
 dependencies = [
  "async-trait",
  "getrandom 0.3.4",
@@ -6666,7 +6666,7 @@ checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 [[package]]
 name = "uds-rp"
 version = "1.0.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#e3327130822c29472a92527ce40fa46aa6587600"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#c01239224de591741487e84291ca7f1ac22c558f"
 dependencies = [
  "client",
  "codec",
@@ -6814,7 +6814,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "vpx-sys"
 version = "1.0.0"
-source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#e3327130822c29472a92527ce40fa46aa6587600"
+source = "git+https://github.com/VirtualCable/uds-remote-protocol.git?branch=master#c01239224de591741487e84291ca7f1ac22c558f"
 dependencies = [
  "pkg-config",
  "vcpkg",
