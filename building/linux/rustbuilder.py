@@ -7,10 +7,14 @@ import os
 import sys
 import subprocess
 import pathlib
+import platform
 import typing
 import argparse
 import shutil
 import collections.abc
+
+# Distros whose artifacts are stripped inside the builder image instead of on the host.
+STRIPPED_IN_BUILDER: typing.Final[frozenset[str]] = frozenset({"Ubuntu2604"})
 
 # === Type aliases ===
 PathLike = str | pathlib.Path
@@ -142,14 +146,15 @@ def exec_builder_for_distro(
         # Copy executables
         for exe in executables:
             copy(exe, output_dir / exe.name)
-            if not debug:
+            if not debug and distro not in STRIPPED_IN_BUILDER:
                 subprocess.run(["strip", output_dir / exe.name], check=True)
             os.chmod(output_dir / exe.name, 0o755)
 
         # Copy .so files
         for so in so_files:
             copy(so, output_dir / so.name)
-            subprocess.run(["strip", output_dir / so.name], check=True)
+            if distro not in STRIPPED_IN_BUILDER:
+                subprocess.run(["strip", output_dir / so.name], check=True)
 
         # Create symlinks
         for symlink in symlinks:
@@ -276,19 +281,28 @@ def main() -> None:
     args = parser.parse_args()
 
     distro: str = args.distro
+    if distro == "Ubuntu2604" and platform.machine() != "x86_64":
+        print(f"Ubuntu2604 is only supported on x86_64 hosts (this host: {platform.machine()}).", file=sys.stderr)
+        sys.exit(1)
     crate_path = pathlib.Path(args.crate_path).resolve()
     debug: bool = args.debug
-    # On debian 12, debian 13 and openSUSE, copy .so files after build to target. Also, create the symlinks
-    # to them for .so.X.Y files.
+    # On debian 12, debian 13, ubuntu 26.04 and openSUSE, copy .so files after build to target. Also, create the versioned
+    # .so.* symlinks.
     SCRIPT: typing.Final[str] = (
         "cp /usr/local/lib/*so [TARGET] && "
         "cd [TARGET] && "
         "for f in /usr/local/lib/*.so.*; do ln --force -s \"${f%%.*}.so\" \"$(basename $f)\"; done"
     )
 
+    # Strip the release executables and shared libraries inside the builder image (see STRIPPED_IN_BUILDER).
+    STRIP_IN_BUILDER: typing.Final[str] = (
+        'find [TARGET] -maxdepth 1 -type f \\( -perm -u+x -o -name "*.so" \\) -exec strip {} +'
+    )
+
     extra_docker_cmd: str = {
         "Debian12": SCRIPT,
         "Debian13": SCRIPT,
+        "Ubuntu2604": SCRIPT if debug else f"{SCRIPT} && {STRIP_IN_BUILDER}",
         "AppImage": "/usr/local/bin/build-appimage.sh",
         "openSUSE": SCRIPT.replace("/usr/local/lib", "/usr/local/lib64"),
     }.get(distro, "")

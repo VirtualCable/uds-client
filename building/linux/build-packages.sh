@@ -16,10 +16,11 @@ TOP=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 CRATE_ROOT=$(realpath "${TOP}/../..")
 
 usage() {
-    echo "Usage: $0 [all|debian12|debian13|fedora|opensuse|appimage]"
+    echo "Usage: $0 [all|debian12|debian13|ubuntu2604|fedora|opensuse|appimage]"
     echo "  all: Build for all supported distributions (default)"
     echo "  debian12: Build for Debian 12"
     echo "  debian13: Build for Debian 13"
+    echo "  ubuntu2604: Build for Ubuntu 26.04"
     echo "  fedora: Build for Fedora"
     echo "  opensuse: Build for openSUSE"
     echo "  appimage: Build portable AppImage"
@@ -32,26 +33,27 @@ fi
 
 build_debian_based() {
     local debian_version="$1"
-    local docker_image="rust-builder-udslauncher:Debian${debian_version}"
-    local outdir="${TOP}/../bin/debian${debian_version}"
+    local distro="${2:-Debian${debian_version}}"
+    local docker_image="rust-builder-udslauncher:${distro}"
+    local outdir="${TOP}/../bin/${distro,,}"
     local debian_lock_file="${TOP}/.build-packages-debian.lock"
     local lock_fd
 
     exec {lock_fd}>"${debian_lock_file}" || return 1
     flock "${lock_fd}" || return 1
 
-    echo "=== Building udslauncher binary using rustbuilder.py for Debian ${debian_version} ==="
+    echo "=== Building udslauncher binary using rustbuilder.py for ${distro} ==="
     cd "${TOP}" || return 1
-    python3 rustbuilder.py "Debian${debian_version}" || return 1
+    python3 rustbuilder.py "${distro}" || return 1
 
-    echo "=== Building for Debian ${debian_version} using ${docker_image} ==="
+    echo "=== Building for ${distro} using ${docker_image} ==="
 
     # Build the deb package, disable fakeroot because on Docker it takes a lot of time.
     docker run --rm \
     -e USER_ID=${UID_HOST} \
     -e GROUP_ID=${GID_HOST} \
     -e IN_DOCKER=1 \
-    -e DISTRO=Debian${debian_version} \
+    -e DISTRO=${distro} \
     -v ${CRATE_ROOT}:/crate \
     -w /crate/building/linux \
     "${docker_image}" \
@@ -126,11 +128,25 @@ build_appimage() {
 requested_targets=("$@")
 
 if [ ${#requested_targets[@]} -eq 0 ]; then
-    requested_targets=("debian12" "debian13" "fedora" "opensuse" "appimage")
+    requested_targets=("debian12" "debian13" "ubuntu2604" "fedora" "opensuse" "appimage")
 fi
 
 if [ "$1" == "all" ]; then
-    requested_targets=("debian12" "debian13" "fedora" "opensuse" "appimage")
+    requested_targets=("debian12" "debian13" "ubuntu2604" "fedora" "opensuse" "appimage")
+fi
+
+if [ "${ARCH}" != "x86_64" ]; then
+    for requested in "$@"; do
+        if [ "${requested,,}" == "ubuntu2604" ]; then
+            echo "ubuntu2604 is only supported on x86_64 hosts (this host: ${ARCH})." >&2
+            exit 1
+        fi
+    done
+    supported_targets=()
+    for target in "${requested_targets[@]}"; do
+        [ "${target,,}" != "ubuntu2604" ] && supported_targets+=("$target")
+    done
+    requested_targets=("${supported_targets[@]}")
 fi
 
 build_pids=()
@@ -160,6 +176,13 @@ for target in "${requested_targets[@]}"; do
             scheduled_targets+=("debian13")
             recognized_targets=1
             ;;
+        ubuntu2604)
+            build_debian_based 26.04 Ubuntu2604 &
+            build_pids+=("$!")
+            build_names+=("Ubuntu2604")
+            scheduled_targets+=("ubuntu2604")
+            recognized_targets=1
+            ;;
         fedora)
             build_rpm_based Fedora &
             build_pids+=("$!")
@@ -182,7 +205,7 @@ for target in "${requested_targets[@]}"; do
             recognized_targets=1
             ;;
         *)
-            echo "Unknown build target: ${target}. Supported values: debian12, debian13, fedora, opensuse, appimage." >&2
+            echo "Unknown build target: ${target}. Supported values: debian12, debian13, ubuntu2604, fedora, opensuse, appimage." >&2
             ;;
     esac
 done
